@@ -104,9 +104,9 @@ else if (tagContent.startsWith('>')) {
 6. Cache and return
 
 **Cache lifecycle:**
-- `partialBodyCache` (Map<String, String>) — static, cleared at the start of every `mergeTemplate()` entry point
-- `currentPartialDepth` (Integer) — static, reset to 0 at the start of every `mergeTemplate()` entry point
-- Consistent with how `currentOutputFormat` is managed (CLAUDE.md:22-25)
+- `partialBodyCache` (Map<String, String>) — static, lazily initialized on first access. **Not reset** in `mergeTemplate()` or anywhere else. Apex transaction boundaries clear it naturally (test method end, Aura call end, batch `execute()` end). This is required: a bulk run of 50 records sharing one partial must issue **one** SOQL, not fifty — resetting mid-bulk would blow past the 100-query governor limit.
+- `currentPartialDepth` (Integer) — static, balanced by the `try/finally` block in `expandPartial()`. Returns to 0 after every expansion (including on thrown exception). No explicit reset needed.
+- This pattern matches the existing `cachedPreDecompTemplateId` / `cachedXmlParts` statics that `tryMergeFromPreDecomposed()` uses (DocGenService.cls:14-16) — populated lazily, survives the bulk loop, cleared by transaction boundary.
 
 **Image-field tags (`{%ImageField}`) in partials:** work automatically — they resolve inside the recursive `processXml()` call, emit into the existing pending-images map, merge machinery handles them on the fully-expanded document.
 
@@ -247,7 +247,7 @@ Each script must stay under the 18,000-char Anonymous Apex limit.
 | Partial references to non-existent partials aren't caught at save time | Runtime error is clear and actionable. Admins discover on first generation of affected template. Revisit if real-world complaints. |
 | DOCX style IDs in partials don't exist in host → Word falls back to Normal style | Documented constraint: use built-in styles in partials. Most clause libraries are paragraph-heavy content that works with Normal/Heading styles. |
 | Depth-5 limit too restrictive for deeply-layered compositions | Configurable constant if anyone pushes back. 5 levels covers legal-clause use cases comfortably based on industry precedent. |
-| Cache statics leak across batches in the bulk runner | Both statics are reset at `mergeTemplate()` entry; bulk runner calls `mergeTemplate()` per record, so state is fresh per invocation. Verified by `testPartialCacheReset`. |
+| Cache fails to dedup SOQL in bulk runs | Cache is lazily populated and survives the bulk loop within a single transaction. Apex transaction boundary (not mergeTemplate entry) is the reset point. Verified by `testPartialCache_SurvivesAcrossCalls` which asserts delta-SOQL = 0 on the second call. |
 
 ## Open Questions
 

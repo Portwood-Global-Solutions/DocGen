@@ -124,11 +124,12 @@ git commit -m "feat: grant Is_Partial__c access to DocGen Admin/User/Guest perms
 
 ---
 
-## Task 3: Add partial cache statics and reset in `mergeTemplate()`
+## Task 3: Add partial cache statics (lazily initialized, transaction-scoped)
 
 **Files:**
 - Modify: `force-app/main/default/classes/DocGenService.cls:1-20` (add statics near existing cache statics)
-- Modify: `force-app/main/default/classes/DocGenService.cls:126-128` (reset statics in mergeTemplate)
+
+**Design intent:** the partial body cache must survive across all `mergeTemplate()` calls in a single transaction, including bulk runs (50 records × 1 shared partial = 1 SOQL, not 50). Apex transaction semantics already provide the right lifetime: static class state persists for the transaction and resets at transaction boundary. We rely on that — we do NOT reset in `mergeTemplate()`. `getPartialBodyXml` handles lazy null-init. `currentPartialDepth` is balanced by the try/finally in `expandPartial`, so it also never needs an explicit reset.
 
 - [ ] **Step 1: Add static cache declarations**
 
@@ -137,9 +138,11 @@ In `force-app/main/default/classes/DocGenService.cls`, find the block of existin
 ```apex
 
     // ========== Template Partials (v1.50+) ==========
-    // Cache of partial-name → splice-ready <w:body> content. Reset at every mergeTemplate() entry.
+    // Cache of partial-name → splice-ready <w:body> content. Lifetime = Apex transaction.
+    // Populated lazily by getPartialBodyXml. Deliberately NOT reset in mergeTemplate(),
+    // so bulk runs (50 records sharing one partial) issue one SOQL, not fifty.
     @TestVisible private static Map<String, String> partialBodyCache;
-    // Recursion depth counter for nested partial includes. Reset at every mergeTemplate() entry.
+    // Recursion depth for nested partial includes. Balanced by try/finally in expandPartial.
     @TestVisible private static Integer currentPartialDepth = 0;
     // Max nesting depth for {>Partial} includes. Protects against cycles and heap blowups.
     private static final Integer MAX_PARTIAL_DEPTH = 5;
@@ -148,36 +151,21 @@ In `force-app/main/default/classes/DocGenService.cls`, find the block of existin
         Pattern.compile('^[A-Za-z0-9_][A-Za-z0-9_\\-\\.]{0,79}$');
 ```
 
-- [ ] **Step 2: Reset statics in mergeTemplate**
+- [ ] **Step 2: Verify mergeTemplate is UNCHANGED for partial state**
 
-In `force-app/main/default/classes/DocGenService.cls`, find `private static MergeResult mergeTemplate(Id templateId, Id recordId, Map<String, String> resolvedImages, String outputFormatOverride)` at around line 126. Immediately after `imageCounter = 0;` (around line 128), add:
-
-```apex
-        partialBodyCache = new Map<String, String>();
-        currentPartialDepth = 0;
-```
-
-So the block becomes:
-
-```apex
-    private static MergeResult mergeTemplate(Id templateId, Id recordId, Map<String, String> resolvedImages, String outputFormatOverride) {
-        pendingImages = new List<Map<String, Object>>();
-        imageCounter = 0;
-        partialBodyCache = new Map<String, String>();
-        currentPartialDepth = 0;
-```
+In `force-app/main/default/classes/DocGenService.cls`, find `private static MergeResult mergeTemplate(...)` at around line 126. Verify the method's opening lines remain exactly as-is — only `pendingImages` and `imageCounter` should be reset there. Do NOT add any reset for `partialBodyCache` or `currentPartialDepth`. If you see yourself about to, stop — the whole point of this task is that the cache must survive the bulk loop.
 
 - [ ] **Step 3: Deploy + compile-check**
 
 Run: `sf project deploy start --source-dir force-app/main/default/classes/DocGenService.cls --target-org docgen-test-ux`
 
-Expected: `Status: Succeeded` (purely additive change; nothing references these yet).
+Expected: `Status: Succeeded` (purely additive; nothing references these yet).
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add force-app/main/default/classes/DocGenService.cls
-git commit -m "feat: add partial cache statics + mergeTemplate reset"
+git commit -m "feat: add partial cache statics (lazy-init, transaction-scoped)"
 ```
 
 ---
@@ -680,24 +668,10 @@ Append to `force-app/main/default/classes/DocGenPartialTests.cls`:
         System.assertEquals(10, count, 'Expected 10 expansions. Got: ' + count + ' — full result: ' + result);
     }
 
-    @IsTest
-    static void testPartialCacheReset() {
-        // Verify that a fresh processXmlForTest call gets a fresh cache view.
-        // (In production, mergeTemplate resets the cache; processXmlForTest
-        //  does NOT — so previously-seeded values persist within a single
-        //  test method, but a new test method starts fresh because statics
-        //  reset between test methods.)
-        seedPartial('Alpha', '<w:t>ALPHA</w:t>');
-
-        String result1 = DocGenService.processXmlForTest(
-            '<w:p>{>Alpha}</w:p>', new Map<String, Object>());
-        System.assert(result1.contains('ALPHA'), 'First call should expand');
-
-        // Without re-seeding, the same cache entry should still be there
-        String result2 = DocGenService.processXmlForTest(
-            '<w:p>{>Alpha}</w:p>', new Map<String, Object>());
-        System.assert(result2.contains('ALPHA'), 'Cache should survive within one test method');
-    }
+    // The real SOQL-persistence assertion lives in Task 15 (testPartialCache_SurvivesAcrossCalls)
+    // because it needs TestDataFactory.createTestPartial to set up a genuine
+    // DocGen_Template__c + Version + pre-decomposed ContentVersion triple.
+    // Here in Task 9 we only cover the seeded-cache shortcut.
 ```
 
 - [ ] **Step 2: Run tests**
@@ -1406,6 +1380,69 @@ Append to `force-app/main/default/classes/DocGenPartialTests.cls`:
 
         System.assert(result.contains('Hello World'),
             'Expected end-to-end partial resolution with host data. Got: ' + result);
+    }
+
+    @IsTest
+    static void testPartialCache_SurvivesAcrossCalls() {
+        // Proves the cache is transaction-scoped and NOT reset between generation calls.
+        // Without this property, a bulk run of 50 records sharing one partial would issue
+        // 50 SOQLs instead of 1 — blowing past the 100-query governor limit fast.
+        TestDataFactory.createTestPartial(
+            'CachePersistPartial',
+            '<w:p><w:r><w:t>Cached</w:t></w:r></w:p>'
+        );
+        DocGenService.partialBodyCache = null; // start from a clean slate
+
+        Integer q0 = Limits.getQueries();
+        String r1 = DocGenService.processXmlForTest(
+            '<w:p>{>CachePersistPartial}</w:p>', new Map<String, Object>());
+        Integer q1 = Limits.getQueries();
+        String r2 = DocGenService.processXmlForTest(
+            '<w:p>{>CachePersistPartial}</w:p>', new Map<String, Object>());
+        Integer q2 = Limits.getQueries();
+
+        System.assert(r1.contains('Cached'), 'First call should expand partial');
+        System.assert(r2.contains('Cached'), 'Second call should expand partial');
+        System.assert(q1 - q0 > 0, 'First call must populate cache via SOQL. Got delta: ' + (q1 - q0));
+        System.assertEquals(0, q2 - q1,
+            'Second call MUST reuse cache — zero new SOQL. Someone reset the cache mid-transaction.');
+    }
+
+    @IsTest
+    static void testExtractBodyContent_Malformed() {
+        // Malformed: missing <w:body> entirely. Exercises extractBodyContent's error path
+        // via the real SOQL + CV load flow (seeding the cache would bypass the extractor).
+        DocGen_Template__c partial = new DocGen_Template__c(
+            Name = 'MalformedPartial', Is_Partial__c = true,
+            Type__c = 'Word', Base_Object_API__c = 'Account'
+        );
+        insert partial;
+        DocGen_Template_Version__c v = new DocGen_Template_Version__c(
+            Template__c = partial.Id, Is_Active__c = true,
+            Type__c = 'Word', Base_Object_API__c = 'Account'
+        );
+        insert v;
+        // Deliberately malformed — no <w:body> element
+        ContentVersion cv = new ContentVersion(
+            Title = 'docgen_tmpl_xml_' + v.Id + '_word__document.xml',
+            PathOnClient = 'word__document.xml',
+            VersionData = Blob.valueOf('<?xml version="1.0"?><w:document><w:p/></w:document>'),
+            FirstPublishLocationId = v.Id
+        );
+        insert cv;
+
+        DocGenService.partialBodyCache = null; // force SOQL + CV load
+
+        Boolean caught = false;
+        try {
+            DocGenService.processXmlForTest(
+                '<w:p>{>MalformedPartial}</w:p>', new Map<String, Object>());
+        } catch (DocGenException e) {
+            caught = true;
+            System.assert(e.getMessage().contains('malformed'),
+                'Expected "malformed" in error message. Got: ' + e.getMessage());
+        }
+        System.assert(caught, 'Expected DocGenException for malformed body');
     }
 ```
 
