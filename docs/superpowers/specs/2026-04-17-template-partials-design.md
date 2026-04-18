@@ -110,6 +110,8 @@ else if (tagContent.startsWith('>')) {
 
 **Image-field tags (`{%ImageField}`) in partials:** work automatically — they resolve inside the recursive `processXml()` call, emit into the existing pending-images map, merge machinery handles them on the fully-expanded document.
 
+**PDF / DOCX parity:** both output paths call `processXml()` server-side (PDF via `mergeTemplate()` → `DocGenHtmlRenderer`; DOCX via `generateDocumentParts()` → client-side ZIP assembly). Partial expansion happens before either path diverges, so the DOCX client receives fully-expanded XML with no `{>...}` tags surviving. No per-format logic needed.
+
 ### Save-time validation
 
 New private helper `validatePartialConstraints(Blob docxZip, String partialName, Id existingId)` invoked from `DocGenController.saveTemplate()` only when `Is_Partial__c = true`. Three checks:
@@ -125,6 +127,7 @@ Skip `extractAndSaveTemplateImages()` for partials — once Check 2 bans embedde
 New shared helper `DocGenService.assertNotPartial(Id templateId)` — throws `DocGenException('This template is a partial — include it in a host template via {>Name}.')` if the target template has `Is_Partial__c = true`. Called from:
 
 - `DocGenController.generate()`
+- `DocGenController.generateDocumentParts()` (DOCX client-side assembly entry point)
 - `DocGenSignatureSenderController.createTemplateSignerRequestWithOrder()`
 - `DocGenSignatureSenderController.createTemplateSignatureRequestForFlow()`
 - `DocGenFlowAction.invoke()`
