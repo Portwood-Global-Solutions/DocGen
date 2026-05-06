@@ -1,5 +1,61 @@
 # Changelog
 
+## v1.84.0 — Visual builder accessibility
+
+Promoted package: `04tVx000000QL2PIAW` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QL2PIAW)
+
+The visual query builder — the gateway feature for non-technical admins — has been refactored to **WCAG 2.1 AA**. A blind admin using a screen reader, or a keyboard-only user without a mouse, can now author a template start to finish.
+
+### What changed
+
+- **Semantic HTML throughout.** All non-semantic click targets (35+ across `<a href="javascript:void(0)">`, `<div onclick>`, `<span onclick>`, `<code onclick>`) became native `<button>` elements so screen readers announce them as interactive. First rule of ARIA: native elements before ARIA attributes.
+- **Full keyboard support in custom dropdowns.** The three custom listbox combos in `docGenQueryBuilder` (Object / Parent / Child) now implement the WAI-ARIA combobox pattern — `role="combobox"` with `aria-expanded`/`aria-controls`/`aria-activedescendant`/`aria-autocomplete="list"`, plus Arrow Up/Down/Home/End navigation, Enter to select, Escape to close.
+- **Visible keyboard focus restored.** Removed `outline: none` on the picker search inputs; added a SLDS-flavored `:focus-visible` ring to bare buttons. Mouse users see no change (`:focus-visible` only fires on keyboard focus).
+- **Semantic group structure on tree nodes.** Each recursive `docGenTreeNode` is `role="group"` with a visually-hidden `<h3>` heading announcing the object label, depth, and selected-field count. Per-pill `aria-label`s include the field name.
+- **Modal dialogs are dialog-shaped.** Both modals in `docGenColumnBuilder` and both in `docGenAdmin` now have `aria-modal="true"`, `aria-labelledby` pointing at the title, **Esc-to-close**, initial focus on the close button, and focus restoration on close.
+- **Page-level live-region channel.** Single `aria-live="polite"` region in `docGenAdmin` listens for bubbling `CustomEvent('announce', {detail:{message}, composed:true})`. Wired but not yet instrumented.
+
+### Side-improvements bundled in
+
+- **Per-rel field search on expanded parent lookups.** Previously a wall of up to 100 unfilterable checkboxes; now each expanded parent rel has its own search input.
+- **Search results uncapped when filtering.** Caps existed only as DOM-protection guards for the unfiltered case — they were leaking into search results too. Cap now only applies when no search term is active.
+- **Filter Builder labels.** `<lightning-combobox>` instances had `variant="label-hidden"` but no `label` attribute, so screen readers had nothing to announce. Each control now has a proper label.
+
+### Aesthetics preserved
+
+All a11y additions are invisible to sighted mouse users. Inline styles kept; a `bare-button` CSS class resets browser button chrome so converted `<button>` elements look identical to the elements they replaced. Custom dropdowns stay custom — no `<lightning-combobox>` swap.
+
+### Validation
+
+- E2E suite: 192/192 assertions across 9 scripts
+- Apex tests: 1201/1201 passing, 75% org-wide coverage
+- Code Analyzer: 0 High severity violations (41 Moderate `pmd:ProtectSensitiveData` false positives on the signature schema)
+
+### Known follow-ups for v1.85
+
+- Manual VoiceOver / NVDA walkthrough on `portwood-staging`
+- Instrument child components to dispatch `announce` events ("Field added", "Relationship expanded", "Save successful")
+- Tab focus trap inside modals (Esc + native Tab works without it; trap is polish)
+
+## v1.83.0 — Rich text and nested table bug fixes
+
+Promoted package: `04tVx000000QKRJIA4` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QKRJIA4)
+
+Five customer-reported merge-engine bugs plus a User Guide refactor that consolidates docs to a single web-hosted source at `portwood.dev/guide`.
+
+### Bug fixes
+
+- **#47 — Rich text `<ul>` / `<ol>` / `<li>` rendering as raw HTML in DOCX.** List-only field values were falling through the multiline-text fallback and `escapeXml`-ing into the output. `processInlineHtml` now tracks a `{ul, ol}` stack with per-level counters, emitting a new `<w:p>` per `<li>` prefixed with `• ` or `N. `. Nested lists indent 4 spaces per level. **Closes #56 as duplicate.**
+- **#48 — `{#Field}` / `{^Field}` falsy-logic asymmetry.** Truthy path checked `val != null`; inverse path used `String.isBlank`. Neither handled Lightning RT residuals like `<p><br></p>`. New `isVisuallyBlankRichText(String)` helper strips tags + nbsp entities; both branches now route through it.
+- **#49 — Nested-table data cells rendered bold.** When an outer cell wrapped a nested table whose first row had `<w:tblHeader/>`, the renderer's `extractElement` returned the FIRST `<w:trPr>` / `<w:tcPr>` found anywhere, mis-tagging the outer row as a header. Fix: direct-child guards in `processTableRow` / `processTableCell` — only consult these properties if they appear before any nested children.
+- **#51 — Numeric character references rendered literally in DOCX.** RTE-stored `&#39;`, `&#8217;`, `&#8220;` etc. rendered as text. `convertRichTextToDocxXml` now routes through `DocGenHtmlRenderer.decodeNumericEntities` (PDF path already had this). Bonus: `generateDocTitle` now resolves `{Today}`, `{Now}`, `{RunningUser.X}` and format suffixes.
+- **#53 — IF conditional inside table row corrupts DOCX.** `{#IF}` / `{/IF}` blocks straddling table-row XML produced un-paired `<w:tr>` elements after merge.
+
+### Other changes
+
+- **User Guide consolidation.** In-repo `UserGuide.md` and the deeper conceptual material now live at `portwood.dev/guide` as a single source. README/UserGuide install links and version-history table were updated.
+- **PDF page-setup matrix e2e.** Hardened to handle MediaBox in compressed PDF streams.
+
 ## v1.82.0 — Image sizing hotfix
 
 Promoted package: `04tal000006rKBdAAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006rKBdAAM)
