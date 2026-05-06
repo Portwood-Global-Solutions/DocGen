@@ -57,6 +57,12 @@ export default class DocGenQueryBuilder extends LightningElement {
     @track showParentFieldDropdown = false;
     @track filteredParentFieldOptions = [];
 
+    // ARIA combobox active-descendant tracking. -1 = no option highlighted.
+    // Reset to -1 on focus/search; advanced by ArrowUp/ArrowDown keys.
+    @track _objectActiveIndex = -1;
+    @track _parentActiveIndex = -1;
+    @track _childActiveIndex = -1;
+
     // --- New Mode ---
     @api showTagsOnly = false;
 
@@ -678,6 +684,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         const searchKey = event.target.value.toLowerCase();
         this.selectedObjectLabel = event.target.value;
         this.showObjectDropdown = true;
+        this._objectActiveIndex = -1;
 
         if (searchKey) {
             this.filteredObjectOptions = this.objectOptions.filter((opt) =>
@@ -690,6 +697,7 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     handleObjectFocus() {
         this.showObjectDropdown = true;
+        this._objectActiveIndex = -1;
         this.filteredObjectOptions = this.objectOptions.filter((opt) =>
             opt.label.toLowerCase().includes((this.selectedObjectLabel || '').toLowerCase())
         );
@@ -698,10 +706,14 @@ export default class DocGenQueryBuilder extends LightningElement {
     handleObjectSelect(event) {
         const value = event.currentTarget.dataset.value;
         const label = event.currentTarget.dataset.label;
+        this._selectObject(value, label);
+    }
 
+    _selectObject(value, label) {
         this._selectedObject = value;
         this.selectedObjectLabel = label;
         this.showObjectDropdown = false;
+        this._objectActiveIndex = -1;
 
         // Reset downstream
         this.selectedFields = [];
@@ -720,6 +732,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         const searchKey = event.target.value.toLowerCase();
         this.selectedChildLabel = event.target.value;
         this.showChildDropdown = true;
+        this._childActiveIndex = -1;
 
         if (searchKey) {
             this.filteredChildOptions = this.childOptions.filter((opt) => opt.label.toLowerCase().includes(searchKey));
@@ -730,6 +743,7 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     handleChildFocus() {
         this.showChildDropdown = true;
+        this._childActiveIndex = -1;
         this.filteredChildOptions = this.childOptions.filter((opt) =>
             opt.label.toLowerCase().includes((this.selectedChildLabel || '').toLowerCase())
         );
@@ -738,10 +752,14 @@ export default class DocGenQueryBuilder extends LightningElement {
     handleChildSelect(event) {
         const value = event.currentTarget.dataset.value;
         const label = event.currentTarget.dataset.label;
+        this._selectChild(value, label);
+    }
 
+    _selectChild(value, label) {
         this.selectedChildRel = value;
         this.selectedChildLabel = label;
         this.showChildDropdown = false;
+        this._childActiveIndex = -1;
     }
 
     // --- Child Clauses ---
@@ -768,6 +786,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         const key = event.target.value.toLowerCase();
         this.selectedParentLabel = event.target.value;
         this.showParentDropdown = true;
+        this._parentActiveIndex = -1;
         this.filteredParentOptions = key
             ? this.parentOptions.filter((o) => o.label.toLowerCase().includes(key))
             : this.parentOptions;
@@ -775,6 +794,7 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     handleParentFocus() {
         this.showParentDropdown = true;
+        this._parentActiveIndex = -1;
         this.filteredParentOptions = this.parentOptions.filter((opt) =>
             opt.label.toLowerCase().includes((this.selectedParentLabel || '').toLowerCase())
         );
@@ -784,10 +804,14 @@ export default class DocGenQueryBuilder extends LightningElement {
         const value = event.currentTarget.dataset.value;
         const label = event.currentTarget.dataset.label;
         const targetObj = event.currentTarget.dataset.target;
+        this._selectParent(value, label, targetObj);
+    }
 
+    _selectParent(value, label, targetObj) {
         this.selectedParentRel = value;
         this.selectedParentLabel = label;
         this.showParentDropdown = false;
+        this._parentActiveIndex = -1;
 
         // Load fields for parent
         this.parentFieldOptions = [];
@@ -915,6 +939,153 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     handleOutsideClick() {
         // ... (Existing)
+    }
+
+    // ── ARIA combobox: ids + active-descendant ──────────────────
+    get objectDropdownId() {
+        return 'qb-obj-dd';
+    }
+    get parentDropdownId() {
+        return 'qb-par-dd';
+    }
+    get childDropdownId() {
+        return 'qb-child-dd';
+    }
+    _optionId(prefix, value) {
+        return 'qb-' + prefix + '-' + String(value || '').replace(/[^A-Za-z0-9_-]/g, '-');
+    }
+
+    get objectActiveDescendantId() {
+        if (!this.showObjectDropdown || this._objectActiveIndex < 0) return null;
+        const opt = this.filteredObjectOptions[this._objectActiveIndex];
+        return opt ? this._optionId('obj', opt.value) : null;
+    }
+    get parentActiveDescendantId() {
+        if (!this.showParentDropdown || this._parentActiveIndex < 0) return null;
+        const opt = this.filteredParentOptions[this._parentActiveIndex];
+        return opt ? this._optionId('par', opt.value) : null;
+    }
+    get childActiveDescendantId() {
+        if (!this.showChildDropdown || this._childActiveIndex < 0) return null;
+        const opt = this.filteredChildOptions[this._childActiveIndex];
+        return opt ? this._optionId('child', opt.value) : null;
+    }
+
+    // Decorated option lists: each item gets _optionId + _ariaSelected so the
+    // template can bind id/aria-selected without inline expressions.
+    get filteredObjectOptionsForListbox() {
+        const idx = this._objectActiveIndex;
+        return (this.filteredObjectOptions || []).map((opt, i) => ({
+            ...opt,
+            _optionId: this._optionId('obj', opt.value),
+            _ariaSelected: i === idx ? 'true' : 'false'
+        }));
+    }
+    get filteredParentOptionsForListbox() {
+        const idx = this._parentActiveIndex;
+        return (this.filteredParentOptions || []).map((opt, i) => ({
+            ...opt,
+            _optionId: this._optionId('par', opt.value),
+            _ariaSelected: i === idx ? 'true' : 'false'
+        }));
+    }
+    get filteredChildOptionsForListbox() {
+        const idx = this._childActiveIndex;
+        return (this.filteredChildOptions || []).map((opt, i) => ({
+            ...opt,
+            _optionId: this._optionId('child', opt.value),
+            _ariaSelected: i === idx ? 'true' : 'false'
+        }));
+    }
+
+    // ── Combobox keyboard navigation ───────────────────────────
+    handleObjectKeydown(event) {
+        this._handleComboKeydown(event, 'object');
+    }
+    handleParentKeydown(event) {
+        this._handleComboKeydown(event, 'parent');
+    }
+    handleChildKeydown(event) {
+        this._handleComboKeydown(event, 'child');
+    }
+
+    _handleComboKeydown(event, type) {
+        let options;
+        let idx;
+        let setIdx;
+        let close;
+        let select;
+        if (type === 'object') {
+            options = this.filteredObjectOptions;
+            idx = this._objectActiveIndex;
+            setIdx = (n) => {
+                this._objectActiveIndex = n;
+            };
+            close = () => {
+                this.showObjectDropdown = false;
+                this._objectActiveIndex = -1;
+            };
+            select = (opt) => this._selectObject(opt.value, opt.label);
+        } else if (type === 'parent') {
+            options = this.filteredParentOptions;
+            idx = this._parentActiveIndex;
+            setIdx = (n) => {
+                this._parentActiveIndex = n;
+            };
+            close = () => {
+                this.showParentDropdown = false;
+                this._parentActiveIndex = -1;
+            };
+            select = (opt) => this._selectParent(opt.value, opt.label, opt.targetObject);
+        } else {
+            options = this.filteredChildOptions;
+            idx = this._childActiveIndex;
+            setIdx = (n) => {
+                this._childActiveIndex = n;
+            };
+            close = () => {
+                this.showChildDropdown = false;
+                this._childActiveIndex = -1;
+            };
+            select = (opt) => this._selectChild(opt.value, opt.label);
+        }
+
+        const len = (options || []).length;
+        switch (event.key) {
+            case 'ArrowDown':
+                event.preventDefault();
+                if (len === 0) return;
+                setIdx(idx < 0 ? 0 : (idx + 1) % len);
+                break;
+            case 'ArrowUp':
+                event.preventDefault();
+                if (len === 0) return;
+                setIdx(idx <= 0 ? len - 1 : idx - 1);
+                break;
+            case 'Home':
+                if (len === 0) return;
+                event.preventDefault();
+                setIdx(0);
+                break;
+            case 'End':
+                if (len === 0) return;
+                event.preventDefault();
+                setIdx(len - 1);
+                break;
+            case 'Enter':
+                if (idx >= 0 && idx < len) {
+                    event.preventDefault();
+                    select(options[idx]);
+                }
+                break;
+            case 'Escape':
+                event.preventDefault();
+                close();
+                break;
+            default:
+                // Other keys: typing in the input — handled by oninput.
+                break;
+        }
     }
 
     // --- Child Logic ---

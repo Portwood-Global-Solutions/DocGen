@@ -31,18 +31,32 @@
                         <input
                             type="search"
                             class="slds-input"
+                            role="combobox"
+                            aria-label="Base object"
+                            aria-autocomplete="list"
+                            aria-expanded={showObjectDropdown}
+                            aria-controls={objectDropdownId}
+                            aria-activedescendant={objectActiveDescendantId}
                             placeholder="Search objects..."
                             value={selectedObjectLabel}
                             oninput={handleObjectSearch}
                             onfocus={handleObjectFocus}
+                            onkeydown={handleObjectKeydown}
                         />
                     </div>
                     <template if:true={showObjectDropdown}>
-                        <div class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid" role="listbox">
+                        <div
+                            id={objectDropdownId}
+                            class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
+                            role="listbox"
+                            aria-label="Base object options"
+                        >
                             <ul class="slds-listbox slds-listbox_vertical" role="presentation">
-                                <template for:each={filteredObjectOptions} for:item="opt">
+                                <template for:each={filteredObjectOptionsForListbox} for:item="opt">
                                     <li
-                                        role="presentation"
+                                        id={opt._optionId}
+                                        role="option"
+                                        aria-selected={opt._ariaSelected}
                                         class="slds-listbox__item"
                                         key={opt.value}
                                         onclick={handleObjectSelect}
@@ -51,7 +65,6 @@
                                     >
                                         <div
                                             class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
-                                            role="option"
                                         >
                                             <span class="slds-truncate" title={opt.label}>{opt.label}</span>
                                         </div>
@@ -169,21 +182,32 @@
                                         <input
                                             type="search"
                                             class="slds-input"
+                                            role="combobox"
+                                            aria-label="Parent object"
+                                            aria-autocomplete="list"
+                                            aria-expanded={showParentDropdown}
+                                            aria-controls={parentDropdownId}
+                                            aria-activedescendant={parentActiveDescendantId}
                                             placeholder="Search parents..."
                                             value={selectedParentLabel}
                                             oninput={handleParentSearch}
                                             onfocus={handleParentFocus}
+                                            onkeydown={handleParentKeydown}
                                         />
                                     </div>
                                     <template if:true={showParentDropdown}>
                                         <div
+                                            id={parentDropdownId}
                                             class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
                                             role="listbox"
+                                            aria-label="Parent object options"
                                         >
                                             <ul class="slds-listbox slds-listbox_vertical" role="presentation">
-                                                <template for:each={filteredParentOptions} for:item="opt">
+                                                <template for:each={filteredParentOptionsForListbox} for:item="opt">
                                                     <li
-                                                        role="presentation"
+                                                        id={opt._optionId}
+                                                        role="option"
+                                                        aria-selected={opt._ariaSelected}
                                                         class="slds-listbox__item"
                                                         key={opt.value}
                                                         onclick={handleParentSelect}
@@ -193,7 +217,6 @@
                                                     >
                                                         <div
                                                             class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
-                                                            role="option"
                                                         >
                                                             <span class="slds-truncate" title={opt.label}
                                                                 >{opt.label}</span
@@ -280,21 +303,35 @@
                                                 <input
                                                     type="search"
                                                     class="slds-input"
+                                                    role="combobox"
+                                                    aria-label="Child relationship"
+                                                    aria-autocomplete="list"
+                                                    aria-expanded={showChildDropdown}
+                                                    aria-controls={childDropdownId}
+                                                    aria-activedescendant={childActiveDescendantId}
                                                     placeholder="Search relationships..."
                                                     value={selectedChildLabel}
                                                     oninput={handleChildSearch}
                                                     onfocus={handleChildFocus}
+                                                    onkeydown={handleChildKeydown}
                                                 />
                                             </div>
                                             <template if:true={showChildDropdown}>
                                                 <div
+                                                    id={childDropdownId}
                                                     class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
                                                     role="listbox"
+                                                    aria-label="Child relationship options"
                                                 >
                                                     <ul class="slds-listbox slds-listbox_vertical" role="presentation">
-                                                        <template for:each={filteredChildOptions} for:item="opt">
+                                                        <template
+                                                            for:each={filteredChildOptionsForListbox}
+                                                            for:item="opt"
+                                                        >
                                                             <li
-                                                                role="presentation"
+                                                                id={opt._optionId}
+                                                                role="option"
+                                                                aria-selected={opt._ariaSelected}
                                                                 class="slds-listbox__item"
                                                                 key={opt.value}
                                                                 onclick={handleChildSelect}
@@ -303,7 +340,6 @@
                                                             >
                                                                 <div
                                                                     class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
-                                                                    role="option"
                                                                 >
                                                                     <span class="slds-truncate" title={opt.label}
                                                                         >{opt.label}</span

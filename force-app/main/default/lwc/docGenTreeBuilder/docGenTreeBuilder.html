@@ -1,8 +1,12 @@
 <template>
-    <div style="border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; font-size: 0.82rem">
+    <div
+        role="region"
+        aria-label="Query builder"
+        style="border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; font-size: 0.82rem"
+    >
         <!-- Header bar -->
         <div style="padding: 8px 14px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; gap: 10px">
-            <span
+            <h2
                 style="
                     font-weight: 700;
                     color: #181818;
@@ -10,13 +14,16 @@
                     align-items: center;
                     gap: 6px;
                     white-space: nowrap;
+                    font-size: inherit;
+                    margin: 0;
                 "
             >
                 <lightning-icon icon-name="standard:record" size="xx-small"></lightning-icon>
                 {selectedObject}
-            </span>
+            </h2>
             <lightning-input
                 type="search"
+                label="Search all fields and relationships"
                 placeholder="Search all fields and relationships..."
                 variant="label-hidden"
                 value={globalSearch}
@@ -24,7 +31,9 @@
                 style="flex: 1"
             >
             </lightning-input>
-            <span style="font-size: 0.75rem; color: #706e6b; white-space: nowrap">{selectedCount} fields</span>
+            <span style="font-size: 0.75rem; color: #706e6b; white-space: nowrap" aria-live="polite"
+                >{selectedCount} fields</span
+            >
         </div>
 
         <template if:true={hasRoot}>

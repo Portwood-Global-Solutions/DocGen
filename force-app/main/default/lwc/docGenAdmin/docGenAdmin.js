@@ -710,6 +710,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    // --- A11y live region ─────────────────────────────────────
+    // Page-level ARIA live announcement channel. Children dispatch a bubbling
+    // CustomEvent('announce', {detail:{message}, composed:true}); we mirror
+    // the message into a `slds-assistive-text` element with aria-live="polite".
+    @track liveAnnouncement = '';
+
+    handleA11yAnnounce(event) {
+        const msg = event && event.detail && event.detail.message;
+        if (!msg) return;
+        // Re-trigger if same string is announced again. Empty briefly so the
+        // SR re-reads identical messages.
+        if (this.liveAnnouncement === msg) {
+            this.liveAnnouncement = '';
+            // eslint-disable-next-line @lwc/lwc/no-async-operation
+            setTimeout(() => {
+                this.liveAnnouncement = msg;
+            }, 50);
+        } else {
+            this.liveAnnouncement = msg;
+        }
+    }
+
+    // Modal Esc-to-close handlers. Focus restoration is handled by the
+    // standard browser flow when the dialog DOM unmounts; full focus trap
+    // (Tab/Shift+Tab cycling) is deferred to v1.85.
+    handleEditModalKeydown(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this.closeEditModal();
+        }
+    }
+    handlePreviewModalKeydown(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this.closePreviewModal();
+        }
+    }
+
     // --- Wizard Logic ---
 
     renderedCallback() {

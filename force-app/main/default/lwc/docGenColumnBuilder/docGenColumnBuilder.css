@@ -28,3 +28,33 @@
     color: var(--slds-g-color-on-surface-2, #181818);
     background: var(--slds-g-color-surface-2, #f3f2f2);
 }
+
+/* Reset chrome on <button> elements that are visually rendered as
+   inline links / pills / clickable list rows. Inline `style` attributes
+   restore per-button visual treatment on top of this reset. */
+.bare-button {
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-align: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+    line-height: inherit;
+}
+.bare-button:focus-visible {
+    outline: 2px solid #0176d3;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Visual highlight for the keyboard-active option in any combobox-style
+   listbox inside this component. WCAG 2.4.7 (Focus Visible) — sighted
+   keyboard users need to see which option will be selected. */
+li[role='option'][aria-selected='true'] .slds-listbox__option {
+    background-color: #ecf3fe;
+    box-shadow: inset 2px 0 0 #0176d3;
+}

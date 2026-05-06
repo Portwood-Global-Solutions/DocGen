@@ -39,9 +39,12 @@ export default class DocGenTreeNode extends LightningElement {
     get pickerFields() {
         if (!this.nodeData || !this.nodeData.fields) return [];
         const s = this._pickerSearch || this.globalSearch || '';
-        return this.nodeData.fields
-            .filter((f) => !s || f.displayLabel.toLowerCase().includes(s) || f.apiName.toLowerCase().includes(s))
-            .slice(0, 100);
+        const filtered = this.nodeData.fields.filter(
+            (f) => !s || f.displayLabel.toLowerCase().includes(s) || f.apiName.toLowerCase().includes(s)
+        );
+        // Cap exists to protect the DOM when there's no search; once the user
+        // is actively filtering, show every match so nothing is hidden.
+        return s ? filtered : filtered.slice(0, 200);
     }
 
     handlePickerToggleField(event) {
@@ -186,7 +189,12 @@ export default class DocGenTreeNode extends LightningElement {
     // ── Template getters ────────────────────────────────────────
     get selectedFields() {
         if (!this.nodeData || !this.nodeData.fields) return [];
-        return this.nodeData.fields.filter((f) => f.checked);
+        return this.nodeData.fields
+            .filter((f) => f.checked)
+            .map((f) => ({
+                ...f,
+                removeLabel: 'Remove field ' + (f.displayLabel || f.apiName)
+            }));
     }
 
     get hasSelectedFields() {
@@ -216,6 +224,36 @@ export default class DocGenTreeNode extends LightningElement {
         return 'padding-left: ' + px + 'px;';
     }
 
+    // ── A11y identifiers + labels ───────────────────────────────
+    // path strings can contain dots and colons (e.g. "Account.child:Contacts");
+    // sanitize for use as DOM ids referenced by aria-controls / aria-labelledby.
+    get _safePath() {
+        const p = this.nodeData && this.nodeData.path ? this.nodeData.path : 'root';
+        return p.replace(/[^A-Za-z0-9_-]/g, '-');
+    }
+    get headingId() {
+        return 'dgt-h-' + this._safePath;
+    }
+    get fieldPickerId() {
+        return 'dgt-fp-' + this._safePath;
+    }
+    get relPickerId() {
+        return 'dgt-rp-' + this._safePath;
+    }
+    get parentPickerId() {
+        return 'dgt-pp-' + this._safePath;
+    }
+    get nodeAccessibleHeading() {
+        if (!this.nodeData) return '';
+        const obj = this.nodeData.objectLabel || this.nodeData.objectName || 'Object';
+        const cnt = this.selectedFields.length;
+        const depth = this.depth || 0;
+        const parts = [obj + ' fields'];
+        if (depth > 0) parts.push('depth ' + depth);
+        if (cnt > 0) parts.push(cnt + ' selected');
+        return parts.join(', ');
+    }
+
     get nodeAlias() {
         return this.nodeData ? this.nodeData.alias || '' : '';
     }
@@ -229,6 +267,18 @@ export default class DocGenTreeNode extends LightningElement {
         return this.nodeData ? this.nodeData.limitAmount || '' : '';
     }
 
+    // Per-parent-rel field-picker search. Keyed by pr.value so multiple
+    // expanded parents keep independent filters. Reassigned (not mutated)
+    // so LWC reactivity picks up the change.
+    @track _parentFieldSearches = {};
+
+    handleParentFieldSearch(event) {
+        const rel = event.currentTarget.dataset.rel;
+        if (!rel) return;
+        const v = (event.target.value || '').toLowerCase();
+        this._parentFieldSearches = { ...this._parentFieldSearches, [rel]: v };
+    }
+
     // Parent rel data for template — filtered by global search
     get parentRelsList() {
         if (!this.nodeData || !this.nodeData.parentRels) return [];
@@ -239,13 +289,35 @@ export default class DocGenTreeNode extends LightningElement {
                     !gs || pr.expanded || this._matchesSearch(pr, gs) || (pr.fields && pr.fields.some((f) => f.checked))
             )
             .map((pr) => {
-                const selFields = pr.fields ? pr.fields.filter((f) => f.checked) : [];
+                const prLabel = pr.displayLabel || pr.value;
+                const selFields = pr.fields
+                    ? pr.fields
+                          .filter((f) => f.checked)
+                          .map((f) => ({
+                              ...f,
+                              removeLabel: 'Remove ' + prLabel + ' ' + (f.displayLabel || f.apiName)
+                          }))
+                    : [];
+                const fieldSearch = (this._parentFieldSearches[pr.value] || gs || '').toLowerCase();
+                const allFields = pr.fields || [];
+                const filteredFields = fieldSearch
+                    ? allFields.filter(
+                          (f) =>
+                              (f.displayLabel && f.displayLabel.toLowerCase().includes(fieldSearch)) ||
+                              (f.apiName && f.apiName.toLowerCase().includes(fieldSearch))
+                      )
+                    : allFields;
                 return {
                     ...pr,
                     selectedFields: selFields,
                     hasSelectedFields: selFields.length > 0,
                     selectedFieldCount: selFields.length,
-                    pickerFields: pr.fields ? pr.fields.slice(0, 100) : []
+                    // Same rule as the base field picker: when actively
+                    // searching, show every match; cap only the unfiltered case.
+                    pickerFields: fieldSearch ? filteredFields : filteredFields.slice(0, 200),
+                    fieldSearchValue: this._parentFieldSearches[pr.value] || '',
+                    fieldSearchAriaLabel: 'Search fields on ' + prLabel,
+                    removeLabel: 'Remove parent lookup ' + prLabel
                 };
             });
     }
@@ -291,23 +363,25 @@ export default class DocGenTreeNode extends LightningElement {
         // clicking again creates a filtered-subset slot rather than toggling
         // the existing one.
         const seen = new Set();
-        return this.nodeData.childRels
+        const filtered = this.nodeData.childRels
             .filter((cr) => {
                 if (seen.has(cr.value)) return false;
                 seen.add(cr.value);
                 return true;
             })
-            .filter((cr) => !s || cr.displayLabel.toLowerCase().includes(s) || cr.value.toLowerCase().includes(s))
-            .slice(0, 50);
+            .filter((cr) => !s || cr.displayLabel.toLowerCase().includes(s) || cr.value.toLowerCase().includes(s));
+        // Cap protects the DOM when unfiltered; with a search term the user
+        // is actively narrowing, so show every match.
+        return s ? filtered : filtered.slice(0, 100);
     }
 
     get filteredParentRels() {
         if (!this.nodeData || !this.nodeData.parentRels) return [];
         const s = this._parentRelPickerSearch;
-        return this.nodeData.parentRels
+        const filtered = this.nodeData.parentRels
             .filter((pr) => !pr.expanded)
-            .filter((pr) => !s || pr.displayLabel.toLowerCase().includes(s) || pr.value.toLowerCase().includes(s))
-            .slice(0, 50);
+            .filter((pr) => !s || pr.displayLabel.toLowerCase().includes(s) || pr.value.toLowerCase().includes(s));
+        return s ? filtered : filtered.slice(0, 100);
     }
 
     handleExpandChildFromPicker(event) {
@@ -349,13 +423,15 @@ export default class DocGenTreeNode extends LightningElement {
             .filter((cr) => !gs || cr.expanded || this._matchesSearch(cr, gs))
             .map((cr) => {
                 const count = cr.nodeData ? this._countNodeFields(cr.nodeData) : 0;
+                const crLabel = cr.displayLabel || cr.value;
                 return {
                     ...cr,
                     slotKey: cr._slotKey || cr.value,
                     hasSelectedCount: count > 0,
                     selectedCount: count,
                     nextDepth: parseInt(this.depth, 10) + 1,
-                    icon: cr.expanded ? 'utility:chevrondown' : 'utility:chevronright'
+                    icon: cr.expanded ? 'utility:chevrondown' : 'utility:chevronright',
+                    removeLabel: 'Remove related list ' + crLabel
                 };
             });
     }

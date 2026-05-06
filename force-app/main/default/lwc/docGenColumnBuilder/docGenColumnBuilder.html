@@ -51,14 +51,16 @@
                             <ul class="slds-listbox slds-listbox_vertical">
                                 <template for:each={filteredObjectOptions} for:item="opt">
                                     <li key={opt.value} class="slds-listbox__item">
-                                        <div
-                                            class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                        <button
+                                            type="button"
+                                            class="bare-button slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                            style="width: 100%; text-align: left"
                                             data-value={opt.value}
                                             data-label={opt.label}
                                             onclick={handleObjectSelect}
                                         >
                                             <span class="slds-truncate">{opt.label}</span>
-                                        </div>
+                                        </button>
                                     </li>
                                 </template>
                             </ul>
@@ -86,8 +88,10 @@
                                 <template if:true={providerOptions.length}>
                                     <template for:each={providerOptions} for:item="cls">
                                         <li key={cls} class="slds-listbox__item">
-                                            <div
-                                                class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                            <button
+                                                type="button"
+                                                class="bare-button slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                                style="width: 100%; text-align: left"
                                                 data-value={cls}
                                                 onclick={handleProviderSelect}
                                             >
@@ -99,7 +103,7 @@
                                                     ></lightning-icon
                                                     >{cls}</span
                                                 >
-                                            </div>
+                                            </button>
                                         </li>
                                     </template>
                                 </template>
@@ -164,20 +168,24 @@
                 </p>
                 <div style="display: flex; flex-wrap: wrap; gap: 4px">
                     <template for:each={providerTags} for:item="tag">
-                        <code
+                        <button
                             key={tag.code}
+                            type="button"
+                            class="bare-button"
                             style="
                                 font-size: 0.75rem;
                                 background: #f3f2f2;
                                 padding: 2px 8px;
                                 border-radius: 4px;
                                 color: #0176d3;
-                                cursor: pointer;
+                                font-family: monospace;
                             "
                             data-copy={tag.code}
                             onclick={handleCopyTag}
-                            >{tag.code}</code
+                            title="Copy merge tag"
                         >
+                            {tag.code}
+                        </button>
                     </template>
                 </div>
             </div>
@@ -221,10 +229,17 @@
             </div>
             <div style="font-size: 0.8125rem; font-family: monospace">
                 <template for:each={relationshipTree} for:item="item">
-                    <div key={item.id} style={item.indent} data-node-id={item.id} onclick={handleTreeNodeClick}>
+                    <button
+                        key={item.id}
+                        type="button"
+                        class="bare-button"
+                        style={item.indent}
+                        data-node-id={item.id}
+                        onclick={handleTreeNodeClick}
+                        aria-label={item.ariaLabel}
+                    >
                         <span
                             style="
-                                cursor: pointer;
                                 padding: 2px 6px;
                                 border-radius: 4px;
                                 display: inline-flex;
@@ -239,45 +254,50 @@
                             <span class={item.badgeClass}>{item.badgeLabel}</span>
                             <strong>{item.label}</strong>
                         </span>
-                    </div>
+                    </button>
                 </template>
             </div>
         </div>
 
         <!-- Object Tabs -->
-        <div style="display: flex; border-bottom: 2px solid #e5e5e5; margin-bottom: 1rem; overflow-x: auto">
+        <div
+            role="tablist"
+            aria-label="Object tabs"
+            style="display: flex; border-bottom: 2px solid #e5e5e5; margin-bottom: 1rem; overflow-x: auto"
+        >
             <template for:each={nodeTabs} for:item="tab">
-                <div
+                <button
                     key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab.ariaSelected}
                     data-node-id={tab.id}
                     onclick={handleTabClick}
+                    class={tab.tabButtonClass}
                     style="
                         padding: 0.5rem 1rem;
-                        cursor: pointer;
                         font-size: 0.875rem;
                         font-weight: 600;
                         white-space: nowrap;
+                        border: 0;
                         border-bottom: 3px solid transparent;
+                        background: none;
                         margin-bottom: -2px;
+                        cursor: pointer;
                     "
-                    class={tab.tabClass}
                 >
                     {tab.label}
-                </div>
+                </button>
             </template>
-            <div
-                style="
-                    padding: 0.5rem 1rem;
-                    cursor: pointer;
-                    color: #0176d3;
-                    font-size: 0.875rem;
-                    font-weight: 600;
-                    white-space: nowrap;
-                "
+            <button
+                type="button"
+                class="bare-button"
                 onclick={handleAddNode}
+                aria-label="Add related list"
+                style="padding: 0.5rem 1rem; color: #0176d3; font-size: 0.875rem; font-weight: 600; white-space: nowrap"
             >
                 + Add
-            </div>
+            </button>
         </div>
 
         <!-- Active Tab Content -->
@@ -288,12 +308,14 @@
                     <div>
                         <h3 style="font-size: 1rem; font-weight: 700; margin: 0">{activeNode.label}</h3>
                         <template if:true={activeNode.isRoot}>
-                            <a
-                                href="javascript:void(0)"
-                                style="font-size: 0.75rem; color: #706e6b; text-decoration: none"
+                            <button
+                                type="button"
+                                class="bare-button"
+                                style="font-size: 0.75rem; color: #706e6b"
                                 onclick={handleChangeRoot}
-                                >Change root object</a
                             >
+                                Change root object
+                            </button>
                         </template>
                         <template if:true={activeNode.isNotRoot}>
                             <p class="slds-text-body_small slds-text-color_weak" style="margin: 2px 0 0 0">
@@ -390,16 +412,17 @@
                                 "
                             >
                                 <template for:each={filteredParentPickerOptions} for:item="rel">
-                                    <div
+                                    <button
                                         key={rel.value}
-                                        class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
-                                        style="cursor: pointer; padding: 0.5rem"
+                                        type="button"
+                                        class="bare-button slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                        style="width: 100%; text-align: left; padding: 0.5rem"
                                         data-value={rel.value}
                                         data-target={rel.targetObject}
                                         onclick={handleParentPickerRelSelect}
                                     >
                                         <span class="slds-truncate">{rel.label}</span>
-                                    </div>
+                                    </button>
                                 </template>
                             </div>
                         </template>
@@ -534,18 +557,21 @@
                                     gap: 4px;
                                 "
                             >
-                                <span
+                                <button
+                                    type="button"
+                                    class="bare-button"
                                     style="
                                         font-size: 0.6875rem;
                                         font-weight: 600;
                                         color: #0176d3;
-                                        cursor: pointer;
                                         text-decoration: underline;
                                     "
                                     data-rel={pg.relationshipName}
                                     onclick={handleEditParentGroup}
-                                    >{pg.relationshipName}:</span
+                                    title="Edit parent fields"
                                 >
+                                    {pg.relationshipName}:
+                                </button>
                                 <template for:each={pg.fields} for:item="pf">
                                     <lightning-pill
                                         key={pf}
@@ -611,20 +637,24 @@
                         </p>
                         <div style="display: flex; flex-wrap: wrap; gap: 4px">
                             <template for:each={activeNodeTags} for:item="tag">
-                                <code
+                                <button
                                     key={tag.code}
+                                    type="button"
+                                    class="bare-button"
                                     style="
                                         font-size: 0.75rem;
                                         background: #f3f2f2;
                                         padding: 2px 8px;
                                         border-radius: 4px;
                                         color: #0176d3;
-                                        cursor: pointer;
+                                        font-family: monospace;
                                     "
                                     data-copy={tag.code}
                                     onclick={handleCopyTag}
-                                    >{tag.code}</code
+                                    title="Copy merge tag"
                                 >
+                                    {tag.code}
+                                </button>
                             </template>
                         </div>
                     </div>
@@ -643,7 +673,14 @@
 
     <!-- ==================== ADD NODE MODAL ==================== -->
     <template if:true={showAddNodeModal}>
-        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+        <section
+            role="dialog"
+            tabindex="-1"
+            aria-modal="true"
+            aria-labelledby="add-node-modal-title"
+            onkeydown={handleAddNodeModalKeydown}
+            class="slds-modal slds-fade-in-open"
+        >
             <div class="slds-modal__container" style="max-width: 480px">
                 <header class="slds-modal__header">
                     <lightning-button-icon
@@ -653,7 +690,7 @@
                         class="slds-button slds-button_icon slds-modal__close"
                         onclick={handleCloseAddNode}
                     ></lightning-button-icon>
-                    <h2 class="slds-text-heading_medium">Add Related Records</h2>
+                    <h2 id="add-node-modal-title" class="slds-text-heading_medium">Add Related Records</h2>
                     <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
                         Choose a related list to add to your document.
                     </p>
@@ -671,8 +708,10 @@
                             <ul class="slds-listbox slds-listbox_vertical slds-has-dividers_bottom-space">
                                 <template for:each={filteredAddOptions} for:item="opt">
                                     <li key={opt.value} class="slds-listbox__item">
-                                        <div
-                                            class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                        <button
+                                            type="button"
+                                            class="bare-button slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                            style="width: 100%"
                                             data-value={opt.value}
                                             onclick={handleAddNodeSelect}
                                         >
@@ -685,7 +724,7 @@
                                             <span class="slds-media__body"
                                                 ><span class="slds-truncate">{opt.label}</span></span
                                             >
-                                        </div>
+                                        </button>
                                     </li>
                                 </template>
                             </ul>
@@ -699,7 +738,14 @@
 
     <!-- ==================== REPORT IMPORT MODAL ==================== -->
     <template if:true={showReportModal}>
-        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+        <section
+            role="dialog"
+            tabindex="-1"
+            aria-modal="true"
+            aria-labelledby="report-modal-title"
+            onkeydown={handleReportModalKeydown}
+            class="slds-modal slds-fade-in-open"
+        >
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
                     <lightning-button-icon
@@ -709,7 +755,7 @@
                         class="slds-button slds-button_icon slds-modal__close"
                         onclick={handleCloseReportModal}
                     ></lightning-button-icon>
-                    <h2 class="slds-text-heading_medium">Import from Report</h2>
+                    <h2 id="report-modal-title" class="slds-text-heading_medium">Import from Report</h2>
                     <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
                         Pick a report and we'll set up your template automatically.
                     </p>
@@ -728,8 +774,10 @@
                                 <ul class="slds-listbox slds-listbox_vertical slds-has-dividers_bottom-space">
                                     <template for:each={reportSearchResults} for:item="report">
                                         <li key={report.id} class="slds-listbox__item">
-                                            <div
-                                                class={report.optionClass}
+                                            <button
+                                                type="button"
+                                                class={report.optionButtonClass}
+                                                style="width: 100%"
                                                 data-id={report.id}
                                                 data-name={report.name}
                                                 onclick={handleReportSelect}
@@ -748,7 +796,7 @@
                                                         ></template
                                                     >
                                                 </span>
-                                            </div>
+                                            </button>
                                         </li>
                                     </template>
                                 </ul>

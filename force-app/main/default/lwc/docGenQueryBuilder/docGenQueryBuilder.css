@@ -1,0 +1,15 @@
+/* Visual highlight for the keyboard-active option in each combobox.
+   Required for WCAG 2.4.7 (Focus Visible) — sighted keyboard users
+   need to see which option will be selected when they press Enter.
+   `aria-activedescendant` keeps actual DOM focus on the input, so
+   without this rule the active option would have no indicator. */
+li[role='option'][aria-selected='true'] .slds-listbox__option {
+    background-color: #ecf3fe;
+    box-shadow: inset 2px 0 0 #0176d3;
+}
+
+/* SLDS-flavored focus ring for the bare search inputs that drive each combobox. */
+.slds-input:focus-visible {
+    outline: 2px solid #0176d3;
+    outline-offset: 1px;
+}

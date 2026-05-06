@@ -1,17 +1,23 @@
 <template>
-    <div class="slds-box slds-container_large">
+    <div class="slds-box slds-container_large" role="region" aria-label="Record filter">
         <h3 class="slds-text-heading_small slds-var-m-bottom_medium">Record Filter</h3>
 
         <template if:true={isLoading}>
-            <lightning-spinner size="small"></lightning-spinner>
+            <lightning-spinner size="small" alternative-text="Loading filter"></lightning-spinner>
         </template>
 
         <template for:each={rows} for:item="row" for:index="index">
-            <div key={row.id} class="slds-grid slds-gutters slds-var-m-bottom_small slds-grid_vertical-align-center">
+            <div
+                key={row.id}
+                class="slds-grid slds-gutters slds-var-m-bottom_small slds-grid_vertical-align-center"
+                role="group"
+                aria-label="Filter condition"
+            >
                 <!-- Logic (AND/OR) -->
                 <template if:true={index}>
                     <div class="slds-col slds-size_2-of-12">
                         <lightning-combobox
+                            label="Condition logic"
                             variant="label-hidden"
                             value={row.logic}
                             options={logicOptions}
@@ -22,13 +28,14 @@
                 </template>
                 <template if:false={index}>
                     <div class="slds-col slds-size_2-of-12">
-                        <span class="slds-text-color_weak slds-var-p-left_small">WHERE</span>
+                        <span class="slds-text-color_weak slds-var-p-left_small" aria-hidden="true">WHERE</span>
                     </div>
                 </template>
 
                 <!-- Field -->
                 <div class="slds-col slds-size_3-of-12">
                     <lightning-combobox
+                        label="Field"
                         variant="label-hidden"
                         value={row.field}
                         options={fieldOptions}
@@ -41,6 +48,7 @@
                 <!-- Operator -->
                 <div class="slds-col slds-size_2-of-12">
                     <lightning-combobox
+                        label="Operator"
                         variant="label-hidden"
                         value={row.operator}
                         options={operatorOptions}
@@ -54,6 +62,7 @@
                 <div class="slds-col slds-size_4-of-12">
                     <!-- Dynamic input type based on field? For now, text. -->
                     <lightning-input
+                        label="Value"
                         variant="label-hidden"
                         value={row.value}
                         placeholder="Value (e.g. 'Closed Won')"

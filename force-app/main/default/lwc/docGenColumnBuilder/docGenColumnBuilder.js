@@ -113,12 +113,17 @@ export default class DocGenColumnBuilder extends LightningElement {
 
     // Tab items for the tabset
     get nodeTabs() {
-        return this.treeNodes.map((n) => ({
-            ...n,
-            tabLabel: n.isRoot ? n.label : n.label,
-            tabClass: n.id === this.activeNodeId ? 'active-tab' : 'inactive-tab',
-            isActive: n.id === this.activeNodeId
-        }));
+        return this.treeNodes.map((n) => {
+            const active = n.id === this.activeNodeId;
+            return {
+                ...n,
+                tabLabel: n.isRoot ? n.label : n.label,
+                tabClass: active ? 'active-tab' : 'inactive-tab',
+                tabButtonClass: 'bare-button ' + (active ? 'active-tab' : 'inactive-tab'),
+                isActive: active,
+                ariaSelected: active ? 'true' : 'false'
+            };
+        });
     }
 
     // Visual relationship tree (rendered on every tab)
@@ -147,7 +152,12 @@ export default class DocGenColumnBuilder extends LightningElement {
                       : 'badge-base badge-related',
                 badgeLabel: node.isRoot ? 'Main' : node.isJunction ? 'Linked' : 'Child',
                 connector: depth > 0 ? '└─' : '',
-                treeItemClass: node.id === this.activeNodeId ? 'slds-theme_shade' : ''
+                treeItemClass: node.id === this.activeNodeId ? 'slds-theme_shade' : '',
+                ariaLabel:
+                    (node.isRoot ? 'Main' : node.isJunction ? 'Linked' : 'Child') +
+                    ' record ' +
+                    node.label +
+                    (node.id === this.activeNodeId ? ', selected' : '')
             }
         ];
 
@@ -698,10 +708,66 @@ export default class DocGenColumnBuilder extends LightningElement {
         if (!parentNode) return;
         this.addNodeParentId = parentNode.id;
         this.addNodeSearch = '';
+        this._captureModalReturnFocus();
         getChildRelationships({ objectName: parentNode.objectApiName }).then((data) => {
             this.addNodeChildOptions = data;
             this.showAddNodeModal = true;
         });
+    }
+
+    // Modal focus management. Capture activeElement before opening so we can
+    // return focus to it on close (per WAI-ARIA Modal Dialog pattern).
+    _captureModalReturnFocus() {
+        // document.activeElement may be the LWC host; that's still useful.
+        try {
+            this._modalReturnFocusEl = document.activeElement;
+        } catch (e) {
+            this._modalReturnFocusEl = null;
+        }
+    }
+    _restoreModalFocus() {
+        const el = this._modalReturnFocusEl;
+        this._modalReturnFocusEl = null;
+        if (el && typeof el.focus === 'function') {
+            // setTimeout 0 lets the modal teardown finish before focus moves.
+            // eslint-disable-next-line @lwc/lwc/no-async-operation
+            setTimeout(() => {
+                try {
+                    el.focus();
+                } catch (e) {
+                    // host element may be gone or non-focusable; safe to ignore.
+                }
+            }, 0);
+        }
+    }
+    // Set initial focus on the close button when a modal opens. Runs after
+    // each render; uses transition flags to avoid re-focusing on every render.
+    renderedCallback() {
+        if (this.showAddNodeModal && !this._addNodeModalOpened) {
+            this._addNodeModalOpened = true;
+            this._focusFirstModalButton('.slds-modal__close');
+        } else if (!this.showAddNodeModal && this._addNodeModalOpened) {
+            this._addNodeModalOpened = false;
+        }
+        if (this.showReportModal && !this._reportModalOpened) {
+            this._reportModalOpened = true;
+            this._focusFirstModalButton('.slds-modal__close');
+        } else if (!this.showReportModal && this._reportModalOpened) {
+            this._reportModalOpened = false;
+        }
+    }
+    _focusFirstModalButton(selector) {
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            const el = this.template.querySelector(selector);
+            if (el && typeof el.focus === 'function') {
+                try {
+                    el.focus();
+                } catch (e) {
+                    /* ignore */
+                }
+            }
+        }, 0);
     }
 
     handleAddNodeSearch(event) {
@@ -709,6 +775,14 @@ export default class DocGenColumnBuilder extends LightningElement {
     }
     handleCloseAddNode() {
         this.showAddNodeModal = false;
+        this._restoreModalFocus();
+    }
+
+    handleAddNodeModalKeydown(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this.handleCloseAddNode();
+        }
     }
 
     handleAddNodeSelect(event) {
@@ -899,6 +973,7 @@ export default class DocGenColumnBuilder extends LightningElement {
 
     // === REPORT IMPORT ===
     handleOpenReportImport() {
+        this._captureModalReturnFocus();
         this.showReportModal = true;
         this.reportSearchResults = [];
         this.reportSearchTerm = '';
@@ -907,8 +982,16 @@ export default class DocGenColumnBuilder extends LightningElement {
         this.showImportPreview = false;
         this._searchReports('');
     }
+    handleReportModalKeydown(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this.handleCloseReportModal();
+        }
+    }
+
     handleCloseReportModal() {
         this.showReportModal = false;
+        this._restoreModalFocus();
         this.showImportPreview = false;
     }
     handleReportSearch(event) {
@@ -925,6 +1008,9 @@ export default class DocGenColumnBuilder extends LightningElement {
                     isSelected: r.id === this.selectedReportId,
                     optionClass:
                         'slds-media slds-listbox__option slds-listbox__option_plain slds-media_small' +
+                        (r.id === this.selectedReportId ? ' slds-theme_shade' : ''),
+                    optionButtonClass:
+                        'bare-button slds-media slds-listbox__option slds-listbox__option_plain slds-media_small' +
                         (r.id === this.selectedReportId ? ' slds-theme_shade' : '')
                 }));
             })
@@ -940,6 +1026,9 @@ export default class DocGenColumnBuilder extends LightningElement {
             isSelected: r.id === this.selectedReportId,
             optionClass:
                 'slds-media slds-listbox__option slds-listbox__option_plain slds-media_small' +
+                (r.id === this.selectedReportId ? ' slds-theme_shade' : ''),
+            optionButtonClass:
+                'bare-button slds-media slds-listbox__option slds-listbox__option_plain slds-media_small' +
                 (r.id === this.selectedReportId ? ' slds-theme_shade' : '')
         }));
     }

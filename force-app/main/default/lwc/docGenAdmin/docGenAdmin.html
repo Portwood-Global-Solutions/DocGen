@@ -1,5 +1,9 @@
 <template>
-    <div class="admin-workspace">
+    <div class="admin-workspace" onannounce={handleA11yAnnounce}>
+        <!-- Page-level ARIA live region. Children dispatch a bubbling
+             CustomEvent('announce', {detail:{message:'…'}, composed:true}) and
+             we mirror the message text here so screen readers announce it. -->
+        <div aria-live="polite" aria-atomic="true" class="slds-assistive-text">{liveAnnouncement}</div>
         <lightning-tabset variant="scoped" active-tab-value={activeMainTab}>
             <lightning-tab label="Create New" value="new_template" onactive={handleWizardTabActive}>
                 <div class="slds-var-p-around_large">
@@ -986,7 +990,14 @@
 
     <!-- Edit Template Modal -->
     <template if:true={isEditModalOpen}>
-        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_large">
+        <section
+            role="dialog"
+            tabindex="-1"
+            aria-modal="true"
+            aria-labelledby="edit-template-modal-title"
+            onkeydown={handleEditModalKeydown}
+            class="slds-modal slds-fade-in-open slds-modal_large"
+        >
             <div class="slds-modal__container modern-modal">
                 <header class="slds-modal__header">
                     <lightning-button-icon
@@ -997,7 +1008,9 @@
                         class="slds-button slds-button_icon slds-modal__close"
                         onclick={closeEditModal}
                     ></lightning-button-icon>
-                    <h2 class="slds-text-heading_medium slds-hyphenate">Edit Template Configuration</h2>
+                    <h2 id="edit-template-modal-title" class="slds-text-heading_medium slds-hyphenate">
+                        Edit Template Configuration
+                    </h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_medium">
                     <!-- Sample Record (persistent across all tabs) — hidden for Apex providers -->
@@ -2173,7 +2186,14 @@
 
     <!-- Preview Modal -->
     <template if:true={isPreviewModalOpen}>
-        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_medium">
+        <section
+            role="dialog"
+            tabindex="-1"
+            aria-modal="true"
+            aria-labelledby="preview-modal-title"
+            onkeydown={handlePreviewModalKeydown}
+            class="slds-modal slds-fade-in-open slds-modal_medium"
+        >
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
                     <lightning-button-icon
@@ -2184,7 +2204,9 @@
                         class="slds-button slds-button_icon slds-modal__close"
                         onclick={closePreviewModal}
                     ></lightning-button-icon>
-                    <h2 class="slds-text-heading_medium">Version Preview: {previewVersion.VersionNumber}</h2>
+                    <h2 id="preview-modal-title" class="slds-text-heading_medium">
+                        Version Preview: {previewVersion.VersionNumber}
+                    </h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_large">
                     <div class="slds-grid slds-gutters slds-var-m-bottom_large">

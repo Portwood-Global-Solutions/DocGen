@@ -1,5 +1,6 @@
 <template>
-    <div style={indentStyle}>
+    <div style={indentStyle} role="group" aria-labelledby={headingId}>
+        <h3 id={headingId} class="slds-assistive-text">{nodeAccessibleHeading}</h3>
         <div style="padding: 8px 14px; border-bottom: 1px solid #f0f0f0">
             <!-- ═══ Selected field pills + picker toggle ═══ -->
             <div style="display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap">
@@ -21,13 +22,17 @@
                     >
                         <span style="color: #1a56db">{sf.displayLabel}</span>
                         <span style="color: #aaa; font-family: monospace; font-size: 0.65rem">{sf.apiName}</span>
-                        <a
-                            href="javascript:void(0)"
+                        <button
+                            type="button"
+                            class="bare-button"
                             data-api={sf.apiName}
                             onclick={handleRemoveField}
-                            style="color: #999; text-decoration: none; margin-left: 2px; font-size: 0.7rem"
-                            >&times;</a
+                            aria-label={sf.removeLabel}
+                            title={sf.removeLabel}
+                            style="color: #999; margin-left: 2px; font-size: 0.7rem"
                         >
+                            &times;
+                        </button>
                     </span>
                 </template>
 
@@ -55,23 +60,30 @@
                                 <span style="color: #aaa; font-family: monospace; font-size: 0.65rem"
                                     >{pr.value}.{pf.apiName}</span
                                 >
-                                <a
-                                    href="javascript:void(0)"
+                                <button
+                                    type="button"
+                                    class="bare-button"
                                     data-api={pf.apiName}
                                     data-rel={pr.value}
                                     onclick={handleRemoveParentField}
-                                    style="color: #999; text-decoration: none; margin-left: 2px; font-size: 0.7rem"
-                                    >&times;</a
+                                    aria-label={pf.removeLabel}
+                                    title={pf.removeLabel}
+                                    style="color: #999; margin-left: 2px; font-size: 0.7rem"
                                 >
+                                    &times;
+                                </button>
                             </span>
                         </template>
                     </template>
                 </template>
 
                 <!-- Add fields button -->
-                <a
-                    href="javascript:void(0)"
+                <button
+                    type="button"
+                    class="bare-button"
                     onclick={togglePicker}
+                    aria-expanded={showPicker}
+                    aria-controls={fieldPickerId}
                     style="
                         display: inline-flex;
                         align-items: center;
@@ -81,18 +93,20 @@
                         font-size: 0.75rem;
                         color: #1a56db;
                         border: 1px dashed #c7d7f5;
-                        text-decoration: none;
                         white-space: nowrap;
                         background: #fafbff;
                     "
                 >
                     + fields
-                </a>
+                </button>
             </div>
 
             <!-- ═══ Field picker dropdown ═══ -->
             <template if:true={showPicker}>
                 <div
+                    id={fieldPickerId}
+                    role="group"
+                    aria-label="Field picker"
                     style="
                         margin-top: 8px;
                         border: 1px solid #e5e5e5;
@@ -104,6 +118,7 @@
                     <input
                         type="text"
                         placeholder="Search fields..."
+                        aria-label="Search fields"
                         value={_pickerSearch}
                         oninput={handlePickerSearch}
                         style="
@@ -113,7 +128,6 @@
                             border-radius: 6px;
                             font-size: 0.8rem;
                             margin-bottom: 6px;
-                            outline: none;
                         "
                     />
                     <div
@@ -172,15 +186,16 @@
                     style="margin-top: 6px; margin-left: 12px; border-left: 2px solid #e9d5ff; padding-left: 10px"
                 >
                     <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px">
-                        <a
-                            href="javascript:void(0)"
+                        <button
+                            type="button"
+                            class="bare-button"
                             data-rel={pr.value}
                             onclick={handleExpandParent}
+                            aria-expanded={pr.expanded}
                             style="
                                 font-weight: 600;
                                 font-size: 0.78rem;
                                 color: #7c3aed;
-                                text-decoration: none;
                                 display: flex;
                                 align-items: center;
                                 gap: 4px;
@@ -192,17 +207,36 @@
                                 style="--sds-c-icon-color-foreground-default: #7c3aed"
                             ></lightning-icon>
                             {pr.displayLabel}
-                        </a>
-                        <a
-                            href="javascript:void(0)"
+                        </button>
+                        <button
+                            type="button"
+                            class="bare-button"
                             data-rel={pr.value}
                             onclick={handleRemoveParent}
-                            style="color: #ccc; text-decoration: none; font-size: 0.8rem; margin-left: auto"
-                            title="Remove"
-                            >&times;</a
+                            aria-label={pr.removeLabel}
+                            style="color: #ccc; font-size: 0.8rem; margin-left: auto"
+                            title={pr.removeLabel}
                         >
+                            &times;
+                        </button>
                     </div>
                     <template if:true={pr.expanded}>
+                        <input
+                            type="text"
+                            placeholder="Search fields..."
+                            aria-label={pr.fieldSearchAriaLabel}
+                            value={pr.fieldSearchValue}
+                            data-rel={pr.value}
+                            oninput={handleParentFieldSearch}
+                            style="
+                                width: 100%;
+                                padding: 5px 9px;
+                                border: 1px solid #d8dde6;
+                                border-radius: 6px;
+                                font-size: 0.75rem;
+                                margin-bottom: 4px;
+                            "
+                        />
                         <div
                             style="
                                 max-height: 160px;
@@ -261,9 +295,12 @@
 
             <!-- ═══ Add related data / parent lookup buttons ═══ -->
             <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap">
-                <a
-                    href="javascript:void(0)"
+                <button
+                    type="button"
+                    class="bare-button"
                     onclick={toggleRelPicker}
+                    aria-expanded={showRelPicker}
+                    aria-controls={relPickerId}
                     style="
                         display: inline-flex;
                         align-items: center;
@@ -273,15 +310,17 @@
                         font-size: 0.75rem;
                         color: #065f46;
                         border: 1px dashed #a7f3d0;
-                        text-decoration: none;
                         background: #f0fdf4;
                     "
                 >
                     + related list
-                </a>
-                <a
-                    href="javascript:void(0)"
+                </button>
+                <button
+                    type="button"
+                    class="bare-button"
                     onclick={toggleParentPicker}
+                    aria-expanded={showParentPicker}
+                    aria-controls={parentPickerId}
                     style="
                         display: inline-flex;
                         align-items: center;
@@ -291,17 +330,19 @@
                         font-size: 0.75rem;
                         color: #7c3aed;
                         border: 1px dashed #d8c4f0;
-                        text-decoration: none;
                         background: #faf5ff;
                     "
                 >
                     + parent lookup
-                </a>
+                </button>
             </div>
 
             <!-- ═══ Related list picker dropdown ═══ -->
             <template if:true={showRelPicker}>
                 <div
+                    id={relPickerId}
+                    role="group"
+                    aria-label="Related list picker"
                     style="
                         margin-top: 6px;
                         border: 1px solid #e5e5e5;
@@ -313,6 +354,7 @@
                     <input
                         type="text"
                         placeholder="Search related lists..."
+                        aria-label="Search related lists"
                         value={_relPickerSearch}
                         oninput={handleRelPickerSearch}
                         style="
@@ -322,14 +364,14 @@
                             border-radius: 6px;
                             font-size: 0.8rem;
                             margin-bottom: 6px;
-                            outline: none;
                         "
                     />
                     <div style="max-height: 180px; overflow-y: auto">
                         <template for:each={filteredChildRels} for:item="cr">
-                            <a
+                            <button
                                 key={cr.value}
-                                href="javascript:void(0)"
+                                type="button"
+                                class="bare-button"
                                 data-rel={cr.value}
                                 onclick={handleExpandChildFromPicker}
                                 style="
@@ -338,10 +380,9 @@
                                     gap: 6px;
                                     padding: 5px 8px;
                                     font-size: 0.8rem;
-                                    text-decoration: none;
                                     color: #065f46;
                                     border-radius: 4px;
-                                    cursor: pointer;
+                                    width: 100%;
                                 "
                                 onmouseover={_hoverIn}
                                 onmouseout={_hoverOut}
@@ -349,7 +390,7 @@
                                 <lightning-icon icon-name="standard:related_list" size="xx-small"></lightning-icon>
                                 <span style="font-weight: 500">{cr.displayLabel}</span>
                                 <span style="color: #999; font-size: 0.68rem; font-family: monospace">{cr.value}</span>
-                            </a>
+                            </button>
                         </template>
                     </div>
                 </div>
@@ -358,6 +399,9 @@
             <!-- ═══ Parent lookup picker dropdown ═══ -->
             <template if:true={showParentPicker}>
                 <div
+                    id={parentPickerId}
+                    role="group"
+                    aria-label="Parent lookup picker"
                     style="
                         margin-top: 6px;
                         border: 1px solid #e5e5e5;
@@ -369,6 +413,7 @@
                     <input
                         type="text"
                         placeholder="Search parent lookups..."
+                        aria-label="Search parent lookups"
                         value={_parentRelPickerSearch}
                         oninput={handleParentRelPickerSearch}
                         style="
@@ -378,14 +423,14 @@
                             border-radius: 6px;
                             font-size: 0.8rem;
                             margin-bottom: 6px;
-                            outline: none;
                         "
                     />
                     <div style="max-height: 180px; overflow-y: auto">
                         <template for:each={filteredParentRels} for:item="pr">
-                            <a
+                            <button
                                 key={pr.value}
-                                href="javascript:void(0)"
+                                type="button"
+                                class="bare-button"
                                 data-rel={pr.value}
                                 onclick={handleExpandParentFromPicker}
                                 style="
@@ -394,10 +439,9 @@
                                     gap: 6px;
                                     padding: 5px 8px;
                                     font-size: 0.8rem;
-                                    text-decoration: none;
                                     color: #7c3aed;
                                     border-radius: 4px;
-                                    cursor: pointer;
+                                    width: 100%;
                                 "
                                 onmouseover={_hoverIn}
                                 onmouseout={_hoverOut}
@@ -409,7 +453,7 @@
                                 ></lightning-icon>
                                 <span style="font-weight: 500">{pr.displayLabel}</span>
                                 <span style="color: #999; font-size: 0.68rem; font-family: monospace">{pr.value}</span>
-                            </a>
+                            </button>
                         </template>
                     </div>
                 </div>
@@ -481,20 +525,17 @@
                             <span style="font-size: 0.65rem; color: #999; font-weight: 400; font-family: monospace"
                                 >{cr.value}</span
                             >
-                            <a
-                                href="javascript:void(0)"
+                            <button
+                                type="button"
+                                class="bare-button"
                                 data-rel={cr.slotKey}
                                 onclick={handleRemoveChild}
-                                style="
-                                    color: #ccc;
-                                    text-decoration: none;
-                                    font-size: 0.85rem;
-                                    margin-left: auto;
-                                    padding: 0 4px;
-                                "
-                                title="Remove"
-                                >&times;</a
+                                aria-label={cr.removeLabel}
+                                style="color: #ccc; font-size: 0.85rem; margin-left: auto; padding: 0 4px"
+                                title={cr.removeLabel}
                             >
+                                &times;
+                            </button>
                         </div>
                         <c-doc-gen-tree-node
                             node-data={cr.nodeData}

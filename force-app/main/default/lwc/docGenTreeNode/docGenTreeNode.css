@@ -1,0 +1,32 @@
+/* Reset for <button> elements that visually look like inline links/pills.
+   Inline `style` attributes (more specific than this class) restore any
+   per-button visual treatment (border, padding, background) on top of
+   the reset. */
+.bare-button {
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-align: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+    line-height: inherit;
+}
+
+/* SLDS-flavored visible focus indicator for keyboard users only.
+   Mouse clicks do not trigger :focus-visible in modern browsers. */
+.bare-button:focus-visible {
+    outline: 2px solid #0176d3;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Same focus-visible treatment for native inputs that lost their
+   default outline via removal of `outline: none`. */
+input:focus-visible {
+    outline: 2px solid #0176d3;
+    outline-offset: 1px;
+}
