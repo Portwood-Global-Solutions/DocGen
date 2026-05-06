@@ -324,7 +324,10 @@
                                                     aria-label="Child relationship options"
                                                 >
                                                     <ul class="slds-listbox slds-listbox_vertical" role="presentation">
-                                                        <template for:each={filteredChildOptionsForListbox} for:item="opt">
+                                                        <template
+                                                            for:each={filteredChildOptionsForListbox}
+                                                            for:item="opt"
+                                                        >
                                                             <li
                                                                 id={opt._optionId}
                                                                 role="option"

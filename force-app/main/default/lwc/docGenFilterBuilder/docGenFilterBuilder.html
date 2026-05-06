@@ -7,7 +7,12 @@
         </template>
 
         <template for:each={rows} for:item="row" for:index="index">
-            <div key={row.id} class="slds-grid slds-gutters slds-var-m-bottom_small slds-grid_vertical-align-center" role="group" aria-label="Filter condition">
+            <div
+                key={row.id}
+                class="slds-grid slds-gutters slds-var-m-bottom_small slds-grid_vertical-align-center"
+                role="group"
+                aria-label="Filter condition"
+            >
                 <!-- Logic (AND/OR) -->
                 <template if:true={index}>
                     <div class="slds-col slds-size_2-of-12">
