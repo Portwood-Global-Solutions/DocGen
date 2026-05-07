@@ -2557,7 +2557,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     @AuraEnabled(cacheable=true)
     public static List<String> searchDataProviders(String searchTerm) {
         List<String> providers = new List<String>();
-        String query = 'SELECT Name FROM ApexClass WHERE NamespacePrefix = null';
+        // Match the runtime resolution in DocGenDataRetriever.getRecordDataV4:
+        // unqualified classes (subscriber-org case) AND portwoodglobal-namespaced
+        // classes (dev-org / namespaced-scratch case, also future packaged samples).
+        // See issue #63.
+        String query = 'SELECT Name FROM ApexClass WHERE NamespacePrefix IN (null, \'portwoodglobal\')';
         if (String.isNotBlank(searchTerm)) {
             query += ' AND Name LIKE \'%' + String.escapeSingleQuotes(searchTerm) + '%\'';
         }

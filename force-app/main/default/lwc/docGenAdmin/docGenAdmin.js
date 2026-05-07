@@ -271,6 +271,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track selectedProviderClassName = '';
     @track providerFields = [];
     @track isValidatingProvider = false;
+    // Optional base SObject API name for v4 Apex Provider templates. When set,
+    // overrides the 'ApexProvider' sentinel in Base_Object_API__c so the template
+    // is filterable by record context (cross-object aggregation use case).
+    @track apexProviderBaseObject = '';
 
     // Edit modal manual query toggle (for backward compat with existing V3 configs)
     @track isManualQuery = false;
@@ -794,10 +798,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     this.showToast('Error', 'Please select an Apex Data Provider class first.', 'error');
                     return;
                 }
-                // Set a sentinel base object — the engine ignores it for v4 configs
-                // but the field is non-nullable downstream. 'ApexProvider' is what
-                // docGenColumnBuilder also emits for this path.
-                this.newTemplateObject = 'ApexProvider';
+                // Base_Object_API__c is non-nullable downstream. If the user supplied
+                // an SObject API name (cross-object aggregation: provider returns data
+                // about a specific record type), use it; otherwise fall back to the
+                // 'ApexProvider' sentinel that docGenColumnBuilder also emits.
+                const apexBase = (this.apexProviderBaseObject || '').trim();
+                this.newTemplateObject = apexBase || 'ApexProvider';
                 this.useApexProvider = true;
                 this.useVisualBuilder = false;
                 this.newTemplateQuery = JSON.stringify({ v: 4, provider: this.selectedProviderClassName });
@@ -877,7 +883,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     handleConfigChange(event) {
-        this.newTemplateObject = event.detail.objectName;
+        // The column builder emits 'ApexProvider' as a sentinel object name when in
+        // Apex Provider mode. Don't let it clobber a real SObject API name that the
+        // user already set in Step 1's "Base Object (optional)" input — needed for
+        // cross-object aggregation use cases (issue #62).
+        const incoming = event.detail.objectName;
+        const haveRealBase = this.newTemplateObject && this.newTemplateObject !== 'ApexProvider';
+        if (!(incoming === 'ApexProvider' && haveRealBase)) {
+            this.newTemplateObject = incoming;
+        }
         this.newTemplateQuery = event.detail.queryConfig;
         this._updateQueryTree();
     }
@@ -891,7 +905,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     handleEditConfigChange(event) {
-        this.editTemplateObject = event.detail.objectName;
+        // Mirror handleConfigChange's sentinel guard — see comment there.
+        const incoming = event.detail.objectName;
+        const haveRealBase = this.editTemplateObject && this.editTemplateObject !== 'ApexProvider';
+        if (!(incoming === 'ApexProvider' && haveRealBase)) {
+            this.editTemplateObject = incoming;
+        }
         this.editTemplateQuery = event.detail.queryConfig;
     }
 
@@ -954,6 +973,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.providerFields = [];
         this.showProviderPicker = false;
         this.isValidatingProvider = false;
+        this.apexProviderBaseObject = '';
+    }
+
+    handleApexProviderBaseObjectChange(event) {
+        this.apexProviderBaseObject = (event.detail ? event.detail.value : event.target.value) || '';
     }
 
     handleApexProviderSearch(event) {
@@ -1532,7 +1556,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     handleEditConfigChange(event) {
-        this.editTemplateObject = event.detail.objectName;
+        // Mirror handleConfigChange's sentinel guard — see comment there.
+        const incoming = event.detail.objectName;
+        const haveRealBase = this.editTemplateObject && this.editTemplateObject !== 'ApexProvider';
+        if (!(incoming === 'ApexProvider' && haveRealBase)) {
+            this.editTemplateObject = incoming;
+        }
         this.editTemplateQuery = event.detail.queryConfig;
     }
 

@@ -228,6 +228,17 @@
                                                         >
                                                         </lightning-button>
                                                     </div>
+                                                    <div class="slds-var-m-top_small">
+                                                        <lightning-input
+                                                            label="Base Object (optional)"
+                                                            value={apexProviderBaseObject}
+                                                            onchange={handleApexProviderBaseObjectChange}
+                                                            placeholder="Account, Opportunity, Custom_Object__c"
+                                                            field-level-help="Leave blank for record-agnostic providers. Set an SObject API name when this provider returns data about a specific record type — needed for cross-object aggregation and record-context filtering."
+                                                            autocomplete="off"
+                                                        >
+                                                        </lightning-input>
+                                                    </div>
                                                 </div>
                                             </template>
                                         </div>
