@@ -193,53 +193,76 @@ export default class DocGenSignatureSender extends LightningElement {
 
     // --- Template Selection ---
 
+    // Synchronous in-flight tracker. selectedTemplates is only appended AFTER an
+    // awaited Apex call resolves, so a synchronous .some() check on it can't catch
+    // multiple pending picks for the same templateId. This Set is mutated before
+    // the await and cleared in finally, giving us a single source of truth for
+    // "is this id already being processed".
+    _pendingTemplateIds = new Set();
+
     async handleTemplateSelected(event) {
         const templateId = event.detail.value;
         if (!templateId) return;
 
-        // availableTemplateOptions filters by selectedTemplates, but selectedTemplates
-        // is only appended after the awaited Apex call below. Rapid clicks can fire
-        // this handler twice for the same templateId before the dropdown re-filters.
-        if (this.selectedTemplates.some((t) => t.templateId === templateId)) {
+        // Guard against three races:
+        //   1. Same id already confirmed in selectedTemplates.
+        //   2. Same id with an in-flight getTemplateSignaturePlacements await.
+        //   3. Two rapid clicks on different ids — handled because each gets its
+        //      own pending entry and runs through independently.
+        if (
+            this._pendingTemplateIds.has(templateId) ||
+            this.selectedTemplates.some((t) => t.templateId === templateId)
+        ) {
             return;
         }
+        this._pendingTemplateIds.add(templateId);
 
-        const opt = this.docGenTemplateOptions.find((t) => t.value === templateId);
-        if (!opt) return;
-
-        // Scan template for placements
-        let placements = [];
         try {
-            placements = await getTemplateSignaturePlacements({ templateId });
-        } catch (_err) {
-            // Template may not have signature tags
-        }
+            const opt = this.docGenTemplateOptions.find((t) => t.value === templateId);
+            if (!opt) return;
 
-        // Build placement summary string
-        const counts = { Full: 0, Initials: 0, Date: 0, DatePick: 0 };
-        for (const p of placements || []) {
-            counts[p.placementType] = (counts[p.placementType] || 0) + 1;
-        }
-        const parts = [];
-        if (counts.Full > 0) parts.push(counts.Full + ' signature' + (counts.Full > 1 ? 's' : ''));
-        if (counts.Initials > 0) parts.push(counts.Initials + ' initial' + (counts.Initials > 1 ? 's' : ''));
-        if (counts.Date > 0) parts.push(counts.Date + ' date' + (counts.Date > 1 ? 's' : ''));
-        if (counts.DatePick > 0) parts.push(counts.DatePick + ' date picker' + (counts.DatePick > 1 ? 's' : ''));
-        const placementSummary = parts.length > 0 ? parts.join(', ') : 'No signature placements detected';
-
-        this.selectedTemplates = [
-            ...this.selectedTemplates,
-            {
-                id: ++templateIdCounter,
-                templateId,
-                name: opt.label,
-                placements: placements || [],
-                placementSummary,
-                docNumber: this.selectedTemplates.length + 1
+            // Scan template for placements
+            let placements = [];
+            try {
+                placements = await getTemplateSignaturePlacements({ templateId });
+            } catch (_err) {
+                // Template may not have signature tags
             }
-        ];
 
-        this._refreshAggregatedPlacements();
+            // Build placement summary string
+            const counts = { Full: 0, Initials: 0, Date: 0, DatePick: 0 };
+            for (const p of placements || []) {
+                counts[p.placementType] = (counts[p.placementType] || 0) + 1;
+            }
+            const parts = [];
+            if (counts.Full > 0) parts.push(counts.Full + ' signature' + (counts.Full > 1 ? 's' : ''));
+            if (counts.Initials > 0) parts.push(counts.Initials + ' initial' + (counts.Initials > 1 ? 's' : ''));
+            if (counts.Date > 0) parts.push(counts.Date + ' date' + (counts.Date > 1 ? 's' : ''));
+            if (counts.DatePick > 0) parts.push(counts.DatePick + ' date picker' + (counts.DatePick > 1 ? 's' : ''));
+            const placementSummary = parts.length > 0 ? parts.join(', ') : 'No signature placements detected';
+
+            // Re-check selectedTemplates after the await — defense-in-depth in case
+            // some other code path appended this id while we were awaiting.
+            if (this.selectedTemplates.some((t) => t.templateId === templateId)) {
+                return;
+            }
+
+            this.selectedTemplates = [
+                ...this.selectedTemplates,
+                {
+                    id: ++templateIdCounter,
+                    templateId,
+                    name: opt.label,
+                    placements: placements || [],
+                    placementSummary,
+                    docNumber: this.selectedTemplates.length + 1
+                }
+            ];
+
+            this._refreshAggregatedPlacements();
+        } finally {
+            this._pendingTemplateIds.delete(templateId);
+        }
     }
 
     handleRemoveTemplate(event) {

@@ -12,7 +12,7 @@
 Integer pass = 0;
 Integer fail = 0;
 
-String[] markers = new List<String>{ 'ALPHA', 'BRAVO', 'CHARLIE', 'DELTA' };
+String[] markers = new List<String>{ 'ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO' };
 
 // ───────── Cleanup prior runs ─────────
 try {
