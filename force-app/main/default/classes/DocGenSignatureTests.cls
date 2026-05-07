@@ -4392,6 +4392,41 @@ private class DocGenSignatureTests {
     }
 
     @isTest
+    static void testParseAndDedupTemplateIds_dropsDuplicatesPreservesOrder() {
+        Id a = '0Mw000000000001AAA';
+        Id b = '0Mw000000000002AAA';
+        Id c = '0Mw000000000003AAA';
+        String json = JSON.serialize(new List<Id>{ a, b, a, c, b, a });
+
+        Test.startTest();
+        List<Id> result = DocGenSignatureSenderController.parseAndDedupTemplateIds(json);
+        Test.stopTest();
+
+        System.assertEquals(3, result.size(), 'Should dedupe to 3 unique templateIds');
+        System.assertEquals(a, result[0], 'First occurrence wins (a)');
+        System.assertEquals(b, result[1], 'Order preserved (b)');
+        System.assertEquals(c, result[2], 'Order preserved (c)');
+    }
+
+    @isTest
+    static void testParseAndDedupTemplateIds_emptyAndSingle() {
+        Test.startTest();
+        System.assertEquals(
+            0,
+            DocGenSignatureSenderController.parseAndDedupTemplateIds('[]').size(),
+            'Empty input → empty output'
+        );
+
+        Id only = '0Mw000000000099AAA';
+        List<Id> single = DocGenSignatureSenderController.parseAndDedupTemplateIds(
+            JSON.serialize(new List<Id>{ only, only, only })
+        );
+        System.assertEquals(1, single.size(), 'All-duplicate input collapses to one');
+        System.assertEquals(only, single[0]);
+        Test.stopTest();
+    }
+
+    @isTest
     static void testBuildPlacementText_datePick() {
         DocGen_Signer__c signer = getTestSigner();
         DocGen_Signature_Request__c req = getTestRequest();

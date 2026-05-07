@@ -13,6 +13,26 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     /**
+     * Parses a JSON array of template IDs and returns it deduped, preserving order.
+     * The LWC sender's template picker can append the same templateId twice when a
+     * user clicks faster than the awaited getTemplateSignaturePlacements call resolves —
+     * the dropdown's "filter already-selected" check runs against pre-await state.
+     */
+    @TestVisible
+    private static List<Id> parseAndDedupTemplateIds(String templateIdsJson) {
+        List<Object> raw = (List<Object>) JSON.deserializeUntyped(templateIdsJson);
+        List<Id> deduped = new List<Id>();
+        Set<Id> seen = new Set<Id>();
+        for (Object t : raw) {
+            Id tid = (Id) t;
+            if (seen.add(tid)) {
+                deduped.add(tid);
+            }
+        }
+        return deduped;
+    }
+
+    /**
      * Returns all active DocGen templates for the signature sender template picker.
      */
     @AuraEnabled(cacheable=true)
@@ -555,11 +575,7 @@ public with sharing class DocGenSignatureSenderController {
         String signingOrder,
         String documentTitleFormat
     ) {
-        List<Object> rawTemplateIds = (List<Object>) JSON.deserializeUntyped(templateIdsJson);
-        List<Id> templateIds = new List<Id>();
-        for (Object t : rawTemplateIds)
-            templateIds.add((Id) t);
-
+        List<Id> templateIds = parseAndDedupTemplateIds(templateIdsJson);
         if (templateIds.isEmpty()) {
             throw new AuraHandledException('At least one template is required.');
         }

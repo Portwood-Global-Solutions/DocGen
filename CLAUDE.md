@@ -73,6 +73,18 @@ sf code-analyzer run --workspace "force-app/" --rule-selector "Security" --rule-
 
 Expected: `0 High severity violation(s) found`. ~30 Moderate false positives are acceptable (see `code-analyzer.yml`).
 
+## Pre-commit: prettier (CI gate)
+
+CI runs `npm run format:check` (prettier) on every PR; a failure blocks merge. Run before pushing:
+
+```bash
+npm install   # one-time, adds prettier to node_modules/.bin
+npm run format        # auto-fix
+npm run format:check  # verify clean
+```
+
+Covers `force-app/**/*.{cls,trigger,page,component,cmp,html,js,xml}`, `scripts/**/*.apex`, and root `*.{json,md,yml,yaml}`. Apex scripts under `/scripts/` are formatted too — long string concatenations get reflowed, so don't fight the wrap.
+
 ## Out of scope
 
 Don't touch signatures, HTML templates, watermarks, client-side DOCX assembly, font handling, command hub, or query config formats unless a bug fix forces it. Historical context for those subsystems was removed from this file in the bug-fix-branch trim — recover from `git log -- CLAUDE.md` if needed.

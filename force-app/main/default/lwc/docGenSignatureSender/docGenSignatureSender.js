@@ -197,6 +197,13 @@ export default class DocGenSignatureSender extends LightningElement {
         const templateId = event.detail.value;
         if (!templateId) return;
 
+        // availableTemplateOptions filters by selectedTemplates, but selectedTemplates
+        // is only appended after the awaited Apex call below. Rapid clicks can fire
+        // this handler twice for the same templateId before the dropdown re-filters.
+        if (this.selectedTemplates.some((t) => t.templateId === templateId)) {
+            return;
+        }
+
         const opt = this.docGenTemplateOptions.find((t) => t.value === templateId);
         if (!opt) return;
 
