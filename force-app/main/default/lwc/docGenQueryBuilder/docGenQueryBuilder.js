@@ -8,7 +8,6 @@ import previewRecordData from '@salesforce/apex/DocGenController.previewRecordDa
 import getAvailableReports from '@salesforce/apex/DocGenController.getAvailableReports';
 import importReportConfig from '@salesforce/apex/DocGenController.importReportConfig';
 import { refreshApex } from '@salesforce/apex';
-import { parseSOQLFields } from 'c/docGenUtils';
 
 export default class DocGenQueryBuilder extends LightningElement {
     @track objectOptions = [];
@@ -18,10 +17,7 @@ export default class DocGenQueryBuilder extends LightningElement {
     @track childOptions = [];
     @track parentOptions = []; // New
     
-    @api
-    get selectedObject() { return this._selectedObject; }
-    set selectedObject(val) { this._selectedObject = val; }
-    @track _selectedObject;
+    @api selectedObject;
     @track selectedObjectLabel = '';
     
     @track baseFieldSelection = [];
@@ -170,7 +166,6 @@ export default class DocGenQueryBuilder extends LightningElement {
                 this.parseConfig(this._queryConfig);
             }
         } else if (error) {
-            // Object loading error handled silently
         }
     }
 
@@ -330,13 +325,90 @@ export default class DocGenQueryBuilder extends LightningElement {
         if (!queryStr) return;
         this._isParsing = true;
 
-        // Parse using nesting-aware SOQL parser (handles nested subqueries + full SOQL statements)
-        const parsed = parseSOQLFields(queryStr);
-        const subqueries = parsed.subqueries;
-
+        // 1. Extract Subqueries (Nested Parentheses Handling is tricky with Regex, assuming standard SOQL)
+        // Match: (SELECT ... FROM ...)
+        // We use a non-greedy match for the content to allow multiple subqueries
+        const subqueryRegex = /\(\s*SELECT\s+([\s\S]+?)\s+FROM\s+([\s\S]+?)\s*\)/gi;
+        
+        let match;
+        const subqueries = [];
+        const fullMatches = []; // To remove them from base string later
+        
+        while ((match = subqueryRegex.exec(queryStr)) !== null) {
+            fullMatches.push(match[0]);
+            
+            const fieldsStr = match[1];
+            const tailStr = match[2].trim(); // Relationship + Clauses
+            
+            // Parse Tail: Relationship [WHERE ...] [ORDER BY ...] [LIMIT ...]
+            // Regex identifying tokens. 
+            // NOTE: SOQL sequence is FROM -> WHERE -> WITH -> GROUP BY -> ORDER BY -> LIMIT
+            // We only care about WHERE, ORDER BY, LIMIT
+            
+            // Simple approach: Split by keywords? Or regex extraction.
+            // Relationship is the first word.
+            const relationshipMatch = tailStr.match(/^(\w+)/);
+            if (!relationshipMatch) continue;
+            
+            const relationshipName = relationshipMatch[1];
+            let clauses = tailStr.substring(relationshipName.length).trim();
+            
+            let whereClause = '';
+            let orderBy = '';
+            let limitAmount = '';
+            
+            // Extract LIMIT (Last)
+            const limitMatch = clauses.match(/\s+LIMIT\s+(\d+)$/i);
+            if (limitMatch) {
+                limitAmount = limitMatch[1];
+                clauses = clauses.substring(0, clauses.length - limitMatch[0].length).trim();
+            }
+            
+            // Extract ORDER BY (Before LIMIT)
+            const orderMatch = clauses.match(/\s+ORDER\s+BY\s+(.+)$/i);
+            if (orderMatch) {
+                orderBy = orderMatch[1];
+                clauses = clauses.substring(0, clauses.length - orderMatch[0].length).trim();
+            }
+            
+            // Extract WHERE (Remaining)
+            const whereMatch = clauses.match(/\s*WHERE\s+(.+)$/i);
+            if (whereMatch) {
+                 whereClause = whereMatch[1];
+            }
+            
+            subqueries.push({
+                relationshipName: relationshipName,
+                fields: fieldsStr.split(',').map(s => s.trim()),
+                whereClause: whereClause,
+                orderBy: orderBy,
+                limitAmount: limitAmount
+            });
+        }
+        
+        // 2. Base Fields
+        // Remove all subquery blocks to get base fields
+        let baseFieldsStr = queryStr;
+        fullMatches.forEach(m => {
+            baseFieldsStr = baseFieldsStr.replace(m, ''); 
+        });
+        
+        // Cleanup commas left behind "Name, , Industry" if subquery was in middle
+        const allFlatFields = baseFieldsStr.split(',')
+            .map(s => s.trim())
+            .filter(s => s.length > 0 && !s.startsWith('('));
+            
         // Distribute to Base vs Parent
-        this.baseFieldSelection = [...parsed.baseFields];
-        this.parentFieldSelection = [...parsed.parentFields];
+        this.baseFieldSelection = [];
+        this.parentFieldSelection = [];
+        
+        allFlatFields.forEach(f => {
+            if (f.includes('.')) {
+                this.parentFieldSelection.push(f);
+            } else {
+                this.baseFieldSelection.push(f);
+            }
+        });
         
         this.updateCombinedSelection();
             
@@ -484,9 +556,9 @@ export default class DocGenQueryBuilder extends LightningElement {
         // Let's implement a safe flatten here.
         if (!data) return {};
         // .. implementation similar to runner ..
-        const flat = {};
-        for (const key in data) {
-            const val = data[key];
+        let flat = {};
+        for (let key in data) {
+            let val = data[key];
              if (val && typeof val === 'object' && val.records) {
                  flat[key] = val.records; // Keep array
              } else if (val && typeof val === 'object' && !Array.isArray(val)) {
@@ -683,7 +755,7 @@ export default class DocGenQueryBuilder extends LightningElement {
         const value = event.currentTarget.dataset.value;
         const label = event.currentTarget.dataset.label;
         
-        this._selectedObject = value;
+        this.selectedObject = value;
         this.selectedObjectLabel = label;
         this.showObjectDropdown = false;
         
@@ -833,8 +905,8 @@ export default class DocGenQueryBuilder extends LightningElement {
 
         if (this.selectedParentRel && this.selectedParentFields.length > 0) {
             const remaining = 10 - this.parentFieldSelection.length;
-            const newFields = [];
-
+            let newFields = [];
+            
             // Slice if they tried to select more than allowed in one go
             const candidates = this.selectedParentFields.slice(0, remaining);
             if (this.selectedParentFields.length > remaining) {
@@ -1249,7 +1321,7 @@ export default class DocGenQueryBuilder extends LightningElement {
                     this.parentFieldSelection = [];
                     this.childConfigs = [];
 
-                    this._selectedObject = result.baseObject;
+                    this.selectedObject = result.baseObject;
                     const objOpt = this.objectOptions.find(o => o.value === result.baseObject);
                     this.selectedObjectLabel = objOpt ? objOpt.label : result.baseObject;
                 }
@@ -1278,11 +1350,11 @@ export default class DocGenQueryBuilder extends LightningElement {
 
     get generatedQuery() {
         if (!this.selectedFields || (this.selectedFields.length === 0 && this.childConfigs.length === 0)) return '';
-        const queryParts = [...this.selectedFields];
+        let queryParts = [...this.selectedFields];
 
         this.childConfigs.forEach(child => {
             if (child.selectedFields.length > 0) {
-                const childFields = [...child.selectedFields];
+                let childFields = [...child.selectedFields];
 
                 // Append grandchild subqueries inside the child's field list
                 if (child.grandchildConfigs) {
@@ -1327,20 +1399,17 @@ export default class DocGenQueryBuilder extends LightningElement {
         this.notifyChange();
     }
 
-    @api
-    get titleFormat() { return this._titleFormat; }
-    set titleFormat(val) { this._titleFormat = val; }
-    @track _titleFormat = '';
+    @api titleFormat = '';
 
     handleTitleChange(event) {
-        this._titleFormat = event.target.value;
+        this.titleFormat = event.target.value;
         this.notifyChange();
     }
 
     handleInsertToTitle(event) {
         const tag = event.currentTarget.dataset.tag;
         if (tag) {
-             this._titleFormat = (this._titleFormat || '') + tag;
+             this.titleFormat = (this.titleFormat || '') + tag;
              this.notifyChange();
         }
     }

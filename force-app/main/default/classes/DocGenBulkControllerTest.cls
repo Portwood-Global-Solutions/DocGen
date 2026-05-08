@@ -1,11 +1,8 @@
-// CxSAST: Test class — SOQL/DML findings are test data operations, not production code paths
 @IsTest
 public with sharing class DocGenBulkControllerTest {
 
     @TestSetup
     static void setup() {
-        TestDataFactory.assignAdminPermissionSet();
-
         // Create an Account for testing
         Account acc = new Account(Name = 'Heap Test Account');
         insert acc;

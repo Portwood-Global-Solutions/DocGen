@@ -1,12 +1,22 @@
-@IsTest
+@isTest
 private class DocGenTests {
 
-    @TestSetup
+    @testSetup
     static void setup() {
-        TestDataFactory.createStandardTestData();
+        // Create Template
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Test Template',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name, AccountSource',
+            Type__c = 'Word'
+        );
+        insert tpl;
 
-        // Link a fake content file to the template (needed for testVersioning)
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        // Create Account
+        Account acc = new Account(Name = 'Test Account', AccountSource = 'Web', Website = 'https://www.example.com');
+        insert acc;
+
+        // Create ContentVersion (File)
         ContentVersion cv = new ContentVersion(
             Title = 'TestDoc',
             PathOnClient = 'TestDoc.docx',
@@ -15,24 +25,24 @@ private class DocGenTests {
         );
         insert cv;
 
+        // Get ContentDocumentId
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        insert new ContentDocumentLink(
+
+        // Link to Template
+        ContentDocumentLink cdl = new ContentDocumentLink(
             LinkedEntityId = tpl.Id,
             ContentDocumentId = conDocId,
             ShareType = 'V'
         );
+        insert cdl;
     }
 
-    @IsTest
+    @isTest
     static void testGenerationFlow() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            // Use V1 config for this legacy test
-            tpl.Query_Config__c = 'Name, AccountSource';
-            update tpl;
-
-            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             Test.startTest();
             Map<String, Object> result = DocGenController.generateDocumentData(tpl.Id, acc.Id);
@@ -41,11 +51,11 @@ private class DocGenTests {
             System.assertNotEquals(null, result.get('data'), 'Data should not be null');
             System.assertNotEquals(null, result.get('templateFile'), 'File should not be null');
             Map<String, Object> data = (Map<String, Object>) result.get('data');
-            System.assertEquals('DocGen Test Account', data.get('Name'), 'Account Name should match test data');
+            System.assertEquals('Test Account', data.get('Name'), 'Account Name should match test data');
         }
     }
 
-    @IsTest
+    @isTest
     static void testGetTemplates() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
@@ -53,14 +63,14 @@ private class DocGenTests {
             System.assertEquals(1, tpls.size(), 'Should return 1 template for Account');
         }
     }
-    @IsTest
+    @isTest
     static void testVersioning() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
             // 1. Setup - Create V1 Record
-            ContentVersion cv1 = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Title = 'TestDoc' LIMIT 1];
+            ContentVersion cv1 = [SELECT Id, ContentDocumentId FROM ContentVersion LIMIT 1];
 
             DocGen_Template_Version__c v1 = new DocGen_Template_Version__c(
                 Template__c = tpl.Id,
@@ -102,7 +112,7 @@ private class DocGenTests {
             );
             insert v2;
 
-            // Deactivate V1
+            // Deactivate V1 (trigger would usually do this but we are manual here or relying on Service)
             v1.Is_Active__c = false;
             update v1;
 
@@ -112,7 +122,7 @@ private class DocGenTests {
             System.assertEquals(EncodingUtil.base64Encode(Blob.valueOf('V2 Content')), contentV2, 'Should return V2 content');
 
             // 4. Activate V1
-            DocGenController.activateVersion(v1.Id);
+            DocGenController.activateVersion(v1.Id); // This method handles deactivation of others
 
             String contentV1 = DocGenTemplateManager.getTemplateFileContent(tpl.Id);
             System.assertEquals(EncodingUtil.base64Encode(Blob.valueOf('Test Content')), contentV1, 'Should return V1 content');

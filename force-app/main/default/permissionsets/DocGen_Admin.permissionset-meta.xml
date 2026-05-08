@@ -25,22 +25,6 @@
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>
-        <apexClass>DocGenGiantQueryAssembler</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenGiantQueryBatch</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenGiantQueryFlowAction</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenGiantQueryStitchJob</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
         <apexClass>DocGenDataProvider</apexClass>
         <enabled>true</enabled>
     </classAccesses>
@@ -76,42 +60,6 @@
         <apexClass>DocGenTemplateManager</apexClass>
         <enabled>true</enabled>
     </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenSignatureController</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenSignatureEmailService</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenSignatureFinalizer</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenSignatureFlowAction</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenSignatureSenderController</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenSignatureService</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenSignatureSubmitter</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenSignatureValidator</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
-    <classAccesses>
-        <apexClass>DocGenAuthenticatorController</apexClass>
-        <enabled>true</enabled>
-    </classAccesses>
     <description>Full access to all Document Generation features and administration.</description>
     <fieldPermissions>
         <editable>true</editable>
@@ -126,11 +74,6 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Job__c.Error_Count__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Job__c.Giant_Query_Config__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -150,11 +93,6 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
-        <field>DocGen_Job__c.Parent_Record_Id__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
         <field>DocGen_Job__c.Query_Condition__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -168,7 +106,6 @@
         <field>DocGen_Job__c.Success_Count__c</field>
         <readable>true</readable>
     </fieldPermissions>
-    <!-- DocGen_Job__c.Template__c is a required master-detail; FLS auto-granted, cannot declare here -->
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Job__c.Total_Records__c</field>
@@ -179,51 +116,9 @@
         <field>DocGen_Saved_Query__c.Description__c</field>
         <readable>true</readable>
     </fieldPermissions>
-    <!-- DocGen_Saved_Query__c.DocGen_Template__c is a required master-detail; FLS auto-granted -->
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Saved_Query__c.Query_Condition__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <!-- DocGen Settings (hierarchy custom setting) fields -->
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Settings__c.Company_Name__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Settings__c.Experience_Site_Url__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Settings__c.Signature_Email_Brand_Color__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Settings__c.Signature_Email_Footer_Text__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Settings__c.Signature_Email_Logo_Url__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Settings__c.Signature_Email_Message__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Settings__c.Signature_Email_Subject__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Settings__c.Signature_OWA_Id__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -256,13 +151,11 @@
         <field>DocGen_Template_Version__c.Query_Config__c</field>
         <readable>true</readable>
     </fieldPermissions>
-    <!-- DocGen_Template_Version__c.Template__c is a required master-detail; FLS auto-granted -->
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Template_Version__c.Type__c</field>
         <readable>true</readable>
     </fieldPermissions>
-    <!-- DocGen_Template__c: Base_Object_API__c, Output_Format__c, Type__c are required; FLS auto-granted -->
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Template__c.Category__c</field>
@@ -285,32 +178,7 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
-        <field>DocGen_Template__c.Lock_Output_Format__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
         <field>DocGen_Template__c.Query_Config__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Template__c.Record_Filter__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Template__c.Required_Permission_Sets__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Template__c.Sort_Order__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Template__c.Specific_Record_Ids__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -318,247 +186,8 @@
         <field>DocGen_Template__c.Test_Record_Id__c</field>
         <readable>true</readable>
     </fieldPermissions>
-    <!-- Signature Request fields (Admin: full access) -->
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Related_Record_Id__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Secure_Token__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Signature_Data__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Signer_Email__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Signer_Name__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Source_Document_Id__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Status__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Template__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Template_Ids__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Signing_Order__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Request__c.Email_Status__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <!-- Signer fields (Admin: full access) -->
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Consent_Captured__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Contact__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.PIN_Attempts__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.PIN_Expires_At__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.PIN_Hash__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.PIN_Verified_At__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Role_Name__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Secure_Token__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Signature_Data__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Signer_Email__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Signer_Name__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Sort_Order__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Decline_Reason__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signer__c.Status__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <!-- Audit fields (Admin: full access) -->
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.Consent_Captured__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.Contact__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.Document_Hash_SHA256__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.Error_Message__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.IP_Address__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.PIN_Verified_At__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <!-- DocGen_Signature_Audit__c.Signature_Request__c is a required master-detail; FLS auto-granted -->
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.Signed_Date__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.Signer_Email__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.Signer_Name__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.Signer__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Audit__c.User_Agent__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <!-- Signature Placement fields (Admin: full access) -->
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Document_Index__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Placement_Type__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Section_Context__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Sequence_Order__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Signature_Request__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Signed_At__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Signed_Value__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <!-- DocGen_Signature_Placement__c.Signer__c is a required master-detail; FLS auto-granted -->
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Status__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>true</editable>
-        <field>DocGen_Signature_Placement__c.Tag_Text__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
     <label>DocGen Admin</label>
-    <pageAccesses>
-        <apexPage>DocGenGuide</apexPage>
-        <enabled>true</enabled>
-    </pageAccesses>
-    <pageAccesses>
-        <apexPage>DocGenVerify</apexPage>
-        <enabled>true</enabled>
-    </pageAccesses>
     <objectPermissions>
         <allowCreate>true</allowCreate>
         <allowDelete>true</allowDelete>
@@ -599,46 +228,6 @@
         <viewAllFields>false</viewAllFields>
         <viewAllRecords>true</viewAllRecords>
     </objectPermissions>
-    <objectPermissions>
-        <allowCreate>true</allowCreate>
-        <allowDelete>true</allowDelete>
-        <allowEdit>true</allowEdit>
-        <allowRead>true</allowRead>
-        <modifyAllRecords>true</modifyAllRecords>
-        <object>DocGen_Signature_Request__c</object>
-        <viewAllFields>false</viewAllFields>
-        <viewAllRecords>true</viewAllRecords>
-    </objectPermissions>
-    <objectPermissions>
-        <allowCreate>true</allowCreate>
-        <allowDelete>true</allowDelete>
-        <allowEdit>true</allowEdit>
-        <allowRead>true</allowRead>
-        <modifyAllRecords>true</modifyAllRecords>
-        <object>DocGen_Signer__c</object>
-        <viewAllFields>false</viewAllFields>
-        <viewAllRecords>true</viewAllRecords>
-    </objectPermissions>
-    <objectPermissions>
-        <allowCreate>true</allowCreate>
-        <allowDelete>false</allowDelete>
-        <allowEdit>false</allowEdit>
-        <allowRead>true</allowRead>
-        <modifyAllRecords>false</modifyAllRecords>
-        <object>DocGen_Signature_Audit__c</object>
-        <viewAllFields>false</viewAllFields>
-        <viewAllRecords>true</viewAllRecords>
-    </objectPermissions>
-    <objectPermissions>
-        <allowCreate>true</allowCreate>
-        <allowDelete>true</allowDelete>
-        <allowEdit>true</allowEdit>
-        <allowRead>true</allowRead>
-        <modifyAllRecords>true</modifyAllRecords>
-        <object>DocGen_Signature_Placement__c</object>
-        <viewAllFields>false</viewAllFields>
-        <viewAllRecords>true</viewAllRecords>
-    </objectPermissions>
     <tabSettings>
         <tab>DocGen_Admin_Guide</tab>
         <visibility>Visible</visibility>
@@ -669,18 +258,6 @@
     </tabSettings>
     <tabSettings>
         <tab>DocGen_Template__c</tab>
-        <visibility>Visible</visibility>
-    </tabSettings>
-    <tabSettings>
-        <tab>DocGen_Signature_Request__c</tab>
-        <visibility>Visible</visibility>
-    </tabSettings>
-    <tabSettings>
-        <tab>DocGen_Signer__c</tab>
-        <visibility>Visible</visibility>
-    </tabSettings>
-    <tabSettings>
-        <tab>DocGen_Signature_Audit__c</tab>
         <visibility>Visible</visibility>
     </tabSettings>
 </PermissionSet>

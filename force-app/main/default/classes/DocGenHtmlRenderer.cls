@@ -5,7 +5,7 @@
 public with sharing class DocGenHtmlRenderer {
 
     private static final String HTML_PREFIX =
-        '<html><head><meta charset="utf-8"/><style>' +
+        '<html><head><style>' +
         '@page { size: letter; margin: 1in; }' + // default — overridden by convertToHtmlWithHeaderFooter
         'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }' +
         'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }' +
@@ -31,72 +31,6 @@ public with sharing class DocGenHtmlRenderer {
 
     // Styles XML from template — set before calling convertToHtml for style resolution
     public static String stylesXml;
-    // #28 async-safe fallback: map of table-style-name → border CSS, pre-extracted in admin
-    // context and cached in Signature_Data__c. Checked by resolveTableStyleBorder BEFORE
-    // parsing stylesXml, so queueables running as Automated Process (which can't access
-    // the pre-decomposed ContentVersions) still render table-style borders correctly.
-    public static Map<String, String> tableStyleBorderMap;
-    // #28 async fallback: styleName → {color, fontFamily, fontSize, bold, italic} — pre-
-    // extracted in admin context, cached in Signature_Data__c, consulted by
-    // resolveStyleTextAttributes before parsing stylesXml. Same rationale as the borders map.
-    public static Map<String, Map<String, String>> styleTextAttrsMap;
-
-    /**
-     * Extracts a compact borders map from styles.xml for async fallback use.
-     * Walks every <w:style w:type="table" w:styleId="X"> element, captures the first-found
-     * border side if the style has <w:tblBorders>, and returns a name→CSS map. Callers can
-     * serialize this to JSON and stash it on a record for later retrieval — useful when
-     * the async render context can't re-query the full styles.xml ContentVersion.
-     */
-    /**
-     * Extracts a compact styleName → text-attributes map from styles.xml for async
-     * fallback use. Covers color, font, size, bold, italic — enough to fix
-     * styles.xml-dependent text rendering in the signature PDF queueable context
-     * where the full stylesXml can't be loaded (Automated Process user + ContentVersion).
-     */
-    public static Map<String, Map<String, String>> extractStyleTextAttributeMap(String stylesXmlSource) {
-        Map<String, Map<String, String>> out = new Map<String, Map<String, String>>();
-        if (String.isBlank(stylesXmlSource)) return out;
-        Pattern p = Pattern.compile('<w:style [^>]*w:styleId="([^"]+)"[^>]*>([\\s\\S]*?)</w:style>');
-        Matcher m = p.matcher(stylesXmlSource);
-        while (m.find()) {
-            String styleName = m.group(1);
-            String styleDef = m.group(2);
-            Map<String, String> attrs = new Map<String, String>();
-            String color = extractAttr(styleDef, 'w:color', 'w:val');
-            if (color != null && color != 'auto' && color.length() >= 6) attrs.put('color', color);
-            String font = extractAttr(styleDef, 'w:rFonts', 'w:ascii');
-            if (font == null) font = extractAttr(styleDef, 'w:rFonts', 'w:hAnsi');
-            if (String.isNotBlank(font)) attrs.put('fontFamily', font);
-            String sz = extractAttr(styleDef, 'w:sz', 'w:val');
-            if (sz != null && sz.isNumeric()) attrs.put('fontSize', sz);
-            if (styleDef.contains('<w:b/>') || styleDef.contains('<w:b ')) attrs.put('bold', 'true');
-            if (styleDef.contains('<w:i/>') || styleDef.contains('<w:i ')) attrs.put('italic', 'true');
-            if (!attrs.isEmpty()) out.put(styleName, attrs);
-        }
-        return out;
-    }
-
-    public static Map<String, String> extractTableStyleBorderMap(String stylesXmlSource) {
-        Map<String, String> out = new Map<String, String>();
-        if (String.isBlank(stylesXmlSource)) return out;
-        Pattern p = Pattern.compile('<w:style [^>]*w:styleId="([^"]+)"[^>]*>([\\s\\S]*?)</w:style>');
-        Matcher m = p.matcher(stylesXmlSource);
-        while (m.find()) {
-            String styleName = m.group(1);
-            String styleDef = m.group(2);
-            if (!styleDef.contains('<w:tblBorders')) continue;
-            String border = parseBorderSide(styleDef, 'w:top');
-            if (border == null) border = parseBorderSide(styleDef, 'w:insideH');
-            if (border == null) border = '0.5pt solid #000';
-            out.put(styleName, border);
-        }
-        return out;
-    }
-
-    // Numbering XML from template — set before calling convertToHtml for list type resolution
-    public static String numberingXml;
-
 
     // Unit conversions
     private static final Decimal HALF_POINTS_TO_PT = 0.5;     // half-points → pt (÷2)
@@ -170,67 +104,38 @@ public with sharing class DocGenHtmlRenderer {
         String bodyContent = extractBodyContent(mainXml);
         String html = processBodyContent(bodyContent, images);
 
-        // Process header/footer HTML for Flying Saucer running elements
-        String headerHtml = '';
-        String footerHtml = '';
+        // If we have header/footer, wrap in a table with thead/tfoot for repeating on every page
         if (String.isNotBlank(headerXml) || String.isNotBlank(footerXml)) {
-            headerHtml = String.isNotBlank(headerXml) ? processBodyContent(extractBodyContent(headerXml), images) : '';
-            footerHtml = String.isNotBlank(footerXml) ? processBodyContent(extractBodyContent(footerXml), images) : '';
+            String headerHtml = String.isNotBlank(headerXml) ? processBodyContent(extractBodyContent(headerXml), images) : '';
+            String footerHtml = String.isNotBlank(footerXml) ? processBodyContent(extractBodyContent(footerXml), images) : '';
 
-            // Zero out paragraph margins inside header/footer for tight spacing
+            // Zero out paragraph margins inside header/footer tables for tight cell spacing
             headerHtml = headerHtml.replace('<p>', '<p style="margin:0;">');
             footerHtml = footerHtml.replace('<p>', '<p style="margin:0;">');
+
+            // Calculate min-height from page dimensions in sectPr
+            String minHeight = calculatePageContentHeight(documentXml);
+
+            String wrapped = '<div style="position:relative;min-height:' + minHeight + ';">';
+            if (String.isNotBlank(headerHtml)) {
+                wrapped += '<div style="padding-bottom:10pt;">' + headerHtml + '</div>';
+            }
+            wrapped += '<div>' + html + '</div>';
+            if (String.isNotBlank(footerHtml)) {
+                wrapped += '<div style="position:absolute;bottom:0;left:0;right:0;padding-top:10pt;">' + footerHtml + '</div>';
+            }
+            wrapped += '</div>';
+            html = wrapped;
         }
 
         // Build dynamic page CSS from document dimensions + styles
         Map<String, Decimal> pageDims = parsePageDimensions(documentXml);
         String cellPadding = resolveDefaultCellPadding();
-        Boolean hasHeader = String.isNotBlank(headerHtml);
-        Boolean hasFooter = String.isNotBlank(footerHtml);
-
-        // Check if document has a title page (Different First Page in Word)
-        // <w:titlePg/> in the final <w:sectPr> means page 1 gets no header/footer
-        // Check the original documentXml since extractBodyContent strips the final sectPr
-        Boolean hasTitlePage = documentXml.contains('<w:titlePg/>') || documentXml.contains('<w:titlePg ');
-
-        // Build @page rule with running header/footer margin boxes (Flying Saucer)
         String dynamicPageCss = '@page { size: ' + pageDims.get('pageWidth') + 'in ' + pageDims.get('pageHeight') + 'in; ' +
             'margin: ' + pageDims.get('marginTop') + 'in ' + pageDims.get('marginRight') + 'in ' +
-            pageDims.get('marginBottom') + 'in ' + pageDims.get('marginLeft') + 'in;';
-        if (hasHeader) {
-            dynamicPageCss += ' @top-center { content: element(docgen-running-header); }';
-        }
-        if (hasFooter) {
-            dynamicPageCss += ' @bottom-center { content: element(docgen-running-footer); }';
-        }
-        dynamicPageCss += ' }';
-
-        // Title page: suppress header/footer on first page via @page :first
-        if (hasTitlePage && (hasHeader || hasFooter)) {
-            dynamicPageCss += ' @page :first { @top-center { content: normal; } @bottom-center { content: normal; } }';
-        }
-
-        // Running element CSS — tells Flying Saucer to pull these divs out of flow
-        // and place them in the @page margin boxes on every page
-        String runningCss = '';
-        if (hasHeader) {
-            runningCss += '#docgen-header { position: running(docgen-running-header); }';
-        }
-        if (hasFooter) {
-            runningCss += '#docgen-footer { position: running(docgen-running-footer); }';
-        }
-
-        // Check if document default style is RTL (Normal style with <w:bidi/> in styles.xml)
-        // Spring '26 Blob.toPdf() uses the Visualforce PDF engine (Flying Saucer).
-        // Flying Saucer does NOT properly implement Unicode Bidi Algorithm —
-        // direction:rtl causes double-reversal. Use text-align:right for layout
-        // and Arial Unicode MS for glyph rendering (the only multibyte-capable font).
-        Boolean isDocRtl = isDefaultStyleRtl();
-        String bodyFont = isDocRtl ? '\'Arial Unicode MS\', Arial, sans-serif' : 'Arial, sans-serif';
-
-        String rtlBodyCss = isDocRtl ? ' text-align: right;' : '';
-        String dynamicCss = dynamicPageCss + runningCss +
-            'body { font-family: ' + bodyFont + '; font-size: 11pt; line-height: 1.15; color: #000;' + rtlBodyCss + ' }' +
+            pageDims.get('marginBottom') + 'in ' + pageDims.get('marginLeft') + 'in; }';
+        String dynamicCss = dynamicPageCss +
+            'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }' +
             'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }' +
             'h2 { font-size: 16pt; font-weight: bold; margin: 0 0 4pt 0; }' +
             'h3 { font-size: 14pt; font-weight: bold; margin: 0 0 4pt 0; }' +
@@ -247,30 +152,15 @@ public with sharing class DocGenHtmlRenderer {
             'li { margin: 0 0 2pt 0; page-break-inside: avoid; }' +
             'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }' +
             'sub { vertical-align: sub; font-size: 0.8em; }' +
-            'sup { vertical-align: super; font-size: 0.8em; }' +
-            '.docgen-page-num::before { content: counter(page); }' +
-            '.docgen-page-total::before { content: counter(pages); }';
-        String bodyTag = '<body>';
-        String dynamicPrefix = '<html><head><meta charset="utf-8"/><style>' + dynamicCss + '</style></head>' + bodyTag;
+            'sup { vertical-align: super; font-size: 0.8em; }';
+        String dynamicPrefix = '<html><head><style>' + dynamicCss + '</style></head><body>';
 
         // Always use dynamic prefix — it has resolved page dimensions and cell padding
         // Inject font-face CSS if provided
         if (String.isNotBlank(fontFaceCss)) {
-            dynamicPrefix = '<html><head><meta charset="utf-8"/><style>' + fontFaceCss + dynamicCss + '</style></head>' + bodyTag;
+            dynamicPrefix = '<html><head><style>' + fontFaceCss + dynamicCss + '</style></head><body>';
         }
-
-        // Insert running header/footer divs at top of body — Flying Saucer pulls them
-        // out of normal flow and places them in @page margin boxes on every page
-        String bodyHtml = '';
-        if (hasHeader) {
-            bodyHtml += '<div id="docgen-header">' + headerHtml + '</div>';
-        }
-        if (hasFooter) {
-            bodyHtml += '<div id="docgen-footer">' + footerHtml + '</div>';
-        }
-        bodyHtml += html;
-
-        return dynamicPrefix + bodyHtml + HTML_SUFFIX;
+        return dynamicPrefix + html + HTML_SUFFIX;
     }
 
     /**
@@ -310,6 +200,9 @@ public with sharing class DocGenHtmlRenderer {
         String html = processBodyContent(bodyContent, images);
 
         // Build CSS with fixed-position header/footer for Flying Saucer
+        String headerHeight = String.isNotBlank(headerHtml) ? '0.75in' : '0';
+        String footerHeight = String.isNotBlank(footerHtml) ? '0.75in' : '0';
+
         String css = '@page { size: letter; margin: 1in; margin-top: ' + (String.isNotBlank(headerHtml) ? '1.75in' : '1in') + '; margin-bottom: ' + (String.isNotBlank(footerHtml) ? '1.75in' : '1in') + '; }';
         css += 'body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.15; color: #000; }';
         css += 'h1 { font-size: 20pt; font-weight: bold; margin: 0 0 6pt 0; }';
@@ -334,7 +227,7 @@ public with sharing class DocGenHtmlRenderer {
         css += '.docgen-header table, .docgen-footer table { border-collapse: collapse; width: 100%; }';
         css += '.docgen-header td, .docgen-footer td { padding: 2pt; vertical-align: middle; }';
 
-        String result = '<html><head><meta charset="utf-8"/><style>' + css + '</style></head><body>';
+        String result = '<html><head><style>' + css + '</style></head><body>';
 
         if (String.isNotBlank(headerHtml)) {
             result += '<div class="docgen-header">' + headerHtml + '</div>';
@@ -375,39 +268,11 @@ public with sharing class DocGenHtmlRenderer {
             Integer bodyEnd = xml.lastIndexOf('</w:body>');
             if (bodyEnd != -1) {
                 String content = xml.substring(bodyContentStart, bodyEnd);
-                // Handle <w:sectPr> elements in the body:
-                // - Mid-body sectPr = section break → replace with page break marker
-                // - Final sectPr = document-level settings → strip entirely
-                // sectPr can appear inside <w:pPr> (paragraph properties) or standalone.
-                // When inside <w:pPr>, just remove it — the containing paragraph handles spacing.
-                // When standalone or the only content in a paragraph, replace with a page break.
-                Integer sectCursor = 0;
-                String processedContent = '';
-                while (sectCursor < content.length()) {
-                    Integer sectStart = content.indexOf('<w:sectPr', sectCursor);
-                    if (sectStart == -1) {
-                        processedContent += content.substring(sectCursor);
-                        break;
-                    }
-                    Integer sectEnd = content.indexOf('</w:sectPr>', sectStart);
-                    if (sectEnd == -1) {
-                        sectEnd = content.indexOf('/>', sectStart);
-                        if (sectEnd != -1) { sectEnd += 2; }
-                        else { processedContent += content.substring(sectCursor); break; }
-                    } else {
-                        sectEnd += 11;
-                    }
-                    processedContent += content.substring(sectCursor, sectStart);
-                    Boolean isLast = content.indexOf('<w:sectPr', sectEnd) == -1;
-                    if (!isLast) {
-                        // Mid-body section break — insert a page break run into the current context.
-                        // If inside a <w:pPr>, just add a page break run after the paragraph closes.
-                        // The sectPr is removed; the containing paragraph gets a page-break-after.
-                        processedContent += '<w:docgen-section-break/>';
-                    }
-                    sectCursor = sectEnd;
+                // Strip <w:sectPr> (section properties) from end of body
+                Integer sectStart = content.lastIndexOf('<w:sectPr');
+                if (sectStart != -1) {
+                    content = content.substring(0, sectStart);
                 }
-                content = processedContent;
                 combinedContent += content;
             } else {
                 combinedContent += xml.substring(bodyContentStart);
@@ -529,10 +394,12 @@ public with sharing class DocGenHtmlRenderer {
                 li.isList = false;
                 return li;
             }
-            // Determine list type from numbering.xml definitions
-            String ilvl = extractAttr(pPr, 'w:ilvl', 'w:val');
-            if (ilvl == null) { ilvl = '0'; }
-            li.isNumbered = isNumberedList(numId, ilvl);
+            // Heuristic: odd numId = bullet, even = numbered (Word's common pattern)
+            // Also check for ilvl to detect nested lists (not handled as nested HTML for simplicity)
+            if (numId != null && numId.isNumeric()) {
+                Integer nId = Integer.valueOf(numId);
+                li.isNumbered = (Math.mod(nId, 2) == 0);
+            }
             return li;
         }
 
@@ -577,16 +444,11 @@ public with sharing class DocGenHtmlRenderer {
         Integer headingLevel = 0;
         Boolean pageBreakBefore = false;
         Boolean isTitle = false;
-        // RTL: explicit <w:bidi/> on paragraph OR inherited from Normal style
-        Boolean isRtl = isDefaultStyleRtl();
 
         // Extract paragraph properties
         String pPr = extractElement(pXml, 'w:pPr');
         if (String.isNotBlank(pPr)) {
             style = parseParagraphStyle(pPr);
-            if (pPr.contains('<w:bidi/>') || pPr.contains('<w:bidi ')) {
-                isRtl = true;
-            }
 
             // Check for heading style
             String pStyleVal = extractAttr(pPr, 'w:pStyle', 'w:val');
@@ -599,16 +461,6 @@ public with sharing class DocGenHtmlRenderer {
                     // Render subtitle as styled paragraph
                     style += (String.isNotBlank(style) ? ';' : '') + 'font-size:14pt;color:#595959';
                 }
-                // Resolve additional attributes (color, font) from the referenced style —
-                // applied at paragraph level so runs without explicit rPr inherit them. Inline
-                // rPr on runs still overrides these via parseRunStyle.
-                Map<String, String> pAttrs = resolveStyleTextAttributes(pStyleVal);
-                if (pAttrs.containsKey('color')) {
-                    style += (String.isNotBlank(style) ? ';' : '') + 'color:#' + pAttrs.get('color');
-                }
-                if (pAttrs.containsKey('fontFamily')) {
-                    style += (String.isNotBlank(style) ? ';' : '') + 'font-family:\'' + pAttrs.get('fontFamily').escapeHtml4() + '\',sans-serif';
-                }
             }
 
             // Check for page break before
@@ -617,11 +469,8 @@ public with sharing class DocGenHtmlRenderer {
             }
         }
 
-        // Section break marker (injected by extractBodyContent for mid-body w:sectPr)
-        Boolean sectionBreakAfter = pXml.contains('<w:docgen-section-break/>');
-
-        // Process runs — for RTL paragraphs, reverse run order so first run (rightmost) renders last in HTML
-        String content = processRuns(pXml, images, isRtl);
+        // Process runs
+        String content = processRuns(pXml, images);
 
         // Check for page break in runs (w:br w:type="page")
         if (pXml.contains('w:type="page"') || pXml.contains('w:type=\'page\'')) {
@@ -639,16 +488,10 @@ public with sharing class DocGenHtmlRenderer {
 
         String pageBreakDiv = pageBreakBefore ? '<div style="page-break-before:always"></div>' : '';
 
-        // Section break after this paragraph (mid-body w:sectPr)
-        if (sectionBreakAfter) {
-            style += (String.isNotBlank(style) ? ';' : '') + 'page-break-after:always';
-        }
-
         // Empty paragraph = line break
         if (String.isBlank(content)) {
             return pageBreakDiv + '<p' + (String.isNotBlank(style) ? ' style="' + style + '"' : '') + '>&nbsp;</p>';
         }
-
 
         // Heading
         if (headingLevel > 0) {
@@ -670,12 +513,6 @@ public with sharing class DocGenHtmlRenderer {
      */
     private static String parseParagraphStyle(String pPr) {
         List<String> styles = new List<String>();
-
-        // RTL / Bidi: <w:bidi/> marks right-to-left paragraph (Hebrew, Arabic)
-        // Flying Saucer: use text-align:right (not direction:rtl which causes double-reversal)
-        if (pPr.contains('<w:bidi/>') || pPr.contains('<w:bidi ')) {
-            styles.add('text-align:right');
-        }
 
         // Alignment: <w:jc w:val="center"/>
         String jcVal = extractAttr(pPr, 'w:jc', 'w:val');
@@ -712,15 +549,12 @@ public with sharing class DocGenHtmlRenderer {
         }
 
         // Indent: <w:ind w:left="720" w:right="0" w:firstLine="360" w:hanging="360"/>
-        // Also supports bidi-aware w:start/w:end as fallback for w:left/w:right
         String indLeft = extractAttr(pPr, 'w:ind', 'w:left');
-        if (indLeft == null) { indLeft = extractAttr(pPr, 'w:ind', 'w:start'); }
         String indHanging = extractAttr(pPr, 'w:ind', 'w:hanging');
         if (indLeft != null && indLeft.isNumeric()) {
             styles.add('margin-left:' + twipsToPt(Integer.valueOf(indLeft)) + 'pt');
         }
         String indRight = extractAttr(pPr, 'w:ind', 'w:right');
-        if (indRight == null) { indRight = extractAttr(pPr, 'w:ind', 'w:end'); }
         if (indRight != null && indRight.isNumeric()) {
             styles.add('margin-right:' + twipsToPt(Integer.valueOf(indRight)) + 'pt');
         }
@@ -816,68 +650,73 @@ public with sharing class DocGenHtmlRenderer {
      * Processes all <w:r> (run) elements within a paragraph.
      */
     private static String processRuns(String pXml, Map<String, String> images) {
-        return processRuns(pXml, images, false);
-    }
-
-    private static String processRuns(String pXml, Map<String, String> images, Boolean isRtlParagraph) {
-        // Resolve Word field codes (PAGE, NUMPAGES) that span multiple runs.
-        // Field structure: <w:fldChar begin/> ... <w:instrText> PAGE </w:instrText> ...
-        // <w:fldChar separate/> ... cached value ... <w:fldChar end/>
-        // Also handles <w:fldSimple w:instr=" PAGE ">...</w:fldSimple>
-        pXml = resolveFieldCodes(pXml);
-
-        List<String> parts = new List<String>();
+        String result = '';
         Integer cursor = 0;
 
         while (cursor < pXml.length()) {
             Integer runStart = pXml.indexOf('<w:r>', cursor);
             Integer runStart2 = pXml.indexOf('<w:r ', cursor);
+
+            // Also check for drawing elements outside runs
             Integer drawingStart = pXml.indexOf('<w:drawing>', cursor);
             Integer drawingStart2 = pXml.indexOf('<w:drawing ', cursor);
+
+            // Also check for hyperlinks
             Integer hyperlinkStart = pXml.indexOf('<w:hyperlink', cursor);
 
+            // Find the earliest element
             Integer nextRun = -1;
-            if (runStart != -1 && runStart2 != -1) { nextRun = Math.min(runStart, runStart2); }
-            else if (runStart != -1) { nextRun = runStart; }
-            else if (runStart2 != -1) { nextRun = runStart2; }
+                        if (runStart != -1 && runStart2 != -1) { nextRun = Math.min(runStart, runStart2); }
+                        else if (runStart != -1) { nextRun = runStart; }
+                        else if (runStart2 != -1) { nextRun = runStart2; }
 
             Integer nextDrawing = -1;
-            if (drawingStart != -1 && drawingStart2 != -1) { nextDrawing = Math.min(drawingStart, drawingStart2); }
-            else if (drawingStart != -1) { nextDrawing = drawingStart; }
-            else if (drawingStart2 != -1) { nextDrawing = drawingStart2; }
+                        if (drawingStart != -1 && drawingStart2 != -1) { nextDrawing = Math.min(drawingStart, drawingStart2); }
+                        else if (drawingStart != -1) { nextDrawing = drawingStart; }
+                        else if (drawingStart2 != -1) { nextDrawing = drawingStart2; }
 
+            // Find earliest of run, drawing, hyperlink
             Integer nextElement = -1;
             String elementType = '';
+
             if (nextRun != -1) { nextElement = nextRun; elementType = 'run'; }
-            if (nextDrawing != -1 && (nextElement == -1 || nextDrawing < nextElement)) { nextElement = nextDrawing; elementType = 'drawing'; }
-            if (hyperlinkStart != -1 && (nextElement == -1 || hyperlinkStart < nextElement)) { nextElement = hyperlinkStart; elementType = 'hyperlink'; }
-            if (nextElement == -1) { break; }
+            if (nextDrawing != -1 && (nextElement == -1 || nextDrawing < nextElement)) {
+                nextElement = nextDrawing; elementType = 'drawing';
+            }
+            if (hyperlinkStart != -1 && (nextElement == -1 || hyperlinkStart < nextElement)) {
+                nextElement = hyperlinkStart; elementType = 'hyperlink';
+            }
+
+                        if (nextElement == -1) { break; }
 
             if (elementType == 'run') {
                 Integer runEnd = findClosingTag(pXml, nextRun, 'w:r');
-                if (runEnd != -1) { parts.add(processRun(pXml.substring(nextRun, runEnd), images)); cursor = runEnd; }
-                else { cursor = nextRun + 1; }
+                if (runEnd != -1) {
+                    result += processRun(pXml.substring(nextRun, runEnd), images);
+                    cursor = runEnd;
+                } else {
+                    cursor = nextRun + 1;
+                }
             } else if (elementType == 'drawing') {
                 Integer drawEnd = findClosingTag(pXml, nextDrawing, 'w:drawing');
-                if (drawEnd != -1) { parts.add(processDrawing(pXml.substring(nextDrawing, drawEnd), images)); cursor = drawEnd; }
-                else { cursor = nextDrawing + 1; }
+                if (drawEnd != -1) {
+                    result += processDrawing(pXml.substring(nextDrawing, drawEnd), images);
+                    cursor = drawEnd;
+                } else {
+                    cursor = nextDrawing + 1;
+                }
             } else if (elementType == 'hyperlink') {
                 Integer hlEnd = findClosingTag(pXml, hyperlinkStart, 'w:hyperlink');
-                if (hlEnd != -1) { parts.add(processHyperlink(pXml.substring(hyperlinkStart, hlEnd), images)); cursor = hlEnd; }
-                else { cursor = hyperlinkStart + 1; }
+                if (hlEnd != -1) {
+                    result += processHyperlink(pXml.substring(hyperlinkStart, hlEnd), images);
+                    cursor = hlEnd;
+                } else {
+                    cursor = hyperlinkStart + 1;
+                }
             }
         }
 
-        // RTL paragraph: reverse run order so first run (rightmost) renders last in LTR HTML
-        if (isRtlParagraph && parts.size() > 1) {
-            List<String> reversed = new List<String>();
-            for (Integer i = parts.size() - 1; i >= 0; i--) {
-                reversed.add(parts[i]);
-            }
-            parts = reversed;
-        }
-
-        return String.join(parts, '');
+        return result;
     }
 
     /**
@@ -933,8 +772,6 @@ public with sharing class DocGenHtmlRenderer {
         // Extract run properties
         String rPr = extractElement(rXml, 'w:rPr');
         String style = (String.isNotBlank(rPr)) ? parseRunStyle(rPr) : '';
-        // RTL run: Flying Saucer renders all chars LTR, so we reverse RTL text in Apex
-        Boolean isRtlRun = String.isNotBlank(rPr) && (rPr.contains('<w:rtl/>') || rPr.contains('<w:rtl '));
         
         String openTags = '';
         String closeTags = '';
@@ -1008,11 +845,8 @@ public with sharing class DocGenHtmlRenderer {
                 if (tagEnd != -1 && rXml.substring(tagEnd - 1, tagEnd) != '/') {
                     Integer tEnd = rXml.indexOf('</w:t>', tagEnd);
                     if (tEnd != -1) {
-                        String text = unescapeXmlEntities(rXml.substring(tagEnd + 1, tEnd));
-                        if (text.contains('<span class="docgen-page-')) {
-                            // Page counter spans — pass through as raw HTML (injected by resolveFieldCodes)
-                            runContent += text;
-                        } else if (text.contains('##BARCODE:')) {
+                        String text = rXml.substring(tagEnd + 1, tEnd);
+                        if (text.contains('##BARCODE:')) {
                             runContent += renderBarcodeHtml(text);
                         } else {
                             // Check for caps in rPr
@@ -1025,7 +859,6 @@ public with sharing class DocGenHtmlRenderer {
                                     }
                                 }
                             }
-                            if (isRtlRun) { text = reverseRtlText(text); }
                             runContent += text.escapeHtml4();
                         }
                         cursor = tEnd + 6;
@@ -1054,7 +887,7 @@ public with sharing class DocGenHtmlRenderer {
             }
         }
 
-        if (runContent.length() == 0) { return ''; }
+        if (String.isBlank(runContent)) { return ''; }
 
         if (String.isNotBlank(style)) {
             return '<span style="' + style + '">' + openTags + runContent + closeTags + '</span>';
@@ -1082,68 +915,15 @@ public with sharing class DocGenHtmlRenderer {
     }
 
     /**
-     * Resolves the key text-formatting attributes (color, font, size, bold, italic) from a
-     * named style in styles.xml. Used to fill in values missing from inline rPr/pPr when
-     * the run/paragraph references a named Word style (e.g. Heading 1 with a built-in color).
-     * Returns a Map with keys: color, fontFamily, fontSize, bold, italic (any subset of those
-     * that the style defines).
-     */
-    private static Map<String, String> resolveStyleTextAttributes(String styleName) {
-        Map<String, String> out = new Map<String, String>();
-        if (String.isBlank(styleName)) return out;
-        // Async-safe fast path — cached from admin context at request creation.
-        if (styleTextAttrsMap != null && styleTextAttrsMap.containsKey(styleName)) {
-            Map<String, String> cached = styleTextAttrsMap.get(styleName);
-            if (cached != null) return cached;
-        }
-        if (String.isBlank(stylesXml)) return out;
-        // Find <w:style ... w:styleId="STYLENAME"> ... </w:style>
-        String searchKey = 'w:styleId="' + styleName + '"';
-        Integer idx = stylesXml.indexOf(searchKey);
-        if (idx < 0) return out;
-        Integer startIdx = stylesXml.lastIndexOf('<w:style', idx);
-        Integer endIdx = stylesXml.indexOf('</w:style>', idx);
-        if (startIdx < 0 || endIdx < 0) return out;
-        String styleDef = stylesXml.substring(startIdx, endIdx);
-
-        String color = extractAttr(styleDef, 'w:color', 'w:val');
-        if (color != null && color != 'auto' && color.length() >= 6) {
-            out.put('color', color);
-        }
-        String font = extractAttr(styleDef, 'w:rFonts', 'w:ascii');
-        if (font == null) font = extractAttr(styleDef, 'w:rFonts', 'w:hAnsi');
-        if (String.isNotBlank(font)) out.put('fontFamily', font);
-        String sz = extractAttr(styleDef, 'w:sz', 'w:val');
-        if (sz != null && sz.isNumeric()) out.put('fontSize', sz);
-        if (styleDef.contains('<w:b/>') || styleDef.contains('<w:b ')) out.put('bold', 'true');
-        if (styleDef.contains('<w:i/>') || styleDef.contains('<w:i ')) out.put('italic', 'true');
-        return out;
-    }
-
-    /**
      * Parses <w:rPr> into CSS style string.
      */
     private static String parseRunStyle(String rPr) {
         List<String> styles = new List<String>();
 
-        // Resolve run-style reference first — inline attributes can still override below.
-        String rStyleVal = extractAttr(rPr, 'w:rStyle', 'w:val');
-        Map<String, String> styleAttrs = (rStyleVal != null)
-            ? resolveStyleTextAttributes(rStyleVal)
-            : new Map<String, String>();
-
-        // Font: <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="David"/>
-        // w:cs = Complex Script font (Hebrew, Arabic) — try this first for RTL content
+        // Font: <w:rFonts w:ascii="Calibri"/>
         String font = extractAttr(rPr, 'w:rFonts', 'w:ascii');
-        if (font == null) { font = extractAttr(rPr, 'w:rFonts', 'w:hAnsi'); }
-        if (font == null) { font = styleAttrs.get('fontFamily'); }
-        String fontCs = extractAttr(rPr, 'w:rFonts', 'w:cs');
-        // RTL run detection: <w:rtl/> marks a run as right-to-left
-        Boolean isRtlRun = rPr.contains('<w:rtl/>') || rPr.contains('<w:rtl ');
-        if (isRtlRun && fontCs != null) {
-            // Use complex script font for RTL runs, fall back to Arial Unicode MS
-            styles.add('font-family:\'Arial Unicode MS\',\'' + fontCs.escapeHtml4() + '\',sans-serif');
-        } else if (font != null) {
+                if (font == null) { font = extractAttr(rPr, 'w:rFonts', 'w:hAnsi'); }
+        if (font != null) {
             styles.add('font-family:\'' + font.escapeHtml4() + '\',sans-serif');
         }
 
@@ -1154,22 +934,10 @@ public with sharing class DocGenHtmlRenderer {
             styles.add('font-size:' + ptSize + 'pt');
         }
 
-        // Color: <w:color w:val="FF0000"/> or <w:color w:val="auto" w:themeColor="accent1"/>
+        // Color: <w:color w:val="FF0000"/>
         String color = extractAttr(rPr, 'w:color', 'w:val');
-        if (color != null && color != 'auto' && color.length() >= 6) {
+        if (color != null && color != 'auto') {
             styles.add('color:#' + color);
-        } else if (color == 'auto' || color == null) {
-            // Check for theme color — Word stores colors as theme references
-            String themeColor = extractAttr(rPr, 'w:color', 'w:themeColor');
-            if (themeColor != null) {
-                String resolved = resolveThemeColor(themeColor);
-                if (resolved != null) {
-                    styles.add('color:#' + resolved);
-                }
-            } else if (styleAttrs.containsKey('color')) {
-                // Fall back to the color defined on the referenced style (Heading 1 / custom style / etc)
-                styles.add('color:#' + styleAttrs.get('color'));
-            }
         }
 
         // Highlight: <w:highlight w:val="yellow"/>
@@ -1216,22 +984,8 @@ public with sharing class DocGenHtmlRenderer {
 
             // Table borders — check inline borders first, then style reference
             if (tblPr.contains('<w:tblBorders')) {
-                // Parse actual border values — only set hasBorders if at least one is real (not none/nil)
-                String tblBdr = extractElement(tblPr, 'w:tblBorders');
-                if (String.isNotBlank(tblBdr)) {
-                    String bTop = parseBorderSide(tblBdr, 'w:top');
-                    String bBottom = parseBorderSide(tblBdr, 'w:bottom');
-                    String bLeft = parseBorderSide(tblBdr, 'w:left');
-                    String bRight = parseBorderSide(tblBdr, 'w:right');
-                    String bInsH = parseBorderSide(tblBdr, 'w:insideH');
-                    String bInsV = parseBorderSide(tblBdr, 'w:insideV');
-                    if (bTop != null || bBottom != null || bLeft != null || bRight != null || bInsH != null || bInsV != null) {
-                        hasBorders = true;
-                        // Use the first real border found for the table-level style
-                        String rep = bTop != null ? bTop : (bInsH != null ? bInsH : (bLeft != null ? bLeft : '0.5pt solid #000'));
-                        tableStyle += ';border:' + rep;
-                    }
-                }
+                hasBorders = true;
+                tableStyle += ';border:0.5pt solid #000';
             } else if (tblPr.contains('w:tblStyle')) {
                 // Table uses a named style — resolve from styles.xml if available
                 String styleVal = extractAttr(tblPr, 'w:tblStyle', 'w:val');
@@ -1244,8 +998,6 @@ public with sharing class DocGenHtmlRenderer {
                 }
             }
 
-            // RTL table: cells reversed manually in processTableRow
-
             // Table alignment
             String tblJc = extractAttr(tblPr, 'w:jc', 'w:val');
             if (tblJc == 'center') {
@@ -1257,6 +1009,8 @@ public with sharing class DocGenHtmlRenderer {
             // Table cell margins (default padding for all cells)
             String tblCellMar = extractElement(tblPr, 'w:tblCellMar');
             if (String.isNotBlank(tblCellMar)) {
+                String topMar = extractAttr(tblCellMar, 'w:top', 'w:w');
+                String bottomMar = extractAttr(tblCellMar, 'w:bottom', 'w:w');
                 String leftMar = extractAttr(tblCellMar, 'w:left', 'w:w');
                                 if (leftMar == null) { leftMar = extractAttr(tblCellMar, 'w:start', 'w:w'); }
                 String rightMar = extractAttr(tblCellMar, 'w:right', 'w:w');
@@ -1264,10 +1018,6 @@ public with sharing class DocGenHtmlRenderer {
                 // These values will be used on cells; for now they affect the table-level default
             }
         }
-
-        // RTL table: reverse cell order manually
-        Boolean isBidiVisual = String.isNotBlank(tblPr) &&
-            (tblPr.contains('<w:bidiVisual/>') || tblPr.contains('<w:bidiVisual '));
 
         // Process rows
         String rows = '';
@@ -1279,7 +1029,7 @@ public with sharing class DocGenHtmlRenderer {
             Integer trEnd = findClosingTag(tblXml, trStart, 'w:tr');
                         if (trEnd == -1) { break; }
 
-            rows += processTableRow(tblXml.substring(trStart, trEnd), images, tblPr, hasBorders, isBidiVisual);
+            rows += processTableRow(tblXml.substring(trStart, trEnd), images, tblPr, hasBorders);
             cursor = trEnd;
         }
 
@@ -1289,14 +1039,14 @@ public with sharing class DocGenHtmlRenderer {
     /**
      * Processes a <w:tr> element into an HTML <tr>.
      */
-    private static String processTableRow(String trXml, Map<String, String> images, String tblPr, Boolean hasBorders, Boolean isBidiVisual) {
+    private static String processTableRow(String trXml, Map<String, String> images, String tblPr, Boolean hasBorders) {
+        String cells = '';
         Integer cursor = 0;
 
         // Check for header row
         String trPr = extractElement(trXml, 'w:trPr');
         Boolean isHeader = (String.isNotBlank(trPr) && (trPr.contains('<w:tblHeader/>') || trPr.contains('<w:tblHeader ')));
 
-        List<String> cellList = new List<String>();
         while (cursor < trXml.length()) {
             Integer tcStart = trXml.indexOf('<w:tc', cursor);
                         if (tcStart == -1) { break; }
@@ -1304,20 +1054,11 @@ public with sharing class DocGenHtmlRenderer {
             Integer tcEnd = findClosingTag(trXml, tcStart, 'w:tc');
                         if (tcEnd == -1) { break; }
 
-            cellList.add(processTableCell(trXml.substring(tcStart, tcEnd), images, tblPr, hasBorders, isHeader));
+            cells += processTableCell(trXml.substring(tcStart, tcEnd), images, tblPr, hasBorders, isHeader);
             cursor = tcEnd;
         }
 
-        // RTL table: reverse cell order so rightmost column appears first in HTML
-        if (isBidiVisual) {
-            List<String> reversed = new List<String>();
-            for (Integer i = cellList.size() - 1; i >= 0; i--) {
-                reversed.add(cellList[i]);
-            }
-            cellList = reversed;
-        }
-
-        return '<tr>' + String.join(cellList, '') + '</tr>';
+        return '<tr>' + cells + '</tr>';
     }
 
     /**
@@ -1420,12 +1161,8 @@ public with sharing class DocGenHtmlRenderer {
     private static Map<String, Decimal> parsePageDimensions(String xml) {
         Map<String, Decimal> dims = new Map<String, Decimal>();
         // Defaults: Letter, 1in margins
-        Integer pgW = 12240;
-        Integer pgH = 15840;
-        Integer mTop = 1440;
-        Integer mRight = 1440;
-        Integer mBottom = 1440;
-        Integer mLeft = 1440;
+        Integer pgW = 12240, pgH = 15840;
+        Integer mTop = 1440, mRight = 1440, mBottom = 1440, mLeft = 1440;
 
         if (String.isNotBlank(xml) && xml.contains('<w:pgSz')) {
             try {
@@ -1435,16 +1172,15 @@ public with sharing class DocGenHtmlRenderer {
                 val = extractAttr(xml, 'w:pgSz', 'w:h');
                 if (val != null && val.isNumeric()) { pgH = Integer.valueOf(val); }
                 val = extractAttr(xml, 'w:pgMar', 'w:top');
-                if (val != null && Pattern.matches('-?\\d+', val)) { mTop = Math.abs(Integer.valueOf(val)); }
+                if (val != null && val.isNumeric()) { mTop = Integer.valueOf(val); }
                 val = extractAttr(xml, 'w:pgMar', 'w:right');
-                if (val != null && Pattern.matches('-?\\d+', val)) { mRight = Math.abs(Integer.valueOf(val)); }
+                if (val != null && val.isNumeric()) { mRight = Integer.valueOf(val); }
                 val = extractAttr(xml, 'w:pgMar', 'w:bottom');
-                if (val != null && Pattern.matches('-?\\d+', val)) { mBottom = Math.abs(Integer.valueOf(val)); }
+                if (val != null && val.isNumeric()) { mBottom = Integer.valueOf(val); }
                 val = extractAttr(xml, 'w:pgMar', 'w:left');
-                if (val != null && Pattern.matches('-?\\d+', val)) { mLeft = Math.abs(Integer.valueOf(val)); }
+                if (val != null && val.isNumeric()) { mLeft = Integer.valueOf(val); }
             } catch (Exception e) {
-                // Intentionally swallowed — page dimension parsing failed, using defaults
-                String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+                System.debug(LoggingLevel.WARN, 'Page dimension parsing failed, using defaults: ' + e.getMessage());
             }
         }
 
@@ -1463,326 +1199,6 @@ public with sharing class DocGenHtmlRenderer {
      * Resolves default table cell padding from TableNormal style in stylesXml.
      * Returns CSS padding value (e.g., "0pt 5.4pt").
      */
-    /**
-     * Resolves Word field codes (PAGE, NUMPAGES, fldSimple) within paragraph XML.
-     * Complex fields span multiple <w:r> elements:
-     *   <w:r><w:fldChar w:fldCharType="begin"/></w:r>
-     *   <w:r><w:instrText> PAGE </w:instrText></w:r>
-     *   <w:r><w:fldChar w:fldCharType="separate"/></w:r>
-     *   <w:r><w:t>1</w:t></w:r>  (cached value — discard)
-     *   <w:r><w:fldChar w:fldCharType="end"/></w:r>
-     * Replaces the entire field construct with a single run containing a CSS-driven span.
-     * Flying Saucer resolves counter(page)/counter(pages) at PDF render time.
-     */
-    private static String resolveFieldCodes(String pXml) {
-        // Handle <w:fldSimple w:instr="..."> wrappers first
-        pXml = resolveFldSimple(pXml);
-
-        // Handle complex field codes (fldChar begin/separate/end)
-        if (!pXml.contains('<w:fldChar')) { return pXml; }
-
-        String result = '';
-        Integer cursor = 0;
-        Boolean inField = false;
-        Boolean inFieldResult = false;
-        String fieldInstr = '';
-        String fieldRpr = '';
-        Integer fieldStartPos = -1;
-
-        while (cursor < pXml.length()) {
-            Integer nextFldChar = pXml.indexOf('<w:fldChar', cursor);
-            Integer nextInstrText = pXml.indexOf('<w:instrText', cursor);
-
-            if (nextFldChar == -1 && !inField) {
-                result += pXml.substring(cursor);
-                break;
-            }
-
-            if (!inField) {
-                // Look for field begin
-                if (nextFldChar == -1) { result += pXml.substring(cursor); break; }
-                if (pXml.indexOf('fldCharType="begin"', nextFldChar) != -1 &&
-                    pXml.indexOf('fldCharType="begin"', nextFldChar) < pXml.indexOf('>', nextFldChar) + 1) {
-                    // Found field begin — find the enclosing run start
-                    fieldStartPos = pXml.lastIndexOf('<w:r>', nextFldChar);
-                    if (fieldStartPos == -1) { fieldStartPos = pXml.lastIndexOf('<w:r ', nextFldChar); }
-                    if (fieldStartPos == -1 || fieldStartPos < cursor) { fieldStartPos = nextFldChar; }
-                    result += pXml.substring(cursor, fieldStartPos);
-                    inField = true;
-                    inFieldResult = false;
-                    fieldInstr = '';
-                    // Capture <w:rPr> from the begin run so page number spans preserve font size
-                    fieldRpr = '';
-                    Integer rprStart = pXml.indexOf('<w:rPr>', fieldStartPos);
-                    if (rprStart != -1 && rprStart < nextFldChar) {
-                        Integer rprEnd = pXml.indexOf('</w:rPr>', rprStart);
-                        if (rprEnd != -1 && rprEnd < nextFldChar) {
-                            fieldRpr = pXml.substring(rprStart, rprEnd + 8);
-                        }
-                    }
-                    // Skip past this fldChar tag
-                    Integer tagEnd = pXml.indexOf('>', nextFldChar);
-                    cursor = (tagEnd != -1) ? tagEnd + 1 : nextFldChar + 1;
-                } else {
-                    // Not a begin — pass through
-                    Integer tagEnd = pXml.indexOf('>', nextFldChar);
-                    result += pXml.substring(cursor, (tagEnd != -1) ? tagEnd + 1 : nextFldChar + 1);
-                    cursor = (tagEnd != -1) ? tagEnd + 1 : nextFldChar + 1;
-                }
-            } else {
-                // Inside a field — look for instrText, separate, or end
-                if (nextInstrText != -1 && (nextFldChar == -1 || nextInstrText < nextFldChar)) {
-                    // Capture instruction text
-                    Integer tagEnd = pXml.indexOf('>', nextInstrText);
-                    if (tagEnd != -1) {
-                        Integer closeInstr = pXml.indexOf('</w:instrText>', tagEnd);
-                        if (closeInstr != -1) {
-                            fieldInstr += pXml.substring(tagEnd + 1, closeInstr).trim().toUpperCase();
-                            cursor = closeInstr + '</w:instrText>'.length();
-                        } else { cursor = tagEnd + 1; }
-                    } else { cursor = nextInstrText + 1; }
-                } else if (nextFldChar != -1) {
-                    Integer fldTagEnd = pXml.indexOf('>', nextFldChar);
-                    String fldTag = (fldTagEnd != -1) ? pXml.substring(nextFldChar, fldTagEnd + 1) : '';
-
-                    if (fldTag.contains('fldCharType="separate"')) {
-                        inFieldResult = true;
-                        cursor = (fldTagEnd != -1) ? fldTagEnd + 1 : nextFldChar + 1;
-                    } else if (fldTag.contains('fldCharType="end"')) {
-                        // Field complete — skip to end of enclosing run
-                        Integer runEnd = pXml.indexOf('</w:r>', nextFldChar);
-                        cursor = (runEnd != -1) ? runEnd + 6 : ((fldTagEnd != -1) ? fldTagEnd + 1 : nextFldChar + 1);
-
-                        // Emit replacement with preserved run properties (font size, color, etc.)
-                        if (fieldInstr.contains('NUMPAGES')) {
-                            result += '<w:r>' + fieldRpr + '<w:t><span class="docgen-page-total"></span></w:t></w:r>';
-                        } else if (fieldInstr.contains('PAGE')) {
-                            result += '<w:r>' + fieldRpr + '<w:t><span class="docgen-page-num"></span></w:t></w:r>';
-                        }
-                        // Other field types: silently drop (DATE, TIME, etc. have static cached values)
-                        inField = false;
-                    } else {
-                        // Nested or other fldChar — skip
-                        cursor = (fldTagEnd != -1) ? fldTagEnd + 1 : nextFldChar + 1;
-                    }
-                } else {
-                    // No more fldChar/instrText — malformed field, dump remaining
-                    cursor = pXml.length();
-                    inField = false;
-                }
-            }
-        }
-        return result;
-    }
-
-    /**
-     * Handles <w:fldSimple w:instr=" PAGE "> wrapper elements.
-     * Replaces them with a run containing the appropriate CSS counter span.
-     */
-    private static String resolveFldSimple(String pXml) {
-        if (!pXml.contains('<w:fldSimple')) { return pXml; }
-        String result = '';
-        Integer cursor = 0;
-        while (cursor < pXml.length()) {
-            Integer fldStart = pXml.indexOf('<w:fldSimple', cursor);
-            if (fldStart == -1) { result += pXml.substring(cursor); break; }
-            result += pXml.substring(cursor, fldStart);
-            Integer tagEnd = pXml.indexOf('>', fldStart);
-            if (tagEnd == -1) { result += pXml.substring(fldStart); break; }
-            String tag = pXml.substring(fldStart, tagEnd + 1).toUpperCase();
-            Integer closeTag = pXml.indexOf('</w:fldSimple>', tagEnd);
-            if (closeTag == -1) { closeTag = pXml.indexOf('</w:fldSimple>', tagEnd); }
-            if (closeTag == -1) { result += pXml.substring(fldStart); break; }
-
-            // Capture <w:rPr> from the inner run to preserve font size on page number spans
-            String innerContent = pXml.substring(tagEnd + 1, closeTag);
-            String fldRpr = '';
-            Integer rprIdx = innerContent.indexOf('<w:rPr>');
-            if (rprIdx != -1) {
-                Integer rprEndIdx = innerContent.indexOf('</w:rPr>', rprIdx);
-                if (rprEndIdx != -1) {
-                    fldRpr = innerContent.substring(rprIdx, rprEndIdx + 8);
-                }
-            }
-
-            if (tag.contains('NUMPAGES')) {
-                result += '<w:r>' + fldRpr + '<w:t><span class="docgen-page-total"></span></w:t></w:r>';
-            } else if (tag.contains('PAGE')) {
-                result += '<w:r>' + fldRpr + '<w:t><span class="docgen-page-num"></span></w:t></w:r>';
-            }
-            // Skip other fldSimple types
-            cursor = closeTag + '</w:fldSimple>'.length();
-        }
-        return result;
-    }
-
-    /**
-     * Checks if the document's default paragraph style (Normal) is RTL.
-     * In Hebrew/Arabic documents, the Normal style typically has <w:bidi/> in its pPr,
-     * meaning ALL paragraphs inherit RTL direction unless explicitly overridden.
-     */
-    /**
-     * Reverses RTL character sequences for Flying Saucer compatibility.
-     * Flying Saucer renders all characters LTR — reversing RTL text makes it
-     * display correctly when read right-to-left.
-     *
-     * Only reverses text that actually contains RTL characters (Hebrew/Arabic).
-     * English merge field values in RTL runs are left untouched.
-     * Mixed content (Hebrew + English in one run) reverses RTL segments only.
-     */
-
-    private static Boolean isRtlCodePoint(Integer cp) {
-        return (cp >= 1424 && cp <= 1535) ||   // Hebrew (U+0590-U+05FF)
-               (cp >= 1536 && cp <= 1791) ||   // Arabic (U+0600-U+06FF)
-               (cp >= 1872 && cp <= 1919) ||   // Arabic Supplement (U+0750-U+077F)
-               (cp >= 64336 && cp <= 65023) ||  // Arabic Presentation Forms-A
-               (cp >= 65136 && cp <= 65279);    // Arabic Presentation Forms-B
-    }
-
-    /**
-     * Reverses RTL text for Flying Saucer. Full string reversal gives correct
-     * character order + word order when rendered LTR with text-align:right.
-     * English merge values are left untouched.
-     */
-    private static String reverseRtlText(String input) {
-        if (String.isBlank(input)) { return input; }
-
-        Boolean hasRtl = false;
-        for (Integer i = 0; i < input.length(); i++) {
-            if (isRtlCodePoint(input.charAt(i))) {
-                hasRtl = true;
-                break;
-            }
-        }
-        if (!hasRtl) { return input; }
-
-        // Check all chars are RTL + neutral ASCII
-        for (Integer i = 0; i < input.length(); i++) {
-            Integer cp = input.charAt(i);
-            if (!isRtlCodePoint(cp) && cp > 127) {
-                return input; // Mixed extended chars — don't reverse
-            }
-        }
-
-        String result = '';
-        for (Integer i = input.length() - 1; i >= 0; i--) {
-            result += input.substring(i, i + 1);
-        }
-        return result;
-    }
-
-    private static Boolean isDefaultStyleRtl() {
-        if (String.isBlank(stylesXml)) { return false; }
-        try {
-            // Find the Normal style (default paragraph style)
-            Integer normalIdx = stylesXml.indexOf('w:styleId="Normal"');
-            if (normalIdx == -1) { normalIdx = stylesXml.indexOf('w:styleId="normal"'); }
-            if (normalIdx == -1) { return false; }
-            Integer styleStart = stylesXml.lastIndexOf('<w:style', normalIdx);
-            Integer styleEnd = stylesXml.indexOf('</w:style>', normalIdx);
-            if (styleStart == -1 || styleEnd == -1) { return false; }
-            String normalDef = stylesXml.substring(styleStart, styleEnd);
-            return normalDef.contains('<w:bidi/>') || normalDef.contains('<w:bidi ');
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * Maps standard Word theme color names to default hex values.
-     * These match the default Office theme (Office 2013+). Not perfect for custom
-     * themes, but covers the vast majority of documents.
-     */
-    private static final Map<String, String> THEME_COLOR_DEFAULTS = new Map<String, String>{
-        'dark1' => '000000',
-        'light1' => 'FFFFFF',
-        'dark2' => '44546A',
-        'light2' => 'E7E6E6',
-        'accent1' => '4472C4',
-        'accent2' => 'ED7D31',
-        'accent3' => 'A5A5A5',
-        'accent4' => 'FFC000',
-        'accent5' => '5B9BD5',
-        'accent6' => '70AD47',
-        'hyperlink' => '0563C1',
-        'followedHyperlink' => '954F72',
-        'text1' => '000000',
-        'text2' => '44546A',
-        'background1' => 'FFFFFF',
-        'background2' => 'E7E6E6'
-    };
-
-    private static String resolveThemeColor(String themeColor) {
-        if (themeColor == null) { return null; }
-        return THEME_COLOR_DEFAULTS.get(themeColor);
-    }
-
-    /**
-     * Determines if a list is numbered by looking up the numId in numbering.xml.
-     * Falls back to style-name heuristic if numbering.xml is not available.
-     * numbering.xml structure: <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
-     * then: <w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum>
-     * Bullet formats: "bullet"
-     * Numbered formats: "decimal", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman", etc.
-     */
-    private static Boolean isNumberedList(String numId, String ilvl) {
-        if (String.isBlank(numberingXml) || numId == null) {
-            // Fallback: assume bullet (safer default than the old odd/even heuristic)
-            return false;
-        }
-        try {
-            // Step 1: Find <w:num w:numId="X"> and get the abstractNumId
-            String numSearch = 'w:numId="' + numId + '"';
-            Integer numIdx = numberingXml.indexOf(numSearch);
-            if (numIdx == -1) { return false; }
-
-            // Find the abstractNumId within this <w:num> element
-            Integer numStart = numberingXml.lastIndexOf('<w:num ', numIdx);
-            Integer numEnd = numberingXml.indexOf('</w:num>', numIdx);
-            if (numStart == -1 || numEnd == -1) {
-                // Self-closing <w:num> — look for abstractNumId within the tag area
-                numEnd = numberingXml.indexOf('>', numIdx);
-                if (numEnd == -1) { return false; }
-            }
-            String numBlock = numberingXml.substring(numStart, numEnd);
-            String abstractNumId = extractAttr(numBlock, 'w:abstractNumId', 'w:val');
-            if (abstractNumId == null) { return false; }
-
-            // Step 2: Find <w:abstractNum w:abstractNumId="Y"> and get the numFmt for the ilvl
-            String absSearch = 'w:abstractNumId="' + abstractNumId + '"';
-            Integer absIdx = numberingXml.indexOf(absSearch);
-            if (absIdx == -1) { return false; }
-
-            Integer absStart = numberingXml.lastIndexOf('<w:abstractNum ', absIdx);
-            Integer absEnd = numberingXml.indexOf('</w:abstractNum>', absIdx);
-            if (absStart == -1 || absEnd == -1) { return false; }
-            String absBlock = numberingXml.substring(absStart, absEnd);
-
-            // Step 3: Find the <w:lvl w:ilvl="Z"> within the abstract definition
-            String lvlSearch = 'w:ilvl="' + ilvl + '"';
-            Integer lvlIdx = absBlock.indexOf(lvlSearch);
-            if (lvlIdx == -1) {
-                // Try ilvl 0 as fallback
-                lvlIdx = absBlock.indexOf('w:ilvl="0"');
-                if (lvlIdx == -1) { return false; }
-            }
-
-            Integer lvlStart = absBlock.lastIndexOf('<w:lvl ', lvlIdx);
-            Integer lvlEnd = absBlock.indexOf('</w:lvl>', lvlIdx);
-            if (lvlStart == -1 || lvlEnd == -1) { return false; }
-            String lvlBlock = absBlock.substring(lvlStart, lvlEnd);
-
-            // Step 4: Get the numFmt value
-            String numFmt = extractAttr(lvlBlock, 'w:numFmt', 'w:val');
-            if (numFmt == null) { return false; }
-
-            // "bullet" = bullet list, everything else = numbered
-            return numFmt != 'bullet';
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     private static String resolveDefaultCellPadding() {
         if (String.isBlank(stylesXml)) { return '0pt 5.4pt'; }
         try {
@@ -1810,12 +1226,7 @@ public with sharing class DocGenHtmlRenderer {
     }
 
     private static String resolveTableStyleBorder(String styleName) {
-        if (String.isBlank(styleName)) return null;
-        // Async-safe fast path — borders map pre-extracted in admin context and cached.
-        if (tableStyleBorderMap != null && tableStyleBorderMap.containsKey(styleName)) {
-            return tableStyleBorderMap.get(styleName);
-        }
-        if (String.isBlank(stylesXml)) { return null; }
+        if (String.isBlank(stylesXml) || String.isBlank(styleName)) { return null; }
 
         // Find the style definition: <w:style ... w:styleId="TableGrid">
         String searchKey = 'w:styleId="' + styleName + '"';
@@ -1950,20 +1361,14 @@ public with sharing class DocGenHtmlRenderer {
             cursor = tEnd + 6; // length of </w:t>
         }
 
-        return unescapeXmlEntities(result);
-    }
+        // Unescape XML entities so downstream escapeHtml4() doesn't double-encode
+        result = result.replace('&amp;', '&');
+        result = result.replace('&lt;', '<');
+        result = result.replace('&gt;', '>');
+        result = result.replace('&apos;', '\'');
+        result = result.replace('&quot;', '"');
 
-    /**
-     * Unescapes standard XML entities so downstream escapeHtml4() doesn't double-encode.
-     */
-    private static String unescapeXmlEntities(String text) {
-        if (String.isBlank(text)) { return text; }
-        text = text.replace('&amp;', '&');
-        text = text.replace('&lt;', '<');
-        text = text.replace('&gt;', '>');
-        text = text.replace('&apos;', '\'');
-        text = text.replace('&quot;', '"');
-        return text;
+        return result;
     }
 
     /**
@@ -2082,7 +1487,7 @@ public with sharing class DocGenHtmlRenderer {
      * Detects ##BARCODE:type:value## markers in text and renders as HTML/CSS bars.
      * No images needed — Blob.toPdf() renders CSS perfectly.
      */
-    public static String renderBarcodeHtml(String text) {
+    private static String renderBarcodeHtml(String text) {
         // Extract marker: ##BARCODE:type:size:VALUE##
         Integer startIdx = text.indexOf('##BARCODE:');
                 if (startIdx == -1) { return text.escapeHtml4(); }

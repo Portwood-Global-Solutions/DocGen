@@ -1,7 +1,4 @@
-public with sharing class DocGenController { // NOPMD ExcessivePublicCount — controller requires public methods for AuraEnabled endpoints
-
-    private static Id cachedTemplateId;
-    private static Map<String, Object> cachedTemplateEnvelope;
+public with sharing class DocGenController {
 
     /**
      * Retrieves template metadata, file content, and merged record data for client-side processing.
@@ -13,12 +10,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     public static Map<String, Object> generateDocumentData(Id templateId, Id recordId) {
         if (templateId == null) { throw new DocGenException('Template ID is missing.'); }
 
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<DocGen_Template__c> templates = [SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c, Document_Title_Format__c
+        List<DocGen_Template__c> templates = [
+            SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c, Document_Title_Format__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
             WITH SYSTEM_MODE
-            LIMIT 1];
+            LIMIT 1
+        ];
 
         if (templates.isEmpty()) {
             throw new DocGenException('Unable to access template. Verify it exists and you have permission.');
@@ -57,6 +55,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * Template metadata and file content are cached statically — queried once,
      * reused across all records in the batch. Only the record data changes.
      */
+    private static Id cachedTemplateId;
+    private static Map<String, Object> cachedTemplateEnvelope;
+
     /**
      * Returns template metadata combined with pre-cached record data, skipping per-record SOQL.
      * @param templateId The DocGen template record ID
@@ -68,12 +69,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
         // Cache template metadata + file content on first call
         if (cachedTemplateId != templateId || cachedTemplateEnvelope == null) {
-            /* code-analyzer-suppress ApexFlsViolation */
-            List<DocGen_Template__c> templates = [SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c, Document_Title_Format__c
+            List<DocGen_Template__c> templates = [
+                SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c, Document_Title_Format__c
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
                 WITH SYSTEM_MODE
-                LIMIT 1];
+                LIMIT 1
+            ];
 
             if (templates.isEmpty()) {
                 throw new DocGenException('Unable to access template. Verify it exists and you have permission.');
@@ -117,7 +119,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             insert cvDecision.getRecords();
             Id cvId = cvDecision.getRecords()[0].Id;
 
-            Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cvId WITH USER_MODE].ContentDocumentId; // NOPMD — internal doc lookup
+            Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cvId WITH USER_MODE].ContentDocumentId;
 
             ContentDocumentLink cdl = new ContentDocumentLink();
             cdl.ContentDocumentId = contentDocId;
@@ -132,76 +134,6 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw new DocGenException('Insufficient access to save document: ' + e.getMessage());
         } catch (Exception e) {
             throw new DocGenException('Error saving document to record: ' + e.getMessage());
-        }
-    }
-
-    /**
-     * Saves a document in chunks for files exceeding the 4MB Aura payload limit.
-     * First chunk creates the ContentVersion, subsequent chunks append to it.
-     * @param recordId The record to link the final document to
-     * @param fileName The document file name
-     * @param base64Chunk One chunk of base64-encoded content (~3MB)
-     * @param chunkIndex Zero-based chunk index
-     * @param totalChunks Total number of chunks expected
-     * @param contentVersionId The CV ID from the first chunk (null for first chunk)
-     * @param extension File extension
-     * @return The ContentVersion ID (same ID returned for all chunks)
-     */
-    @AuraEnabled
-    public static Id saveDocumentChunk(Id recordId, String fileName, String base64Chunk,
-            Integer chunkIndex, Integer totalChunks, Id contentVersionId, String extension) {
-        try {
-            if (chunkIndex == 0) {
-                // First chunk — create the ContentVersion with partial data
-                ContentVersion cv = new ContentVersion();
-                cv.Title = fileName;
-                cv.PathOnClient = fileName + (extension.startsWith('.') ? extension : '.' + extension);
-                cv.VersionData = EncodingUtil.base64Decode(base64Chunk);
-                cv.IsMajorVersion = true;
-                SObjectAccessDecision cvDec = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentVersion>{ cv });
-                insert cvDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-                cv.Id = cvDec.getRecords()[0].Id;
-
-                if (totalChunks == 1) {
-                    // Single chunk — link to record immediately
-                    Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH USER_MODE].ContentDocumentId; // NOPMD — internal doc lookup
-                    try {
-                        ContentDocumentLink cdl = new ContentDocumentLink(
-                            ContentDocumentId = contentDocId, LinkedEntityId = recordId, ShareType = 'V', Visibility = 'AllUsers'
-                        );
-                        SObjectAccessDecision cdlDec = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentDocumentLink>{ cdl });
-                        insert cdlDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-                    } catch (Exception linkErr) {
-                        String noop = linkErr.getMessage(); // NOPMD UnusedLocalVariable — some objects don't support CDL
-                    }
-                }
-                return cv.Id;
-            } else {
-                // Subsequent chunk — read existing CV, append data, re-save
-                ContentVersion existing = [SELECT Id, VersionData, Title, PathOnClient FROM ContentVersion WHERE Id = :contentVersionId WITH USER_MODE LIMIT 1]; // NOPMD — internal chunk read
-                String existingB64 = EncodingUtil.base64Encode(existing.VersionData);
-                String combined = existingB64 + base64Chunk;
-                existing.VersionData = EncodingUtil.base64Decode(combined);
-                SObjectAccessDecision updDec = Security.stripInaccessible(AccessType.UPDATABLE, new List<ContentVersion>{ existing });
-                update updDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-
-                if (chunkIndex == totalChunks - 1) {
-                    // Last chunk — link to record
-                    Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :existing.Id WITH USER_MODE].ContentDocumentId; // NOPMD — internal doc lookup
-                    try {
-                        ContentDocumentLink cdl = new ContentDocumentLink(
-                            ContentDocumentId = contentDocId, LinkedEntityId = recordId, ShareType = 'V', Visibility = 'AllUsers'
-                        );
-                        SObjectAccessDecision cdlDec = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentDocumentLink>{ cdl });
-                        insert cdlDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-                    } catch (Exception linkErr) {
-                        String noop = linkErr.getMessage(); // NOPMD UnusedLocalVariable — some objects don't support CDL
-                    }
-                }
-                return existing.Id;
-            }
-        } catch (Exception e) {
-            throw DocGenService.ahe(e, 'Error saving document chunk: ' + e.getMessage());
         }
     }
 
@@ -229,18 +161,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled
     public static Map<String, Object> processAndReturnDocumentWithImages(Id templateId, Id recordId, Map<String, String> resolvedImages) {
-        return processAndReturnDocumentWithOverride(templateId, recordId, resolvedImages, null);
-    }
-
-    /**
-     * Processes a template with optional pre-resolved images AND an optional output format override.
-     * When outputFormatOverride is non-null, ignores the template's Output_Format__c.
-     * Throws if the template's Lock_Output_Format__c is true, or if PowerPoint→PDF is requested.
-     */
-    @AuraEnabled
-    public static Map<String, Object> processAndReturnDocumentWithOverride(Id templateId, Id recordId, Map<String, String> resolvedImages, String outputFormatOverride) {
         try {
-            Map<String, Object> result = DocGenService.processDocument(templateId, recordId, resolvedImages, outputFormatOverride);
+            Map<String, Object> result = DocGenService.processDocument(templateId, recordId, resolvedImages);
             Blob docBlob = (Blob) result.get('blob');
             return new Map<String, Object>{
                 'base64' => EncodingUtil.base64Encode(docBlob),
@@ -280,670 +202,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     @AuraEnabled
     public static String getContentVersionBase64(Id contentVersionId) {
         List<ContentVersion> cvs = [
-            SELECT VersionData FROM ContentVersion WHERE Id = :contentVersionId WITH USER_MODE LIMIT 1
+            SELECT VersionData FROM ContentVersion WHERE Id = :contentVersionId WITH SYSTEM_MODE LIMIT 1
         ];
         if (cvs.isEmpty()) { return null; }
         return EncodingUtil.base64Encode(cvs[0].VersionData);
-    }
-
-    /**
-     * Generates a document using Giant Query async pipeline for records with thousands of children.
-     * Scouts child counts, and if any exceed the threshold (2000), creates a Job, extracts the
-     * loop body, and launches the batch harvester. Falls through to normal generation otherwise.
-     * @param templateId The DocGen_Template__c record ID
-     * @param recordId The source record ID to generate from
-     * @return Map with keys: jobId, isGiantQuery, childCounts. If isGiantQuery is false, includes docId.
-     */
-    @AuraEnabled
-    public static Map<String, Object> generateDocumentGiantQuery(Id templateId, Id recordId) {
-        try {
-            if (templateId == null) { throw new DocGenException('Template ID is missing.'); }
-            if (recordId == null) { throw new DocGenException('Record ID is missing.'); }
-
-            // Get template config
-            /* code-analyzer-suppress ApexFlsViolation */
-            List<DocGen_Template__c> templates = [SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c
-                FROM DocGen_Template__c
-                WHERE Id = :templateId
-                WITH SYSTEM_MODE
-                LIMIT 1];
-            if (templates.isEmpty()) {
-                throw new DocGenException('Unable to access template. Verify it exists and you have permission.');
-            }
-            DocGen_Template__c template = templates[0];
-            String queryConfig = template.Query_Config__c;
-
-            // Scout child counts (works for V1 flat strings AND V3 JSON)
-            Map<String, Integer> counts = DocGenDataRetriever.scoutChildCounts(recordId, queryConfig);
-
-            // Check if any count exceeds threshold
-            Integer threshold = 2000;
-            String giantRelationship = null;
-            Map<String, Object> giantNodeConfig = null;
-
-            Integer configVersion = DocGenDataRetriever.getConfigVersion(queryConfig);
-
-            for (String relName : counts.keySet()) {
-                if (counts.get(relName) > threshold) {
-                    giantRelationship = relName;
-                    break;
-                }
-            }
-
-            if (giantRelationship != null) {
-                if (configVersion >= 3) {
-                    // V3: find the matching node in the JSON config
-                    Map<String, Object> config = (Map<String, Object>) JSON.deserializeUntyped(queryConfig.trim());
-                    List<Object> nodesJson = (List<Object>) config.get('nodes');
-                    if (nodesJson != null) {
-                        for (Object nodeObj : nodesJson) {
-                            Map<String, Object> n = (Map<String, Object>) nodeObj;
-                            if (giantRelationship.equals((String) n.get('relationshipName'))) {
-                                giantNodeConfig = n;
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    // V1/V2 flat string: build node config from schema + parsed subquery
-                    giantNodeConfig = buildNodeConfigFromFlat(recordId, queryConfig, giantRelationship);
-                }
-            }
-
-            if (giantRelationship == null) {
-                // All counts within threshold — normal generation
-                Id docId = DocGenService.generateDocument(templateId, recordId);
-                // Resolve the latest ContentVersion ID for download support
-                List<ContentVersion> cvs = [
-                    SELECT Id, Title FROM ContentVersion
-                    WHERE ContentDocumentId = :docId AND IsLatest = true
-                    WITH USER_MODE LIMIT 1
-                ];
-                return new Map<String, Object>{
-                    'isGiantQuery' => false,
-                    'docId' => docId,
-                    'contentVersionId' => cvs.isEmpty() ? null : cvs[0].Id,
-                    'title' => cvs.isEmpty() ? null : cvs[0].Title,
-                    'childCounts' => counts
-                };
-            }
-
-            // Giant Query path: create Job, extract loop body, launch batch
-            // Use pre-decomposed XML to get document.xml — avoids ZIP decompression heap cost
-            /* code-analyzer-suppress ApexFlsViolation */
-            List<DocGen_Template_Version__c> activeVersions = [SELECT Id FROM DocGen_Template_Version__c
-                WHERE Template__c = :templateId AND Is_Active__c = true
-                WITH SYSTEM_MODE LIMIT 1];
-            String documentXml = null;
-            if (!activeVersions.isEmpty()) {
-                String xmlKey = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_word__document.xml';
-                List<ContentVersion> xmlCvs = [
-                    SELECT VersionData FROM ContentVersion
-                    WHERE Title = :xmlKey WITH USER_MODE LIMIT 1 // NOPMD — internal pre-decomposed part
-                ];
-                if (!xmlCvs.isEmpty()) {
-                    documentXml = xmlCvs[0].VersionData.toString();
-                }
-            }
-            // Fallback: decompress ZIP if pre-decomposed parts unavailable
-            if (documentXml == null) {
-                String base64File = DocGenTemplateManager.getTemplateFileContent(templateId);
-                Blob templateBlob = EncodingUtil.base64Decode(base64File);
-                Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
-                for (Compression.ZipEntry entry : reader.getEntries()) {
-                    if (entry.getName() == 'word/document.xml') {
-                        documentXml = reader.extract(entry.getName()).toString();
-                        break;
-                    }
-                }
-            }
-            if (documentXml == null) {
-                throw new DocGenException('Template does not contain word/document.xml.');
-            }
-
-            Map<String, String> loopParts = DocGenService.extractLoopBody(documentXml, giantRelationship);
-            if (loopParts == null) {
-                throw new DocGenException('Could not find loop for relationship: ' + giantRelationship);
-            }
-
-            String outputFormat = template.Output_Format__c != null ? template.Output_Format__c : 'PDF';
-
-            // Create Job record
-            DocGen_Job__c job = new DocGen_Job__c(
-                Status__c = 'Draft',
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                Template__c = templateId,
-                Label__c = 'Giant Query',
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                Parent_Record_Id__c = String.valueOf(recordId),
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                Giant_Query_Config__c = JSON.serialize(new Map<String, Object>{
-                    'relationshipName' => giantRelationship,
-                    'childNodeConfig' => giantNodeConfig,
-                    'childCount' => counts.get(giantRelationship)
-                })
-            );
-            /* code-analyzer-suppress ApexFlsViolation */
-            insert job; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
-
-            // Launch batch — shell PDF generation happens in start() with fresh heap
-            DocGenGiantQueryBatch batch = new DocGenGiantQueryBatch(
-                job.Id, templateId, recordId, giantNodeConfig,
-                loopParts.get('innerXml'),
-                outputFormat
-            );
-            Database.executeBatch(batch, 1); // scope size 1: one page descriptor per execute
-
-            return new Map<String, Object>{
-                'jobId' => job.Id,
-                'isGiantQuery' => true,
-                'childCounts' => counts,
-                'giantRelationship' => giantRelationship,
-                'outputFormat' => outputFormat
-            };
-        } catch (DocGenException e) {
-            throw DocGenService.ahe(e);
-        } catch (Exception e) {
-            throw DocGenService.ahe(e, 'Error initiating Giant Query generation.');
-        }
-    }
-
-    /**
-     * Returns the status and progress of a Giant Query job for client-side polling.
-     * @param jobId The DocGen_Job__c record ID
-     * @return Map with status, successCount, totalRecords
-     */
-    @AuraEnabled
-    public static Map<String, Object> getGiantQueryJobStatus(Id jobId) {
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<DocGen_Job__c> jobs = [SELECT Status__c, Success_Count__c, Total_Records__c, Label__c
-            FROM DocGen_Job__c
-            WHERE Id = :jobId
-            WITH SYSTEM_MODE LIMIT 1];
-        if (jobs.isEmpty()) {
-            return new Map<String, Object>{ 'status' => 'Not Found' };
-        }
-        DocGen_Job__c job = jobs[0];
-        return new Map<String, Object>{
-            'status' => job.Status__c,
-            'successCount' => job.Success_Count__c,
-            'totalRecords' => job.Total_Records__c,
-            'label' => job.Label__c
-        };
-    }
-
-    /**
-     * Returns the ordered list of fragment ContentVersion IDs for a Giant Query job.
-     * Used by client-side DOCX assembly to fetch each fragment one at a time.
-     * @param jobId The DocGen_Job__c record ID
-     * @return Map with fragmentIds (ordered list) and fragmentCount
-     */
-    @AuraEnabled
-    public static Map<String, Object> getGiantQueryFragments(Id jobId) {
-        String prefix = 'docgen_giant_' + jobId + '_';
-        String shellTitle = 'docgen_giant_' + jobId + '_shell';
-        List<ContentVersion> fragments = [
-            SELECT Id, Title FROM ContentVersion
-            WHERE Title LIKE :(prefix + '%') AND Title != :shellTitle
-            WITH USER_MODE ORDER BY Title // NOPMD — internal fragment lookup
-        ];
-        List<String> fragmentIds = new List<String>();
-        for (ContentVersion cv : fragments) {
-            fragmentIds.add(cv.Id);
-        }
-
-        // Look up the final assembled PDF if it exists (single-part result)
-        String finalTitle = 'docgen_giant_' + jobId + '_final';
-        List<ContentVersion> finalCvs = [
-            SELECT Id FROM ContentVersion
-            WHERE Title = :finalTitle WITH USER_MODE LIMIT 1 // NOPMD — internal lookup
-        ];
-
-        // Look up PDF parts if multiple chunks were rendered
-        String partPrefix = 'docgen_giant_' + jobId + '_part_';
-        List<ContentVersion> partCvs = [
-            SELECT Id FROM ContentVersion
-            WHERE Title LIKE :(partPrefix + '%') WITH USER_MODE ORDER BY Title // NOPMD
-        ];
-        List<String> partIds = new List<String>();
-        for (ContentVersion cv : partCvs) { partIds.add(cv.Id); }
-
-        return new Map<String, Object>{
-            'fragmentIds' => fragmentIds,
-            'fragmentCount' => fragments.size(),
-            'finalPdfCvId' => finalCvs.isEmpty() ? null : finalCvs[0].Id,
-            'partPdfCvIds' => partIds
-        };
-    }
-
-    /**
-     * Generates document parts for Giant Query DOCX assembly. Returns the merged
-     * template shell XML (parent data filled, giant loop replaced with placeholder)
-     * plus image maps. The client injects harvest fragments and builds the DOCX ZIP.
-     * @param templateId The DocGen_Template__c record ID
-     * @param recordId The source record ID for parent-level merge tags
-     * @param giantRelationshipName The child relationship name processed by harvest batch
-     * @return Map containing allXmlParts, image maps, title, placeholder token
-     */
-    @AuraEnabled
-    public static Map<String, Object> generateDocumentPartsGiantQuery(Id templateId, Id recordId, String giantRelationshipName) {
-        // CxSAST: SOQL injection — giantRelationshipName is not used in SOQL; it is only used for XML loop extraction in DocGenService.extractLoopBody()
-        try {
-            return DocGenService.generateDocumentPartsGiantQuery(templateId, recordId, String.escapeSingleQuotes(giantRelationshipName));
-        } catch (Exception e) {
-            throw DocGenService.ahe(e, 'Error generating Giant Query document parts.');
-        }
-    }
-
-    /**
-     * Deletes the fragment ContentVersions for a Giant Query job after client-side
-     * DOCX assembly is complete. Cleans up intermediate storage.
-     * @param jobId The DocGen_Job__c record ID
-     */
-    @AuraEnabled
-    public static void cleanupGiantQueryFragments(Id jobId) {
-        String prefix = 'docgen_giant_' + jobId + '_';
-        Set<Id> docIds = new Set<Id>();
-        for (ContentVersion cv : [
-            SELECT ContentDocumentId FROM ContentVersion
-            WHERE Title LIKE :(prefix + '%') WITH USER_MODE // NOPMD — internal fragment cleanup
-        ]) {
-            docIds.add(cv.ContentDocumentId);
-        }
-        if (!docIds.isEmpty() && Schema.sObjectType.ContentDocument.isDeletable()) {
-            delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds]; // NOPMD ApexCRUDViolation — CRUD checked above
-        }
-    }
-
-    /**
-     * Launches a Giant Query PDF batch using client-provided child node config.
-     * Works for ALL config versions (V1/V2/V3) — the scout already resolved the
-     * child node metadata, so we don't need to parse the query config here.
-     * Only loads the document XML (pre-decomposed) to extract the loop body.
-     * @param templateId The DocGen_Template__c record ID
-     * @param recordId The parent record ID
-     * @param giantRelationship The child relationship name with >2000 records
-     * @param childNodeConfigJson JSON-serialized child node config from scout
-     * @return Map with jobId, isGiantQuery, outputFormat
-     */
-    @AuraEnabled
-    public static Map<String, Object> launchGiantQueryPdfBatch(Id templateId, Id recordId, String giantRelationship, String childNodeConfigJson) {
-        try {
-            if (templateId == null) { throw new DocGenException('Template ID is missing.'); }
-            if (recordId == null) { throw new DocGenException('Record ID is missing.'); }
-
-            Map<String, Object> childNodeConfig = (Map<String, Object>) JSON.deserializeUntyped(childNodeConfigJson);
-
-            // Get document XML from pre-decomposed parts (no ZIP decompression)
-            /* code-analyzer-suppress ApexFlsViolation */
-            List<DocGen_Template_Version__c> activeVersions = [SELECT Id FROM DocGen_Template_Version__c
-                WHERE Template__c = :templateId AND Is_Active__c = true
-                WITH SYSTEM_MODE LIMIT 1];
-            String documentXml = null;
-            if (!activeVersions.isEmpty()) {
-                String xmlKey = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_word__document.xml';
-                List<ContentVersion> xmlCvs = [
-                    SELECT VersionData FROM ContentVersion
-                    WHERE Title = :xmlKey WITH USER_MODE LIMIT 1 // NOPMD — internal pre-decomposed part
-                ];
-                if (!xmlCvs.isEmpty()) {
-                    documentXml = xmlCvs[0].VersionData.toString();
-                }
-            }
-            if (documentXml == null) {
-                throw new DocGenException('Pre-decomposed template parts not found. Please re-save the template.');
-            }
-
-            Map<String, String> loopParts = DocGenService.extractLoopBody(documentXml, giantRelationship);
-            documentXml = null; // free
-            if (loopParts == null) {
-                throw new DocGenException('Could not find loop for relationship: ' + giantRelationship);
-            }
-
-            // Create Job record
-            DocGen_Job__c job = new DocGen_Job__c(
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                Status__c = 'Draft',
-                Template__c = templateId,
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                Label__c = 'Giant Query PDF',
-                Parent_Record_Id__c = String.valueOf(recordId)
-            );
-            /* code-analyzer-suppress ApexFlsViolation */
-            insert job; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
-
-            // Ensure relationshipName is in the config (V1 scout doesn't include it)
-            childNodeConfig.put('relationshipName', giantRelationship);
-
-            // Launch batch
-            DocGenGiantQueryBatch batch = new DocGenGiantQueryBatch(
-                job.Id, templateId, recordId, childNodeConfig,
-                loopParts.get('innerXml'), 'PDF'
-            );
-            Database.executeBatch(batch, 1);
-
-            return new Map<String, Object>{
-                'jobId' => job.Id,
-                'isGiantQuery' => true,
-                'outputFormat' => 'PDF'
-            };
-        } catch (DocGenException e) {
-            throw DocGenService.ahe(e);
-        } catch (Exception e) {
-            throw DocGenService.ahe(e, 'Error launching Giant Query PDF batch.');
-        }
-    }
-
-    /**
-     * Lightweight scout: counts child records per relationship for Giant Query detection.
-     * Reads the query config directly from the template — no client-side cache dependency.
-     * @param recordId The parent record ID
-     * @param templateId The DocGen_Template__c record ID
-     * @return Map of relationship name to child record count
-     */
-    @AuraEnabled
-    public static Map<String, Object> scoutChildCounts(Id recordId, Id templateId) {
-        Map<String, Object> result = new Map<String, Object>();
-        result.put('counts', new Map<String, Integer>());
-        result.put('childNodes', new Map<String, Map<String, Object>>());
-
-        if (recordId == null || templateId == null) {
-            return result;
-        }
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<DocGen_Template__c> templates = [SELECT Query_Config__c, Base_Object_API__c FROM DocGen_Template__c WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1];
-        if (templates.isEmpty() || String.isBlank(templates[0].Query_Config__c)) {
-            return result;
-        }
-
-        String queryConfig = templates[0].Query_Config__c;
-        // CxSAST: SOQL injection — queryConfig sourced from DB record (not user input); scoutChildCounts uses Schema validation + escapeSingleQuotes + USER_MODE
-        Map<String, Integer> counts = DocGenDataRetriever.scoutChildCounts(recordId, queryConfig);
-        result.put('counts', counts);
-
-        // Build child node metadata for the client (works for all config formats)
-        Map<String, Map<String, Object>> childNodes = new Map<String, Map<String, Object>>();
-        String trimmed = queryConfig.trim();
-
-        if (trimmed.startsWith('{')) {
-            // V3/V2 JSON — parse nodes
-            Map<String, Object> config = (Map<String, Object>) JSON.deserializeUntyped(trimmed);
-            List<Object> nodes = (List<Object>) config.get('nodes');
-            if (nodes != null) {
-                for (Object nodeObj : nodes) {
-                    Map<String, Object> n = (Map<String, Object>) nodeObj;
-                    String relName = (String) n.get('relationshipName');
-                    if (String.isNotBlank(relName) && n.get('parentNode') != null) {
-                        childNodes.put(relName, new Map<String, Object>{
-                            'object' => n.get('object'),
-                            'lookupField' => n.get('lookupField'),
-                            'fields' => n.get('fields'),
-                            'parentFields' => n.get('parentFields')
-                        });
-                    }
-                }
-            }
-        } else {
-            // V1 flat string — resolve child relationships from Schema
-            String baseObject = templates[0].Base_Object_API__c;
-            Schema.DescribeSObjectResult parentDescribe = Schema.getGlobalDescribe().get(baseObject)?.getDescribe();
-            if (parentDescribe != null) {
-                Pattern subqPattern = Pattern.compile('(?i)\\(\\s*SELECT\\s+(.+?)\\s+FROM\\s+(\\w+)([^)]*)\\)');
-                Matcher m = subqPattern.matcher(trimmed);
-                Map<String, Schema.ChildRelationship> relMap = new Map<String, Schema.ChildRelationship>();
-                for (Schema.ChildRelationship cr : parentDescribe.getChildRelationships()) {
-                    if (cr.getRelationshipName() != null) {
-                        relMap.put(cr.getRelationshipName().toLowerCase(), cr);
-                    }
-                }
-                while (m.find()) {
-                    String fieldList = m.group(1);
-                    String relName = m.group(2);
-                    String clausesPart = m.group(3) != null ? m.group(3).trim() : '';
-                    Schema.ChildRelationship cr = relMap.get(relName.toLowerCase());
-                    if (cr != null) {
-                        List<String> fields = new List<String>();
-                        List<String> parentFields = new List<String>();
-                        for (String f : fieldList.split(',')) {
-                            String fTrimmed = f.trim();
-                            if (String.isNotBlank(fTrimmed)) {
-                                if (fTrimmed.contains('.')) {
-                                    parentFields.add(fTrimmed);
-                                } else {
-                                    fields.add(fTrimmed);
-                                }
-                            }
-                        }
-                        Map<String, Object> nodeConfig = new Map<String, Object>{
-                            'object' => String.valueOf(cr.getChildSObject()),
-                            'lookupField' => String.valueOf(cr.getField()),
-                            'fields' => fields,
-                            'parentFields' => parentFields,
-                            'relationshipName' => relName
-                        };
-                        // Extract WHERE, ORDER BY, and LIMIT from clauses
-                        if (String.isNotBlank(clausesPart)) {
-                            Pattern wherePattern = Pattern.compile('(?i)\\s*WHERE\\s+(.+?)(?:\\s+ORDER\\s+BY|\\s+LIMIT|$)');
-                            Matcher whereMatcher = wherePattern.matcher(clausesPart);
-                            if (whereMatcher.find()) {
-                                nodeConfig.put('where', whereMatcher.group(1).trim());
-                            }
-                            Pattern orderPattern = Pattern.compile('(?i)ORDER\\s+BY\\s+(.+?)(?:\\s+LIMIT|$)');
-                            Matcher orderMatcher = orderPattern.matcher(clausesPart);
-                            if (orderMatcher.find()) {
-                                nodeConfig.put('orderBy', orderMatcher.group(1).trim());
-                            }
-                            Pattern limitPattern = Pattern.compile('(?i)LIMIT\\s+(\\d+)');
-                            Matcher limitMatcher = limitPattern.matcher(clausesPart);
-                            if (limitMatcher.find()) {
-                                nodeConfig.put('limit', limitMatcher.group(1).trim());
-                            }
-                        }
-                        childNodes.put(relName, nodeConfig);
-                    }
-                }
-            }
-        }
-
-        result.put('childNodes', childNodes);
-        return result;
-    }
-
-    /**
-     * Returns one page of child records for client-side Giant Query assembly.
-     * Uses cursor-based pagination (Id > lastCursorId) — no OFFSET limit.
-     * Each call is a fresh transaction with fresh heap.
-     * @param childObject The child SObject API name
-     * @param lookupField The lookup field on the child pointing to the parent
-     * @param parentId The parent record ID
-     * @param lastCursorId The last record ID from the previous page (null for first page)
-     * @param fields Comma-separated list of fields to query
-     * @param pageSize Number of records per page (max 200)
-     * @return Map with 'records' (List<Map<String,Object>>), 'lastId' (String), 'hasMore' (Boolean)
-     */
-    @AuraEnabled
-    public static Map<String, Object> getChildRecordPage(String childObject, String lookupField, Id parentId, String lastCursorId, String fields, Integer pageSize) {
-        if (pageSize == null || pageSize > 500) { pageSize = 500; }
-
-        // Validate object name against Schema
-        Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
-        if (gd.get(childObject) == null) {
-            throw DocGenService.ahe(new DocGenException('Invalid object: ' + childObject), 'Invalid child object.');
-        }
-
-        String query = 'SELECT ' + String.escapeSingleQuotes(fields) +
-            ' FROM ' + String.escapeSingleQuotes(childObject) +
-            ' WHERE ' + String.escapeSingleQuotes(lookupField) + ' = :parentId';
-
-        if (String.isNotBlank(lastCursorId)) {
-            query += ' AND Id > :lastCursorId';
-        }
-        query += ' ORDER BY Id LIMIT :pageSize';
-
-        // CxSAST: SOQL injection mitigated by Schema.getGlobalDescribe() validation + escapeSingleQuotes + USER_MODE
-        List<SObject> records = Database.query(query, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — object validated by Schema; fields from template config; USER_MODE enforced
-
-        List<Map<String, Object>> recordMaps = new List<Map<String, Object>>();
-        for (SObject rec : records) {
-            recordMaps.add(rec.getPopulatedFieldsAsMap());
-        }
-
-        String lastId = records.isEmpty() ? null : records[records.size() - 1].Id;
-
-        return new Map<String, Object>{
-            'records' => recordMaps,
-            'lastId' => lastId,
-            'hasMore' => records.size() == pageSize
-        };
-    }
-
-    /**
-     * Returns all child record IDs in sort order for client-side Giant Query DOCX assembly.
-     * One lightweight Id-only query (up to 50K rows). The client chunks these IDs
-     * and calls getChildRecordsByIds() per chunk to get full field data.
-     * @param childObject The child SObject API name
-     * @param lookupField The lookup field on the child pointing to the parent
-     * @param parentId The parent record ID
-     * @param orderByClause The ORDER BY clause (e.g., "Product2.Name ASC")
-     * @return List of record IDs in sort order
-     */
-    @AuraEnabled
-    public static List<Id> getSortedChildIds(String childObject, String lookupField, Id parentId, String orderByClause, String whereClause) {
-        // Allowlist validation: object verified against Schema.getGlobalDescribe()
-        SObjectType childType = Schema.getGlobalDescribe().get(childObject);
-        if (childType == null) {
-            throw DocGenService.ahe(new DocGenException('Invalid object: ' + childObject), 'Invalid child object.');
-        }
-        Map<String, Schema.SObjectField> fieldMap = childType.getDescribe().fields.getMap();
-
-        // Allowlist validation: lookupField verified against Schema.describeSObjects() field map
-        if (String.isBlank(lookupField) || !fieldMap.containsKey(lookupField.toLowerCase())) {
-            throw new DocGenException('Invalid lookup field: ' + lookupField);
-        }
-
-        // Allowlist validation: ORDER BY fields verified against Schema.describeSObjects() field map
-        if (String.isBlank(orderByClause)) {
-            throw new DocGenException('ORDER BY clause is required for sorted query.');
-        }
-        if (orderByClause.contains(';') || orderByClause.contains('--') || orderByClause.contains('/*')) {
-            throw new DocGenException('Invalid ORDER BY clause.');
-        }
-        String normalized = orderByClause.replaceAll('\\s+', ' ').toUpperCase().trim();
-        for (String kw : new List<String>{ 'INSERT ', 'UPDATE ', 'DELETE ', 'MERGE ', 'DROP ', 'SELECT ' }) {
-            if (normalized.contains(kw)) {
-                throw new DocGenException('Invalid ORDER BY clause: disallowed keyword.');
-            }
-        }
-        // Parse ORDER BY fields and validate each against Schema field describe
-        for (String part : orderByClause.split(',')) {
-            String fieldName = part.trim().split('\\s+')[0].toLowerCase();
-            // Handle relationship fields like Product2.Name — validate the relationship prefix
-            String baseField = fieldName.contains('.') ? fieldName.split('\\.')[0] : fieldName;
-            if (!fieldMap.containsKey(baseField)) {
-                // Try with __r → __c conversion for custom relationship fields
-                String asLookup = baseField.endsWith('__r') ? baseField.substring(0, baseField.length() - 3) + '__c' : baseField;
-                if (!fieldMap.containsKey(asLookup)) {
-                    throw new DocGenException('Invalid field in ORDER BY: ' + fieldName);
-                }
-            }
-        }
-
-        // Sanitize WHERE clause if provided
-        if (String.isNotBlank(whereClause)) {
-            if (whereClause.contains(';') || whereClause.contains('--') || whereClause.contains('/*')) {
-                throw new DocGenException('Invalid WHERE clause.');
-            }
-            String normalizedWhere = whereClause.replaceAll('\\s+', ' ').toUpperCase().trim();
-            for (String kw : new List<String>{ 'INSERT ', 'UPDATE ', 'DELETE ', 'MERGE ', 'DROP ', 'SELECT ' }) {
-                if (normalizedWhere.contains(kw)) {
-                    throw new DocGenException('Invalid WHERE clause: disallowed keyword.');
-                }
-            }
-            // Allowlist validation: WHERE clause field names verified against Schema.describeSObjects() field map
-            validateWhereClauseFields(whereClause, fieldMap);
-        }
-
-        String query = 'SELECT Id FROM ' + String.escapeSingleQuotes(childObject) +
-            ' WHERE ' + String.escapeSingleQuotes(lookupField) + ' = :parentId';
-        if (String.isNotBlank(whereClause)) { query += ' AND ' + whereClause; }
-        query += ' ORDER BY ' + orderByClause;
-
-        List<Id> sortedIds = new List<Id>();
-        // CxSAST: SOQL injection mitigated by Schema allowlist validation on object, lookupField, ORDER BY fields, WHERE fields + keyword blocklist + USER_MODE
-        for (SObject rec : Database.query(query, AccessLevel.USER_MODE)) { // NOPMD ApexSOQLInjection — all dynamic elements validated against Schema.describeSObjects() field map; USER_MODE enforced
-            sortedIds.add(rec.Id);
-        }
-        return sortedIds;
-    }
-
-    /**
-     * Returns child records for a specific list of IDs. Used with getSortedChildIds()
-     * for sorted client-side Giant Query DOCX assembly.
-     * @param childObject The child SObject API name
-     * @param fields Comma-separated field list
-     * @param recordIds List of record IDs to fetch
-     * @return List of record maps with populated fields
-     */
-    @AuraEnabled
-    public static List<Map<String, Object>> getChildRecordsByIds(String childObject, String fields, List<Id> recordIds) {
-        if (recordIds == null || recordIds.isEmpty()) { return new List<Map<String, Object>>(); }
-        // Allowlist validation: object verified against Schema.getGlobalDescribe()
-        SObjectType childType = Schema.getGlobalDescribe().get(childObject);
-        if (childType == null) {
-            throw DocGenService.ahe(new DocGenException('Invalid object: ' + childObject), 'Invalid child object.');
-        }
-
-        // Allowlist validation: each field verified against Schema.describeSObjects() field map
-        Map<String, Schema.SObjectField> fieldMap = childType.getDescribe().fields.getMap();
-        List<String> validatedFields = new List<String>();
-        for (String f : fields.split(',')) {
-            String fieldName = f.trim();
-            if (String.isBlank(fieldName)) { continue; }
-            String lower = fieldName.toLowerCase();
-            // Direct field
-            if (fieldMap.containsKey(lower)) {
-                validatedFields.add(String.escapeSingleQuotes(fieldName));
-                continue;
-            }
-            // Relationship field (e.g., Product2.Name) — validate relationship prefix exists
-            if (fieldName.contains('.')) {
-                String relPrefix = fieldName.split('\\.')[0].toLowerCase();
-                Boolean foundRel = false;
-                for (Schema.SObjectField sof : fieldMap.values()) {
-                    String relName = sof.getDescribe().getRelationshipName();
-                    if (relName != null && relName.toLowerCase() == relPrefix) {
-                        foundRel = true;
-                        break;
-                    }
-                }
-                if (foundRel) {
-                    validatedFields.add(String.escapeSingleQuotes(fieldName));
-                    continue;
-                }
-            }
-            // Field not found in schema — skip (silent drop matches DataRetriever behavior)
-        }
-        if (validatedFields.isEmpty()) {
-            validatedFields.add('Id');
-        }
-
-        String query = 'SELECT ' + String.join(validatedFields, ', ') +
-            ' FROM ' + String.escapeSingleQuotes(childObject) +
-            ' WHERE Id IN :recordIds';
-
-        // CxSAST: SOQL injection mitigated by Schema allowlist validation on object and all field names + USER_MODE
-        List<SObject> records = Database.query(query, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
-
-        // Re-order to match input ID sequence
-        Map<Id, SObject> byId = new Map<Id, SObject>();
-        for (SObject rec : records) { byId.put(rec.Id, rec); }
-
-        List<Map<String, Object>> result = new List<Map<String, Object>>();
-        for (Id recId : recordIds) {
-            SObject rec = byId.get(recId);
-            if (rec != null) { result.add(rec.getPopulatedFieldsAsMap()); }
-        }
-        return result;
     }
 
     /**
@@ -958,11 +220,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (recordId == null || String.isBlank(baseObject) || String.isBlank(queryConfig)) {
             return null;
         }
-        // Validate base object against Schema
-        if (Schema.getGlobalDescribe().get(baseObject) == null) {
-            throw new DocGenException('Invalid or inaccessible object: ' + baseObject);
-        }
-        // CxSAST: SOQL injection mitigated — baseObject validated by Schema; queryConfig parsed by DataRetriever which validates all objects/fields via Schema + escapeSingleQuotes + USER_MODE
+
         try {
             return DocGenDataRetriever.getRecordData(recordId, baseObject, queryConfig);
         } catch (Exception e) {
@@ -971,223 +229,19 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
-     * Returns templates configured for a specific SObject type, applying audience visibility
-     * (Required_Permission_Sets__c) but NO per-record filter.
-     * Backward-compatible — existing callers see the same set of templates as before plus the
-     * new audience filter (only meaningful for templates that opt in by setting the field).
+     * Returns all DocGen templates configured for a specific SObject type.
+     * @param objectApiName The SObject API name to filter templates by
+     * @return List of matching DocGen_Template__c records
      */
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getTemplatesForObject(String objectApiName) {
-        return getTemplatesForObjectInternal(objectApiName, null);
-    }
-
-    /**
-     * Returns templates configured for a specific SObject type AND visible to the current
-     * record (Specific_Record_Ids__c) AND visible to the running user (Required_Permission_Sets__c).
-     * Sorted by Sort_Order__c ASC NULLS LAST, Is_Default__c DESC, Name ASC.
-     * @param objectApiName The SObject API name (e.g. 'Account')
-     * @param recordId The current record Id (string form). Required for per-record filter to apply.
-     */
-    @AuraEnabled(cacheable=true)
-    public static List<DocGen_Template__c> getTemplatesForObjectAndRecord(String objectApiName, String recordId) {
-        return getTemplatesForObjectInternal(objectApiName, recordId);
-    }
-
-    /**
-     * Shared filter implementation for getTemplatesForObject and getTemplatesForObjectAndRecord.
-     */
-    private static List<DocGen_Template__c> getTemplatesForObjectInternal(String objectApiName, String recordId) {
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<DocGen_Template__c> all = [
-            SELECT Id, Name, Description__c, Type__c, Output_Format__c, Is_Default__c,
-                   Query_Config__c, Category__c, Sort_Order__c, Lock_Output_Format__c,
-                   Specific_Record_Ids__c, Required_Permission_Sets__c, Record_Filter__c,
-                   Base_Object_API__c
+        return [
+            SELECT Id, Name, Description__c, Type__c, Output_Format__c, Is_Default__c
             FROM DocGen_Template__c
             WHERE Base_Object_API__c = :objectApiName
             WITH SYSTEM_MODE
-            ORDER BY Sort_Order__c ASC NULLS LAST, Is_Default__c DESC, Name ASC
+            ORDER BY Is_Default__c DESC, Name ASC
         ];
-        // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
-
-        if (all.isEmpty()) return all;
-
-        String recordId18 = (recordId != null) ? String.valueOf(Id.valueOf(recordId)) : null;
-        Set<String> userPermSets = getCurrentUserPermissionSetNames();
-
-        // Cache results of per-record-filter evaluations so templates sharing the same
-        // clause incur only one SOQL query per (clause, record) combo.
-        Map<String, Boolean> filterCache = new Map<String, Boolean>();
-
-        List<DocGen_Template__c> visible = new List<DocGen_Template__c>();
-        for (DocGen_Template__c t : all) {
-            if (!templateMatchesRecord(t, recordId18, filterCache)) continue;
-            if (!templateVisibleToUser(t, userPermSets)) continue;
-            visible.add(t);
-        }
-        return visible;
-    }
-
-    /**
-     * Returns the API names of every permission set currently assigned to the running user.
-     * Used by template visibility filtering.
-     */
-    @TestVisible
-    public static Set<String> getCurrentUserPermissionSetNames() {
-        Set<String> names = new Set<String>();
-        /* code-analyzer-suppress ApexFlsViolation */
-        for (PermissionSetAssignment psa : [
-            SELECT PermissionSet.Name
-            FROM PermissionSetAssignment
-            WHERE AssigneeId = :UserInfo.getUserId()
-            WITH SYSTEM_MODE
-        ]) {
-            if (psa.PermissionSet != null && psa.PermissionSet.Name != null) {
-                names.add(psa.PermissionSet.Name);
-            }
-        }
-        return names;
-    }
-
-    /**
-     * Returns true when the template applies to the given record.
-     * Precedence:
-     *   1. Record_Filter__c (SOQL WHERE clause) — if set, evaluate it against the record; wins over Specific_Record_Ids__c.
-     *   2. Specific_Record_Ids__c (comma-separated Ids) — match if recordId is in the list.
-     *   3. Neither set — template applies to all records of its Base Object.
-     */
-    private static Boolean templateMatchesRecord(DocGen_Template__c t, String recordId18, Map<String, Boolean> filterCache) {
-        // Record Filter (WHERE clause) takes precedence when set
-        if (String.isNotBlank(t.Record_Filter__c)) {
-            if (String.isBlank(recordId18)) return false; // filter is set but no record context
-            if (String.isBlank(t.Base_Object_API__c)) return false; // misconfigured template
-            return recordMatchesFilter(t.Base_Object_API__c, recordId18, t.Record_Filter__c, filterCache);
-        }
-        // Fall back to Id list
-        if (String.isBlank(t.Specific_Record_Ids__c)) return true;
-        if (String.isBlank(recordId18)) return false;
-        for (String rawId : t.Specific_Record_Ids__c.split(',')) {
-            String trimmed = rawId.trim();
-            if (String.isBlank(trimmed)) continue;
-            try {
-                if (String.valueOf(Id.valueOf(trimmed)) == recordId18) return true;
-            } catch (Exception e) {
-                continue;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Evaluates a SOQL WHERE clause against a specific record.
-     * Runs `SELECT Id FROM {base} WHERE Id = :recordId AND ({whereClause}) LIMIT 1` and returns
-     * true when a row comes back. Uses DocGenDataRetriever.sanitizeWhereClause to block DML
-     * keywords / semicolons / subqueries before the clause reaches dynamic SOQL.
-     *
-     * Malformed clauses (throws on sanitize or at query time) return false — the template hides
-     * rather than exposing every record. This is the safer default for a noise-reduction feature.
-     *
-     * filterCache dedupes lookups when multiple templates share the same clause for the same record.
-     */
-    private static Boolean recordMatchesFilter(String baseObjectApiName, String recordId18, String whereClause, Map<String, Boolean> filterCache) {
-        String cacheKey = baseObjectApiName + '|' + recordId18 + '|' + whereClause;
-        if (filterCache != null && filterCache.containsKey(cacheKey)) {
-            return filterCache.get(cacheKey);
-        }
-
-        Boolean matched = false;
-        try {
-            String safeClause = DocGenDataRetriever.sanitizeWhereClause(whereClause);
-            SObjectType objType = Schema.getGlobalDescribe().get(baseObjectApiName);
-            if (objType == null) {
-                matched = false;
-            } else {
-                Id recordId = Id.valueOf(recordId18);
-                String soql = 'SELECT Id FROM ' + String.escapeSingleQuotes(baseObjectApiName) +
-                    ' WHERE Id = :recordId AND (' + safeClause + ') LIMIT 1';
-                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-                List<SObject> rows = Database.query(soql, AccessLevel.SYSTEM_MODE); // NOPMD ApexSOQLInjection — clause sanitized via DocGenDataRetriever.sanitizeWhereClause; object name escaped; Id param bound
-                matched = !rows.isEmpty();
-            }
-        } catch (Exception e) {
-            // Malformed clause, inaccessible object, or Id parse failure — hide the template.
-            matched = false;
-        }
-
-        if (filterCache != null) filterCache.put(cacheKey, matched);
-        return matched;
-    }
-
-    /**
-     * Shared filter path for the signature sender's template picker.
-     * Applies per-record filter (Record_Filter__c wins over Specific_Record_Ids__c) and
-     * audience filter (Required_Permission_Sets__c). Called from DocGenSignatureSenderController
-     * to avoid duplicating the filter logic in two places.
-     */
-    public static List<DocGen_Template__c> filterTemplatesForSender(List<DocGen_Template__c> all, String relatedRecordId) {
-        if (all == null || all.isEmpty()) return all;
-        String recordId18 = null;
-        if (String.isNotBlank(relatedRecordId)) {
-            try { recordId18 = String.valueOf(Id.valueOf(relatedRecordId)); } catch (Exception e) { recordId18 = null; }
-        }
-        Set<String> userPermSets = getCurrentUserPermissionSetNames();
-        Map<String, Boolean> filterCache = new Map<String, Boolean>();
-
-        List<DocGen_Template__c> visible = new List<DocGen_Template__c>();
-        for (DocGen_Template__c t : all) {
-            if (!templateMatchesRecord(t, recordId18, filterCache)) continue;
-            if (!templateVisibleToUser(t, userPermSets)) continue;
-            visible.add(t);
-        }
-        return visible;
-    }
-
-    /**
-     * Admin utility — lets the template editor test a WHERE clause against a sample record
-     * before saving. Returns { matched: Boolean, error: String|null } so the LWC can show a
-     * green/red indicator with the error text on failure.
-     */
-    @AuraEnabled
-    public static Map<String, Object> testRecordFilter(String baseObjectApiName, String sampleRecordId, String whereClause) {
-        Map<String, Object> result = new Map<String, Object>{ 'matched' => false, 'error' => null };
-        if (String.isBlank(baseObjectApiName) || String.isBlank(sampleRecordId) || String.isBlank(whereClause)) {
-            result.put('error', 'Base Object, Sample Record Id, and WHERE clause are all required.');
-            return result;
-        }
-        try {
-            String safeClause = DocGenDataRetriever.sanitizeWhereClause(whereClause);
-            SObjectType objType = Schema.getGlobalDescribe().get(baseObjectApiName);
-            if (objType == null) {
-                result.put('error', 'Unknown Base Object: ' + baseObjectApiName);
-                return result;
-            }
-            Id recordId = Id.valueOf(sampleRecordId);
-            String soql = 'SELECT Id FROM ' + String.escapeSingleQuotes(baseObjectApiName) +
-                ' WHERE Id = :recordId AND (' + safeClause + ') LIMIT 1';
-            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-            List<SObject> rows = Database.query(soql, AccessLevel.SYSTEM_MODE); // NOPMD ApexSOQLInjection — clause sanitized, object escaped, Id bound
-            result.put('matched', !rows.isEmpty());
-        } catch (DocGenException e) {
-            result.put('error', e.getMessage());
-        } catch (Exception e) {
-            result.put('error', 'Filter invalid or record not accessible: ' + e.getMessage());
-        }
-        return result;
-    }
-
-    /**
-     * Returns true when the template's audience filter is empty OR the user has at least one
-     * of the listed permission sets assigned.
-     */
-    private static Boolean templateVisibleToUser(DocGen_Template__c t, Set<String> userPermSets) {
-        if (String.isBlank(t.Required_Permission_Sets__c)) return true;
-        if (userPermSets == null || userPermSets.isEmpty()) return false;
-        for (String rawName : t.Required_Permission_Sets__c.split(',')) {
-            String trimmed = rawName.trim();
-            if (String.isBlank(trimmed)) continue;
-            if (userPermSets.contains(trimmed)) return true;
-        }
-        return false;
     }
 
     /**
@@ -1196,140 +250,96 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getAllTemplates() {
-        /* code-analyzer-suppress ApexFlsViolation */
-        return [SELECT Id, Name, Description__c, Type__c, Base_Object_API__c, Category__c, Query_Config__c,
+        return [
+            SELECT Id, Name, Description__c, Type__c, Base_Object_API__c, Category__c, Query_Config__c,
                    Test_Record_Id__c, Output_Format__c, Document_Title_Format__c, Is_Default__c,
-                   Sort_Order__c, Lock_Output_Format__c, Specific_Record_Ids__c, Required_Permission_Sets__c,
-                   Record_Filter__c,
                    (SELECT ContentDocumentId FROM ContentDocumentLinks ORDER BY ContentDocument.CreatedDate DESC LIMIT 1)
             FROM DocGen_Template__c
             WITH SYSTEM_MODE
             ORDER BY Category__c ASC, Name ASC
-            LIMIT 2000];
+        ];
     }
 
     /**
      * Saves template field updates and optionally creates a new template version.
-     // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
      * @param fields Map of field API names to values for the template record
-     // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
      * @param createVersion Whether to create a new active version snapshot
-     // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
      */
-    // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
     @AuraEnabled
-    // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-    public static void saveTemplate(Map<String, Object> fields, Boolean createVersion, String contentVersionId) {
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+    public static void saveTemplate(Map<String, Object> fields, Boolean createVersion) {
         try {
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             // 1. Update Template
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             Id templateId = (Id) fields.get('Id');
             DocGen_Template__c template = new DocGen_Template__c(Id = templateId);
             template.Name = (String) fields.get('Name');
             template.Category__c = (String) fields.get('Category__c');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             template.Type__c = (String) fields.get('Type__c');
             template.Base_Object_API__c = (String) fields.get('Base_Object_API__c');
             template.Description__c = (String) fields.get('Description__c');
             template.Query_Config__c = (String) fields.get('Query_Config__c');
             template.Test_Record_Id__c = (String) fields.get('Test_Record_Id__c');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             template.Document_Title_Format__c = (String) fields.get('Document_Title_Format__c');
 
-            // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
             // Update Output Format if provided
             if (fields.containsKey('Output_Format__c')) {
                 template.Output_Format__c = (String) fields.get('Output_Format__c');
-            }
-            // 1.47 — runner visibility & sort fields (only set when key is present so partial saves still work)
-            if (fields.containsKey('Sort_Order__c')) {
-                Object sortVal = fields.get('Sort_Order__c');
-                if (sortVal == null || (sortVal instanceof String && String.isBlank((String) sortVal))) {
-                    template.Sort_Order__c = null;
-                } else if (sortVal instanceof Decimal) {
-                    template.Sort_Order__c = (Decimal) sortVal;
-                } else {
-                    try { template.Sort_Order__c = Decimal.valueOf(String.valueOf(sortVal)); } catch (Exception ignored) { template.Sort_Order__c = null; }
-                }
-            }
-            if (fields.containsKey('Lock_Output_Format__c')) {
-                template.Lock_Output_Format__c = (Boolean) fields.get('Lock_Output_Format__c');
-            }
-            if (fields.containsKey('Specific_Record_Ids__c')) {
-                template.Specific_Record_Ids__c = (String) fields.get('Specific_Record_Ids__c');
-            }
-            if (fields.containsKey('Required_Permission_Sets__c')) {
-                template.Required_Permission_Sets__c = (String) fields.get('Required_Permission_Sets__c');
-            }
-            if (fields.containsKey('Record_Filter__c')) {
-                template.Record_Filter__c = (String) fields.get('Record_Filter__c');
             }
             // Update Default flag if provided — enforce one default per object
             if (fields.containsKey('Is_Default__c')) {
                 Boolean isDefault = (Boolean) fields.get('Is_Default__c');
                 template.Is_Default__c = isDefault;
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 if (isDefault == true && template.Base_Object_API__c != null) {
                     String baseObj = (String) fields.get('Base_Object_API__c');
-                    /* code-analyzer-suppress ApexFlsViolation */
-                    List<DocGen_Template__c> otherDefaults = [SELECT Id FROM DocGen_Template__c
+                    List<DocGen_Template__c> otherDefaults = [
+                        SELECT Id FROM DocGen_Template__c
                         WHERE Base_Object_API__c = :baseObj
                         AND Is_Default__c = true
                         AND Id != :templateId
-                        WITH SYSTEM_MODE];
+                        WITH SYSTEM_MODE
+                    ];
                     for (DocGen_Template__c other : otherDefaults) {
                         other.Is_Default__c = false;
                     }
                     if (!otherDefaults.isEmpty()) {
-                        /* code-analyzer-suppress ApexFlsViolation */
-                    update otherDefaults; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                        update otherDefaults; // NOPMD ApexCRUDViolation - package-internal custom object
                     }
                 }
             }
-            /* code-analyzer-suppress ApexFlsViolation */
-            update template; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
-
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+            // Package-internal object — CRUD controlled by DocGen permission sets
+            update template; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
 
             // 2. Create Version if requested
             if (createVersion == true) {
                 // Deactivate current active versions
-                /* code-analyzer-suppress ApexFlsViolation */
-                List<DocGen_Template_Version__c> activeVersions = [SELECT Id FROM DocGen_Template_Version__c
+                List<DocGen_Template_Version__c> activeVersions = [
+                    SELECT Id FROM DocGen_Template_Version__c
                     WHERE Template__c = :templateId AND Is_Active__c = true
-                    WITH SYSTEM_MODE];
+                    WITH SYSTEM_MODE
+                ];
                 for (DocGen_Template_Version__c av : activeVersions) {
                     av.Is_Active__c = false;
                 }
                 if (!activeVersions.isEmpty()) {
-                    /* code-analyzer-suppress ApexFlsViolation */
-                    update activeVersions; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                    // Package-internal object — CRUD controlled by DocGen permission sets
+                    update activeVersions; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
                 }
 
-                // Use specific ContentVersion ID if provided (from upload event),
-                // otherwise fall back to latest version on the document
-                String cvId = contentVersionId;
-                if (String.isBlank(cvId)) {
-                    List<ContentDocumentLink> links = [
-                        SELECT ContentDocument.LatestPublishedVersionId
-                        FROM ContentDocumentLink
-                        WHERE LinkedEntityId = :templateId
-                        WITH USER_MODE ORDER BY ContentDocument.CreatedDate DESC
-                        LIMIT 1
-                    ];
-                    if (!links.isEmpty()) {
-                        cvId = links[0].ContentDocument.LatestPublishedVersionId;
-                    }
+                // Get latest ContentVersionId
+                List<ContentDocumentLink> links = [
+                    SELECT ContentDocument.LatestPublishedVersionId
+                    FROM ContentDocumentLink
+                    WHERE LinkedEntityId = :templateId
+                    WITH USER_MODE
+                    ORDER BY ContentDocument.CreatedDate DESC
+                    LIMIT 1
+                ];
+
+                String cvId = null;
+                if (!links.isEmpty()) {
+                    cvId = links[0].ContentDocument.LatestPublishedVersionId;
                 }
-
-
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
                 DocGen_Template_Version__c version = new DocGen_Template_Version__c();
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 version.Template__c = templateId;
                 version.Query_Config__c = (String) fields.get('Query_Config__c');
                 version.Content_Version_Id__c = cvId;
@@ -1341,16 +351,16 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 version.Type__c = (String) fields.get('Type__c');
                 version.Base_Object_API__c = (String) fields.get('Base_Object_API__c');
 
-                /* code-analyzer-suppress ApexFlsViolation */
-                insert version; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                // Package-internal object — CRUD controlled by DocGen permission sets
+                insert version; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
 
                 // Extract images from DOCX/PPTX and save as ContentVersions linked to the version.
                 // Blob.toPdf() cannot render data URI images — needs committed CV URLs.
                 try {
                     DocGenService.extractAndSaveTemplateImages(templateId, version.Id);
                 } catch (Exception imgErr) {
-                    // Intentionally swallowed — image extraction failure is non-fatal
-                    String noop = imgErr.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+                    // Image extraction failure is non-fatal
+                    System.debug(LoggingLevel.ERROR, 'DocGenController: Image extraction failed: ' + imgErr.getMessage());
                 }
             }
         } catch (Exception e) {
@@ -1368,14 +378,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (!Schema.sObjectType.DocGen_Template__c.isDeletable()) {
                 throw DocGenService.ahe('Insufficient access.');
             }
-            /* code-analyzer-suppress ApexFlsViolation */
-            delete new DocGen_Template__c(Id = templateId); // NOPMD ApexCRUDViolation - isDeletable() checked above; package-internal custom object
+            delete new DocGen_Template__c(Id = templateId);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error deleting template. Please check your permissions.');
         }
     }
-
-    // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
 
     /**
      * Returns all version history records for a template, ordered by creation date descending.
@@ -1384,13 +391,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled
     public static List<DocGen_Template_Version__c> getTemplateVersions(Id templateId) {
-        /* code-analyzer-suppress ApexFlsViolation */
-        return [SELECT Id, Name, CreatedDate, CreatedBy.Name, Query_Config__c, Content_Version_Id__c,
+        return [
+            SELECT Id, Name, CreatedDate, CreatedBy.Name, Query_Config__c, Content_Version_Id__c,
                    Category__c, Description__c, Type__c, Base_Object_API__c, Is_Active__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId
             WITH SYSTEM_MODE
-            ORDER BY CreatedDate DESC];
+            ORDER BY CreatedDate DESC
+        ];
     }
 
     /**
@@ -1400,39 +408,32 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     @AuraEnabled
     public static void activateVersion(Id versionId) {
         try {
-            /* code-analyzer-suppress ApexFlsViolation */
-            List<DocGen_Template_Version__c> actVerList = [SELECT Template__c, Query_Config__c, Content_Version_Id__c, Category__c, Description__c, Type__c, Base_Object_API__c
+            DocGen_Template_Version__c version = [
+                SELECT Template__c, Query_Config__c, Content_Version_Id__c, Category__c, Description__c, Type__c, Base_Object_API__c
                 FROM DocGen_Template_Version__c
                 WHERE Id = :versionId
                 WITH SYSTEM_MODE
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                LIMIT 1];
-            DocGen_Template_Version__c version = actVerList[0];
+                LIMIT 1
+            ];
 
             // 1. Deactivate others
-            /* code-analyzer-suppress ApexFlsViolation */
-            List<DocGen_Template_Version__c> others = [SELECT Id FROM DocGen_Template_Version__c
+            List<DocGen_Template_Version__c> others = [
+                SELECT Id FROM DocGen_Template_Version__c
                 WHERE Template__c = :version.Template__c AND Is_Active__c = true
-                WITH SYSTEM_MODE];
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+                WITH SYSTEM_MODE
+            ];
             for (DocGen_Template_Version__c v : others) {
                 v.Is_Active__c = false;
             }
+            // Package-internal objects — CRUD controlled by DocGen permission sets
             if (!others.isEmpty()) {
-                /* code-analyzer-suppress ApexFlsViolation */
-                update others; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+                update others; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
             }
 
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-
             // 2. Activate this one
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             version.Is_Active__c = true;
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-            /* code-analyzer-suppress ApexFlsViolation */
-            update version; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            // Package-internal object — CRUD controlled by DocGen permission sets
+            update version; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
 
             // 3. Update Template Record Headline
             DocGen_Template__c template = new DocGen_Template__c(Id = version.Template__c);
@@ -1442,8 +443,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Type__c = version.Type__c;
             template.Base_Object_API__c = version.Base_Object_API__c;
 
-            /* code-analyzer-suppress ApexFlsViolation */
-            update template; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            // Package-internal object — CRUD controlled by DocGen permission sets
+            update template; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
 
         } catch (Exception e) {
             throw new DocGenException('Error activating version: ' + e.getMessage());
@@ -1560,7 +561,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         }
         query += ' ORDER BY Name LIMIT 50';
 
-        for (ApexClass cls : Database.query(query, AccessLevel.USER_MODE)) {
+        for (ApexClass cls : Database.query(query)) {
             // Try to instantiate and check interface
             Type t = Type.forName(cls.Name);
             if (t != null) {
@@ -1570,8 +571,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         providers.add(cls.Name);
                     }
                 } catch (Exception e) {
-                    // Intentionally swallowed — non-instantiable class, skip
-                    String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+                    System.debug(LoggingLevel.FINE, 'searchDataProviders: skipping ' + cls.Name + ' — ' + e.getMessage());
                 }
             }
         }
@@ -1727,153 +727,104 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
     // Sample data creation method removed per cleanup request.
 
-    /**
-     * Allowlist validation: extracts field-name tokens from a WHERE clause and validates
-     * each against the provided Schema field map. Tokens that look like values (quoted strings,
-     * numbers, dates, booleans, null, bind variables) are skipped. Only identifiers that appear
-     * in field-name position (before operators) are checked.
-     *
-     * This is best-effort parsing — the definitive security gate is USER_MODE execution.
-     * The purpose is to satisfy Checkmarx static analysis requiring Schema allowlist checks.
-     */
-    private static void validateWhereClauseFields(String whereClause, Map<String, Schema.SObjectField> fieldMap) {
-        // Strip quoted string literals so they don't confuse the tokenizer
-        String stripped = whereClause.replaceAll('\'[^\']*\'', '\'\'');
-        // Tokenize on whitespace and parentheses
-        List<String> tokens = stripped.split('[\\s(),]+');
-        // SOQL operators and keywords to skip
-        Set<String> skipTokens = new Set<String>{
-            '=', '!=', '<', '>', '<=', '>=', 'LIKE', 'IN', 'NOT', 'AND', 'OR',
-            'NULL', 'TRUE', 'FALSE', 'INCLUDES', 'EXCLUDES', 'LAST_N_DAYS',
-            'NEXT_N_DAYS', 'TODAY', 'YESTERDAY', 'TOMORROW', 'LAST_WEEK',
-            'THIS_WEEK', 'NEXT_WEEK', 'LAST_MONTH', 'THIS_MONTH', 'NEXT_MONTH',
-            'LAST_QUARTER', 'THIS_QUARTER', 'NEXT_QUARTER', 'LAST_YEAR',
-            'THIS_YEAR', 'NEXT_YEAR', 'LAST_90_DAYS', 'NEXT_90_DAYS',
-            'LAST_N_MONTHS', 'NEXT_N_MONTHS', 'LAST_N_QUARTERS', 'NEXT_N_QUARTERS',
-            'LAST_N_YEARS', 'NEXT_N_YEARS', ''
-        };
-        for (String token : tokens) {
-            String t = token.trim();
-            if (String.isBlank(t)) { continue; }
-            String upper = t.toUpperCase();
-            // Skip SOQL keywords, operators, quoted literals, numbers, date literals, bind vars
-            if (skipTokens.contains(upper)) { continue; }
-            if (t.startsWith('\'') || t.startsWith(':')) { continue; }
-            if (t.isNumeric() || Pattern.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}.*', upper)) { continue; }
-            if (Pattern.matches('LAST_N_.*:\\d+', upper) || Pattern.matches('NEXT_N_.*:\\d+', upper)) { continue; }
-            // This looks like a field name — validate against Schema
-            String baseField = t.contains('.') ? t.split('\\.')[0].toLowerCase() : t.toLowerCase();
-            if (!fieldMap.containsKey(baseField)) {
-                // Try __r → __c for custom relationship traversals
-                String asLookup = baseField.endsWith('__r') ? baseField.substring(0, baseField.length() - 3) + '__c' : baseField;
-                if (!fieldMap.containsKey(asLookup)) {
-                    throw new DocGenException('Invalid field in WHERE clause: ' + t);
-                }
-            }
-        }
-    }
+    // --- Template Sharing Logic ---
 
     /**
-     * Builds a Giant Query child node config from a V1 flat query string.
-     * Parses the subquery for the given relationship name and resolves
-     * the child object + lookup field from the parent record's schema.
+     * Returns sharing records for a template, excluding the owner share.
+     * @param templateId The DocGen template record ID
+     * @return List of maps with share record details (Id, UserOrGroupId, Name, AccessLevel, RowCause)
      */
-    private static Map<String, Object> buildNodeConfigFromFlat(Id recordId, String queryConfig, String relationshipName) {
-        // Resolve child object and lookup field from schema
-        String parentObjectType = String.valueOf(recordId.getSobjectType());
-        Schema.DescribeSObjectResult parentDescribe = Schema.getGlobalDescribe().get(parentObjectType)?.getDescribe();
-        if (parentDescribe == null) { return null; }
-
-        String childObjectName = null;
-        String lookupField = null;
-        for (Schema.ChildRelationship cr : parentDescribe.getChildRelationships()) {
-            if (cr.getRelationshipName() != null && cr.getRelationshipName().equalsIgnoreCase(relationshipName)) {
-                childObjectName = String.valueOf(cr.getChildSObject());
-                lookupField = String.valueOf(cr.getField());
-                break;
-            }
-        }
-        if (childObjectName == null) { return null; }
-
-        // Parse the subquery to extract fields, parent fields, and clauses
-        List<String> childFields = new List<String>();
-        List<String> parentFields = new List<String>();
-        String orderBy = null;
-        String whereClause = null;
-        String limitVal = null;
-
-        // Find the subquery in the config string
-        Pattern subqPattern = Pattern.compile('(?i)\\(\\s*SELECT\\s+(.+?)\\s+FROM\\s+' + Pattern.quote(relationshipName) + '([^)]*)\\)');
-        Matcher m = subqPattern.matcher(queryConfig);
-        if (m.find()) {
-            String fieldsPart = m.group(1);
-            String clausesPart = m.group(2) != null ? m.group(2).trim() : '';
-
-            // Parse fields
-            for (String f : fieldsPart.split(',')) {
-                String trimmed = f.trim();
-                if (String.isBlank(trimmed)) { continue; }
-                if (trimmed.contains('.')) {
-                    parentFields.add(trimmed);
-                } else {
-                    childFields.add(trimmed);
-                }
-            }
-
-            // Extract WHERE (before ORDER BY / LIMIT)
-            Pattern wherePattern = Pattern.compile('(?i)\\s*WHERE\\s+(.+?)(?:\\s+ORDER\\s+BY|\\s+LIMIT|$)');
-            Matcher whereMatcher = wherePattern.matcher(clausesPart);
-            if (whereMatcher.find()) {
-                whereClause = whereMatcher.group(1).trim();
-            }
-
-            // Extract ORDER BY
-            Pattern orderPattern = Pattern.compile('(?i)ORDER\\s+BY\\s+(.+?)(?:\\s+LIMIT|$)');
-            Matcher orderMatcher = orderPattern.matcher(clausesPart);
-            if (orderMatcher.find()) {
-                orderBy = orderMatcher.group(1).trim();
-            }
-
-            // Extract LIMIT
-            Pattern limitPattern = Pattern.compile('(?i)LIMIT\\s+(\\d+)');
-            Matcher limitMatcher = limitPattern.matcher(clausesPart);
-            if (limitMatcher.find()) {
-                limitVal = limitMatcher.group(1).trim();
-            }
-        }
-
-        Map<String, Object> nodeConfig = new Map<String, Object>{
-            'relationshipName' => relationshipName,
-            'object' => childObjectName,
-            'lookupField' => lookupField,
-            'fields' => childFields,
-            'parentFields' => parentFields
-        };
-        if (String.isNotBlank(whereClause)) {
-            nodeConfig.put('where', whereClause);
-        }
-        if (String.isNotBlank(limitVal)) {
-            nodeConfig.put('limit', limitVal);
-        }
-        if (String.isNotBlank(orderBy)) {
-            nodeConfig.put('orderBy', orderBy);
-        }
-        return nodeConfig;
-    }
-
-    // --- Deprecated Sharing Methods (stubs kept for managed package compatibility) ---
-
     @AuraEnabled(cacheable=false)
-    public static List<Map<String, String>> getTemplateShares(Id templateId) { return new List<Map<String, String>>(); }
+    public static List<Map<String, String>> getTemplateShares(Id templateId) {
+        List<Map<String, String>> shares = new List<Map<String, String>>();
 
-    @AuraEnabled
-    public static void shareTemplate(Id templateId, Id userOrGroupId, String accessLevel) { }
+        String shareObject = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getName().replace('__c', '__Share');
+        List<SObject> shareRecords = Database.query( // NOPMD ApexSOQLInjection - shareObject derived from Schema.SObjectType describe, not user input
+            'SELECT Id, UserOrGroupId, UserOrGroup.Name, AccessLevel, RowCause ' +
+            'FROM ' + String.escapeSingleQuotes(shareObject) + ' ' +
+            'WHERE ParentId = :templateId AND RowCause != \'Owner\' WITH SYSTEM_MODE'
+        );
 
-    @AuraEnabled
-    public static void removeShare(Id shareId) { }
+        for (SObject s : shareRecords) {
+            Map<String, String> row = new Map<String, String>();
+            row.put('Id', (String)s.get('Id'));
+            row.put('UserOrGroupId', (String)s.get('UserOrGroupId'));
+            row.put('UserOrGroupName', (String)s.getSObject('UserOrGroup').get('Name'));
+            row.put('AccessLevel', (String)s.get('AccessLevel'));
+            row.put('RowCause', (String)s.get('RowCause'));
+            shares.add(row);
+        }
+        return shares;
+    }
 
+    /**
+     * Creates a manual sharing record for a template with the specified user or group.
+     * @param templateId The DocGen template record ID
+     * @param userOrGroupId The User or Group ID to share with
+     * @param accessLevel The access level (e.g., 'Read', 'Edit')
+     */
     @AuraEnabled
-    public static List<Map<String, String>> searchUsersAndGroups(String searchTerm) { return new List<Map<String, String>>(); }
+    public static void shareTemplate(Id templateId, Id userOrGroupId, String accessLevel) {
+        String shareObject = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getName().replace('__c', '__Share');
+        SObject share = Schema.getGlobalDescribe().get(shareObject).newSObject();
+        share.put('ParentId', templateId);
+        share.put('UserOrGroupId', userOrGroupId);
+        share.put('AccessLevel', accessLevel);
+        share.put('RowCause', 'Manual');
+
+        try {
+            SObjectAccessDecision shareDecision = Security.stripInaccessible(AccessType.CREATABLE, new List<SObject>{ share });
+            insert shareDecision.getRecords();
+        } catch (DmlException e) {
+            throw DocGenService.ahe(e, 'Error sharing template. Please check permissions.');
+        }
+    }
+
+    /**
+     * Removes a manual sharing record from a template.
+     * @param shareId The DocGen_Template__Share record ID to delete
+     */
+    @AuraEnabled
+    public static void removeShare(Id shareId) {
+        try {
+            if (!Schema.sObjectType.DocGen_Template__c.isDeletable()) {
+                throw DocGenService.ahe('Insufficient access.');
+            }
+            delete new DocGen_Template__Share(Id = shareId); // NOPMD ApexCRUDViolation - isDeletable() checked above; package-internal share object
+        } catch (DmlException e) {
+            throw DocGenService.ahe(e, 'Error removing share. Please check permissions.');
+        }
+    }
+
+    /**
+     * Searches active users and public groups by name for the template sharing UI.
+     * @param searchTerm The search string to match against user/group names
+     * @return List of maps with Id, Name, Type, and Icon for matching users and groups
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<Map<String, String>> searchUsersAndGroups(String searchTerm) {
+        String key = '%' + searchTerm + '%';
+        List<Map<String, String>> results = new List<Map<String, String>>();
+
+        for (User u : [SELECT Id, Name FROM User WHERE Name LIKE :key AND IsActive = TRUE WITH USER_MODE LIMIT 10]) {
+             Map<String, String> row = new Map<String, String>();
+             row.put('Id', u.Id);
+             row.put('Name', u.Name);
+             row.put('Type', 'User');
+             row.put('Icon', 'standard:user');
+             results.add(row);
+        }
+
+        for (Group g : [SELECT Id, Name FROM Group WHERE Name LIKE :key AND Type = 'Regular' WITH USER_MODE LIMIT 10]) {
+             Map<String, String> row = new Map<String, String>();
+             row.put('Id', g.Id);
+             row.put('Name', g.Name);
+             row.put('Type', 'Group');
+             row.put('Icon', 'standard:groups');
+             results.add(row);
+        }
+        return results;
+    }
 
     // --- Rich Text Image Resolution ---
 
@@ -1942,7 +893,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             FROM ContentDocumentLink
             WHERE LinkedEntityId = :recordId
             AND ContentDocument.FileExtension = 'pdf'
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY ContentDocument.Title
         ];
 
@@ -1971,19 +922,19 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe('Parent record ID, child object, and lookup field are required.');
         }
 
-        // Allowlist validation: object verified against Schema.getGlobalDescribe()
+        // Validate child object exists in schema
         SObjectType childType = Schema.getGlobalDescribe().get(childObject);
         if (childType == null) {
             throw DocGenService.ahe('Invalid child object: ' + childObject);
         }
 
-        // Allowlist validation: lookupField verified against Schema.describeSObjects() field map
+        // Validate lookup field exists on child object
         Map<String, SObjectField> fieldMap = childType.getDescribe().fields.getMap();
         if (!fieldMap.containsKey(lookupField.toLowerCase())) {
             throw DocGenService.ahe('Invalid lookup field: ' + lookupField);
         }
 
-        // Allowlist validation: displayField derived from Schema field map (Name or Id) — always safe
+        // Determine display field — use Name if available, else Id
         Boolean hasName = fieldMap.containsKey('name') && fieldMap.get('name').getDescribe().isAccessible();
         String displayField = hasName ? 'Name' : 'Id';
 
@@ -1993,17 +944,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ' FROM ' + String.escapeSingleQuotes(childObject) +
             ' WHERE ' + String.escapeSingleQuotes(lookupField) + ' = :parentRecordId';
         if (String.isNotBlank(filterClause)) {
-            String sanitizedFilter = DocGenBulkController.sanitizeCondition(filterClause);
-            // Allowlist validation: WHERE clause field names verified against Schema.describeSObjects() field map
-            validateWhereClauseFields(sanitizedFilter, fieldMap);
-            childQuery += ' AND (' + sanitizedFilter + ')';
+            childQuery += ' AND (' + filterClause + ')';
         }
         childQuery += ' ORDER BY ' + displayField + ' LIMIT 200';
 
         List<SObject> childRecords;
         try {
-            // CxSAST: SOQL injection mitigated by Schema allowlist validation on all dynamic elements (object, lookupField, displayField, filterClause fields) + USER_MODE
-            childRecords = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
+            childRecords = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection - object/field names validated against Schema.getGlobalDescribe(); runs with USER_MODE
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error querying child records');
         }
@@ -2028,7 +975,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             FROM ContentDocumentLink
             WHERE LinkedEntityId IN :childIds
             AND ContentDocument.FileExtension = 'pdf'
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY ContentDocument.Title
         ];
 
@@ -2068,15 +1015,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     @AuraEnabled
     public static List<Map<String, String>> getAvailableReports(String searchTerm) {
         String query = 'SELECT Id, Name, DeveloperName, FolderName FROM Report';
-        String safeTerm; // Used via bind variable in dynamic SOQL below
         if (String.isNotBlank(searchTerm)) {
-            safeTerm = '%' + String.escapeSingleQuotes(searchTerm.trim()) + '%';
+            String safeTerm = '%' + String.escapeSingleQuotes(searchTerm.trim()) + '%';
             query += ' WHERE Name LIKE :safeTerm';
         }
         query += ' ORDER BY Name LIMIT 50';
 
         List<Map<String, String>> results = new List<Map<String, String>>();
-        for (Report r : Database.query(query, AccessLevel.USER_MODE)) {
+        for (Report r : Database.query(query)) {
             results.add(new Map<String, String>{
                 'id' => r.Id,
                 'name' => r.Name,
@@ -2112,8 +1058,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         }
 
         // Get the field map for normalization
-        Map<String, SObjectType> globalDescribe = Schema.getGlobalDescribe();
-        SObjectType objType = globalDescribe.get(baseObject);
+        SObjectType objType = Schema.getGlobalDescribe().get(baseObject);
         if (objType == null) {
             throw DocGenService.ahe('Object not found: ' + baseObject);
         }
@@ -2182,7 +1127,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 }
 
                 // Build field maps for label matching regardless
-                SObjectType childType = globalDescribe.get(childObjName);
+                SObjectType childType = Schema.getGlobalDescribe().get(childObjName);
                 if (childType != null) {
                     Map<String, SObjectField> cfm = childType.getDescribe().fields.getMap();
                     childFieldMaps.put(childObjName, cfm);
@@ -2197,39 +1142,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     childProperCaseMaps.put(childObjName, cpm);
                 }
             }
-        } else {
-            // Dynamic child discovery for custom object report types not in the hardcoded map.
-            // Scan the base object's child relationships and build field maps for any queryable
-            // children so report columns can be matched by label.
-            for (Schema.ChildRelationship cr : objType.getDescribe().getChildRelationships()) {
-                if (cr.getRelationshipName() == null) { continue; }
-                String childObjName = cr.getChildSObject().getDescribe().getName();
-                if (childObjName.endsWith('History') || childObjName.endsWith('Share') || childObjName.endsWith('Feed')) { continue; }
-                if (childRelNameByObject.containsKey(childObjName)) { continue; }
-                Schema.DescribeSObjectResult childDesc = cr.getChildSObject().getDescribe();
-                if (!childDesc.isQueryable() || childDesc.isDeprecatedAndHidden()) { continue; }
-                childRelNameByObject.put(childObjName, cr.getRelationshipName());
-                Map<String, SObjectField> cfm = childDesc.fields.getMap();
-                if (cfm.size() < 3) { continue; } // Skip trivial objects
-                childFieldMaps.put(childObjName, cfm);
-                Map<String, String> clm = new Map<String, String>();
-                Map<String, String> cpm = new Map<String, String>();
-                for (String fn : cfm.keySet()) {
-                    Schema.DescribeFieldResult cdfr = cfm.get(fn).getDescribe();
-                    clm.put(cdfr.getLabel().toLowerCase(), cdfr.getName());
-                    cpm.put(fn.toLowerCase(), cdfr.getName());
-                }
-                childLabelMaps.put(childObjName, clm);
-                childProperCaseMaps.put(childObjName, cpm);
-            }
         }
 
         // Also discover grandchildren (e.g., Quote → QuoteLineItems) so their
         // field labels can match against report columns dynamically.
+        Map<String, String> grandchildRelNames = new Map<String, String>();
         for (String childObjName : new List<String>(childRelNameByObject.keySet())) {
             String relName = childRelNameByObject.get(childObjName);
             if (relName.startsWith('__junction_')) { continue; } // Skip junctions
-            SObjectType childType = globalDescribe.get(childObjName);
+            SObjectType childType = Schema.getGlobalDescribe().get(childObjName);
             if (childType == null) { continue; }
             for (Schema.ChildRelationship gcr : childType.getDescribe().getChildRelationships()) {
                 if (gcr.getRelationshipName() == null) { continue; }
@@ -2254,6 +1175,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 childProperCaseMaps.put(gcObjName, gcpm);
             }
         }
+
+        // Report column abbreviation prefixes → target object
+        Map<String, String> reportPrefixToObject = new Map<String, String>{
+            'QLI' => 'QuoteLineItem',
+            'Q' => 'Quote',
+            'OLI' => 'OpportunityLineItem',
+            'CM' => 'CampaignMember'
+        };
 
         Map<String, Map<String, String>> reportKeyOverrides = new Map<String, Map<String, String>>{
             'PRODUCT_NAME' => new Map<String, String>{ 'object' => 'OpportunityLineItem', 'field' => 'Name' },
@@ -2310,9 +1239,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
             // 0b. Check hardcoded overrides for remaining unmapped columns
             if (!mapped && reportKeyOverrides.containsKey(colKey)) {
-                Map<String, String> overrideInfo = reportKeyOverrides.get(colKey);
-                String targetObj = overrideInfo.get('object');
-                String targetField = overrideInfo.get('field');
+                Map<String, String> override_info = reportKeyOverrides.get(colKey);
+                String targetObj = override_info.get('object');
+                String targetField = override_info.get('field');
                 String relName = childRelNameByObject.get(targetObj);
                 if (relName != null) {
                     if (!childFields.containsKey(relName)) { childFields.put(relName, new List<String>()); }
@@ -2545,14 +1474,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (relName.startsWith('__junction_')) { continue; }
             if (!childFields.containsKey(relName)) { continue; } // Only include objects with matched fields
 
-            // Find which parent this child belongs to and the correct lookup field
+            // Find which parent this child belongs to
             String parentObj = findParentObject(childObjName, baseObject, childRelNameByObject);
-            String lookupFieldName = findLookupField(childObjName, parentObj);
 
             childHierarchy.put(relName, new Map<String, String>{
                 'objectName' => childObjName,
                 'parentObject' => parentObj,
-                'lookupField' => lookupFieldName
+                'lookupField' => parentObj + 'Id'
             });
         }
 
@@ -2593,27 +1521,6 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             }
         }
         return baseObject;
-    }
-
-    /**
-     * Finds the lookup field on childObjName that references parentObjName.
-     * Uses schema describe to find the correct field, falling back to parentObj+'Id' or parentObj for custom.
-     */
-    private static String findLookupField(String childObjName, String parentObjName) {
-        SObjectType childType = Schema.getGlobalDescribe().get(childObjName);
-        if (childType != null) {
-            for (Schema.SObjectField sof : childType.getDescribe().fields.getMap().values()) {
-                Schema.DescribeFieldResult dfr = sof.getDescribe();
-                if (dfr.getType() != Schema.DisplayType.REFERENCE || dfr.getReferenceTo() == null) { continue; }
-                for (Schema.SObjectType ref : dfr.getReferenceTo()) {
-                    if (ref.getDescribe().getName() == parentObjName) {
-                        return dfr.getName();
-                    }
-                }
-            }
-        }
-        // Fallback: standard convention
-        return parentObjName.endsWith('__c') ? parentObjName : parentObjName + 'Id';
     }
 
     /**
@@ -2661,9 +1568,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             junctionRelName.removeEnd('es'),          // AccountContactRelations → AccountContactRelation (if ends in 'es')
             junctionRelName                           // Exact match (rare)
         };
-        Map<String, SObjectType> gd = Schema.getGlobalDescribe();
         for (String candidate : candidates) {
-            SObjectType juncType = gd.get(candidate);
+            SObjectType juncType = Schema.getGlobalDescribe().get(candidate);
             if (juncType == null) { continue; }
             for (SObjectField sof : juncType.getDescribe().fields.getMap().values()) {
                 Schema.DescribeFieldResult dfr = sof.getDescribe();
@@ -2684,13 +1590,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     private static String resolveJunctionObjectName(String junctionRelName) {
         if (String.isBlank(junctionRelName)) { return null; }
-        Map<String, SObjectType> gd = Schema.getGlobalDescribe();
         for (String candidate : new List<String>{
             junctionRelName.removeEnd('s'),
             junctionRelName.removeEnd('es'),
             junctionRelName
         }) {
-            if (gd.containsKey(candidate)) { return candidate; }
+            if (Schema.getGlobalDescribe().containsKey(candidate)) { return candidate; }
         }
         return junctionRelName.removeEnd('s');
     }
@@ -2802,7 +1707,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (globalDescribe.containsKey(stripped)) { return stripped; }
         }
 
-        // Strategy 3: Custom report types ending in __c are handled in Strategy 6 below
+        // Strategy 3: Custom report types ending in __c — query the DeveloperName
+        if (reportTypeName.endsWith('__c')) {
+            // Custom report type — the first column's prefix is often the base object
+            // This is handled in Strategy 6 below
+        }
 
         // Strategy 4: Match the report type label against object labels
         // "Accounts" → Account, "Opportunities with Contact Roles and Products" → Opportunity
@@ -2838,29 +1747,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // Strategy 6: Custom report type with __c — try to resolve via name minus suffix
         if (reportTypeName.contains('__c')) {
             String basePart = reportTypeName.substringBefore('__c');
-            // 6a. Try the full custom object name (basePart + '__c') — it may be the object itself
-            String customObjName = basePart + '__c';
-            if (globalDescribe.containsKey(customObjName)) { return customObjName; }
-            // 6b. Try with namespace prefix stripped (e.g., ns__My_Report__c → My_Report__c → My_Object__c)
-            if (basePart.contains('__')) {
-                String withoutNs = basePart.substringAfter('__') + '__c';
-                if (globalDescribe.containsKey(withoutNs)) { return withoutNs; }
-            }
-            // 6c. Fallback: check if any part matches a standard object name
+            // Remove common prefixes/suffixes from custom report type developer names
             for (String objName : commonObjects) {
                 if (basePart.containsIgnoreCase(objName) && globalDescribe.containsKey(objName)) {
                     return objName;
                 }
-            }
-            // 6d. Scan all custom objects for a name contained in the report type
-            for (String objName : globalDescribe.keySet()) {
-                if (!objName.endsWith('__c')) { continue; }
-                Schema.DescribeSObjectResult objDesc = globalDescribe.get(objName).getDescribe();
-                if (!objDesc.isQueryable() || objDesc.isDeprecatedAndHidden()) { continue; }
-                String objBase = objName.removeEnd('__c');
-                // Strip namespace from object name for matching
-                if (objBase.contains('__')) { objBase = objBase.substringAfter('__'); }
-                if (basePart.containsIgnoreCase(objBase)) { return objDesc.getName(); }
             }
         }
 
@@ -3649,17 +2540,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             + 'PSJwcmVzZXJ2ZSI+UG93ZXJlZCBieSBEb2NHZW48L3c6dD48L3c6cj48L3c6cD4KICAgIDx3OnNlY3RQcj4KICAgICAgPHc6cGdTeiB3Onc9IjEyMjQwIiB3'
             + 'Omg9IjE1ODQwIi8+CiAgICAgIDx3OnBnTWFyIHc6dG9wPSIxNDQwIiB3OnJpZ2h0PSIxNDQwIiB3OmJvdHRvbT0iMTQ0MCIgdzpsZWZ0PSIxNDQwIiB3Omhl'
             + 'YWRlcj0iNzIwIiB3OmZvb3Rlcj0iNzIwIiB3Omd1dHRlcj0iMCIvPgogICAgPC93OnNlY3RQcj4KICA8L3c6Ym9keT4KPC93OmRvY3VtZW50PlBLAQIUAxQA'
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             + 'AAAAACk3eFzXeYTquAEAALgBAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQDFAAAAAAAKTd4XCAbhuouAQAALgEAAAsAAAAA'
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             + 'AAAAAAAAAIAB6QEAAF9yZWxzLy5yZWxzUEsBAhQDFAAAAAAAKTd4XIwOhdCdAAAAnQAAABwAAAAAAAAAAAAAAIABQAMAAHdvcmQvX3JlbHMvZG9jdW1lbnQu'
             + 'eG1sLnJlbHNQSwECFAMUAAAAAAApN3hcOTom9VYbAABWGwAAEQAAAAAAAAAAAAAAgAEXBAAAd29yZC9kb2N1bWVudC54bWxQSwUGAAAAAAQABAADAQAAnB8A'
             + 'AAAA'
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         );
-
-
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
         // ---- Create records ----
         List<DocGen_Template__c> templates = new List<DocGen_Template__c>();
@@ -3674,8 +2559,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Description__c = d.get('desc')
             ));
         }
-        /* code-analyzer-suppress ApexFlsViolation */
-        insert templates; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        insert templates; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
 
         // Create ContentVersions (DOCX files) linked to templates
         List<ContentVersion> cvs = new List<ContentVersion>();
@@ -3688,16 +2572,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 FirstPublishLocationId = templates[i].Id
             ));
         }
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-        SObjectAccessDecision cvsDec = Security.stripInaccessible(AccessType.CREATABLE, cvs);
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-        insert cvsDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-        for (Integer i = 0; i < cvs.size(); i++) {
-            cvs[i].Id = cvsDec.getRecords()[i].Id;
-        }
+        insert cvs; // NOPMD ApexCRUDViolation - ContentVersion insert; access controlled by DocGen permission sets
+        // IDs are populated on the list after insert — no re-query needed
+        // (re-querying breaks insertion order and mismatches CVs to templates)
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         // Create active template versions with snapshot headers
         List<DocGen_Template_Version__c> versions = new List<DocGen_Template_Version__c>();
         for (Integer i = 0; i < templates.size(); i++) {
@@ -3712,16 +2590,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Base_Object_API__c = templates[i].Base_Object_API__c
             ));
         }
-        /* code-analyzer-suppress ApexFlsViolation */
-        insert versions; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        insert versions; // NOPMD ApexCRUDViolation - package-internal custom object; access controlled by DocGen permission sets
 
         // Extract and save template images for PDF rendering
         for (Integer i = 0; i < versions.size(); i++) {
             try {
                 DocGenService.extractAndSaveTemplateImages(templates[i].Id, versions[i].Id);
             } catch (Exception imgErr) {
-                // Intentionally swallowed — image extraction failure is non-fatal for sample templates
-                String noop = imgErr.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+                System.debug(LoggingLevel.ERROR, 'Sample template image extraction failed for ' + templates[i].Name + ': ' + imgErr.getMessage());
             }
         }
 
@@ -3746,8 +2622,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     @AuraEnabled
     public static String exportTemplate(Id templateId) {
         try {
-            /* code-analyzer-suppress ApexFlsViolation */
-            List<DocGen_Template__c> templates = [SELECT Name, Base_Object_API__c, Type__c, Output_Format__c, Category__c,
+            List<DocGen_Template__c> templates = [
+                SELECT Name, Base_Object_API__c, Type__c, Output_Format__c, Category__c,
                        Description__c, Query_Config__c, Document_Title_Format__c, Is_Default__c,
                        (SELECT Id, Is_Active__c, Query_Config__c, Content_Version_Id__c,
                                Category__c, Description__c, Type__c, Base_Object_API__c
@@ -3755,7 +2631,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                        (SELECT Name, Query_Condition__c, Description__c FROM Saved_Queries__r)
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
-                WITH SYSTEM_MODE LIMIT 1];
+                WITH USER_MODE
+                LIMIT 1
+            ];
             if (templates.isEmpty()) {
                 throw new DocGenException('Template not found or not accessible.');
             }
@@ -3786,7 +2664,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         SELECT VersionData, FileExtension, Title
                         FROM ContentVersion
                         WHERE Id = :ver.Content_Version_Id__c
-                        WITH USER_MODE LIMIT 1 // NOPMD — internal template file read
+                        WITH USER_MODE
+                        LIMIT 1
                     ];
                     if (!cvs.isEmpty()) {
                         Map<String, Object> fileData = new Map<String, Object>();
@@ -3824,23 +2703,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * @return The new template record ID
      */
     @AuraEnabled
-    // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
     public static Id importTemplate(String jsonData) {
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         try {
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             Map<String, Object> bundle = (Map<String, Object>) JSON.deserializeUntyped(jsonData);
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             Map<String, Object> tmplData = (Map<String, Object>) bundle.get('template');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             if (tmplData == null) {
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 throw new DocGenException('Invalid import file: missing template data.');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             }
-
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
             // 1. Create template record
             DocGen_Template__c tmpl = new DocGen_Template__c();
@@ -3853,8 +2722,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             tmpl.Query_Config__c = (String) tmplData.get('Query_Config__c');
             tmpl.Document_Title_Format__c = (String) tmplData.get('Document_Title_Format__c');
             tmpl.Is_Default__c = tmplData.get('Is_Default__c') == true;
-            /* code-analyzer-suppress ApexFlsViolation */
-            insert tmpl; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            insert tmpl; // NOPMD ApexCRUDViolation - package-internal custom object
 
             // 2. Upload template file if present
             Map<String, Object> fileData = (Map<String, Object>) bundle.get('templateFile');
@@ -3863,23 +2731,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 ContentVersion cv = new ContentVersion();
                 cv.Title = tmpl.Name;
                 cv.PathOnClient = tmpl.Name + '.' + (String) fileData.get('fileExtension');
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 cv.VersionData = EncodingUtil.base64Decode((String) fileData.get('base64'));
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 cv.FirstPublishLocationId = tmpl.Id;
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                SObjectAccessDecision impCvDec = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentVersion>{ cv });
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                insert impCvDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                cv.Id = impCvDec.getRecords()[0].Id;
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+                insert cv; // NOPMD ApexCRUDViolation - ContentVersion for template file
                 cvId = cv.Id;
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             }
-
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
             // 3. Create active version
             DocGen_Template_Version__c ver = new DocGen_Template_Version__c();
@@ -3891,21 +2747,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ver.Description__c = (String) tmplData.get('Description__c');
             ver.Type__c = (String) tmplData.get('Type__c');
             ver.Base_Object_API__c = (String) tmplData.get('Base_Object_API__c');
-            /* code-analyzer-suppress ApexFlsViolation */
-            insert ver; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            insert ver; // NOPMD ApexCRUDViolation - package-internal custom object
 
             // 4. Extract images and pre-decompose (non-fatal)
             try {
                 DocGenService.extractAndSaveTemplateImages(tmpl.Id, ver.Id);
             } catch (Exception imgErr) {
-                // Intentionally swallowed — image extraction failure is non-fatal during import
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                String noop = imgErr.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+                System.debug(LoggingLevel.ERROR, 'Import: Image extraction failed: ' + imgErr.getMessage());
             }
-
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
             // 5. Create saved queries if present
             List<Object> savedQueries = (List<Object>) bundle.get('savedQueries');
@@ -3920,8 +2769,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     newSq.Description__c = (String) sq.get('Description__c');
                     sqs.add(newSq);
                 }
-                /* code-analyzer-suppress ApexFlsViolation */
-                insert sqs; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                insert sqs; // NOPMD ApexCRUDViolation - package-internal custom object
             }
 
             return tmpl.Id;

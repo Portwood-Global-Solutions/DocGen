@@ -12,188 +12,71 @@
                         </div>
                         
                         <div class="wizard-content">
-                            <!-- Step 1: Details + Object Selection -->
+                            <!-- Step 1: Details -->
                             <template if:true={isStep1}>
                                 <div class="slds-grid slds-gutters_large">
                                     <div class="slds-col slds-size_1-of-2">
                                         <lightning-input label="Template Name" value={newTemplateName} onchange={handleNameChange} required></lightning-input>
                                         <lightning-input label="Category" value={newTemplateCategory} onchange={handleCategoryChange} class="slds-var-m-top_medium"></lightning-input>
-                                        <!-- Base Object with search -->
-                                        <div style="position: relative;" class="slds-var-m-top_medium">
-                                            <lightning-input
-                                                label="Base Object"
-                                                value={newTemplateObject}
-                                                onchange={handleObjectSearchInput}
-                                                placeholder="Account, Opportunity, Contact..."
-                                                required
-                                                autocomplete="off">
-                                            </lightning-input>
-                                            <template if:true={showObjectSuggestions}>
-                                                <ul role="listbox" style="position: absolute; z-index: 20; max-height: 200px; overflow-y: auto; left: 0; right: 0; background: #fff; border: 1px solid #d8dde6; border-radius: 0 0 6px 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); list-style: none; margin: 0; padding: 0;">
-                                                    <template for:each={filteredObjectOptions} for:item="obj">
-                                                        <li key={obj.value} class="slash-item" role="option" style="cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #f3f2f2;" data-value={obj.value} onclick={handleObjectSuggestionClick}>
-                                                            <span style="font-weight: 600;">{obj.label}</span>
-                                                            <span style="font-family: monospace; font-size: 0.8rem; color: #7c3aed;">{obj.value}</span>
-                                                        </li>
-                                                    </template>
-                                                </ul>
-                                            </template>
-                                        </div>
                                     </div>
                                     <div class="slds-col slds-size_1-of-2">
                                         <lightning-combobox label="Type" value={newTemplateType} options={typeOptions} onchange={handleTypeChange} required></lightning-combobox>
                                         <lightning-combobox label="Output Format" value={newTemplateOutputFormat} options={outputFormatOptions} onchange={handleOutputFormatChange} class="slds-var-m-top_medium" required></lightning-combobox>
-                                        <template if:true={newTemplateObject}>
-                                            <div class="slds-var-m-top_medium">
-                                                <lightning-record-picker
-                                                    label="Sample Record (optional)"
-                                                    object-api-name={newTemplateObject}
-                                                    value={newTemplateSampleRecordId}
-                                                    onchange={handleSampleRecordChange}
-                                                    placeholder="Pick a record to preview data...">
-                                                </lightning-record-picker>
-                                                <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">See real data from this record while building your query.</p>
-                                            </div>
-                                        </template>
+                                        <lightning-textarea label="Description" value={newTemplateDesc} onchange={handleDescChange} class="slds-var-m-top_medium"></lightning-textarea>
                                     </div>
                                 </div>
                             </template>
 
-                            <!-- Step 2: Query -->
+                            <!-- Step 2: Query Builder -->
                             <template if:true={isStep2}>
-                                <div style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-                                    <div style="display: flex; align-items: center; gap: 8px;">
-                                        <lightning-icon icon-name="standard:account" size="x-small"></lightning-icon>
-                                        <span style="font-weight: 700;">{newTemplateObject}</span>
-                                    </div>
-                                    <a href="javascript:void(0)" onclick={toggleVisualBuilder}
-                                        style="font-size: 0.82rem; color: #7c3aed; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                                        <lightning-icon icon-name={visualBuilderToggleIcon} size="xx-small" style="--sds-c-icon-color-foreground-default: #7c3aed;"></lightning-icon>
-                                        <template if:false={useVisualBuilder}>Try our visual builder</template>
-                                        <template if:true={useVisualBuilder}>Switch to manual query</template>
-                                    </a>
+                                <div class="slds-grid slds-grid_align-end slds-var-m-bottom_medium">
+                                    <lightning-input type="toggle"
+                                        label="Manual Query Mode"
+                                        checked={isNewManualQuery}
+                                        onchange={handleNewManualQueryToggle}
+                                        message-toggle-active="Manual"
+                                        message-toggle-inactive="Builder">
+                                    </lightning-input>
                                 </div>
 
-                                <!-- Visual Builder -->
-                                <template if:true={useVisualBuilder}>
-                                    <c-doc-gen-tree-builder
+                                <!-- Visual Builder (Column Layout) -->
+                                <template if:false={isNewManualQuery}>
+                                    <c-doc-gen-column-builder
                                         selected-object={newTemplateObject}
                                         query-config={newTemplateQuery}
                                         onconfigchange={handleConfigChange}>
-                                    </c-doc-gen-tree-builder>
+                                    </c-doc-gen-column-builder>
                                 </template>
 
-                                <!-- Manual Query Textarea -->
-                                <template if:false={useVisualBuilder}>
-                                <div style="position: relative;">
-                                    <textarea
-                                        class="slds-textarea wizard-query-textarea"
-                                        value={newTemplateQuery}
-                                        oninput={handleDirectQueryEdit}
-                                        onkeydown={handleQueryKeyDown}
-                                        placeholder="Paste a SOQL query or type field names — suggestions will appear.&#10;&#10;Examples:&#10;  SELECT Name, Industry, (SELECT FirstName FROM Contacts) FROM Account&#10;  Name, Industry, Phone&#10;  Owner.Name, CreatedBy.Email&#10;  (SELECT FirstName, LastName FROM Contacts)"
-                                        style="width: 100%; min-height: 240px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 0.9rem; line-height: 1.8; padding: 14px; border: 1px solid #d8dde6; border-radius: 8px; resize: vertical;">
-                                    </textarea>
-                                    <template if:true={showSuggestions}>
-                                        <div style="position: absolute; z-index: 20; left: 14px; right: 14px; max-height: 200px; overflow-y: auto; background: #fff; border: 1px solid #d8dde6; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); padding: 4px 0;"
-                                            onmousedown={handleSuggestionMouseDown}>
-                                            <template for:each={suggestions} for:item="s">
-                                                <div key={s.value} class="slash-item" data-value={s.value} onclick={handleSuggestionClick}
-                                                    style="padding: 6px 12px; cursor: pointer; display: flex; align-items: baseline; gap: 8px;">
-                                                    <span style="font-family: monospace; font-size: 0.85rem; color: #7c3aed; font-weight: 600;">{s.value}</span>
-                                                    <span style="font-size: 0.78rem; color: #706e6b;">{s.label}</span>
-                                                    <template if:true={s.extra}>
-                                                        <span style="font-size: 0.68rem; color: #999; margin-left: auto;">{s.extra}</span>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </template>
-                                </div>
-                                </template>
-                                <template if:true={queryWarnings}>
-                                    <template for:each={queryWarnings} for:item="warn">
-                                        <div key={warn} style="margin-top: 8px; padding: 8px 12px; background: #fff8e1; border: 1px solid #f9a825; border-radius: 6px; font-size: 0.8rem; color: #5d4037; display: flex; align-items: center; gap: 6px;">
-                                            <lightning-icon icon-name="utility:warning" size="xx-small" variant="warning"></lightning-icon>
-                                            {warn}
-                                        </div>
-                                    </template>
-                                </template>
-                                <template if:true={queryTreeNodes.length}>
-                                    <div style="margin-top: 12px; border: 1px solid #e5e5e5; border-radius: 8px; padding: 10px 14px; background: #fafaf9;">
-                                        <template for:each={queryTreeNodes} for:item="node">
-                                            <div key={node.id}>
-                                                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 6px;">
-                                                    <lightning-icon icon-name="standard:account" size="xx-small"></lightning-icon>
-                                                    <span style="font-weight: 700; font-size: 0.85rem;">{node.label}</span>
-                                                </div>
-                                                <!-- Fields with sample values -->
-                                                <template if:true={node.hasFields}>
-                                                    <div style="margin-left: 22px; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px;">
-                                                        <template for:each={node.fieldPills} for:item="fp">
-                                                            <span key={fp.key} style="background: #eef4ff; border: 1px solid #c7d7f5; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; display: inline-flex; align-items: baseline; gap: 4px;">
-                                                                <span style="color: #1a56db;">{fp.name}</span>
-                                                                <template if:true={fp.sample}>
-                                                                    <span style="color: #555; font-family: -apple-system, sans-serif; font-weight: 400;">= {fp.sample}</span>
-                                                                </template>
-                                                            </span>
-                                                        </template>
-                                                    </div>
-                                                </template>
-                                                <!-- Parent fields with sample values -->
-                                                <template if:true={node.hasParentFields}>
-                                                    <div style="margin-left: 22px; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px;">
-                                                        <template for:each={node.parentPills} for:item="pp">
-                                                            <span key={pp.key} style="background: #f3e8ff; border: 1px solid #d8c4f0; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; display: inline-flex; align-items: baseline; gap: 4px;">
-                                                                <span style="color: #7c3aed;">{pp.name}</span>
-                                                                <template if:true={pp.sample}>
-                                                                    <span style="color: #555; font-family: -apple-system, sans-serif; font-weight: 400;">= {pp.sample}</span>
-                                                                </template>
-                                                            </span>
-                                                        </template>
-                                                    </div>
-                                                </template>
-                                                <!-- Child relationships (flattened for any depth) -->
-                                                <template if:true={node.hasFlatChildren}>
-                                                    <div style="margin-left: 22px;">
-                                                        <template for:each={node.flatChildren} for:item="child">
-                                                            <div key={child.id} style={child.indentStyle}>
-                                                                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                                                                    <lightning-icon icon-name="standard:related_list" size="xx-small"></lightning-icon>
-                                                                    <span style="font-weight: 600; font-size: 0.82rem;">{child.label}</span>
-                                                                    <span style="font-size: 0.72rem; color: #706e6b; margin-left: 4px;">({child.fieldCount} fields)</span>
-                                                                </div>
-                                                                <div style="margin-left: 20px; display: flex; flex-wrap: wrap; gap: 3px;">
-                                                                    <template for:each={child.fields} for:item="cf">
-                                                                        <span key={cf} style="background: #ecfdf5; color: #065f46; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace;">{cf}</span>
-                                                                    </template>
-                                                                    <template if:true={child.hasParentFields}>
-                                                                        <template for:each={child.parentFields} for:item="pf">
-                                                                            <span key={pf} style="background: #f3e8ff; color: #7c3aed; border: 1px solid #d8c4f0; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace;">{pf}</span>
-                                                                        </template>
-                                                                    </template>
-                                                                </div>
-                                                            </div>
-                                                        </template>
-                                                    </div>
-                                                </template>
-                                            </div>
+                                <!-- Manual Mode -->
+                                <template if:true={isNewManualQuery}>
+                                    <div class="slds-box slds-theme_shade" style="border-radius: 8px;">
+                                        <template if:true={isV3Query}>
+                                            <p style="font-size: 0.75rem; font-weight: 600; color: #706e6b; margin-bottom: 0.5rem;">Query Configuration</p>
+                                            <pre style="font-size: 0.8125rem; background: #fff; padding: 0.75rem; border-radius: 6px; border: 1px solid #e5e5e5; white-space: pre-wrap; margin: 0;">{readableQueryConfig}</pre>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">Switch back to Builder mode to edit this configuration.</p>
+                                        </template>
+                                        <template if:false={isV3Query}>
+                                            <lightning-input
+                                                label="Base Object API Name"
+                                                value={newTemplateObject}
+                                                onchange={handleNewManualObjectChange}
+                                                required
+                                                class="slds-var-m-bottom_small">
+                                            </lightning-input>
+                                            <lightning-textarea
+                                                label="SOQL Query Fields"
+                                                value={newTemplateQuery}
+                                                onchange={handleNewQueryStringChange}
+                                                class="slds-text-font_monospace"
+                                                style="min-height: 200px;">
+                                            </lightning-textarea>
+                                            <p class="slds-text-body_small slds-var-m-top_x-small">
+                                                Enter comma-separated fields or subqueries. Example: <code>Name, Industry, (SELECT LastName FROM Contacts)</code>
+                                            </p>
                                         </template>
                                     </div>
                                 </template>
-
-                                <!-- Inline Help -->
-                                <div style="margin-top: 14px; background: #f8fafc; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px 16px; font-size: 0.8rem; color: #444; line-height: 1.7;">
-                                    <div style="font-weight: 700; color: #181818; margin-bottom: 6px;">Quick Reference</div>
-                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px;">
-                                        <div><strong>Fields:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">Name, Industry, Phone</code></div>
-                                        <div><strong>Parent lookup:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">Owner.Name, Account.Industry</code></div>
-                                        <div><strong>Related list:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">(SELECT FirstName FROM Contacts)</code></div>
-                                        <div><strong>With filter:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">(SELECT Name FROM Opps WHERE StageName = 'Closed Won')</code></div>
-                                        <div><strong>With sort:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">(SELECT Name FROM Contacts ORDER BY LastName)</code></div>
-                                        <div><strong>With limit:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">(SELECT Name FROM Cases LIMIT 10)</code></div>
-                                    </div>
-                                </div>
                             </template>
 
                             <!-- Step 3: Review & Create -->
@@ -298,7 +181,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_large">
             <div class="slds-modal__container modern-modal">
                 <header class="slds-modal__header">
-                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" title="Close" variant="bare" class="slds-button slds-button_icon slds-modal__close" onclick={closeEditModal}></lightning-button-icon>
+                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" title="Close" variant="bare" class="slds-modal__close" onclick={closeEditModal}></lightning-button-icon>
                     <h2 class="slds-text-heading_medium slds-hyphenate">Edit Template Configuration</h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_medium">
@@ -348,206 +231,52 @@
                                 <lightning-textarea label="Description" value={editTemplateDesc} onchange={handleEditDescChange} class="slds-var-m-top_medium"></lightning-textarea>
                             </div>
 
-                            <!-- 1.47 — Visibility & sort controls -->
-                            <div class="slds-var-p-horizontal_small slds-var-m-top_large">
-                                <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Visibility &amp; Sort</h3>
-                                <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_small">
-                                    Control which records and which users see this template in the runner, signature sender, bulk picker, and Flow.
-                                </p>
-                                <div class="slds-grid slds-gutters_medium">
-                                    <div class="slds-col slds-size_1-of-2">
-                                        <lightning-input
-                                            type="number"
-                                            label="Sort Order"
-                                            field-level-help="Lower numbers appear higher in the picker. Blank = sort by Default-first then Name."
-                                            value={editTemplateSortOrder}
-                                            onchange={handleEditSortOrderChange}>
-                                        </lightning-input>
-                                        <lightning-input
-                                            type="toggle"
-                                            label="Lock Output Format"
-                                            field-level-help="When ON, the runner won't let users override the Output Format at runtime."
-                                            checked={editTemplateLockOutputFormat}
-                                            onchange={handleEditLockOutputChange}
-                                            message-toggle-active="Locked"
-                                            message-toggle-inactive="Unlocked"
-                                            class="slds-var-m-top_medium">
-                                        </lightning-input>
-                                    </div>
-                                    <div class="slds-col slds-size_1-of-2">
-                                        <lightning-textarea
-                                            label="Specific Record Ids"
-                                            field-level-help="Comma-separated 18-char record Ids (e.g. 001AB0000000001AAA, 001AB0000000002AAA). When set, the template only appears for those records. Blank = applies to ALL records of the Base Object."
-                                            value={editTemplateSpecificRecordIds}
-                                            onchange={handleEditSpecificRecordIdsChange}>
-                                        </lightning-textarea>
-                                        <lightning-textarea
-                                            label="Required Permission Sets"
-                                            field-level-help="Comma-separated permission set API names (e.g. DocGen_Executive_Templates, DocGen_Finance_Templates). Users need at least ONE assigned to see this template. Blank = visible to all DocGen users."
-                                            value={editTemplateRequiredPermissionSets}
-                                            onchange={handleEditRequiredPermSetsChange}
-                                            class="slds-var-m-top_medium">
-                                        </lightning-textarea>
-                                    </div>
-                                </div>
-
-                                <!-- 1.48 — Record Filter (SOQL WHERE clause) — power users -->
-                                <div class="slds-var-m-top_medium">
-                                    <lightning-textarea
-                                        label="Record Filter (SOQL WHERE clause)"
-                                        field-level-help="Advanced / power users. SOQL WHERE clause evaluated against the current record. Examples: Type = 'Customer'  |  Industry IN ('Technology','Media')  |  Annual_Revenue__c > 1000000 AND BillingCountry = 'US'. Wins over Specific Record Ids when both set. Blank = no filter."
-                                        value={editTemplateRecordFilter}
-                                        onchange={handleEditRecordFilterChange}>
-                                    </lightning-textarea>
-                                    <div class="slds-var-m-top_x-small">
-                                        <lightning-button
-                                            label="Test Against Sample Record"
-                                            icon-name="utility:check"
-                                            variant="neutral"
-                                            onclick={handleTestRecordFilter}
-                                            disabled={editTemplateRecordFilterTesting}>
-                                        </lightning-button>
-                                        <span class="slds-text-body_small slds-text-color_weak slds-var-m-left_small">Tests the clause against the Sample Test Record Id on this template.</span>
-                                    </div>
-                                    <div class={recordFilterResultClass}>
-                                        {editTemplateRecordFilterResultMessage}
-                                    </div>
-                                </div>
-                            </div>
-
                         </lightning-tab>
 
                         <!-- Tab 2: Query Configuration -->
-                        <lightning-tab label="Query Configuration" value="query" onactive={handleQueryTabActive}>
-                             <div class="slds-var-p-horizontal_small" style="padding-top: 8px;">
-                                     <div style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-                                         <div style="display: flex; align-items: center; gap: 8px;">
-                                             <lightning-icon icon-name="standard:account" size="x-small"></lightning-icon>
-                                             <span style="font-weight: 700;">{editTemplateObject}</span>
-                                         </div>
-                                         <a href="javascript:void(0)" onclick={toggleEditVisualBuilder}
-                                             style="font-size: 0.82rem; color: #7c3aed; text-decoration: none; display: flex; align-items: center; gap: 4px;">
-                                             <lightning-icon icon-name={editVisualBuilderToggleIcon} size="xx-small" style="--sds-c-icon-color-foreground-default: #7c3aed;"></lightning-icon>
-                                             <template if:false={editUseVisualBuilder}>Try our visual builder</template>
-                                             <template if:true={editUseVisualBuilder}>Switch to manual query</template>
-                                         </a>
+                        <lightning-tab label="Query Configuration" value="query">
+                             <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_medium slds-var-p-around_small">
+                                 <div class="slds-col">
+                                     <p class="slds-text-body_small slds-text-color_weak">
+                                         Configure the data query for this template.
+                                     </p>
+                                 </div>
+                                 <div class="slds-col">
+                                     <lightning-input type="toggle" 
+                                        label="Manual Query Mode" 
+                                        checked={isManualQuery} 
+                                        onchange={handleManualQueryToggle} 
+                                        message-toggle-active="Manual" 
+                                        message-toggle-inactive="Builder">
+                                     </lightning-input>
+                                 </div>
+                             </div>
+
+                             <div class="slds-var-p-horizontal_small">
+                                 <!-- Builder Mode -->
+                                 <template if:false={isManualQuery}>
+                                    <c-doc-gen-column-builder
+                                        selected-object={editTemplateObject}
+                                        query-config={editTemplateQuery}
+                                        onconfigchange={handleEditConfigChange}>
+                                    </c-doc-gen-column-builder>
+                                 </template>
+
+                                 <!-- Manual Mode -->
+                                 <template if:true={isManualQuery}>
+                                     <div class="slds-box slds-theme_shade" style="border-radius: 8px;">
+                                         <lightning-textarea
+                                            label="SOQL Query Fields"
+                                            value={editTemplateQuery}
+                                            onchange={handleQueryStringChange}
+                                            class="slds-text-font_monospace"
+                                            style="min-height: 200px;">
+                                         </lightning-textarea>
+                                         <p class="slds-text-body_small slds-var-m-top_small">
+                                             Enter comma-separated fields or subqueries. Example: <code>Name, Industry, (SELECT LastName FROM Contacts)</code>
+                                         </p>
                                      </div>
-
-                                     <!-- Visual Builder -->
-                                     <template if:true={editUseVisualBuilder}>
-                                         <c-doc-gen-tree-builder
-                                             selected-object={editTemplateObject}
-                                             query-config={editTemplateQuery}
-                                             onconfigchange={handleEditConfigChange}>
-                                         </c-doc-gen-tree-builder>
-                                     </template>
-
-                                     <!-- Manual Query Textarea -->
-                                     <template if:false={editUseVisualBuilder}>
-                                     <div style="position: relative;">
-                                         <textarea
-                                             class="slds-textarea edit-query-textarea"
-                                             value={editTemplateQuery}
-                                             oninput={handleEditDirectQueryEdit}
-                                             onkeydown={handleQueryKeyDown}
-                                             placeholder="Paste a SOQL query or type field names — suggestions will appear.&#10;&#10;Examples:&#10;  SELECT Name, Industry, (SELECT FirstName FROM Contacts) FROM Account&#10;  Name, Industry, Phone&#10;  Owner.Name, CreatedBy.Email&#10;  (SELECT FirstName, LastName FROM Contacts)"
-                                             style="width: 100%; min-height: 240px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 0.9rem; line-height: 1.8; padding: 14px; border: 1px solid #d8dde6; border-radius: 8px; resize: vertical;">
-                                         </textarea>
-                                         <template if:true={showSuggestions}>
-                                             <div style="position: absolute; z-index: 20; left: 14px; right: 14px; max-height: 200px; overflow-y: auto; background: #fff; border: 1px solid #d8dde6; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); padding: 4px 0;"
-                                                 onmousedown={handleSuggestionMouseDown}>
-                                                 <template for:each={suggestions} for:item="s">
-                                                     <div key={s.value} class="slash-item" data-value={s.value} onclick={handleSuggestionClick}
-                                                         style="padding: 6px 12px; cursor: pointer; display: flex; align-items: baseline; gap: 8px;">
-                                                         <span style="font-family: monospace; font-size: 0.85rem; color: #7c3aed; font-weight: 600;">{s.value}</span>
-                                                         <span style="font-size: 0.78rem; color: #706e6b;">{s.label}</span>
-                                                         <template if:true={s.extra}>
-                                                             <span style="font-size: 0.68rem; color: #999; margin-left: auto;">{s.extra}</span>
-                                                         </template>
-                                                     </div>
-                                                 </template>
-                                             </div>
-                                         </template>
-                                     </div>
-                                     </template>
-
-                                     <!-- Manual-only: Query warnings, tree preview, quick reference -->
-                                     <template if:false={editUseVisualBuilder}>
-                                     <template if:true={queryWarnings}>
-                                         <template for:each={queryWarnings} for:item="warn">
-                                             <div key={warn} style="margin-top: 8px; padding: 8px 12px; background: #fff8e1; border: 1px solid #f9a825; border-radius: 6px; font-size: 0.8rem; color: #5d4037; display: flex; align-items: center; gap: 6px;">
-                                                 <lightning-icon icon-name="utility:warning" size="xx-small" variant="warning"></lightning-icon>
-                                                 {warn}
-                                             </div>
-                                         </template>
-                                     </template>
-
-                                     <template if:true={queryTreeNodes.length}>
-                                         <div style="margin-top: 12px; border: 1px solid #e5e5e5; border-radius: 8px; padding: 10px 14px; background: #fafaf9;">
-                                             <template for:each={queryTreeNodes} for:item="node">
-                                                 <div key={node.id}>
-                                                     <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 6px;">
-                                                         <lightning-icon icon-name="standard:account" size="xx-small"></lightning-icon>
-                                                         <span style="font-weight: 700; font-size: 0.85rem;">{node.label}</span>
-                                                     </div>
-                                                     <template if:true={node.hasFields}>
-                                                         <div style="margin-left: 22px; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px;">
-                                                             <template for:each={node.fieldPills} for:item="fp">
-                                                                 <span key={fp.key} style="background: #eef4ff; border: 1px solid #c7d7f5; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; display: inline-flex; align-items: baseline; gap: 4px;">
-                                                                     <span style="color: #1a56db;">{fp.name}</span>
-                                                                 </span>
-                                                             </template>
-                                                         </div>
-                                                     </template>
-                                                     <template if:true={node.hasParentFields}>
-                                                         <div style="margin-left: 22px; display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px;">
-                                                             <template for:each={node.parentPills} for:item="pp">
-                                                                 <span key={pp.key} style="background: #f3e8ff; border: 1px solid #d8c4f0; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace;">
-                                                                     <span style="color: #7c3aed;">{pp.name}</span>
-                                                                 </span>
-                                                             </template>
-                                                         </div>
-                                                     </template>
-                                                     <template if:true={node.hasFlatChildren}>
-                                                         <div style="margin-left: 22px;">
-                                                             <template for:each={node.flatChildren} for:item="child">
-                                                                 <div key={child.id} style={child.indentStyle}>
-                                                                     <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
-                                                                         <lightning-icon icon-name="standard:related_list" size="xx-small"></lightning-icon>
-                                                                         <span style="font-weight: 600; font-size: 0.82rem;">{child.label}</span>
-                                                                         <span style="font-size: 0.72rem; color: #706e6b; margin-left: 4px;">({child.fieldCount} fields)</span>
-                                                                     </div>
-                                                                     <div style="margin-left: 20px; display: flex; flex-wrap: wrap; gap: 3px;">
-                                                                         <template for:each={child.fields} for:item="cf">
-                                                                             <span key={cf} style="background: #ecfdf5; color: #065f46; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace;">{cf}</span>
-                                                                         </template>
-                                                                         <template if:true={child.hasParentFields}>
-                                                                             <template for:each={child.parentFields} for:item="pf">
-                                                                                 <span key={pf} style="background: #f3e8ff; color: #7c3aed; border: 1px solid #d8c4f0; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace;">{pf}</span>
-                                                                             </template>
-                                                                         </template>
-                                                                     </div>
-                                                                 </div>
-                                                             </template>
-                                                         </div>
-                                                     </template>
-                                                 </div>
-                                             </template>
-                                         </div>
-                                     </template>
-
-                                     <div style="margin-top: 14px; background: #f8fafc; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px 16px; font-size: 0.8rem; color: #444; line-height: 1.7;">
-                                         <div style="font-weight: 700; color: #181818; margin-bottom: 6px;">Quick Reference</div>
-                                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px;">
-                                             <div><strong>Fields:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">Name, Industry, Phone</code></div>
-                                             <div><strong>Parent lookup:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">Owner.Name, Account.Industry</code></div>
-                                             <div><strong>Related list:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">(SELECT FirstName FROM Contacts)</code></div>
-                                             <div><strong>With filter:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">(SELECT Name FROM Opps WHERE StageName = 'Closed Won')</code></div>
-                                             <div><strong>With sort:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">(SELECT Name FROM Contacts ORDER BY LastName)</code></div>
-                                             <div><strong>With limit:</strong> <code style="background:#eee;padding:1px 4px;border-radius:3px;">(SELECT Name FROM Cases LIMIT 10)</code></div>
-                                         </div>
-                                     </div>
-                                     </template>
+                                 </template>
                              </div>
                         </lightning-tab>
 
@@ -697,7 +426,7 @@
         <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_medium">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" title="Close" variant="bare" class="slds-button slds-button_icon slds-modal__close" onclick={closePreviewModal}></lightning-button-icon>
+                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" title="Close" variant="bare" class="slds-modal__close" onclick={closePreviewModal}></lightning-button-icon>
                     <h2 class="slds-text-heading_medium">Version Preview: {previewVersion.VersionNumber}</h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_large">
@@ -757,5 +486,23 @@
         <div class="slds-backdrop slds-backdrop_open"></div>
     </template>
 
+    <!-- Sharing Modal -->
+    <template if:true={isSharingModalOpen}>
+        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <lightning-button-icon icon-name="utility:close" alternative-text="Close" title="Close" variant="bare" class="slds-modal__close" onclick={handleCloseSharing}></lightning-button-icon>
+                    <h2 class="slds-text-heading_medium slds-hyphenate">Share Template</h2>
+                </header>
+                <div class="slds-modal__content slds-var-p-around_large">
+                    <c-doc-gen-sharing 
+                        record-id={sharingTemplateId}
+                        onclose={handleCloseSharing}>
+                    </c-doc-gen-sharing>
+                </div>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
 
 </template>

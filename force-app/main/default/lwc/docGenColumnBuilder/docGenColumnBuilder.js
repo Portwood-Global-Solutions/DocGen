@@ -8,7 +8,6 @@ import getAvailableReports from '@salesforce/apex/DocGenController.getAvailableR
 import importReportConfig from '@salesforce/apex/DocGenController.importReportConfig';
 import searchDataProviders from '@salesforce/apex/DocGenController.searchDataProviders';
 import validateDataProvider from '@salesforce/apex/DocGenController.validateDataProvider';
-import { parseSOQLFields } from 'c/docGenUtils';
 
 let _nodeId = 0;
 function nextNodeId() { return 'n' + (_nodeId++); }
@@ -16,10 +15,7 @@ function nextNodeId() { return 'n' + (_nodeId++); }
 export default class DocGenColumnBuilder extends LightningElement {
 
     // === PUBLIC API ===
-    @api
-    get selectedObject() { return this._selectedObject; }
-    set selectedObject(val) { this._selectedObject = val; }
-    @track _selectedObject = '';
+    @api selectedObject = '';
     @api
     get queryConfig() { return this._queryConfig; }
     set queryConfig(value) {
@@ -239,7 +235,7 @@ export default class DocGenColumnBuilder extends LightningElement {
     handleObjectSelect(event) {
         const value = event.currentTarget.dataset.value;
         const label = event.currentTarget.dataset.label;
-        this._selectedObject = value;
+        this.selectedObject = value;
         this.selectedObjectLabel = label;
         this.showObjectPicker = false;
         this._initRootNode(value, label);
@@ -449,7 +445,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         // Reset everything — go back to object selector
         this.treeNodes = [];
         this.activeNodeId = null;
-        this._selectedObject = '';
+        this.selectedObject = '';
         this.selectedObjectLabel = '';
         this.objectSearchTerm = '';
         this.isApexProviderMode = false;
@@ -539,27 +535,17 @@ export default class DocGenColumnBuilder extends LightningElement {
         this.treeNodes = [node];
         this.activeNodeId = node.id;
         this._loadNodeFields(node);
-        // Notify parent of object selection (config may still be empty until fields are picked)
-        this.dispatchEvent(new CustomEvent('configchange', {
-            detail: { objectName: this.selectedObject, queryConfig: this.generatedConfig }
-        }));
+        this._notifyChange();
     }
 
     _createNode(objectApiName, label, isRoot, parentNodeId, lookupField, relationshipName, junctionConfig) {
         // Clean up label — strip API name in parens, use friendly names
         let friendlyLabel = label || objectApiName;
         // "OpportunityLineItems (Opportunity Product)" → "Opportunity Products"
-        // But NOT for root objects where label is "Friendly Name (API_Name__c)"
         if (friendlyLabel.includes('(') && friendlyLabel.includes(')')) {
-            const inner = friendlyLabel.substring(friendlyLabel.indexOf('(') + 1, friendlyLabel.indexOf(')'));
-            // If the inner text looks like an API name (contains __), use the part before the parens
-            if (inner.includes('__')) {
-                friendlyLabel = friendlyLabel.substring(0, friendlyLabel.indexOf('(')).trim();
-            } else {
-                friendlyLabel = inner;
-                // Pluralize if it doesn't end in 's'
-                if (!friendlyLabel.endsWith('s')) friendlyLabel += 's';
-            }
+            friendlyLabel = friendlyLabel.substring(friendlyLabel.indexOf('(') + 1, friendlyLabel.indexOf(')'));
+            // Pluralize if it doesn't end in 's'
+            if (!friendlyLabel.endsWith('s')) friendlyLabel += 's';
         }
         // "Contact (via OpportunityContactRoles)" → "Contacts"
         if (friendlyLabel.includes(' (via ')) {
@@ -644,9 +630,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         }
 
         // Use the actual lookup field from schema describe (not guessed from object name)
-        // Fallback: if childObjectApiName is missing, derive from relationship name
-        // e.g., Record_Consolidation__cs → Record_Consolidation__c
-        const childObjName = opt.childObjectApiName || relName.replace(/__cs$/, '__c').replace(/__r$/, '__c');
+        const childObjName = opt.childObjectApiName;
         const lookupField = opt.lookupField || this._guessLookupField(parentNode.objectApiName, relName);
         const newNode = this._createNode(childObjName, opt.label, false, this.addNodeParentId,
             lookupField, relName);
@@ -657,26 +641,18 @@ export default class DocGenColumnBuilder extends LightningElement {
         this._loadNodeFields(newNode);
         this._notifyChange();
         // Force a re-render after modal close to ensure tabs and tree update
-        Promise.resolve().then(() => { this.treeNodes = [...this.treeNodes]; });
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => { this.treeNodes = [...this.treeNodes]; }, 0);
     }
 
-    _guessLookupField(parentObjectName, relationshipName) {
-        // Custom relationship suffixes: __r → __c, __cs → __c (Custom Settings)
-        if (relationshipName) {
-            if (relationshipName.endsWith('__r')) {
-                return relationshipName.replace(/__r$/, '__c');
-            }
-            if (relationshipName.endsWith('__cs')) {
-                // Custom Setting relationship: the lookup field strips the trailing 's'
-                return relationshipName.replace(/__cs$/, '__c');
-            }
+    _guessLookupField(parentObjectName) {
+        // Common patterns: Account → AccountId, Opportunity → OpportunityId
+        // Custom objects: MyObj__c → MyObj__c (lookup field)
+        // For standard objects, the lookup field is typically ParentObjectName + 'Id'
+        if (parentObjectName.endsWith('__c')) {
+            return parentObjectName; // Custom: the lookup IS the object name
         }
-        // Standard relationships: Account → AccountId, Opportunity → OpportunityId
-        if (!parentObjectName.endsWith('__c')) {
-            return parentObjectName + 'Id';
-        }
-        // Custom parent with standard-named relationship: use the object name as-is
-        return parentObjectName;
+        return parentObjectName + 'Id';
     }
 
     handleRemoveNode(event) {
@@ -843,7 +819,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         if (!result) return;
         this.showReportModal = false;
         this.showImportPreview = false;
-        this._selectedObject = result.baseObject;
+        this.selectedObject = result.baseObject;
         const objOpt = this.objectOptions.find(o => o.value === result.baseObject);
         this.selectedObjectLabel = objOpt ? objOpt.label : result.baseObject;
 
@@ -908,8 +884,7 @@ export default class DocGenColumnBuilder extends LightningElement {
                     }
                     const junctionRel = jInfo ? (jInfo.junctionRel || '') : '';
                     const junctionObjName = jInfo ? (jInfo.junctionObject || junctionRel.replace(/s$/, '')) : junctionRel.replace(/s$/, '');
-                    const defaultLookup = result.baseObject.endsWith('__c') ? result.baseObject : result.baseObject + 'Id';
-                    const baseLookupField = jInfo ? (jInfo.baseLookupField || defaultLookup) : defaultLookup;
+                    const baseLookupField = jInfo ? (jInfo.baseLookupField || result.baseObject + 'Id') : result.baseObject + 'Id';
                     const targetRelName = jInfo ? (jInfo.targetRelName || targetObjName) : targetObjName;
 
                     // Create node for the junction object as a regular child
@@ -978,7 +953,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         // Trigger a notifyChange so the config includes fields immediately
         this._notifyChange();
 
-        const toastMsg = result.fieldCount + ' fields from "' + result.reportName + '" applied.';
+        let toastMsg = result.fieldCount + ' fields from "' + result.reportName + '" applied.';
         this.dispatchEvent(new ShowToastEvent({
             title: 'Report Imported',
             message: toastMsg,
@@ -1012,13 +987,24 @@ export default class DocGenColumnBuilder extends LightningElement {
     _parseV1Config(value) {
         if (!this.selectedObject) return;
         // V1: "Name, Industry, (SELECT FirstName, LastName FROM Contacts)"
-        // Also accepts full SOQL: "SELECT Name FROM Account"
-        const parsed = parseSOQLFields(value);
-        const fields = [...parsed.baseFields, ...parsed.parentFields];
-        const children = parsed.subqueries.map(sq => ({
-            rel: sq.relationshipName,
-            fields: [...sq.fields, ...sq.children.map(c => '(SELECT ' + c.fields.join(', ') + ' FROM ' + c.relationshipName + ')')]
-        }));
+        const fields = [];
+        const children = [];
+        let remaining = value;
+
+        // Extract subqueries first
+        const subqRegex = /\(\s*SELECT\s+(.+?)\s+FROM\s+(\w+)\s*\)/gi;
+        let match;
+        while ((match = subqRegex.exec(value)) !== null) {
+            const childFields = match[1].split(',').map(f => f.trim()).filter(f => f);
+            children.push({ rel: match[2], fields: childFields });
+        }
+        remaining = remaining.replace(subqRegex, '').replace(/,\s*,/g, ',').replace(/^\s*,|,\s*$/g, '');
+
+        // Parse base fields
+        remaining.split(',').forEach(f => {
+            const field = f.trim();
+            if (field) fields.push(field);
+        });
 
         // Build tree
         const rootNode = this._createNode(this.selectedObject, this.selectedObject, true, null, null, null);
@@ -1027,8 +1013,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         this._loadNodeFields(rootNode);
 
         for (const child of children) {
-            const lookupField = this._guessLookupField(this.selectedObject, child.rel);
-            const childNode = this._createNode(child.rel, child.rel, false, rootNode.id, lookupField, child.rel);
+            const childNode = this._createNode(child.rel, child.rel, false, rootNode.id, null, child.rel);
             childNode.selectedFields = child.fields;
             nodes.push(childNode);
             this._loadNodeFields(childNode);
@@ -1041,7 +1026,7 @@ export default class DocGenColumnBuilder extends LightningElement {
     _parseV2Config(config) {
         const objName = config.baseObject;
         if (!objName) return;
-        this._selectedObject = objName;
+        this.selectedObject = objName;
 
         const rootNode = this._createNode(objName, objName, true, null, null, null);
         rootNode.selectedFields = config.baseFields || [];
@@ -1062,8 +1047,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         // Children
         if (config.children) {
             for (const child of config.children) {
-                const lookupField = this._guessLookupField(objName, child.rel);
-                const childNode = this._createNode(child.rel, child.rel, false, rootNode.id, lookupField, child.rel);
+                const childNode = this._createNode(child.rel, child.rel, false, rootNode.id, null, child.rel);
                 childNode.selectedFields = child.fields || [];
                 nodes.push(childNode);
                 this._loadNodeFields(childNode);
@@ -1073,8 +1057,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         // Junctions
         if (config.junctions) {
             for (const junc of config.junctions) {
-                const juncLookupField = this._guessLookupField(objName, junc.junctionRel);
-                const juncNode = this._createNode(junc.junctionRel, junc.junctionRel, false, rootNode.id, juncLookupField, junc.junctionRel, {
+                const juncNode = this._createNode(junc.junctionRel, junc.junctionRel, false, rootNode.id, null, junc.junctionRel, {
                     targetObject: junc.targetObject,
                     targetIdField: junc.targetIdField,
                     targetFields: junc.targetFields || []
@@ -1133,7 +1116,7 @@ export default class DocGenColumnBuilder extends LightningElement {
         }
         this.treeNodes = nodes;
         this.activeNodeId = nodes.length > 0 ? nodes[0].id : null;
-        this._selectedObject = config.root;
+        this.selectedObject = config.root;
     }
 
     // === NOTIFY PARENT ===

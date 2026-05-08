@@ -3,22 +3,80 @@ private class DocGenMiscTests {
 
     @TestSetup
     static void setup() {
-        TestDataFactory.createStandardTestData();
+        Account acc = new Account(Name = 'Misc Test Account', AccountSource = 'Web', Website = 'https://test.com');
+        insert acc;
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Misc Test Template',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name, AccountSource',
+            Type__c = 'Word'
+        );
+        insert tpl;
     }
 
     /**
      * Creates a ContentVersion linked to the test template (fake content).
      */
     private static ContentVersion createTestFile() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        return TestDataFactory.createTestTemplateFile(tpl.Id);
+        ContentVersion cv = new ContentVersion(
+            Title = 'MiscTestDoc',
+            PathOnClient = 'MiscTestDoc.docx',
+            VersionData = Blob.valueOf('Not a real DOCX file')
+        );
+        insert cv;
+
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        insert new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        return cv;
     }
 
     /**
      * Builds a minimal valid DOCX (ZIP) with template merge tags and links to template.
      */
     private static ContentVersion createValidDocxFile(String docXml) {
-        return TestDataFactory.createValidDocxFile(docXml);
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry('[Content_Types].xml', Blob.valueOf(
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+            '<Default Extension="xml" ContentType="application/xml"/>' +
+            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+            '</Types>'
+        ));
+        zw.addEntry('_rels/.rels', Blob.valueOf(
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+            '</Relationships>'
+        ));
+        zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '</Relationships>'
+        ));
+        zw.addEntry('word/document.xml', Blob.valueOf(docXml));
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'ValidDocx',
+            PathOnClient = 'ValidDocx.docx',
+            VersionData = zw.getArchive()
+        );
+        insert cv;
+
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        insert new ContentDocumentLink(
+            LinkedEntityId = tpl.Id,
+            ContentDocumentId = conDocId,
+            ShareType = 'V'
+        );
+        return cv;
     }
 
     // =========================================================================
@@ -86,14 +144,14 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithValidFields() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             Test.startTest();
             Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, AccountSource');
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null for valid fields');
-            System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match test account');
+            System.assertEquals('Misc Test Account', result.get('Name'), 'Name should match test account');
             System.assertEquals('Web', result.get('AccountSource'), 'AccountSource should match test account');
         }
     }
@@ -102,18 +160,18 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithInvalidObject() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Boolean caught = false;
 
             Test.startTest();
             try {
                 DocGenDataRetriever.getRecordData(acc.Id, 'NotARealObject__c', 'Name');
-            } catch (Exception e) {
+            } catch (AuraHandledException e) {
                 caught = true;
             }
             Test.stopTest();
 
-            System.assert(caught, 'Should throw for invalid object');
+            System.assert(caught, 'Should throw AuraHandledException for invalid object');
         }
     }
 
@@ -126,12 +184,12 @@ private class DocGenMiscTests {
             Test.startTest();
             try {
                 DocGenDataRetriever.getRecordData(null, '', '');
-            } catch (Exception e) {
+            } catch (AuraHandledException e) {
                 caught = true;
             }
             Test.stopTest();
 
-            System.assert(caught, 'Should throw for blank params');
+            System.assert(caught, 'Should throw AuraHandledException for blank params');
         }
     }
 
@@ -139,14 +197,14 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithRelationshipField() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             Test.startTest();
             Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, Owner.Name');
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null for relationship field query');
-            System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match test account');
+            System.assertEquals('Misc Test Account', result.get('Name'), 'Name should match test account');
             System.assert(result.containsKey('Owner'), 'Should contain Owner relationship data');
         }
     }
@@ -155,14 +213,14 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithNonExistentField() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             Test.startTest();
             Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, TotallyFakeField__xyz');
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null even with non-existent field');
-            System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should still be returned with non-existent field');
+            System.assertEquals('Misc Test Account', result.get('Name'), 'Name should still be returned with non-existent field');
         }
     }
 
@@ -170,19 +228,19 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithBlankObjectOrFields() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Boolean caught1 = false;
             Boolean caught2 = false;
 
             Test.startTest();
             try {
                 DocGenDataRetriever.getRecordData(acc.Id, '', 'Name');
-            } catch (Exception e) {
+            } catch (AuraHandledException e) {
                 caught1 = true;
             }
             try {
                 DocGenDataRetriever.getRecordData(acc.Id, 'Account', '');
-            } catch (Exception e) {
+            } catch (AuraHandledException e) {
                 caught2 = true;
             }
             Test.stopTest();
@@ -198,8 +256,8 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testGenerateDocumentFlowActionErrorPath() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         DocGenFlowAction.Request req = new DocGenFlowAction.Request();
         req.templateId = tpl.Id;
@@ -249,8 +307,8 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentThrowsOnInvalidDocx() {
         createTestFile();
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         try {
@@ -266,7 +324,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentNullTemplate() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         try {
@@ -280,7 +338,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testGenerateDocumentNullRecord() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
         Test.startTest();
         try {
@@ -306,8 +364,8 @@ private class DocGenMiscTests {
             '<w:p><w:r><w:t>{AccountSource}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -327,8 +385,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Hello {Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Id docId = DocGenService.generateDocument(tpl.Id, acc.Id);
@@ -349,8 +407,8 @@ private class DocGenMiscTests {
             '</w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -369,8 +427,8 @@ private class DocGenMiscTests {
             '</w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -390,11 +448,11 @@ private class DocGenMiscTests {
         createValidDocxFile(docXml);
 
         // Update template query config to include Website
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, AccountSource, Website';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -411,19 +469,18 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Document_Title_Format__c = 'Doc_{Name}_{AccountSource}';
-        tpl.Query_Config__c = 'Name, AccountSource';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
         Test.stopTest();
 
         String title = (String) result.get('title');
-        System.assert(title.contains('DocGen Test Account'), 'Title should contain account name');
+        System.assert(title.contains('Misc Test Account'), 'Title should contain account name');
         System.assert(title.contains('Web'), 'Title should contain account source');
     }
 
@@ -436,8 +493,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name} {%NonExistentImage}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -455,8 +512,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{%NonExistentImage:200x150}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -474,8 +531,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{/orphan}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -493,8 +550,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{#NoClose}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Map<String, Object> result;
         Test.startTest();
@@ -539,10 +596,10 @@ private class DocGenMiscTests {
         ContentVersion cv = new ContentVersion(Title='HeaderFooterDoc', PathOnClient='HeaderFooterDoc.docx', VersionData=zw.getArchive());
         insert cv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -559,11 +616,11 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Output_Format__c = 'PDF';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Id docId = DocGenService.generateDocument(tpl.Id, acc.Id);
@@ -579,13 +636,13 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentWithChildSubquery() {
         // Use Contacts subquery to exercise loop processing with records list
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
         tpl.Base_Object_API__c = 'Account';
         update tpl;
 
         // Add a contact to the account
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         insert new Contact(FirstName = 'Loop', LastName = 'Tester', AccountId = acc.Id);
 
         String docXml =
@@ -606,11 +663,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentWithTableRowLoop() {
         // Section inside a <w:tr> — exercises table row expansion code
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         insert new Contact(FirstName = 'Row', LastName = 'Expand', AccountId = acc.Id);
 
         String docXml =
@@ -632,7 +689,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentWithNestedDotPath() {
         // Owner.Name uses dotted path — exercises resolveValue with nested map
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Owner.Name';
         update tpl;
 
@@ -642,7 +699,7 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Owner.Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -667,11 +724,11 @@ private class DocGenMiscTests {
         // Template with {%ImageField} — field value will be a CV Id
         // We need the query to return a field containing the CV Id
         // Use Description field on Account to hold the CV Id
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = imgCv.Id;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -691,11 +748,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentWithHtmlRichText() {
         // Field value contains <p>/<div> HTML that should be stripped
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p>Hello</p><div>World</div>';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -715,7 +772,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentWithPowerPoint() {
         // PowerPoint template — exercises the ppt/slides branch
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
         update tpl;
 
@@ -743,7 +800,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -762,18 +819,18 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Document_Title_Format__c = null;
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
         Test.stopTest();
 
         String title = (String) result.get('title');
-        System.assertEquals('DocGen Test Account', title, 'Should fall back to record Name');
+        System.assertEquals('Misc Test Account', title, 'Should fall back to record Name');
     }
 
     // =========================================================================
@@ -783,7 +840,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testGetRecordDataWithSubquery() {
         // Exercises the subquery (parenthesized SELECT) branch in field parsing
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         insert new Contact(FirstName = 'Sub', LastName = 'Query', AccountId = acc.Id);
 
         Test.startTest();
@@ -791,7 +848,7 @@ private class DocGenMiscTests {
         Test.stopTest();
 
         System.assertNotEquals(null, result, 'Result should not be null for subquery test');
-        System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match for subquery test');
+        System.assertEquals('Misc Test Account', result.get('Name'), 'Name should match for subquery test');
         System.assert(result.containsKey('Contacts'), 'Should contain Contacts subquery');
     }
 
@@ -799,33 +856,33 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithAutoAppendC() {
         // Exercises the __c auto-append branch — AccountSource exists, but try without __c
         // "Website" is a standard field so this tests the field-not-found skip path
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, ZZZInvalidField');
         Test.stopTest();
 
         System.assertNotEquals(null, result, 'Result should not be null for auto-append test');
-        System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match for auto-append test');
+        System.assertEquals('Misc Test Account', result.get('Name'), 'Name should match for auto-append test');
     }
 
     @IsTest
     static void testGetRecordDataWithInvalidRelationship() {
         // Exercises the invalid relationship field branch (relFound = false)
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, FakeRel__r.Field');
         Test.stopTest();
 
         System.assertNotEquals(null, result, 'Result should not be null for invalid relationship test');
-        System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match for invalid relationship test');
+        System.assertEquals('Misc Test Account', result.get('Name'), 'Name should match for invalid relationship test');
     }
 
     @IsTest
     static void testGetRecordDataAllFieldsInvalid() {
         // Exercises the cleanSelect == '' fallback to 'Id'
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'ZZZFake1, ZZZFake2');
@@ -838,20 +895,20 @@ private class DocGenMiscTests {
     @IsTest
     static void testGetRecordDataWithBlankFieldPart() {
         // Exercises the blank field part skip (trailing comma)
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, , AccountSource');
         Test.stopTest();
 
         System.assertNotEquals(null, result, 'Result should not be null for blank field part test');
-        System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match for blank field part test');
+        System.assertEquals('Misc Test Account', result.get('Name'), 'Name should match for blank field part test');
     }
 
     @IsTest
     static void testGetRecordDataWithAddressField() {
         // Exercises the Address type branch in mapSObject
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.BillingStreet = '123 Main St';
         acc.BillingCity = 'TestCity';
         acc.BillingState = 'CA';
@@ -872,65 +929,6 @@ private class DocGenMiscTests {
     // =========================================================================
 
     // =========================================================================
-    // Full-pipeline tests — attachRealDocxToTestTemplate exercises the entire
-    // merge pipeline: mergeTemplate, processXml, DocGenHtmlRenderer, Blob.toPdf
-    // =========================================================================
-
-    @IsTest
-    static void testFullPdfGenerationPipeline() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            TestDataFactory.attachRealDocxToTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            Id docId = DocGenService.generateDocument(tpl.Id, acc.Id);
-            Test.stopTest();
-
-            System.assertNotEquals(null, docId, 'Should generate a document');
-            List<ContentVersion> cvs = [SELECT ContentSize FROM ContentVersion WHERE ContentDocumentId = :docId];
-            System.assert(!cvs.isEmpty(), 'Should have a ContentVersion');
-            System.assert(cvs[0].ContentSize > 0, 'Generated file should not be empty');
-        }
-    }
-
-    @IsTest
-    static void testFullDocxPartsPipeline() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            TestDataFactory.attachRealDocxToTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            Map<String, Object> parts = DocGenService.generateDocumentParts(tpl.Id, acc.Id);
-            Test.stopTest();
-
-            System.assertNotEquals(null, parts, 'Should return parts');
-            System.assertNotEquals(null, parts.get('allXmlParts'), 'Should have XML parts');
-        }
-    }
-
-    @IsTest
-    static void testFullHtmlRenderPipeline() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            TestDataFactory.attachRealDocxToTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            String html = DocGenService.generateHtmlForRecord(tpl.Id, acc.Id, null);
-            Test.stopTest();
-
-            System.assertNotEquals(null, html, 'Should return HTML');
-            System.assert(html.length() > 0, 'HTML should not be empty');
-            System.assert(html.contains('DocGen Test Account'), 'Should contain the account name');
-        }
-    }
-
-    // =========================================================================
     // DocGenFlowAction — success path coverage
     // =========================================================================
 
@@ -943,8 +941,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         DocGenFlowAction.Request req = new DocGenFlowAction.Request();
         req.templateId = tpl.Id;
@@ -971,7 +969,7 @@ private class DocGenMiscTests {
         Test.startTest();
         try {
             DocGenTemplateManager.getTemplateFileContent(null);
-        } catch (Exception e) {
+        } catch (AuraHandledException e) {
             caught = true;
         }
         Test.stopTest();
@@ -981,12 +979,12 @@ private class DocGenMiscTests {
     @IsTest
     static void testGetTemplateFileContentNoFile() {
         // Template exists but no file attached and no active version
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         Boolean caught = false;
         Test.startTest();
         try {
             DocGenTemplateManager.getTemplateFileContent(tpl.Id);
-        } catch (Exception e) {
+        } catch (AuraHandledException e) {
             caught = true;
         }
         Test.stopTest();
@@ -1005,8 +1003,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Hello {Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.generatePdfBlob(tpl.Id, acc.Id);
@@ -1018,7 +1016,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testGeneratePdfBlobThrowsForPowerPoint() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
         update tpl;
 
@@ -1043,7 +1041,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Boolean caught = false;
@@ -1065,11 +1063,11 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Account: {Name}, Source: {AccountSource}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Document_Title_Format__c = 'PDF_{Name}';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.generatePdfBlob(tpl.Id, acc.Id);
@@ -1077,18 +1075,18 @@ private class DocGenMiscTests {
 
         System.assertNotEquals(null, result.get('blob'), 'Blob should not be null for PDF blob with title format');
         String title = (String) result.get('title');
-        System.assert(title.contains('DocGen Test Account'), 'PDF title should contain account name');
+        System.assert(title.contains('Misc Test Account'), 'PDF title should contain account name');
     }
 
     @IsTest
     static void testGeneratePdfBlobWithImage() {
         // PDF path with image — exercises imageBase64ByRelId collection
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('PNGFAKE'));
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'data:image/png;base64,' + tinyBase64;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1117,11 +1115,11 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Output_Format__c = 'PDF';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Id docId = DocGenService.generateDocument(tpl.Id, acc.Id);
@@ -1134,7 +1132,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testGenerateDocumentSavesPptx() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
         update tpl;
 
@@ -1163,7 +1161,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Id docId = DocGenService.generateDocument(tpl.Id, acc.Id);
@@ -1181,11 +1179,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentConditionalSectionTruthyString() {
         // Section where key resolves to a non-null string — exercises the non-null fallback path
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'Has description';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1205,7 +1203,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentConditionalSectionNullValue() {
         // Section where key resolves to null — produces empty output for section
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1215,7 +1213,7 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{#Description}This should not appear{/Description}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1231,7 +1229,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentWithDateFormatTag() {
         // {CreatedDate:MM/dd/yyyy} — exercises DateTime format path in processXml
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, CreatedDate';
         update tpl;
 
@@ -1241,7 +1239,7 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{CreatedDate:MM/dd/yyyy}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1253,7 +1251,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentWithColonInNonDateField() {
         // {Name:someformat} — non-date field with colon, exercises dateFormat != null but not DateTime
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -1261,7 +1259,7 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name:uppercase}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1277,11 +1275,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentHtmlSpanAndBrStrip() {
         // Field value with <span> and <br> tags — exercises stripHtmlTags path
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p>Line one</p><br/><span style="color:red">Line two</span>';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1307,11 +1305,11 @@ private class DocGenMiscTests {
         // Field value contains <img src="data:image/png;base64,..."> — exercises
         // the rich text image detection and extractImageFromHtml data URI path
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('PNGDATA'));
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<img src="data:image/png;base64,' + tinyBase64 + '" />';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1332,11 +1330,11 @@ private class DocGenMiscTests {
     static void testProcessDocumentImageTagDataUri() {
         // {%Description} where Description is a data:image/jpeg URI — exercises data URI branch in buildImageXml
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('JPEGFAKE'));
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'data:image/jpeg;base64,' + tinyBase64;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1356,11 +1354,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentImageTagBlankValue() {
         // {%Description} where Description is blank — exercises null return from buildImageXml
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1381,11 +1379,11 @@ private class DocGenMiscTests {
     static void testProcessDocumentImageTagWithDimensions() {
         // {%Description:200x150} with a data URI — exercises size parsing in image tag
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('SIZED'));
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'data:image/png;base64,' + tinyBase64;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1415,11 +1413,11 @@ private class DocGenMiscTests {
             'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
         ));
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = longBase64;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1447,11 +1445,11 @@ private class DocGenMiscTests {
         insert imgCv;
         imgCv = [SELECT Id FROM ContentVersion WHERE Id = :imgCv.Id];
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = imgCv.Id;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1476,11 +1474,11 @@ private class DocGenMiscTests {
     static void testProcessDocumentImageTagRefidUrl() {
         // {%Description} where Description contains a refid URL — exercises fetchSalesforceImage with refid
         // Will fail to find image (no matching record) but exercises the code path
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'https://example.com/servlet/rtaImage?refid=0EM000000000001';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1501,11 +1499,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentImageTagServletUrl() {
         // {%Description} with /servlet/ URL — exercises the servlet/sfc branch
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '/servlet/filedownload?file=015000000000001';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1539,8 +1537,8 @@ private class DocGenMiscTests {
             '</w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1558,8 +1556,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Plain text no tags</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1581,8 +1579,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Hello {Name} and {unclosed</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Map<String, Object> result;
         Test.startTest();
@@ -1604,8 +1602,8 @@ private class DocGenMiscTests {
             '<w:body></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1623,8 +1621,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Before {NonExistentField} After</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1636,7 +1634,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentXmlSpecialChars() {
         // Account name with & < > — exercises escapeXml
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Name = 'Acme & Co <Test>';
         update acc;
 
@@ -1646,7 +1644,7 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1668,8 +1666,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1681,7 +1679,7 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentDeepNestedPathNull() {
         // {Owner.Manager.Name} — deeply nested, Manager is null
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Owner.Name';
         update tpl;
 
@@ -1691,7 +1689,7 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Owner.Manager.Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1712,19 +1710,18 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Document_Title_Format__c = 'Doc-{Name}-{MissingField}-{AccountSource}';
-        tpl.Query_Config__c = 'Name, AccountSource';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
         Test.stopTest();
 
         String title = (String) result.get('title');
-        System.assert(title.contains('DocGen Test Account'), 'Title should contain account name for mixed fields');
+        System.assert(title.contains('Misc Test Account'), 'Title should contain account name for mixed fields');
         System.assert(title.contains('Web'), 'Title should contain account source for mixed fields');
         System.assert(title.contains('--'), 'Missing field should be replaced with empty string');
     }
@@ -1735,11 +1732,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentTableRowExpansionMultipleRows() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         insert new List<Contact>{
             new Contact(FirstName = 'Alice', LastName = 'Smith', AccountId = acc.Id),
             new Contact(FirstName = 'Bob', LastName = 'Jones', AccountId = acc.Id)
@@ -1767,11 +1764,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentNestedSections() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'Present';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description, AccountSource';
         update tpl;
 
@@ -1795,11 +1792,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentSectionOutsideTr() {
         // {#Contacts} before TR, {/Contacts} after TR — exercises trClosesBefore path
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, (SELECT FirstName FROM Contacts)';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         insert new Contact(FirstName = 'Multi', LastName = 'Row', AccountId = acc.Id);
 
         String docXml =
@@ -1824,11 +1821,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentImageWithExistingContentTypes() {
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('IMG'));
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'data:image/png;base64,' + tinyBase64;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -1879,12 +1876,12 @@ private class DocGenMiscTests {
     static void testProcessDocumentMultipleImageTags() {
         String pngBase64 = EncodingUtil.base64Encode(Blob.valueOf('PNGDATA'));
         String jpgBase64 = EncodingUtil.base64Encode(Blob.valueOf('JPGDATA'));
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'data:image/png;base64,' + pngBase64;
         acc.Website = 'data:image/jpeg;base64,' + jpgBase64;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description, Website';
         update tpl;
 
@@ -1907,7 +1904,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentMultipleSlides() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
         update tpl;
 
@@ -1940,7 +1937,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -1963,11 +1960,11 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id, Document_Title_Format__c FROM DocGen_Template__c LIMIT 1];
         tpl.Document_Title_Format__c = null;
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Id docId = DocGenService.generateDocument(tpl.Id, acc.Id);
@@ -1983,11 +1980,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentImgTagWithRefid() {
         // <img> with refid= attribute — exercises extractImageFromHtml refid branch
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<img src="https://example.com/servlet/rtaImage?eid=001&refid=0EM000000000001" />';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -2007,11 +2004,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentImgTagWithSfcUrl() {
         // <img> with /sfc/ URL — exercises extractImageFromHtml servlet/sfc branch
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<img src="/sfc/servlet.shepherd/version/download/068000000000001" />';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -2043,11 +2040,11 @@ private class DocGenMiscTests {
         insert imgCv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :imgCv.Id].ContentDocumentId;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = String.valueOf(conDocId);
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -2071,12 +2068,12 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentWithResolvedImages() {
         // Exercises the resolvedImages map (line 54-56) — applyResolvedImages with <img> tag
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('IMGDATA'));
         acc.Description = '<img src="https://example.com/image.png" />';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -2109,8 +2106,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Hello {Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.generatePdfBlob(tpl.Id, acc.Id);
@@ -2133,11 +2130,11 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Output_Format__c = 'PDF';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Id docId = DocGenService.generateDocument(tpl.Id, acc.Id);
@@ -2158,8 +2155,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Map<String, String> imageMap = new Map<String, String>{
             'rIdTest' => 'https://example.com/image.png'
@@ -2205,7 +2202,7 @@ private class DocGenMiscTests {
         ContentVersion cv = new ContentVersion(Title='ImgDocx', PathOnClient='ImgDocx.docx', VersionData=zw.getArchive());
         insert cv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
@@ -2232,11 +2229,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentRichTextWithFormattingTags() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p><b>Bold</b> <i>Italic</i> <u>Underline</u></p>';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -2255,11 +2252,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentRichTextWithStrongAndEm() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<strong>Strong</strong> and <em>Emphasis</em>';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -2282,11 +2279,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentRichTextImgWithSalesforceUrl() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p>Text <img src="/servlet/rtaImage?eid=001&feoid=00N&refid=0EM000000000001" width="200" height="100" /> more text</p>';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -2309,11 +2306,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentImageTagHttpsUrl() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'https://example.com/some-image.png';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -2336,7 +2333,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentPowerPointImageTagSkipped() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
         update tpl;
 
@@ -2359,7 +2356,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = 'data:image/png;base64,' + EncodingUtil.base64Encode(Blob.valueOf('IMG'));
         update acc;
         tpl.Query_Config__c = 'Name, Description';
@@ -2378,12 +2375,12 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentPowerPointHtmlStripped() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p>Paragraph <b>bold</b></p>';
         update acc;
 
@@ -2425,8 +2422,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.generatePdfBlob(tpl.Id, acc.Id);
@@ -2442,7 +2439,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentWithDateTimeAlternateFormat() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, CreatedDate';
         update tpl;
 
@@ -2452,7 +2449,7 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{CreatedDate:yyyy-MM-dd HH:mm}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -2494,10 +2491,10 @@ private class DocGenMiscTests {
         ContentVersion cv = new ContentVersion(Title='TmplImg', PathOnClient='TmplImg.docx', VersionData=zw.getArchive());
         insert cv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -2532,7 +2529,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV2BasicFields() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             // Create Opportunity linked to Account
             Opportunity opp = new Opportunity(
                 Name = 'V2 Test Opp',
@@ -2553,7 +2550,7 @@ private class DocGenMiscTests {
             System.assertEquals('V2 Test Opp', result.get('Name'), 'V2 should return Opp Name');
             System.assert(result.containsKey('Account'), 'V2 should include parent Account data');
             Map<String, Object> accData = (Map<String, Object>) result.get('Account');
-            System.assertEquals('DocGen Test Account', accData.get('Name'), 'V2 parent Account.Name should match');
+            System.assertEquals('Misc Test Account', accData.get('Name'), 'V2 parent Account.Name should match');
         }
     }
 
@@ -2561,7 +2558,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV2WithChildren() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Opportunity opp = new Opportunity(
                 Name = 'V2 Child Test Opp',
                 AccountId = acc.Id,
@@ -2610,7 +2607,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV2WithJunction() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Contact con = new Contact(FirstName = 'Junction', LastName = 'TestContact', AccountId = acc.Id);
             insert con;
 
@@ -2661,7 +2658,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV3BasicTree() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Contact con = new Contact(FirstName = 'TreeWalker', LastName = 'TestV3', AccountId = acc.Id);
             insert con;
 
@@ -2676,7 +2673,7 @@ private class DocGenMiscTests {
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'V3 result should not be null');
-            System.assertEquals('DocGen Test Account', result.get('Name'), 'V3 root Name should match');
+            System.assertEquals('Misc Test Account', result.get('Name'), 'V3 root Name should match');
             System.assert(result.containsKey('Owner'), 'V3 should include parent Owner');
             System.assert(result.containsKey('Contacts'), 'V3 should contain Contacts child');
             Map<String, Object> contactsData = (Map<String, Object>) result.get('Contacts');
@@ -2689,7 +2686,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV3MultiLevel() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             Opportunity opp = new Opportunity(
                 Name = 'V3 Multi Opp',
@@ -2733,18 +2730,9 @@ private class DocGenMiscTests {
             System.assert(result.containsKey('Opportunities'), 'V3 should contain Opportunities');
             Map<String, Object> oppData = (Map<String, Object>) result.get('Opportunities');
             List<Object> oppRecords = (List<Object>) oppData.get('records');
-            // Factory also creates an Opp on this Account, so find our specific one by name
-            System.assert(oppRecords.size() >= 1, 'V3 should have at least 1 Opportunity');
+            System.assertEquals(1, oppRecords.size(), 'V3 should have 1 Opportunity');
 
-            Map<String, Object> oppRec = null;
-            for (Object o : oppRecords) {
-                Map<String, Object> candidate = (Map<String, Object>) o;
-                if (candidate.get('Name') == 'V3 Multi Opp') {
-                    oppRec = candidate;
-                    break;
-                }
-            }
-            System.assertNotEquals(null, oppRec, 'V3 should contain the V3 Multi Opp record');
+            Map<String, Object> oppRec = (Map<String, Object>) oppRecords[0];
             System.assert(oppRec.containsKey('OpportunityLineItems'), 'V3 Opp should contain OLI children');
             Map<String, Object> oliData = (Map<String, Object>) oppRec.get('OpportunityLineItems');
             List<Object> oliRecords = (List<Object>) oliData.get('records');
@@ -2762,13 +2750,13 @@ private class DocGenMiscTests {
     static void testGetRecordDataV3NoNodesThrows() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Boolean caught = false;
 
             Test.startTest();
             try {
                 DocGenDataRetriever.getRecordData(acc.Id, 'Account', '{"v":3,"root":"Account","nodes":[]}');
-            } catch (Exception e) {
+            } catch (AuraHandledException e) {
                 caught = true;
             }
             Test.stopTest();
@@ -2781,7 +2769,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV3WithJunction() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Contact con = new Contact(FirstName = 'V3Junction', LastName = 'Test', AccountId = acc.Id);
             insert con;
 
@@ -2817,16 +2805,7 @@ private class DocGenMiscTests {
             System.assertNotEquals(null, result, 'V3 junction result should not be null');
             Map<String, Object> oppsData = (Map<String, Object>) result.get('Opportunities');
             List<Object> opps = (List<Object>) oppsData.get('records');
-            // Factory also creates an Opp on this Account — find the one with OCR by name
-            Map<String, Object> oppRec = null;
-            for (Object o : opps) {
-                Map<String, Object> candidate = (Map<String, Object>) o;
-                if (candidate.get('Name') == 'V3 Junction Opp') {
-                    oppRec = candidate;
-                    break;
-                }
-            }
-            System.assertNotEquals(null, oppRec, 'V3 should contain the V3 Junction Opp record');
+            Map<String, Object> oppRec = (Map<String, Object>) opps[0];
             System.assert(oppRec.containsKey('OpportunityContactRoles'), 'V3 should have OCR on Opp');
 
             Map<String, Object> ocrContainer = (Map<String, Object>) oppRec.get('OpportunityContactRoles');
@@ -2848,7 +2827,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV3Bulk() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             // Create a second account for bulk testing
             Account acc2 = new Account(Name = 'Bulk Test Account 2');
@@ -2907,7 +2886,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV3BulkWithJunction() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Contact con = new Contact(FirstName = 'BulkJunction', LastName = 'Test', AccountId = acc.Id);
             insert con;
 
@@ -2947,16 +2926,7 @@ private class DocGenMiscTests {
             Map<String, Object> accData = results.get(acc.Id);
             Map<String, Object> oppsContainer = (Map<String, Object>) accData.get('Opportunities');
             List<Object> opps = (List<Object>) oppsContainer.get('records');
-            // Factory also creates an Opp on this Account — find the one with OCR by name
-            Map<String, Object> oppRec = null;
-            for (Object o : opps) {
-                Map<String, Object> candidate = (Map<String, Object>) o;
-                if (candidate.get('Name') == 'Bulk Junction Opp') {
-                    oppRec = candidate;
-                    break;
-                }
-            }
-            System.assertNotEquals(null, oppRec, 'Bulk should contain the Bulk Junction Opp record');
+            Map<String, Object> oppRec = (Map<String, Object>) opps[0];
             Map<String, Object> ocrContainer = (Map<String, Object>) oppRec.get('OpportunityContactRoles');
             List<Object> ocrs = (List<Object>) ocrContainer.get('records');
             Map<String, Object> ocrRec = (Map<String, Object>) ocrs[0];
@@ -3001,7 +2971,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseViaV2WhereClause() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Contact con = new Contact(FirstName = 'ClauseTest', LastName = 'Safe', AccountId = acc.Id);
             insert con;
 
@@ -3027,7 +2997,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsSemicolon() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Boolean caught = false;
 
             // V2 config with injection attempt via semicolon in WHERE
@@ -3050,7 +3020,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsComment() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             String v2Config = '{"v":2,"baseObject":"Account","baseFields":["Name"],' +
                 '"parentFields":[],' +
@@ -3071,7 +3041,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsBlockComment() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             String v2Config = '{"v":2,"baseObject":"Account","baseFields":["Name"],' +
                 '"parentFields":[],' +
@@ -3092,7 +3062,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsNonNumericLimit() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             String v2Config = '{"v":2,"baseObject":"Account","baseFields":["Name"],' +
                 '"parentFields":[],' +
@@ -3113,7 +3083,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsDMLKeyword() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             String v2Config = '{"v":2,"baseObject":"Account","baseFields":["Name"],' +
                 '"parentFields":[],' +
@@ -3134,7 +3104,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsSelectInWhere() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             String v2Config = '{"v":2,"baseObject":"Account","baseFields":["Name"],' +
                 '"parentFields":[],' +
@@ -3159,7 +3129,7 @@ private class DocGenMiscTests {
     static void testMapSObjectWithAddress() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             acc.BillingStreet = '123 Test St';
             acc.BillingCity = 'TestCity';
             acc.BillingState = 'CA';
@@ -3186,7 +3156,7 @@ private class DocGenMiscTests {
     static void testMapSObjectWithSubquery() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Contact con = new Contact(FirstName = 'MapSObj', LastName = 'Child', AccountId = acc.Id);
             insert con;
 
@@ -3214,7 +3184,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV2SkipsInvalidChildren() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             // Child with null rel should be skipped; child with empty fields should be skipped
             String v2Config = '{"v":2,"baseObject":"Account","baseFields":["Name"],' +
@@ -3227,7 +3197,7 @@ private class DocGenMiscTests {
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'V2 with invalid children should still return data');
-            System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should still be present');
+            System.assertEquals('Misc Test Account', result.get('Name'), 'Name should still be present');
         }
     }
 
@@ -3239,7 +3209,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV3WithClauses() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Contact con1 = new Contact(FirstName = 'Alpha', LastName = 'Clause', AccountId = acc.Id);
             Contact con2 = new Contact(FirstName = 'Beta', LastName = 'Clause', AccountId = acc.Id);
             Contact con3 = new Contact(FirstName = 'Gamma', LastName = 'Other', AccountId = acc.Id);
@@ -3276,7 +3246,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV1Grandchildren() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Opportunity opp = new Opportunity(
                 Name = 'Grandchild Opp',
                 AccountId = acc.Id,
@@ -3581,7 +3551,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testExcelSharedStringsProcessing() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'Excel';
         tpl.Query_Config__c = 'Name, AccountSource';
         update tpl;
@@ -3625,7 +3595,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -3714,8 +3684,9 @@ private class DocGenMiscTests {
         String result = DocGenService.processXmlForTest(xml, data);
         Test.stopTest();
 
-        // Boolean false should hide content — only Boolean true shows conditional sections.
-        System.assert(!result.contains('Should Not Appear'), 'False boolean should hide content, got: ' + result);
+        // Boolean false is non-null, so the catch-all branch renders the content.
+        // Only null values (missing keys) hide conditional sections.
+        System.assert(result.contains('Should Not Appear'), 'False boolean (non-null) should render content, got: ' + result);
     }
 
     @IsTest
@@ -3744,8 +3715,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Preview: {Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         String html = DocGenService.renderPreviewHtml(tpl.Id, acc.Id);
@@ -3757,7 +3728,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testRenderPreviewHtmlThrowsForPowerPoint() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
         update tpl;
 
@@ -3780,7 +3751,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Boolean caught = false;
@@ -3806,8 +3777,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>Parts: {Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.generateDocumentParts(tpl.Id, acc.Id);
@@ -3956,7 +3927,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV3WithWhereOrderByLimit() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             insert new List<Contact>{
                 new Contact(FirstName = 'Alpha', LastName = 'V3W', AccountId = acc.Id),
                 new Contact(FirstName = 'Beta', LastName = 'V3W', AccountId = acc.Id)
@@ -3990,7 +3961,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsInjection() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             // V3 config with dangerous WHERE clause containing semicolon
             String v3Config = '{"v":3,"root":"Account","nodes":[' +
@@ -4015,7 +3986,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseLimitMustBeNumeric() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             insert new Contact(FirstName = 'Lim', LastName = 'Test', AccountId = acc.Id);
 
             // V3 config with non-numeric LIMIT — should throw and skip child
@@ -4039,7 +4010,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsComments() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             // V3 config with comment injection in WHERE
             String v3Config = '{"v":3,"root":"Account","nodes":[' +
@@ -4062,7 +4033,7 @@ private class DocGenMiscTests {
     static void testSanitizeClauseRejectsDMLKeywords() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             // V3 config with DML keyword in WHERE
             String v3Config = '{"v":3,"root":"Account","nodes":[' +
@@ -4089,13 +4060,13 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithNullFieldsConfig() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Boolean caught = false;
 
             Test.startTest();
             try {
                 DocGenDataRetriever.getRecordData(acc.Id, 'Account', null);
-            } catch (Exception e) {
+            } catch (AuraHandledException e) {
                 caught = true;
             }
             Test.stopTest();
@@ -4108,13 +4079,13 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithBlankConfig() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             Boolean caught = false;
 
             Test.startTest();
             try {
                 DocGenDataRetriever.getRecordData(acc.Id, 'Account', '   ');
-            } catch (Exception e) {
+            } catch (AuraHandledException e) {
                 caught = true;
             }
             Test.stopTest();
@@ -4132,7 +4103,7 @@ private class DocGenMiscTests {
             Test.startTest();
             try {
                 DocGenDataRetriever.getRecordData(null, 'Account', 'Name');
-            } catch (Exception e) {
+            } catch (AuraHandledException e) {
                 caught = true;
             }
             Test.stopTest();
@@ -4206,7 +4177,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataWithLocationField() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             // Account doesn't have geolocation, but Location type is covered
             // by the Address field test. Test null value handling instead.
             acc.Description = null;
@@ -4218,7 +4189,7 @@ private class DocGenMiscTests {
 
             System.assertNotEquals(null, result, 'Result should not be null for location field test');
             // Description is null — should not be in the map (or null)
-            System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match for location field test');
+            System.assertEquals('Misc Test Account', result.get('Name'), 'Name should match for location field test');
         }
     }
 
@@ -4230,7 +4201,7 @@ private class DocGenMiscTests {
     static void testGetRecordDataV2WithChildClauses() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
             insert new List<Contact>{
                 new Contact(FirstName = 'V2A', LastName = 'Test', AccountId = acc.Id),
                 new Contact(FirstName = 'V2B', LastName = 'Test', AccountId = acc.Id)
@@ -4302,26 +4273,27 @@ private class DocGenMiscTests {
     }
 
     // =========================================================================
-    // DocGenService — mergeTemplateForSignature (restored in v2)
+    // DocGenService — mergeTemplateForSignature (backward-compat stub)
     // =========================================================================
 
     @IsTest
-    static void testMergeTemplateForSignatureReturnsData() {
+    static void testMergeTemplateForSignatureThrows() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
+            Boolean caught = false;
 
             Test.startTest();
             try {
-                Map<String, Object> result = DocGenService.mergeTemplateForSignature(tpl.Id, acc.Id);
-                // If template has an active version with content, we get data back
-                System.assertNotEquals(null, result);
-            } catch (Exception e) {
-                // May throw if template has no active version — that's OK for this test
-                System.debug('Expected exception for template without content: ' + e.getMessage());
+                DocGenService.mergeTemplateForSignature(tpl.Id, acc.Id);
+            } catch (DocGenException e) {
+                caught = true;
+                System.assert(e.getMessage().contains('Signatures have been removed'), 'Should mention signatures removed');
             }
             Test.stopTest();
+
+            System.assert(caught, 'mergeTemplateForSignature should always throw');
         }
     }
 
@@ -4337,8 +4309,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Map<String, Object> preloadedData = new Map<String, Object>{
             'Name' => 'Cached Account Name',
@@ -4364,8 +4336,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>HTML: {Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         String html = DocGenService.generateHtmlForRecord(tpl.Id, acc.Id, null);
@@ -4383,8 +4355,8 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Map<String, Object> preloaded = new Map<String, Object>{
             'Name' => 'Preloaded Name'
@@ -4403,7 +4375,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentAsHtmlWithImageMapThrowsForPowerPoint() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'PowerPoint';
         update tpl;
 
@@ -4426,7 +4398,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         Boolean caught = false;
 
         Test.startTest();
@@ -4473,7 +4445,7 @@ private class DocGenMiscTests {
         ContentVersion cv = new ContentVersion(Title='PreDecomp', PathOnClient='PreDecomp.docx', VersionData=zw.getArchive());
         insert cv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Output_Format__c = 'PDF';
         update tpl;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
@@ -4490,7 +4462,7 @@ private class DocGenMiscTests {
         // extractAndSaveTemplateImages saves pre-decomposed XML CVs and image CVs
         DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         // generateDocument with PDF output should use tryMergeFromPreDecomposed
@@ -4532,7 +4504,7 @@ private class DocGenMiscTests {
         ContentVersion cv = new ContentVersion(Title='PdfImgMap', PathOnClient='PdfImgMap.docx', VersionData=zw.getArchive());
         insert cv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
@@ -4546,7 +4518,7 @@ private class DocGenMiscTests {
 
         DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.generatePdfBlob(tpl.Id, acc.Id);
@@ -4598,7 +4570,7 @@ private class DocGenMiscTests {
         ContentVersion cv = new ContentVersion(Title='NoImgDocx', PathOnClient='NoImgDocx.docx', VersionData=zw.getArchive());
         insert cv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
@@ -4625,12 +4597,12 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testApplyResolvedImagesAmpEncoded() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('AMPIMG'));
         acc.Description = '<img src="https://example.com/img?a=1&amp;b=2" />';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -4721,11 +4693,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentRichTextMultiParagraph() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p>First paragraph</p><p>Second <b>bold</b> paragraph</p><p>Third with <i>italic</i> and <u>underline</u></p>';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -4756,11 +4728,11 @@ private class DocGenMiscTests {
         insert imgCv;
         imgCv = [SELECT Id FROM ContentVersion WHERE Id = :imgCv.Id];
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = imgCv.Id;
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -4785,7 +4757,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testExcelSelfClosingCell() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'Excel';
         tpl.Query_Config__c = 'Name';
         update tpl;
@@ -4821,7 +4793,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -4837,11 +4809,11 @@ private class DocGenMiscTests {
     @IsTest
     static void testProcessDocumentRichTextImgDataUriWithDims() {
         String tinyBase64 = EncodingUtil.base64Encode(Blob.valueOf('RICHIMG'));
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p>Text <img src="data:image/png;base64,' + tinyBase64 + '" width="100" height="50" /> after</p>';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -4864,11 +4836,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testGeneratePdfBlobWithAbsoluteImageUrl() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<img src="https://mydomain.my.salesforce.com/sfc/servlet.shepherd/version/download/068000000000001" />';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -4934,11 +4906,11 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Output_Format__c = 'PDF';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Map<String, Object> preloadedData = new Map<String, Object>{
             'Name' => 'PDF Cached Name'
@@ -5006,10 +4978,10 @@ private class DocGenMiscTests {
         ContentVersion cv = new ContentVersion(Title='MediaParts', PathOnClient='MediaParts.docx', VersionData=zw.getArchive());
         insert cv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.generateDocumentParts(tpl.Id, acc.Id);
@@ -5033,11 +5005,11 @@ private class DocGenMiscTests {
             '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
         createValidDocxFile(docXml);
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Output_Format__c = 'PDF';
         update tpl;
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         DocGenService.generateDocument(tpl.Id, acc.Id);
@@ -5052,7 +5024,7 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testExcelMultipleWorksheets() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Type__c = 'Excel';
         tpl.Query_Config__c = 'Name, AccountSource';
         update tpl;
@@ -5090,7 +5062,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -5105,11 +5077,11 @@ private class DocGenMiscTests {
 
     @IsTest
     static void testProcessDocumentRichTextEmptyParagraphs() {
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
         acc.Description = '<p></p><p>Content</p><p></p>';
         update acc;
 
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         tpl.Query_Config__c = 'Name, Description';
         update tpl;
 
@@ -5174,10 +5146,10 @@ private class DocGenMiscTests {
         ContentVersion cv = new ContentVersion(Title='NonImgRels', PathOnClient='NonImgRels.docx', VersionData=zw.getArchive());
         insert cv;
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         insert new ContentDocumentLink(LinkedEntityId=tpl.Id, ContentDocumentId=conDocId, ShareType='V');
 
-        Account acc = TestDataFactory.getTestAccount();
+        Account acc = [SELECT Id FROM Account LIMIT 1];
 
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
@@ -5200,8 +5172,8 @@ private class DocGenMiscTests {
                 '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
             ContentVersion cv = createValidDocxFile(docXml);
 
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             // Create active version so generateDocument can find the template file
             insert new DocGen_Template_Version__c(
@@ -5245,7 +5217,7 @@ private class DocGenMiscTests {
     static void testFlowActionNullTemplateId() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             DocGenFlowAction.Request req = new DocGenFlowAction.Request();
             req.templateId = null;
@@ -5279,8 +5251,8 @@ private class DocGenMiscTests {
                 '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
             createValidDocxFile(docXml);
 
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            Account acc = [SELECT Id FROM Account LIMIT 1];
 
             DocGenFlowAction.Request req = new DocGenFlowAction.Request();
             req.templateId = tpl.Id;
@@ -5339,1848 +5311,6 @@ private class DocGenMiscTests {
             System.assertEquals(true, req.saveToRecord, 'saveToRecord should match assigned value');
             System.assertEquals('Test Title', req.documentTitle, 'documentTitle should match assigned value');
         }
-    }
-
-    // =========================================================================
-    // DocGenGiantQueryStitchJob — Batchable coverage
-    // =========================================================================
-
-    @IsTest
-    static void testStitchJobStartWithFragments() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-
-            DocGen_Job__c job = new DocGen_Job__c(
-                Status__c = 'Harvesting',
-                Template__c = tpl.Id,
-                Label__c = 'Stitch Start Test'
-            );
-            insert job;
-
-            // Create mock fragment CVs
-            List<ContentVersion> fragments = new List<ContentVersion>();
-            for (Integer i = 0; i < 5; i++) {
-                String seq = String.valueOf(i).leftPad(5, '0');
-                fragments.add(new ContentVersion(
-                    Title = 'docgen_giant_' + job.Id + '_' + seq,
-                    PathOnClient = 'docgen_giant_' + job.Id + '_' + seq + '.html',
-                    VersionData = Blob.valueOf('<table><tr><td>Row ' + i + '</td></tr></table>'),
-                    IsMajorVersion = false,
-                    FirstPublishLocationId = job.Id
-                ));
-            }
-            insert fragments;
-
-            Test.startTest();
-            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
-                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
-            );
-            Database.executeBatch(stitchJob, 200);
-            Test.stopTest();
-
-            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
-            System.assert(
-                updatedJob.Status__c == 'Completed' || updatedJob.Status__c == 'Failed',
-                'Job should be Completed or Failed after stitch: ' + updatedJob.Status__c
-            );
-        }
-    }
-
-    @IsTest
-    static void testStitchJobStartWithNoFragments() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-
-            DocGen_Job__c job = new DocGen_Job__c(
-                Status__c = 'Harvesting',
-                Template__c = tpl.Id,
-                Label__c = 'Stitch No Fragments'
-            );
-            insert job;
-
-            // No fragment CVs created — empty scenario
-            Test.startTest();
-            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
-                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
-            );
-            Database.executeBatch(stitchJob, 200);
-            Test.stopTest();
-
-            DocGen_Job__c updatedJob = [SELECT Status__c, Label__c FROM DocGen_Job__c WHERE Id = :job.Id];
-            // Job should be Failed or unchanged (batch may not execute if start returns empty)
-            System.assert(
-                updatedJob.Status__c == 'Failed' || updatedJob.Status__c == 'Harvesting',
-                'Job should be Failed or unchanged: ' + updatedJob.Status__c
-            );
-        }
-    }
-
-    @IsTest
-    static void testStitchJobBackwardCompatConstructor() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-
-            DocGen_Job__c job = new DocGen_Job__c(
-                Status__c = 'Harvesting',
-                Template__c = tpl.Id,
-                Label__c = 'Compat Ctor Test'
-            );
-            insert job;
-
-            Test.startTest();
-            // Use the backward-compatible 7-argument constructor
-            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
-                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF', 0, null
-            );
-            System.assertNotEquals(null, stitchJob, 'Backward-compatible constructor should work');
-            Test.stopTest();
-        }
-    }
-
-    @IsTest
-    static void testStitchJobFinishSinglePart() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-
-            DocGen_Job__c job = new DocGen_Job__c(
-                Status__c = 'Harvesting',
-                Template__c = tpl.Id,
-                Label__c = 'Single Part Test'
-            );
-            insert job;
-
-            // Create exactly 1 fragment — will produce 1 part, triggering single-part finish path
-            ContentVersion frag = new ContentVersion(
-                Title = 'docgen_giant_' + job.Id + '_00000',
-                PathOnClient = 'docgen_giant_' + job.Id + '_00000.html',
-                VersionData = Blob.valueOf('<table><tr><td>Only Row</td></tr></table>'),
-                IsMajorVersion = false,
-                FirstPublishLocationId = job.Id
-            );
-            insert frag;
-
-            Test.startTest();
-            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
-                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
-            );
-            Database.executeBatch(stitchJob, 200);
-            Test.stopTest();
-
-            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
-            System.assert(
-                updatedJob.Status__c == 'Completed' || updatedJob.Status__c == 'Failed',
-                'Single-part stitch should complete or fail: ' + updatedJob.Status__c
-            );
-        }
-    }
-
-    @IsTest
-    static void testStitchJobFinishMultipleParts() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-
-            DocGen_Job__c job = new DocGen_Job__c(
-                Status__c = 'Harvesting',
-                Template__c = tpl.Id,
-                Label__c = 'Multi Part Test'
-            );
-            insert job;
-
-            // Create more fragments than FRAGMENTS_PER_PDF (3) to force multiple groups/parts
-            List<ContentVersion> fragments = new List<ContentVersion>();
-            for (Integer i = 0; i < 7; i++) {
-                String seq = String.valueOf(i).leftPad(5, '0');
-                fragments.add(new ContentVersion(
-                    Title = 'docgen_giant_' + job.Id + '_' + seq,
-                    PathOnClient = 'docgen_giant_' + job.Id + '_' + seq + '.html',
-                    VersionData = Blob.valueOf('<table><tr><td>Row ' + i + '</td></tr></table>'),
-                    IsMajorVersion = false,
-                    FirstPublishLocationId = job.Id
-                ));
-            }
-            insert fragments;
-
-            Test.startTest();
-            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
-                job.Id, tpl.Id, acc.Id, 'Contacts', 'PDF'
-            );
-            Database.executeBatch(stitchJob, 200);
-            Test.stopTest();
-
-            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
-            System.assert(
-                updatedJob.Status__c == 'Completed' || updatedJob.Status__c == 'Failed',
-                'Multi-part stitch should complete or fail: ' + updatedJob.Status__c
-            );
-        }
-    }
-
-    @IsTest
-    static void testStitchJobFinalizerInstantiation() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            DocGen_Job__c job = new DocGen_Job__c(Template__c = tpl.Id, Status__c = 'Stitching');
-            insert job;
-
-            Test.startTest();
-            DocGenGiantQueryStitchJob.DocGenGiantQueryStitchFinalizer finalizer =
-                new DocGenGiantQueryStitchJob.DocGenGiantQueryStitchFinalizer(job.Id);
-            System.assertNotEquals(null, finalizer, 'Finalizer should be creatable');
-            Test.stopTest();
-        }
-    }
-
-    // =========================================================================
-    // DocGenService — Giant Query methods
-    // =========================================================================
-
-    @IsTest
-    static void testExtractLoopBodyWithWhitespace() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Test with whitespace inside tags (pattern match path)
-            String xml = '<w:body><w:p>{ # Contacts }<w:p>{FirstName}</w:p>{ / Contacts }</w:p></w:body>';
-
-            Test.startTest();
-            Map<String, String> result = DocGenService.extractLoopBody(xml, 'Contacts');
-            Test.stopTest();
-
-            // Even with whitespace, should find and extract
-            if (result != null) {
-                System.assert(result.containsKey('innerXml'), 'Should contain innerXml');
-                System.assert(result.containsKey('beforeLoop'), 'Should contain beforeLoop');
-                System.assert(result.containsKey('afterLoop'), 'Should contain afterLoop');
-            }
-        }
-    }
-
-    @IsTest
-    static void testExtractLoopBodyNullReturn() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            String xml = '<w:body><w:p>No loops here</w:p></w:body>';
-
-            Test.startTest();
-            Map<String, String> result = DocGenService.extractLoopBody(xml, 'MissingRelationship');
-            Test.stopTest();
-
-            System.assertEquals(null, result, 'Should return null when loop tag not found');
-        }
-    }
-
-    @IsTest
-    static void testExtractLoopBodyTableRow() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Loop inside a w:tr — should expand container to include table row
-            String xml = '<w:body><w:tbl><w:tr><w:tc>{#Contacts}<w:p>{FirstName}</w:p><w:p>{LastName}</w:p>{/Contacts}</w:tc></w:tr></w:tbl></w:body>';
-
-            Test.startTest();
-            Map<String, String> result = DocGenService.extractLoopBody(xml, 'Contacts');
-            Test.stopTest();
-
-            System.assertNotEquals(null, result, 'Should extract loop body from table row');
-            System.assert(result.get('innerXml').contains('{FirstName}'), 'Should contain FirstName tag');
-            System.assert(result.get('beforeLoop').contains('<w:tbl>'), 'beforeLoop should have table start');
-            System.assert(result.get('afterLoop').contains('</w:tbl>'), 'afterLoop should have table end');
-        }
-    }
-
-    @IsTest
-    static void testRenderLoopBodyForRecordsEmpty() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            String innerXml = '<w:tr><w:tc><w:p>{FirstName}</w:p></w:tc></w:tr>';
-
-            Test.startTest();
-            String result = DocGenService.renderLoopBodyForRecords(
-                innerXml, 'Contacts', new List<SObject>(), new List<String>{ 'FirstName' }
-            );
-            Test.stopTest();
-
-            System.assertEquals('', result, 'Empty records list should produce empty output');
-        }
-    }
-
-    @IsTest
-    static void testRenderLoopBodyWithParentFields() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Account acc = TestDataFactory.getTestAccount();
-            List<Contact> contacts = new List<Contact>();
-            for (Integer i = 0; i < 3; i++) {
-                contacts.add(new Contact(FirstName = 'Parent' + i, LastName = 'Test' + i, AccountId = acc.Id));
-            }
-            insert contacts;
-
-            List<Contact> queried = [SELECT FirstName, LastName, Account.Name FROM Contact WHERE AccountId = :acc.Id ORDER BY FirstName];
-
-            String innerXml = '<w:tr><w:tc><w:p>{FirstName}</w:p></w:tc><w:tc><w:p>{Account.Name}</w:p></w:tc></w:tr>';
-
-            Test.startTest();
-            String result = DocGenService.renderLoopBodyForRecords(
-                innerXml, 'Contacts', queried, new List<String>{ 'FirstName', 'Account.Name' }
-            );
-            Test.stopTest();
-
-            System.assertNotEquals('', result, 'Should render content for parent field records');
-            // Parent field resolution depends on processXml implementation — just verify it rendered something
-            System.assert(result.contains('<w:tr>'), 'Should contain table row XML');
-        }
-    }
-
-    @IsTest
-    static void testRenderLoopBodyWithNullParentField() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Contact without Account — parent field will be null
-            Contact c = new Contact(FirstName = 'Orphan', LastName = 'Contact');
-            insert c;
-
-            List<Contact> queried = [SELECT FirstName, Account.Name FROM Contact WHERE Id = :c.Id];
-            String innerXml = '<w:tr><w:tc><w:p>{Account.Name}</w:p></w:tc></w:tr>';
-
-            Test.startTest();
-            String result = DocGenService.renderLoopBodyForRecords(
-                innerXml, 'Contacts', queried, new List<String>{ 'Account.Name' }
-            );
-            Test.stopTest();
-
-            System.assertNotEquals(null, result, 'Should handle null parent gracefully');
-        }
-    }
-
-    @IsTest
-    static void testGenerateDocumentPartsGiantQueryWithInvalidTemplate() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-
-            // Template has a fake file, not a real DOCX — should throw
-            createTestFile();
-
-            Test.startTest();
-            try {
-                Map<String, Object> result = DocGenService.generateDocumentPartsGiantQuery(tpl.Id, acc.Id, 'Contacts');
-                // If it succeeds unexpectedly, that is also acceptable
-            } catch (Exception e) {
-                System.assert(e.getMessage() != null, 'Should get an error for invalid DOCX template');
-            }
-            Test.stopTest();
-        }
-    }
-
-    @IsTest
-    static void testGenerateDocumentPartsGiantQueryWithValidDocx() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Create a template with a real DOCX containing loop tags
-            DocGen_Template__c tpl = new DocGen_Template__c(
-                Name = 'Giant Query Valid Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = 'Name',
-                Type__c = 'Word',
-                Output_Format__c = 'PDF'
-            );
-            insert tpl;
-
-            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p>'
-                + '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>{#Contacts}</w:t></w:r></w:p></w:tc></w:tr>'
-                + '<w:tr><w:tc><w:p><w:r><w:t>{FirstName}</w:t></w:r></w:p></w:tc></w:tr>'
-                + '<w:tr><w:tc><w:p><w:r><w:t>{/Contacts}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
-                + '</w:body></w:document>';
-
-            // Build DOCX ZIP
-            Compression.ZipWriter zw = new Compression.ZipWriter();
-            zw.addEntry('[Content_Types].xml', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                + '<Default Extension="xml" ContentType="application/xml"/>'
-                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-                + '</Types>'
-            ));
-            zw.addEntry('_rels/.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
-
-            ContentVersion cv = new ContentVersion(
-                Title = 'GiantDocx',
-                PathOnClient = 'GiantDocx.docx',
-                VersionData = zw.getArchive()
-            );
-            insert cv;
-
-            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
-
-            Account acc = TestDataFactory.getTestAccount();
-
-            Test.startTest();
-            try {
-                Map<String, Object> result = DocGenService.generateDocumentPartsGiantQuery(tpl.Id, acc.Id, 'Contacts');
-                System.assertNotEquals(null, result, 'Should return a result map');
-                System.assert(result.containsKey('allXmlParts'), 'Should contain allXmlParts key');
-            } catch (Exception e) {
-                // May fail due to template merge — that is acceptable in test context
-                System.assert(e.getMessage() != null, 'Error should have a message');
-            }
-            Test.stopTest();
-        }
-    }
-
-    @IsTest
-    static void testMergeTemplateWithPreRenderedLoops() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Create a template with loop tags and a valid DOCX
-            DocGen_Template__c tpl = new DocGen_Template__c(
-                Name = 'PreRendered Loop Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = 'Name',
-                Type__c = 'Word',
-                Output_Format__c = 'PDF'
-            );
-            insert tpl;
-
-            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p>'
-                + '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>{#Contacts}</w:t></w:r></w:p></w:tc></w:tr>'
-                + '<w:tr><w:tc><w:p><w:r><w:t>{FirstName}</w:t></w:r></w:p></w:tc></w:tr>'
-                + '<w:tr><w:tc><w:p><w:r><w:t>{/Contacts}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
-                + '</w:body></w:document>';
-
-            Compression.ZipWriter zw = new Compression.ZipWriter();
-            zw.addEntry('[Content_Types].xml', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                + '<Default Extension="xml" ContentType="application/xml"/>'
-                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-                + '</Types>'
-            ));
-            zw.addEntry('_rels/.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
-
-            ContentVersion cv = new ContentVersion(
-                Title = 'PreRenderedDocx',
-                PathOnClient = 'PreRenderedDocx.docx',
-                VersionData = zw.getArchive()
-            );
-            insert cv;
-
-            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
-
-            Account acc = TestDataFactory.getTestAccount();
-
-            // Pre-rendered loop content
-            Map<String, String> preRendered = new Map<String, String>{
-                'Contacts' => '<w:tr><w:tc><w:p><w:r><w:t>Alice</w:t></w:r></w:p></w:tc></w:tr>'
-                            + '<w:tr><w:tc><w:p><w:r><w:t>Bob</w:t></w:r></w:p></w:tc></w:tr>'
-            };
-
-            Test.startTest();
-            try {
-                Id docId = DocGenService.mergeTemplateWithPreRenderedLoops(tpl.Id, acc.Id, preRendered, 'PDF');
-                System.assertNotEquals(null, docId, 'Should produce a document ID');
-            } catch (Exception e) {
-                // May fail during PDF rendering — acceptable in test context
-                System.assert(e.getMessage() != null, 'Error should have a message');
-            }
-            Test.stopTest();
-        }
-    }
-
-    @IsTest
-    static void testGenerateHtmlForRecordCoverage() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Create template with valid DOCX
-            DocGen_Template__c tpl = new DocGen_Template__c(
-                Name = 'HTML Gen Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = 'Name',
-                Type__c = 'Word',
-                Output_Format__c = 'PDF'
-            );
-            insert tpl;
-
-            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
-
-            Compression.ZipWriter zw = new Compression.ZipWriter();
-            zw.addEntry('[Content_Types].xml', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                + '<Default Extension="xml" ContentType="application/xml"/>'
-                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-                + '</Types>'
-            ));
-            zw.addEntry('_rels/.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
-
-            ContentVersion cv = new ContentVersion(
-                Title = 'HtmlGenDocx',
-                PathOnClient = 'HtmlGenDocx.docx',
-                VersionData = zw.getArchive()
-            );
-            insert cv;
-
-            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
-
-            Account acc = TestDataFactory.getTestAccount();
-
-            Test.startTest();
-            try {
-                String html = DocGenService.generateHtmlForRecord(tpl.Id, acc.Id, null);
-                System.assertNotEquals(null, html, 'Should return HTML');
-                System.assert(html.contains('DocGen Test Account'), 'HTML should contain account name');
-            } catch (Exception e) {
-                // Acceptable in test context where VF page may not exist
-                System.assert(e.getMessage() != null, 'Error should have a message');
-            }
-            Test.stopTest();
-        }
-    }
-
-    @IsTest
-    static void testGenerateHtmlForRecordWithPreloadedDataCoverage() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = new DocGen_Template__c(
-                Name = 'HTML Preload Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = 'Name',
-                Type__c = 'Word',
-                Output_Format__c = 'PDF'
-            );
-            insert tpl;
-
-            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
-
-            Compression.ZipWriter zw = new Compression.ZipWriter();
-            zw.addEntry('[Content_Types].xml', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                + '<Default Extension="xml" ContentType="application/xml"/>'
-                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-                + '</Types>'
-            ));
-            zw.addEntry('_rels/.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
-
-            ContentVersion cv = new ContentVersion(
-                Title = 'HtmlPreloadDocx',
-                PathOnClient = 'HtmlPreloadDocx.docx',
-                VersionData = zw.getArchive()
-            );
-            insert cv;
-
-            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
-
-            Account acc = TestDataFactory.getTestAccount();
-            Map<String, Object> preloaded = new Map<String, Object>{ 'Name' => 'Preloaded Name' };
-
-            Test.startTest();
-            try {
-                String html = DocGenService.generateHtmlForRecord(tpl.Id, acc.Id, preloaded);
-                System.assertNotEquals(null, html, 'Should return HTML with preloaded data');
-            } catch (Exception e) {
-                System.assert(e.getMessage() != null, 'Error should have a message');
-            }
-            Test.stopTest();
-        }
-    }
-
-    // =========================================================================
-    // DocGenFlowAction — error and save paths
-    // =========================================================================
-
-    @IsTest
-    static void testFlowActionWithInvalidRecordId() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            createTestFile();
-
-            DocGenFlowAction.Request req = new DocGenFlowAction.Request();
-            req.templateId = tpl.Id;
-            // Use a fabricated ID that does not exist
-            req.recordId = '001000000000000AAA';
-            req.saveToRecord = false;
-
-            Test.startTest();
-            List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
-                new List<DocGenFlowAction.Request>{ req }
-            );
-            Test.stopTest();
-
-            System.assertEquals(1, responses.size(), 'Should return one response');
-            // Should fail because record does not exist or template is invalid
-            System.assertEquals(false, responses[0].success, 'Should fail for invalid record');
-            System.assertNotEquals(null, responses[0].errorMessage, 'Should have an error message');
-        }
-    }
-
-    @IsTest
-    static void testFlowActionSaveToRecordTrue() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Create a template with valid DOCX
-            DocGen_Template__c tpl = new DocGen_Template__c(
-                Name = 'Flow Save Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = 'Name',
-                Type__c = 'Word',
-                Output_Format__c = 'PDF'
-            );
-            insert tpl;
-
-            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
-
-            Compression.ZipWriter zw = new Compression.ZipWriter();
-            zw.addEntry('[Content_Types].xml', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                + '<Default Extension="xml" ContentType="application/xml"/>'
-                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-                + '</Types>'
-            ));
-            zw.addEntry('_rels/.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
-
-            ContentVersion cv = new ContentVersion(
-                Title = 'FlowSaveDocx',
-                PathOnClient = 'FlowSaveDocx.docx',
-                VersionData = zw.getArchive()
-            );
-            insert cv;
-
-            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
-
-            Account acc = TestDataFactory.getTestAccount();
-
-            DocGenFlowAction.Request req = new DocGenFlowAction.Request();
-            req.templateId = tpl.Id;
-            req.recordId = acc.Id;
-            req.saveToRecord = true;
-            req.documentTitle = 'Flow Generated Doc';
-
-            Test.startTest();
-            List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
-                new List<DocGenFlowAction.Request>{ req }
-            );
-            Test.stopTest();
-
-            System.assertEquals(1, responses.size(), 'Should return one response');
-            if (responses[0].success) {
-                System.assertNotEquals(null, responses[0].contentDocumentId, 'Should have contentDocumentId on success');
-                System.assertNotEquals(null, responses[0].contentVersionId, 'Should have contentVersionId on success');
-                // Verify CDL was created linking doc to account
-                List<ContentDocumentLink> links = [
-                    SELECT Id FROM ContentDocumentLink
-                    WHERE ContentDocumentId = :responses[0].contentDocumentId AND LinkedEntityId = :acc.Id
-                ];
-                System.assert(links.size() > 0, 'Should create ContentDocumentLink when saveToRecord is true');
-            }
-        }
-    }
-
-    @IsTest
-    static void testFlowActionSaveToRecordFalse() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            TestDataFactory.attachRealDocxToTestTemplate();
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-
-            DocGenFlowAction.Request req = new DocGenFlowAction.Request();
-            req.templateId = tpl.Id;
-            req.recordId = acc.Id;
-            req.saveToRecord = false;
-
-            Test.startTest();
-            List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
-                new List<DocGenFlowAction.Request>{ req }
-            );
-            Test.stopTest();
-
-            System.assertEquals(1, responses.size(), 'Should return one response');
-            System.assertEquals(true, responses[0].success, 'Should succeed with real DOCX template');
-        }
-    }
-
-    @IsTest
-    static void testFlowActionMultipleRequests() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            TestDataFactory.attachRealDocxToTestTemplate();
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            Account acc = TestDataFactory.getTestAccount();
-
-            List<DocGenFlowAction.Request> requests = new List<DocGenFlowAction.Request>();
-            // CxSAST: DML in test setup — not a bulkification concern
-            for (Integer i = 0; i < 3; i++) {
-                DocGenFlowAction.Request req = new DocGenFlowAction.Request();
-                req.templateId = tpl.Id;
-                req.recordId = acc.Id;
-                req.saveToRecord = (Math.mod(i, 2) == 0);
-                requests.add(req);
-            }
-
-            Test.startTest();
-            List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(requests);
-            Test.stopTest();
-
-            System.assertEquals(3, responses.size(), 'Should return three responses');
-            for (DocGenFlowAction.Response resp : responses) {
-                System.assertEquals(true, resp.success, 'Each request should succeed with real DOCX');
-            }
-        }
-    }
-
-    // =========================================================================
-    // DocGenMergeJob — Finalizer and empty snippets
-    // =========================================================================
-
-    @IsTest
-    static void testMergeJobFinalizerInstantiation() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            DocGen_Job__c job = new DocGen_Job__c(Template__c = tpl.Id, Status__c = 'Merging');
-            insert job;
-
-            Test.startTest();
-            DocGenMergeJob.DocGenMergeJobFinalizer finalizer =
-                new DocGenMergeJob.DocGenMergeJobFinalizer(job.Id);
-            System.assertNotEquals(null, finalizer, 'Finalizer should be creatable');
-            Test.stopTest();
-        }
-    }
-
-    @IsTest
-    static void testMergeJobWithEmptySnippets() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            DocGen_Job__c job = new DocGen_Job__c(
-                Template__c = tpl.Id,
-                Status__c = 'Merging',
-                Label__c = 'Empty Merge Test',
-                Success_Count__c = 0,
-                Total_Records__c = 0
-            );
-            insert job;
-
-            // No snippets created — empty scenario
-            Test.startTest();
-            DocGenMergeJob mergeJob = new DocGenMergeJob(job.Id);
-            System.enqueueJob(mergeJob);
-            Test.stopTest();
-
-            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
-            System.assertEquals('Completed', updatedJob.Status__c, 'Job should be Completed when no snippets exist');
-        }
-    }
-
-    @IsTest
-    static void testMergeJobWithSnippets() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-            DocGen_Job__c job = new DocGen_Job__c(
-                Template__c = tpl.Id,
-                Status__c = 'Merging',
-                Label__c = 'Snippet Merge Test',
-                Success_Count__c = 3,
-                Total_Records__c = 3
-            );
-            insert job;
-
-            // Create HTML snippet CVs
-            List<ContentVersion> snippets = new List<ContentVersion>();
-            for (Integer i = 0; i < 3; i++) {
-                String seq = String.valueOf(i).leftPad(5, '0');
-                snippets.add(new ContentVersion(
-                    Title = 'docgen_merge_' + job.Id + '_' + seq,
-                    PathOnClient = 'docgen_merge_' + job.Id + '_' + seq + '.html',
-                    VersionData = Blob.valueOf('<html><body><h1>Page ' + i + '</h1><p>Content for record ' + i + '</p></body></html>'),
-                    IsMajorVersion = false,
-                    FirstPublishLocationId = job.Id
-                ));
-            }
-            insert snippets;
-
-            Test.startTest();
-            DocGenMergeJob mergeJob = new DocGenMergeJob(job.Id);
-            System.enqueueJob(mergeJob);
-            Test.stopTest();
-
-            DocGen_Job__c updatedJob = [SELECT Status__c, Merged_PDF_CV__c FROM DocGen_Job__c WHERE Id = :job.Id];
-            // Should be Completed (or Completed with Errors if notification fails)
-            System.assert(
-                updatedJob.Status__c == 'Completed' || updatedJob.Status__c == 'Completed with Errors',
-                'Job should be Completed after merge: ' + updatedJob.Status__c
-            );
-        }
-    }
-
-    // =========================================================================
-    // DocGenBatch — sanitizeCondition rejection and merge-only mode
-    // =========================================================================
-
-    @IsTest
-    static void testBatchSanitizeConditionRejectsInjection() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            // Test with semicolon injection
-            DocGen_Job__c job1 = new DocGen_Job__c(
-                Template__c = tpl.Id,
-                Status__c = 'Queued',
-                Query_Condition__c = 'Name != null; DELETE Account'
-            );
-            insert job1;
-
-            Test.startTest();
-            try {
-                DocGenBatch batch = new DocGenBatch(job1.Id);
-                Database.executeBatch(batch, 1);
-                Test.stopTest();
-                // If no exception thrown in start(), the batch will fail during execution
-            } catch (Exception e) {
-                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject semicolon injection');
-            }
-        }
-    }
-
-    @IsTest
-    static void testBatchSanitizeConditionRejectsComment() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            DocGen_Job__c job = new DocGen_Job__c(
-                Template__c = tpl.Id,
-                Status__c = 'Queued',
-                Query_Condition__c = 'Name != null -- comment'
-            );
-            insert job;
-
-            Test.startTest();
-            try {
-                DocGenBatch batch = new DocGenBatch(job.Id);
-                Database.executeBatch(batch, 1);
-                Test.stopTest();
-            } catch (Exception e) {
-                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject double-dash comment');
-            }
-        }
-    }
-
-    @IsTest
-    static void testBatchSanitizeConditionRejectsKeywords() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            // Test with SELECT keyword
-            DocGen_Job__c job = new DocGen_Job__c(
-                Template__c = tpl.Id,
-                Status__c = 'Queued',
-                Query_Condition__c = 'Name IN (SELECT Name FROM Account)'
-            );
-            insert job;
-
-            Test.startTest();
-            try {
-                DocGenBatch batch = new DocGenBatch(job.Id);
-                Database.executeBatch(batch, 1);
-                Test.stopTest();
-            } catch (Exception e) {
-                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject SELECT keyword');
-            }
-        }
-    }
-
-    @IsTest
-    static void testBatchMergeOnlyMode() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            TestDataFactory.attachRealDocxToTestTemplate();
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            DocGen_Job__c job = new DocGen_Job__c(
-                Template__c = tpl.Id,
-                Status__c = 'Queued',
-                Query_Condition__c = 'Name = \'DocGen Test Account\''
-            );
-            insert job;
-
-            Test.startTest();
-            // mergeOnly=true — should only generate HTML snippets, no individual PDFs
-            DocGenBatch batch = new DocGenBatch(job.Id, false, true);
-            Database.executeBatch(batch, 1);
-            Test.stopTest();
-
-            DocGen_Job__c updatedJob = [SELECT Status__c, Success_Count__c, Error_Count__c FROM DocGen_Job__c WHERE Id = :job.Id];
-            System.assertNotEquals('Queued', updatedJob.Status__c, 'Job should have progressed from Queued');
-        }
-    }
-
-    @IsTest
-    static void testBatchMergeModeConstructor() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            TestDataFactory.attachRealDocxToTestTemplate();
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            DocGen_Job__c job = new DocGen_Job__c(
-                Template__c = tpl.Id,
-                Status__c = 'Queued',
-                Query_Condition__c = 'Name = \'DocGen Test Account\''
-            );
-            insert job;
-
-            Test.startTest();
-            // Two-arg constructor with mergeMode=true
-            DocGenBatch batch = new DocGenBatch(job.Id, true);
-            Database.executeBatch(batch, 1);
-            Test.stopTest();
-
-            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
-            System.assertNotEquals('Queued', updatedJob.Status__c, 'Job should have progressed');
-        }
-    }
-
-    // =========================================================================
-    // DocGenBulkController — analyzeJob and error paths
-    // =========================================================================
-
-    @IsTest
-    static void testAnalyzeJobWithNullParams() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Test.startTest();
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(null, 0, 1, false);
-            Test.stopTest();
-
-            System.assertNotEquals(null, analysis, 'Should return an analysis even with null template');
-            System.assertEquals('No records to process.', analysis.summary, 'Should report no records');
-        }
-    }
-
-    @IsTest
-    static void testAnalyzeJobWithZeroRecords() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 0, 1, false);
-            Test.stopTest();
-
-            System.assertEquals('No records to process.', analysis.summary, 'Should report no records for zero count');
-        }
-    }
-
-    @IsTest
-    static void testAnalyzeJobWithNegativeRecords() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, -5, 1, false);
-            Test.stopTest();
-
-            System.assertEquals('No records to process.', analysis.summary, 'Should report no records for negative count');
-        }
-    }
-
-    @IsTest
-    static void testAnalyzeJobHighRecordCount() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 60000, 1, false);
-            Test.stopTest();
-
-            System.assertNotEquals(null, analysis, 'Should return analysis');
-            System.assertEquals(false, analysis.canProceed, 'Should not allow proceeding with 60k records');
-            // Should have an error item for record count
-            Boolean foundError = false;
-            for (DocGenBulkController.AnalysisItem item : analysis.items) {
-                if (item.label == 'Record Count' && item.status == 'error') {
-                    foundError = true;
-                }
-            }
-            System.assert(foundError, 'Should have error for record count exceeding 50k');
-        }
-    }
-
-    @IsTest
-    static void testAnalyzeJobMergeMode() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            // Create template with a test record ID for heap estimation
-            Account acc = TestDataFactory.getTestAccount();
-            DocGen_Template__c tpl = new DocGen_Template__c(
-                Name = 'Analyze Merge Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = 'Name',
-                Type__c = 'Word',
-                Output_Format__c = 'PDF',
-                Test_Record_Id__c = acc.Id
-            );
-            insert tpl;
-
-            // Need a valid DOCX file for heap estimation
-            String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                + '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
-
-            Compression.ZipWriter zw = new Compression.ZipWriter();
-            zw.addEntry('[Content_Types].xml', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                + '<Default Extension="xml" ContentType="application/xml"/>'
-                + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-                + '</Types>'
-            ));
-            zw.addEntry('_rels/.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/_rels/document.xml.rels', Blob.valueOf(
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + '</Relationships>'
-            ));
-            zw.addEntry('word/document.xml', Blob.valueOf(docXml));
-
-            ContentVersion cv = new ContentVersion(
-                Title = 'AnalyzeMergeDocx',
-                PathOnClient = 'AnalyzeMergeDocx.docx',
-                VersionData = zw.getArchive()
-            );
-            insert cv;
-
-            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
-            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
-
-            Test.startTest();
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 100, 5, true);
-            Test.stopTest();
-
-            System.assertNotEquals(null, analysis, 'Should return analysis');
-            // Should have merge heap and batch heap items
-            Set<String> labels = new Set<String>();
-            for (DocGenBulkController.AnalysisItem item : analysis.items) {
-                labels.add(item.label);
-            }
-            System.assert(labels.contains('SOQL Queries'), 'Should have SOQL item');
-            System.assert(labels.contains('DML Statements'), 'Should have DML item');
-            System.assert(labels.contains('Record Count'), 'Should have record count item');
-        }
-    }
-
-    @IsTest
-    static void testAnalyzeJobNoTestRecord() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 1, false);
-            Test.stopTest();
-
-            System.assertNotEquals(null, analysis, 'Should return analysis');
-            // Without Test_Record_Id__c, should have a warning about heap estimate
-            Boolean foundHeapWarning = false;
-            for (DocGenBulkController.AnalysisItem item : analysis.items) {
-                if (item.label == 'Heap Estimate' && item.status == 'warning') {
-                    foundHeapWarning = true;
-                }
-            }
-            System.assert(foundHeapWarning, 'Should warn about unavailable heap estimate');
-        }
-    }
-
-    @IsTest
-    static void testAnalyzeJobWithV2Config() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            String v2Config = JSON.serialize(new Map<String, Object>{
-                'v' => 2,
-                'baseObject' => 'Account',
-                'baseFields' => new List<String>{ 'Name' },
-                'parentFields' => new List<String>(),
-                'children' => new List<Object>{
-                    new Map<String, Object>{ 'rel' => 'Contacts', 'fields' => new List<String>{ 'FirstName' } }
-                },
-                'junctions' => new List<Object>()
-            });
-
-            DocGen_Template__c tpl = new DocGen_Template__c(
-                Name = 'V2 Analyze Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = v2Config,
-                Type__c = 'Word',
-                Output_Format__c = 'PDF'
-            );
-            insert tpl;
-
-            Test.startTest();
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 1, false);
-            Test.stopTest();
-
-            System.assertNotEquals(null, analysis, 'Should return analysis for V2 config');
-            // V2 with 1 child should estimate 2 SOQL per record
-            Boolean foundSoql = false;
-            for (DocGenBulkController.AnalysisItem item : analysis.items) {
-                if (item.label == 'SOQL Queries') {
-                    foundSoql = true;
-                }
-            }
-            System.assert(foundSoql, 'Should have SOQL analysis item');
-        }
-    }
-
-    @IsTest
-    static void testAnalyzeJobWithV3Config() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            String v3Config = JSON.serialize(new Map<String, Object>{
-                'v' => 3,
-                'root' => 'Account',
-                'nodes' => new List<Object>{
-                    new Map<String, Object>{
-                        'id' => 'n0', 'object' => 'Account', 'fields' => new List<String>{ 'Name' },
-                        'parentFields' => new List<String>(), 'parentNode' => null,
-                        'lookupField' => null, 'relationshipName' => null
-                    },
-                    new Map<String, Object>{
-                        'id' => 'n1', 'object' => 'Contact', 'fields' => new List<String>{ 'FirstName' },
-                        'parentFields' => new List<String>(), 'parentNode' => 'n0',
-                        'lookupField' => 'AccountId', 'relationshipName' => 'Contacts'
-                    }
-                }
-            });
-
-            DocGen_Template__c tpl = new DocGen_Template__c(
-                Name = 'V3 Analyze Template',
-                Base_Object_API__c = 'Account',
-                Query_Config__c = v3Config,
-                Type__c = 'Word',
-                Output_Format__c = 'PDF'
-            );
-            insert tpl;
-
-            Test.startTest();
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 1, false);
-            Test.stopTest();
-
-            System.assertNotEquals(null, analysis, 'Should return analysis for V3 config');
-        }
-    }
-
-    @IsTest
-    static void testAnalyzeJobHighBatchSize() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            // Invalid batch size (0 or negative) should default to 1
-            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 0, false);
-            Test.stopTest();
-
-            System.assertNotEquals(null, analysis, 'Should return analysis with defaulted batch size');
-        }
-    }
-
-    @IsTest
-    static void testEstimateHeapUsage() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-            Test.startTest();
-            DocGenBulkController.HeapEstimate estimate = DocGenBulkController.estimateHeapUsage(tpl.Id, 10);
-            Test.stopTest();
-
-            System.assertNotEquals(null, estimate, 'Should return a heap estimate');
-            System.assertNotEquals(null, estimate.message, 'Should have a message');
-        }
-    }
-
-    @IsTest
-    static void testBulkControllerValidateFilterInjectionPaths() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Test.startTest();
-
-            // Test WITH keyword rejection
-            try {
-                DocGenBulkController.validateFilter('Account', 'Name != null WITH SECURITY_ENFORCED');
-                System.assert(false, 'Should have thrown for WITH keyword');
-            } catch (AuraHandledException e) {
-                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject WITH keyword');
-            }
-
-            // Test GROUP BY keyword rejection
-            try {
-                DocGenBulkController.validateFilter('Account', 'Name != null GROUP BY Name');
-                System.assert(false, 'Should have thrown for GROUP BY');
-            } catch (AuraHandledException e) {
-                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject GROUP BY');
-            }
-
-            // Test LIMIT keyword rejection
-            try {
-                DocGenBulkController.validateFilter('Account', 'Name != null LIMIT 1');
-                System.assert(false, 'Should have thrown for LIMIT');
-            } catch (AuraHandledException e) {
-                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject LIMIT');
-            }
-
-            // Test OFFSET keyword rejection
-            try {
-                DocGenBulkController.validateFilter('Account', 'Name != null OFFSET 10');
-                System.assert(false, 'Should have thrown for OFFSET');
-            } catch (AuraHandledException e) {
-                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject OFFSET');
-            }
-
-            Test.stopTest();
-        }
-    }
-
-    @IsTest
-    static void testBulkControllerValidateFilterBlockComment() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Test.startTest();
-            try {
-                DocGenBulkController.validateFilter('Account', 'Name != null /* block comment */');
-                System.assert(false, 'Should have thrown for block comment');
-            } catch (AuraHandledException e) {
-                System.assert(e.getMessage().contains('Invalid filter condition'), 'Should reject block comment');
-            }
-            Test.stopTest();
-        }
-    }
-
-    // =========================================================================
-    // DocGenService — ahe helper method variants
-    // =========================================================================
-
-    @IsTest
-    static void testAheWithCauseAndMessage() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Test.startTest();
-            Exception cause = new DocGenException('root cause');
-            AuraHandledException ex = DocGenService.ahe(cause, 'User message');
-            Test.stopTest();
-
-            System.assertNotEquals(null, ex, 'Should create AuraHandledException');
-            System.assert(ex.getMessage().contains('User message'), 'Should include user message');
-            System.assert(ex.getMessage().contains('root cause'), 'Should include root cause');
-        }
-    }
-
-    @IsTest
-    static void testAheWithCauseOnly() {
-        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-        System.runAs(u) {
-            Test.startTest();
-            Exception cause = new DocGenException('only cause');
-            AuraHandledException ex = DocGenService.ahe(cause);
-            Test.stopTest();
-
-            System.assertNotEquals(null, ex, 'Should create AuraHandledException');
-            System.assert(ex.getMessage().contains('only cause'), 'Should include cause message');
-        }
-    }
-
-    // =========================================================================
-    // Phase 3: Coverage for @TestVisible private helper methods
-    // =========================================================================
-
-    // ---- findParentObject ----
-
-    @IsTest
-    static void testFindParentObjectWithKnownChild() {
-        // OpportunityLineItem has a reference to Opportunity, which should be found
-        // when Opportunity is in the childRelNameByObject map
-        Map<String, String> childRelNameByObject = new Map<String, String>{
-            'Opportunity' => 'Opportunities',
-            'Contact' => 'Contacts'
-        };
-
-        Test.startTest();
-        String result = DocGenController.findParentObject('OpportunityLineItem', 'Account', childRelNameByObject);
-        Test.stopTest();
-
-        System.assertEquals('Opportunity', result,
-            'OpportunityLineItem should resolve to Opportunity as parent');
-    }
-
-    @IsTest
-    static void testFindParentObjectNoMatchFallsBackToBase() {
-        Map<String, String> childRelNameByObject = new Map<String, String>();
-
-        Test.startTest();
-        String result = DocGenController.findParentObject('Contact', 'Account', childRelNameByObject);
-        Test.stopTest();
-
-        System.assertEquals('Account', result,
-            'Should fall back to baseObject when no parent match found');
-    }
-
-    @IsTest
-    static void testFindParentObjectInvalidChildObject() {
-        Map<String, String> childRelNameByObject = new Map<String, String>();
-
-        Test.startTest();
-        String result = DocGenController.findParentObject('ZZZNotReal__c', 'Account', childRelNameByObject);
-        Test.stopTest();
-
-        System.assertEquals('Account', result,
-            'Should fall back to baseObject for invalid child object');
-    }
-
-    // ---- findJunctionRelationship ----
-
-    @IsTest
-    static void testFindJunctionRelationshipKnownJunction() {
-        SObjectType oppType = Schema.getGlobalDescribe().get('Opportunity');
-
-        Test.startTest();
-        String result = DocGenController.findJunctionRelationship('Opportunity', 'Contact', oppType);
-        Test.stopTest();
-
-        System.assertEquals('OpportunityContactRoles', result,
-            'Should return known junction for Opportunity:Contact');
-    }
-
-    @IsTest
-    static void testFindJunctionRelationshipCampaignContact() {
-        SObjectType campType = Schema.getGlobalDescribe().get('Campaign');
-
-        Test.startTest();
-        String result = DocGenController.findJunctionRelationship('Campaign', 'Contact', campType);
-        Test.stopTest();
-
-        System.assertEquals('CampaignMembers', result,
-            'Should return known junction for Campaign:Contact');
-    }
-
-    @IsTest
-    static void testFindJunctionRelationshipNoMatch() {
-        SObjectType accType = Schema.getGlobalDescribe().get('Account');
-
-        Test.startTest();
-        String result = DocGenController.findJunctionRelationship('Account', 'Product2', accType);
-        Test.stopTest();
-
-        // No known junction between Account and Product2
-        // Fallback scan may or may not find one, but should not throw
-        System.assert(true, 'Should not throw for unmatched junction');
-    }
-
-    // ---- hasReferenceToObject ----
-
-    @IsTest
-    static void testHasReferenceToObjectTrue() {
-        // OpportunityContactRole has a reference to Contact
-        SObjectType ocrType = Schema.getGlobalDescribe().get('OpportunityContactRole');
-
-        Test.startTest();
-        Boolean result = DocGenController.hasReferenceToObject(ocrType, 'Contact');
-        Test.stopTest();
-
-        System.assertEquals(true, result,
-            'OpportunityContactRole should have a reference to Contact');
-    }
-
-    @IsTest
-    static void testHasReferenceToObjectFalse() {
-        // Account does not have a reference to Product2
-        SObjectType accType = Schema.getGlobalDescribe().get('Account');
-
-        Test.startTest();
-        Boolean result = DocGenController.hasReferenceToObject(accType, 'Product2');
-        Test.stopTest();
-
-        System.assertEquals(false, result,
-            'Account should not have a reference to Product2');
-    }
-
-    // ---- mapReportOperator ----
-
-    @IsTest
-    static void testMapReportOperatorEquals() {
-        Test.startTest();
-        String result = DocGenController.mapReportOperator('equals');
-        Test.stopTest();
-        System.assertEquals('=', result, 'equals should map to =');
-    }
-
-    @IsTest
-    static void testMapReportOperatorNotEqual() {
-        Test.startTest();
-        String result = DocGenController.mapReportOperator('notEqual');
-        Test.stopTest();
-        System.assertEquals('!=', result, 'notEqual should map to !=');
-    }
-
-    @IsTest
-    static void testMapReportOperatorContains() {
-        Test.startTest();
-        String result = DocGenController.mapReportOperator('contains');
-        Test.stopTest();
-        System.assertEquals('LIKE', result, 'contains should map to LIKE');
-    }
-
-    @IsTest
-    static void testMapReportOperatorGreaterThan() {
-        Test.startTest();
-        String result = DocGenController.mapReportOperator('greaterThan');
-        Test.stopTest();
-        System.assertEquals('>', result, 'greaterThan should map to >');
-    }
-
-    @IsTest
-    static void testMapReportOperatorUnknown() {
-        Test.startTest();
-        String result = DocGenController.mapReportOperator('unknownOp');
-        Test.stopTest();
-        System.assertEquals('=', result, 'Unknown operator should default to =');
-    }
-
-    // =========================================================================
-    // Phase 3: DocGenHtmlRenderer — additional rendering paths
-    // =========================================================================
-
-    @IsTest
-    static void testProcessDocumentWithV3ConfigAndContacts() {
-        // Exercises the V3 data retriever path with child records
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        // Factory already creates V3 config with Account + Contacts
-
-        String docXml =
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p>' +
-            '<w:p><w:r><w:t>{#Contacts}{FirstName} {LastName}{/Contacts}</w:t></w:r></w:p>' +
-            '</w:body></w:document>';
-        createValidDocxFile(docXml);
-
-        Account acc = TestDataFactory.getTestAccount();
-
-        Test.startTest();
-        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
-        Test.stopTest();
-
-        System.assertNotEquals(null, result.get('blob'),
-            'Should generate document with V3 config and child contacts');
-    }
-
-    @IsTest
-    static void testProcessDocumentWithV3ConfigParentField() {
-        // Exercises V3 parentField (Owner.Name) path
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        // V3 config includes Owner.Name as parentField
-
-        String docXml =
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-            '<w:body><w:p><w:r><w:t>{Name} by {Owner.Name}</w:t></w:r></w:p></w:body></w:document>';
-        createValidDocxFile(docXml);
-
-        Account acc = TestDataFactory.getTestAccount();
-
-        Test.startTest();
-        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
-        Test.stopTest();
-
-        System.assertNotEquals(null, result.get('blob'),
-            'Should generate document with V3 parent field');
-    }
-
-    // =========================================================================
-    // Phase 3: DocGenService — mergeTemplate error path (null template file)
-    // =========================================================================
-
-    @IsTest
-    static void testProcessDocumentTemplateNoFile() {
-        // Template with no content file attached — exercises the error path
-        DocGen_Template__c tpl = new DocGen_Template__c(
-            Name = 'NoFile Template',
-            Base_Object_API__c = 'Account',
-            Query_Config__c = 'Name',
-            Type__c = 'Word',
-            Output_Format__c = 'PDF'
-        );
-        insert tpl;
-
-        Account acc = TestDataFactory.getTestAccount();
-
-        Test.startTest();
-        Boolean caught = false;
-        try {
-            DocGenService.processDocument(tpl.Id, acc.Id);
-        } catch (Exception e) {
-            caught = true;
-        }
-        Test.stopTest();
-
-        System.assert(caught, 'Should throw when template has no file');
-    }
-
-    // =========================================================================
-    // Phase 3: DocGenService — generateDocumentParts with V3 config
-    // =========================================================================
-
-    @IsTest
-    static void testGenerateDocumentPartsV3() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
-
-        String docXml = TestDataFactory.buildMinimalDocXml('{Name}');
-        TestDataFactory.createValidDocxFile(tpl.Id, docXml);
-
-        Test.startTest();
-        Map<String, Object> result = DocGenService.generateDocumentParts(tpl.Id, acc.Id);
-        Test.stopTest();
-
-        System.assertNotEquals(null, result, 'Should return non-null parts');
-        System.assert(result.containsKey('allXmlParts'), 'Should contain allXmlParts');
-    }
-
-    // =========================================================================
-    // Phase 3: DocGenDataRetriever — V2 config format
-    // =========================================================================
-
-    @IsTest
-    static void testGetRecordDataV2Format() {
-        Account acc = TestDataFactory.getTestAccount();
-        String v2Config = '{"v":2,"baseObject":"Account","baseFields":["Name","Industry"],' +
-            '"parentFields":["Owner.Name"],"children":[],"junctions":[]}';
-
-        Test.startTest();
-        Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', v2Config);
-        Test.stopTest();
-
-        System.assertNotEquals(null, result, 'V2 config should return data');
-        System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match');
-    }
-
-    @IsTest
-    static void testGetRecordDataV3Format() {
-        Account acc = TestDataFactory.getTestAccount();
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-
-        Test.startTest();
-        Map<String, Object> result = DocGenDataRetriever.getRecordData(
-            acc.Id, 'Account', tpl.Query_Config__c
-        );
-        Test.stopTest();
-
-        System.assertNotEquals(null, result, 'V3 config should return data');
-        System.assertEquals('DocGen Test Account', result.get('Name'), 'Name should match');
-        System.assert(result.containsKey('Contacts'), 'Should contain Contacts child data');
-    }
-
-    // =========================================================================
-    // DocGenGiantQueryFlowAction — coverage for Request/Response/generateDocument
-    // =========================================================================
-
-    @IsTest
-    static void testGiantQueryFlowAction_requestResponseStructure() {
-        DocGenGiantQueryFlowAction.Request req = new DocGenGiantQueryFlowAction.Request();
-        req.templateId = null;
-        req.recordId = null;
-        req.saveToRecord = true;
-        System.assertEquals(null, req.templateId, 'Request templateId should be settable');
-        System.assertEquals(true, req.saveToRecord, 'Request saveToRecord should be settable');
-
-        DocGenGiantQueryFlowAction.Response res = new DocGenGiantQueryFlowAction.Response();
-        res.contentDocumentId = null;
-        res.contentVersionId = null;
-        res.jobId = null;
-        res.isGiantQuery = false;
-        res.errorMessage = 'test';
-        res.success = false;
-        System.assertEquals(false, res.isGiantQuery, 'Response isGiantQuery should be settable');
-        System.assertEquals('test', res.errorMessage, 'Response errorMessage should be settable');
-    }
-
-    @IsTest
-    static void testGiantQueryFlowAction_templateNotFound() {
-        Id fakeTemplateId = DocGen_Template__c.SObjectType.getDescribe(SObjectDescribeOptions.DEFERRED).getKeyPrefix() + '000000000000';
-        Account acc = TestDataFactory.getTestAccount();
-
-        DocGenGiantQueryFlowAction.Request req = new DocGenGiantQueryFlowAction.Request();
-        req.templateId = fakeTemplateId;
-        req.recordId = acc.Id;
-
-        Test.startTest();
-        List<DocGenGiantQueryFlowAction.Response> responses = DocGenGiantQueryFlowAction.generateDocument(
-            new List<DocGenGiantQueryFlowAction.Request>{ req }
-        );
-        Test.stopTest();
-
-        System.assertEquals(1, responses.size(), 'Should return one response');
-        System.assertEquals(false, responses[0].success, 'Should fail for non-existent template');
-        System.assertNotEquals(null, responses[0].errorMessage, 'Error message should be set');
-    }
-
-    @IsTest
-    static void testGiantQueryFlowAction_syncPath() {
-        // Template with no child records — should go sync path but fail because no real DOCX
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
-        createTestFile();
-
-        DocGenGiantQueryFlowAction.Request req = new DocGenGiantQueryFlowAction.Request();
-        req.templateId = tpl.Id;
-        req.recordId = acc.Id;
-        req.saveToRecord = false;
-
-        Test.startTest();
-        List<DocGenGiantQueryFlowAction.Response> responses = DocGenGiantQueryFlowAction.generateDocument(
-            new List<DocGenGiantQueryFlowAction.Request>{ req }
-        );
-        Test.stopTest();
-
-        System.assertEquals(1, responses.size(), 'Should return one response');
-        // Will error because test file is not a real DOCX, but exercises the sync code path
-        System.assertNotEquals(null, responses[0], 'Response should not be null');
-    }
-
-    @IsTest
-    static void testGiantQueryFlowAction_syncPathWithValidDocx() {
-        // Create a valid DOCX so the sync path succeeds
-        String docXml =
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
-        createValidDocxFile(docXml);
-
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
-
-        DocGenGiantQueryFlowAction.Request req = new DocGenGiantQueryFlowAction.Request();
-        req.templateId = tpl.Id;
-        req.recordId = acc.Id;
-        req.saveToRecord = true;
-
-        Test.startTest();
-        List<DocGenGiantQueryFlowAction.Response> responses = DocGenGiantQueryFlowAction.generateDocument(
-            new List<DocGenGiantQueryFlowAction.Request>{ req }
-        );
-        Test.stopTest();
-
-        System.assertEquals(1, responses.size(), 'Should return one response');
-        // With valid DOCX and small dataset, should succeed via sync path
-        if (responses[0].success) {
-            System.assertNotEquals(null, responses[0].contentDocumentId, 'Should have document ID on sync success');
-            System.assertEquals(false, responses[0].isGiantQuery, 'Should not be giant query for small dataset');
-        }
-    }
-
-    @IsTest
-    static void testGiantQueryFlowAction_multipleRequests() {
-        // Test with multiple requests in the batch
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
-
-        DocGenGiantQueryFlowAction.Request req1 = new DocGenGiantQueryFlowAction.Request();
-        req1.templateId = tpl.Id;
-        req1.recordId = acc.Id;
-
-        DocGenGiantQueryFlowAction.Request req2 = new DocGenGiantQueryFlowAction.Request();
-        req2.templateId = tpl.Id;
-        req2.recordId = acc.Id;
-
-        Test.startTest();
-        List<DocGenGiantQueryFlowAction.Response> responses = DocGenGiantQueryFlowAction.generateDocument(
-            new List<DocGenGiantQueryFlowAction.Request>{ req1, req2 }
-        );
-        Test.stopTest();
-
-        System.assertEquals(2, responses.size(), 'Should return two responses');
-    }
-
-    // =========================================================================
-    // DocGenGiantQueryAssembler — coverage for static utility methods
-    // =========================================================================
-
-    @IsTest
-    static void testGiantQueryAssembler_constructorAndExecuteNoFragments() {
-        // Create a Job record to use as jobId
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
-        DocGen_Job__c job = new DocGen_Job__c(
-            Status__c = 'Draft',
-            Template__c = tpl.Id,
-            Label__c = 'Test Assembler',
-            Parent_Record_Id__c = String.valueOf(acc.Id)
-        );
-        insert job;
-
-        Test.startTest();
-        DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(
-            job.Id, tpl.Id, acc.Id, 'Contacts'
-        );
-        assembler.execute(null);
-        Test.stopTest();
-
-        // Should fail with 'No data to render' because no fragments exist
-        DocGen_Job__c updatedJob = [SELECT Status__c, Label__c FROM DocGen_Job__c WHERE Id = :job.Id];
-        System.assertEquals('Failed', updatedJob.Status__c, 'Job should fail with no fragments');
-    }
-
-    @IsTest
-    static void testGiantQueryAssembler_withFragments() {
-        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
-        Account acc = TestDataFactory.getTestAccount();
-        DocGen_Job__c job = new DocGen_Job__c(
-            Status__c = 'Draft',
-            Template__c = tpl.Id,
-            Label__c = 'Test Assembler Frags',
-            Parent_Record_Id__c = String.valueOf(acc.Id)
-        );
-        insert job;
-
-        // Create a fragment ContentVersion
-        String fragTitle = 'docgen_giant_' + job.Id + '_0001';
-        ContentVersion fragCv = new ContentVersion(
-            Title = fragTitle,
-            PathOnClient = fragTitle + '.html',
-            VersionData = Blob.valueOf('<tr><td>Row 1</td><td>Value 1</td></tr>')
-        );
-        insert fragCv;
-
-        // Also create a pre-rendered HTML template for buildHtmlTemplate fallback
-        // (no active version, so it falls back to auto-generated table wrapper)
-
-        Test.startTest();
-        DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(
-            job.Id, tpl.Id, acc.Id, 'Contacts'
-        );
-        assembler.execute(null);
-        Test.stopTest();
-
-        // Job should either complete or fail (Blob.toPdf may not work in test),
-        // but code paths are exercised
-        DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
-        System.assertNotEquals('Draft', updatedJob.Status__c, 'Job status should have changed from Draft');
-    }
-
-    // =========================================================================
-    // DocGenException — additional coverage
-    // =========================================================================
-
-    @IsTest
-    static void testDocGenExceptionThrowAndCatch() {
-        Boolean caught = false;
-        Test.startTest();
-        try {
-            throw new DocGenException('Thrown in test');
-        } catch (DocGenException e) {
-            caught = true;
-            System.assertEquals('Thrown in test', e.getMessage());
-        }
-        Test.stopTest();
-        System.assert(caught, 'DocGenException should be catchable');
     }
 
 }

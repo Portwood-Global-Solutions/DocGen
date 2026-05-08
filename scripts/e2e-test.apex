@@ -1,394 +1,444 @@
-// DocGen E2E Test Script — Comprehensive Pipeline Validation
+// =====================================================================
+// DocGen FULL End-to-End Test — ONE CLICK, ZERO DEPENDENCIES
+// Creates ALL data including template + DOCX file. Cleans up after.
+// Tests: template creation, data retrieval, V3 tree walker, parent
+//        fields, grandchildren, legacy compat, images, doc generation,
+//        junction stitching
 // Run: sf apex run --target-org <org> -f scripts/e2e-test.apex
-// Expected: PASS: N  FAIL: 0  ALL TESTS PASSED
+// =====================================================================
 
 Integer pass = 0;
 Integer fail = 0;
-Id acctId; Id tmplId; Id sigReqId; Id signerId; Id jobId;
-String signerToken;
 
-// Helper: check if a set contains a value with or without namespace prefix
-Boolean containsNs(Set<String> s, String val) {
-    return s.contains(val) || s.contains('portwoodglobal__' + val);
+Database.DMLOptions dml = new Database.DMLOptions();
+dml.DuplicateRuleHeader.allowSave = true;
+String uid = String.valueOf(Math.mod(Math.abs(Crypto.getRandomInteger()), 100000));
+
+// =====================================================================
+// 1. CREATE TEST DATA
+// =====================================================================
+
+Account acc = new Account(
+    Name = 'E2E-' + uid,
+    Industry = 'Technology',
+    Phone = '(555) 999-' + uid.leftPad(4, '0').right(4),
+    Website = 'www.test.com',
+    BillingStreet = '100 Test Dr',
+    BillingCity = 'San Francisco',
+    BillingState = 'CA',
+    BillingPostalCode = '94105'
+);
+Database.insert(acc, dml);
+
+List<Contact> cons = new List<Contact>{
+    new Contact(AccountId = acc.Id, FirstName = 'Alice', LastName = 'Johnson-' + uid, Title = 'CEO', Email = 'alice' + uid + '@test.com'),
+    new Contact(AccountId = acc.Id, FirstName = 'Bob', LastName = 'Smith-' + uid, Title = 'CTO', Email = 'bob' + uid + '@test.com')
+};
+Database.insert(cons, dml);
+
+Opportunity opp = new Opportunity(
+    Name = 'Test Deal-' + uid,
+    AccountId = acc.Id,
+    Amount = 100000,
+    StageName = 'Proposal/Price Quote',
+    CloseDate = Date.today().addDays(30)
+);
+Database.insert(opp, dml);
+
+// Products + Line Items
+List<Pricebook2> pbs = [SELECT Id FROM Pricebook2 WHERE IsStandard = true LIMIT 1];
+Product2 p1;
+Product2 p2;
+if (!pbs.isEmpty()) {
+    p1 = new Product2(Name = 'Widget Pro-' + uid, IsActive = true);
+    p2 = new Product2(Name = 'Support Plan-' + uid, IsActive = true);
+    insert new List<Product2>{ p1, p2 };
+    PricebookEntry pe1 = new PricebookEntry(Pricebook2Id = pbs[0].Id, Product2Id = p1.Id, UnitPrice = 5000, IsActive = true);
+    PricebookEntry pe2 = new PricebookEntry(Pricebook2Id = pbs[0].Id, Product2Id = p2.Id, UnitPrice = 1000, IsActive = true);
+    insert new List<PricebookEntry>{ pe1, pe2 };
+    insert new List<OpportunityLineItem>{
+        new OpportunityLineItem(OpportunityId = opp.Id, PricebookEntryId = pe1.Id, Quantity = 10, UnitPrice = 5000),
+        new OpportunityLineItem(OpportunityId = opp.Id, PricebookEntryId = pe2.Id, Quantity = 5, UnitPrice = 1000)
+    };
 }
 
-// ===== TEST 1: Permission Set Validation =====
-try {
-    List<PermissionSet> aps = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_Admin' LIMIT 1];
-    if (aps.isEmpty()) { fail++; System.debug('TEST 1a: DocGen_Admin exists... FAIL'); }
-    else {
-        pass++; System.debug('TEST 1a: DocGen_Admin exists... PASS');
-        Id psId = aps[0].Id;
+// Contact Role for junction test
+insert new OpportunityContactRole(OpportunityId = opp.Id, ContactId = cons[0].Id, Role = 'Decision Maker', IsPrimary = true);
 
-        // Class accesses
-        Set<String> cls = new Set<String>();
-        for (SetupEntityAccess s : [SELECT SetupEntityId FROM SetupEntityAccess WHERE ParentId = :psId AND SetupEntityType = 'ApexClass']) {
-            cls.add([SELECT Name FROM ApexClass WHERE Id = :s.SetupEntityId LIMIT 1].Name);
+// Test image (100x100 red square PNG)
+String pngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAA40lEQVR42u3QMQEAAAgDINc/9Mzg0QSJdnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dv4HAAD//9jQAQGH1FniAAAAAElFTkSuQmCC';
+ContentVersion imgCv = new ContentVersion(
+    Title = 'E2E Test Image ' + uid,
+    PathOnClient = 'test_image.png',
+    VersionData = EncodingUtil.base64Decode(pngB64),
+    IsMajorVersion = true
+);
+Database.insert(imgCv, dml);
+imgCv = [SELECT Id FROM ContentVersion WHERE Id = :imgCv.Id];
+
+// Store image CV ID in Description (simulates an image field)
+acc.Description = String.valueOf(imgCv.Id);
+update acc;
+
+System.debug('Setup: Account=' + acc.Id + ' | Opp=' + opp.Id + ' | Image CV=' + imgCv.Id);
+
+// =====================================================================
+// 2. CREATE TEMPLATE + DOCX FILE + VERSION (fully self-contained)
+// =====================================================================
+
+// V3 query config for Account with Contacts, Opportunities, and Line Items
+String v3Config = '{"v":3,"root":"Account","nodes":[' +
+    '{"id":"n0","object":"Account","fields":["Name","Industry","Phone","Description"],"parentFields":["Owner.Name"],"parentNode":null,"lookupField":null,"relationshipName":null},' +
+    '{"id":"n1","object":"Contact","fields":["FirstName","LastName","Title","Email"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Contacts"},' +
+    '{"id":"n2","object":"Opportunity","fields":["Name","Amount","StageName"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Opportunities"},' +
+    '{"id":"n3","object":"OpportunityLineItem","fields":["Quantity","UnitPrice","TotalPrice"],"parentFields":["Product2.Name"],"parentNode":"n2","lookupField":"OpportunityId","relationshipName":"OpportunityLineItems"}' +
+    ']}';
+
+DocGen_Template__c tmpl = new DocGen_Template__c(
+    Name = 'E2E Test-' + uid,
+    Base_Object_API__c = 'Account',
+    Type__c = 'Word',
+    Output_Format__c = 'PDF',
+    Query_Config__c = v3Config,
+    Test_Record_Id__c = acc.Id
+);
+insert tmpl;
+
+// Minimal valid DOCX with merge tags: {Name}, {Industry}, {Owner.Name},
+// {#Contacts}...{/Contacts}, {#Opportunities}...{/Opportunities},
+// {#OpportunityLineItems}{Product2.Name}{/OpportunityLineItems}
+String docxB64 = 'UEsDBBQAAAAAAGeUdlzXeYTquAEAALgBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbDw/eG1sIHZlcnNpb249IjEuMCIgZW5jb2Rpbmc9IlVURi04IiBzdGFuZGFsb25lPSJ5ZXMiPz4KPFR5cGVzIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvcGFja2FnZS8yMDA2L2NvbnRlbnQtdHlwZXMiPgogIDxEZWZhdWx0IEV4dGVuc2lvbj0icmVscyIgQ29udGVudFR5cGU9ImFwcGxpY2F0aW9uL3ZuZC5vcGVueG1sZm9ybWF0cy1wYWNrYWdlLnJlbGF0aW9uc2hpcHMreG1sIi8+CiAgPERlZmF1bHQgRXh0ZW5zaW9uPSJ4bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi94bWwiLz4KICA8T3ZlcnJpZGUgUGFydE5hbWU9Ii93b3JkL2RvY3VtZW50LnhtbCIgQ29udGVudFR5cGU9ImFwcGxpY2F0aW9uL3ZuZC5vcGVueG1sZm9ybWF0cy1vZmZpY2Vkb2N1bWVudC53b3JkcHJvY2Vzc2luZ21sLmRvY3VtZW50Lm1haW4reG1sIi8+CjwvVHlwZXM+UEsDBBQAAAAAAGeUdlwgG4bqLgEAAC4BAAALAAAAX3JlbHMvLnJlbHM8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCIgc3RhbmRhbG9uZT0ieWVzIj8+CjxSZWxhdGlvbnNoaXBzIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvcGFja2FnZS8yMDA2L3JlbGF0aW9uc2hpcHMiPgogIDxSZWxhdGlvbnNoaXAgSWQ9InJJZDEiIFR5cGU9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMvb2ZmaWNlRG9jdW1lbnQiIFRhcmdldD0id29yZC9kb2N1bWVudC54bWwiLz4KPC9SZWxhdGlvbnNoaXBzPlBLAwQUAAAAAABnlHZcjA6F0J0AAACdAAAAHAAAAHdvcmQvX3JlbHMvZG9jdW1lbnQueG1sLnJlbHM8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCIgc3RhbmRhbG9uZT0ieWVzIj8+CjxSZWxhdGlvbnNoaXBzIHhtbG5zPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvcGFja2FnZS8yMDA2L3JlbGF0aW9uc2hpcHMiPgo8L1JlbGF0aW9uc2hpcHM+UEsDBBQAAAAAAGeUdlyLLJ4uSQYAAEkGAAARAAAAd29yZC9kb2N1bWVudC54bWw8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCIgc3RhbmRhbG9uZT0ieWVzIj8+Cjx3OmRvY3VtZW50IHhtbG5zOndwYz0iaHR0cDovL3NjaGVtYXMubWljcm9zb2Z0LmNvbS9vZmZpY2Uvd29yZC8yMDEwL3dvcmRwcm9jZXNzaW5nQ2FudmFzIgogICAgICAgICAgICB4bWxuczptYz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL21hcmt1cC1jb21wYXRpYmlsaXR5LzIwMDYiCiAgICAgICAgICAgIHhtbG5zOm89InVybjpzY2hlbWFzLW1pY3Jvc29mdC1jb206b2ZmaWNlOm9mZmljZSIKICAgICAgICAgICAgeG1sbnM6cj0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcyIKICAgICAgICAgICAgeG1sbnM6bT0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvbWF0aCIKICAgICAgICAgICAgeG1sbnM6dj0idXJuOnNjaGVtYXMtbWljcm9zb2Z0LWNvbTp2bWwiCiAgICAgICAgICAgIHhtbG5zOndwPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvZHJhd2luZ21sLzIwMDYvd29yZHByb2Nlc3NpbmdEcmF3aW5nIgogICAgICAgICAgICB4bWxuczp3MTA9InVybjpzY2hlbWFzLW1pY3Jvc29mdC1jb206b2ZmaWNlOndvcmQiCiAgICAgICAgICAgIHhtbG5zOnc9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy93b3JkcHJvY2Vzc2luZ21sLzIwMDYvbWFpbiIKICAgICAgICAgICAgeG1sbnM6d25lPSJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL29mZmljZS93b3JkLzIwMDYvd29yZG1sIgogICAgICAgICAgICBtYzpJZ25vcmFibGU9IncxNCB3cDE0Ij4KICA8dzpib2R5PgogICAgPHc6cD48dzpyPjx3OnQ+QWNjb3VudDoge05hbWV9PC93OnQ+PC93OnI+PC93OnA+CiAgICA8dzpwPjx3OnI+PHc6dD5JbmR1c3RyeToge0luZHVzdHJ5fTwvdzp0PjwvdzpyPjwvdzpwPgogICAgPHc6cD48dzpyPjx3OnQ+T3duZXI6IHtPd25lci5OYW1lfTwvdzp0PjwvdzpyPjwvdzpwPgogICAgPHc6cD48dzpyPjx3OnQ+eyNDb250YWN0c308L3c6dD48L3c6cj48L3c6cD4KICAgIDx3OnA+PHc6cj48dzp0Pi0ge0ZpcnN0TmFtZX0ge0xhc3ROYW1lfSAoe0VtYWlsfSk8L3c6dD48L3c6cj48L3c6cD4KICAgIDx3OnA+PHc6cj48dzp0PnsvQ29udGFjdHN9PC93OnQ+PC93OnI+PC93OnA+CiAgICA8dzpwPjx3OnI+PHc6dD57I09wcG9ydHVuaXRpZXN9PC93OnQ+PC93OnI+PC93OnA+CiAgICA8dzpwPjx3OnI+PHc6dD5EZWFsOiB7TmFtZX0gLSB7QW1vdW50fTwvdzp0PjwvdzpyPjwvdzpwPgogICAgPHc6cD48dzpyPjx3OnQ+eyNPcHBvcnR1bml0eUxpbmVJdGVtc308L3c6dD48L3c6cj48L3c6cD4KICAgIDx3OnA+PHc6cj48dzp0PiAgUHJvZHVjdDoge1Byb2R1Y3QyLk5hbWV9IHh7UXVhbnRpdHl9PC93OnQ+PC93OnI+PC93OnA+CiAgICA8dzpwPjx3OnI+PHc6dD57L09wcG9ydHVuaXR5TGluZUl0ZW1zfTwvdzp0PjwvdzpyPjwvdzpwPgogICAgPHc6cD48dzpyPjx3OnQ+ey9PcHBvcnR1bml0aWVzfTwvdzp0PjwvdzpyPjwvdzpwPgogIDwvdzpib2R5Pgo8L3c6ZG9jdW1lbnQ+UEsBAhQDFAAAAAAAZ5R2XNd5hOq4AQAAuAEAABMAAAAAAAAAAAAAAIABAAAAAFtDb250ZW50X1R5cGVzXS54bWxQSwECFAMUAAAAAABnlHZcIBuG6i4BAAAuAQAACwAAAAAAAAAAAAAAgAHpAQAAX3JlbHMvLnJlbHNQSwECFAMUAAAAAABnlHZcjA6F0J0AAACdAAAAHAAAAAAAAAAAAAAAgAFAAwAAd29yZC9fcmVscy9kb2N1bWVudC54bWwucmVsc1BLAQIUAxQAAAAAAGeUdlyLLJ4uSQYAAEkGAAARAAAAAAAAAAAAAACAARcEAAB3b3JkL2RvY3VtZW50LnhtbFBLBQYAAAAABAAEAAMBAACPCgAAAAA=';
+
+// Upload DOCX as ContentVersion linked to the template
+ContentVersion docxCv = new ContentVersion(
+    Title = 'E2E Template-' + uid,
+    PathOnClient = 'e2e_template_' + uid + '.docx',
+    VersionData = EncodingUtil.base64Decode(docxB64),
+    IsMajorVersion = true,
+    FirstPublishLocationId = tmpl.Id
+);
+insert docxCv;
+docxCv = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :docxCv.Id];
+
+// Create active template version pointing to the DOCX
+DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+    Template__c = tmpl.Id,
+    Content_Version_Id__c = docxCv.Id,
+    Is_Active__c = true
+);
+insert ver;
+
+System.debug('Template: ' + tmpl.Id + ' | Version: ' + ver.Id + ' | DOCX CV: ' + docxCv.Id);
+
+// =====================================================================
+// 3. V3 TREE WALKER TESTS
+// =====================================================================
+
+Map<String, Object> data = DocGenDataRetriever.getRecordData(acc.Id, 'Account', v3Config);
+
+// Test 1: Account Name
+if (data.get('Name') == acc.Name) { pass++; } else { fail++; System.debug('FAIL T1: Account Name expected=' + acc.Name + ' got=' + data.get('Name')); }
+
+// Test 2: Owner.Name parent field
+Object owner = data.get('Owner');
+if (owner instanceof Map<String, Object> && ((Map<String, Object>) owner).get('Name') != null) { pass++; } else { fail++; System.debug('FAIL T2: Owner.Name missing'); }
+
+// Test 3: Contacts count
+Object cObj = data.get('Contacts');
+Integer cCount = 0;
+if (cObj instanceof Map<String, Object>) { cCount = ((List<Object>) ((Map<String, Object>) cObj).get('records')).size(); }
+if (cCount == 2) { pass++; } else { fail++; System.debug('FAIL T3: Contacts count=' + cCount + ' expected 2'); }
+
+// Test 4: Opportunities count
+Object oObj = data.get('Opportunities');
+Integer oCount = 0;
+Integer liCount = 0;
+if (oObj instanceof Map<String, Object>) {
+    List<Object> oRecs = (List<Object>) ((Map<String, Object>) oObj).get('records');
+    oCount = oRecs.size();
+    if (!oRecs.isEmpty()) {
+        Map<String, Object> firstOpp = (Map<String, Object>) oRecs[0];
+        Object liObj = firstOpp.get('OpportunityLineItems');
+        if (liObj instanceof Map<String, Object>) {
+            liCount = ((List<Object>) ((Map<String, Object>) liObj).get('records')).size();
+            // Test 5: Product2.Name parent field on line items
+            List<Object> liRecs = (List<Object>) ((Map<String, Object>) liObj).get('records');
+            if (!liRecs.isEmpty()) {
+                Map<String, Object> firstLi = (Map<String, Object>) liRecs[0];
+                Object prod = firstLi.get('Product2');
+                if (prod instanceof Map<String, Object> && ((Map<String, Object>) prod).get('Name') != null) {
+                    pass++;
+                    System.debug('Product2.Name = ' + ((Map<String, Object>) prod).get('Name'));
+                } else { fail++; System.debug('FAIL T5: Product2.Name missing on LineItem'); }
+            }
         }
-        Boolean ok = cls.contains('DocGenController') && cls.contains('DocGenService') && cls.contains('DocGenSignatureController');
-        if (ok) { pass++; System.debug('TEST 1b: Admin class accesses... PASS'); }
-        else { fail++; System.debug('TEST 1b: Admin class accesses... FAIL — found: ' + cls); }
-
-        // Object permissions — check with and without namespace
-        Set<String> objs = new Set<String>();
-        for (ObjectPermissions op : [SELECT SobjectType FROM ObjectPermissions WHERE ParentId = :psId AND PermissionsRead = true]) { objs.add(op.SobjectType); }
-        ok = containsNs(objs, 'DocGen_Template__c') && containsNs(objs, 'DocGen_Job__c')
-            && containsNs(objs, 'DocGen_Signature_Request__c') && containsNs(objs, 'DocGen_Signer__c');
-        if (ok) { pass++; System.debug('TEST 1c: Admin object permissions... PASS'); }
-        else { fail++; System.debug('TEST 1c: Admin object permissions... FAIL — found: ' + objs); }
-
-        // Signature field permissions — check with and without namespace
-        Set<String> flds = new Set<String>();
-        for (FieldPermissions fp : [SELECT Field FROM FieldPermissions WHERE ParentId = :psId AND PermissionsRead = true]) { flds.add(fp.Field); }
-        ok = containsNs(flds, 'DocGen_Signer__c.PIN_Hash__c') || containsNs(flds, 'DocGen_Signer__c.portwoodglobal__PIN_Hash__c')
-            || flds.contains('portwoodglobal__DocGen_Signer__c.portwoodglobal__PIN_Hash__c');
-        if (ok) { pass++; System.debug('TEST 1d: Admin signature field perms... PASS'); }
-        else { fail++; System.debug('TEST 1d: Admin signature field perms... FAIL — sample: ' + (flds.size() > 0 ? new List<String>(flds)[0] : 'empty')); }
     }
+}
+if (oCount == 1) { pass++; } else { fail++; System.debug('FAIL T4: Opp count=' + oCount + ' expected 1'); }
 
-    // User perm set
-    List<PermissionSet> ups = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_User' LIMIT 1];
-    if (!ups.isEmpty()) {
-        Set<String> uo = new Set<String>();
-        for (ObjectPermissions op : [SELECT SobjectType FROM ObjectPermissions WHERE ParentId = :ups[0].Id AND PermissionsRead = true]) { uo.add(op.SobjectType); }
-        Boolean uOk = containsNs(uo, 'DocGen_Signature_Request__c') && containsNs(uo, 'DocGen_Signer__c');
-        if (uOk) { pass++; System.debug('TEST 1e: User sig object read... PASS'); }
-        else { fail++; System.debug('TEST 1e: User sig object read... FAIL — found: ' + uo); }
-    } else { fail++; System.debug('TEST 1e: DocGen_User missing... FAIL'); }
+// Test 6: Line Items count
+if (liCount == 2) { pass++; } else { fail++; System.debug('FAIL T6: LineItem count=' + liCount + ' expected 2'); }
 
-    // Guest perm set
-    List<PermissionSet> gps = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_Guest_Signature' LIMIT 1];
-    if (!gps.isEmpty()) {
-        Id gId = gps[0].Id;
-        Set<String> gc = new Set<String>();
-        Set<String> gp = new Set<String>();
-        for (SetupEntityAccess s : [SELECT SetupEntityId, SetupEntityType FROM SetupEntityAccess WHERE ParentId = :gId]) {
-            if (s.SetupEntityType == 'ApexClass') { gc.add([SELECT Name FROM ApexClass WHERE Id = :s.SetupEntityId LIMIT 1].Name); }
-            if (s.SetupEntityType == 'ApexPage') { gp.add([SELECT Name FROM ApexPage WHERE Id = :s.SetupEntityId LIMIT 1].Name); }
-        }
-        Boolean gcOk = gc.contains('DocGenSignatureController') && gc.contains('DocGenAuthenticatorController');
-        if (gcOk) { pass++; System.debug('TEST 1f: Guest class accesses... PASS'); }
-        else { fail++; System.debug('TEST 1f: Guest class accesses... FAIL — found: ' + gc); }
-        Boolean gpOk = gp.contains('DocGenSignature') && gp.contains('DocGenSign') && gp.contains('DocGenVerify');
-        if (gpOk) { pass++; System.debug('TEST 1g: Guest page accesses... PASS'); }
-        else { fail++; System.debug('TEST 1g: Guest page accesses... FAIL — found: ' + gp); }
+// Test 7: Description contains CV ID (image field simulation)
+String descVal = (String) data.get('Description');
+if (descVal != null && descVal.startsWith('068')) { pass++; } else { fail++; System.debug('FAIL T7: Description CV ID = ' + descVal); }
 
-        Set<String> go2 = new Set<String>();
-        for (ObjectPermissions op : [SELECT SobjectType FROM ObjectPermissions WHERE ParentId = :gId AND PermissionsRead = true]) { go2.add(op.SobjectType); }
-        Boolean goOk = containsNs(go2, 'DocGen_Signature_Request__c') && containsNs(go2, 'DocGen_Signer__c');
-        if (goOk) { pass++; System.debug('TEST 1h: Guest object perms... PASS'); }
-        else { fail++; System.debug('TEST 1h: Guest object perms... FAIL — found: ' + go2); }
-    } else { fail++; System.debug('TEST 1f-h: DocGen_Guest_Signature missing... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 1: Perm sets... FAIL — ' + e.getMessage()); }
+// =====================================================================
+// 4. LEGACY V1 BACKWARD COMPAT
+// =====================================================================
 
-// ===== TEST 2: Create Test Data =====
-Account acct;
-List<Contact> cons;
-Opportunity opp;
+// Test 8: Legacy V1 config still works
+Map<String, Object> legData = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, Industry, (SELECT FirstName, LastName FROM Contacts)');
+Object lcObj = legData.get('Contacts');
+Integer lcCount = 0;
+if (lcObj instanceof Map<String, Object>) { lcCount = ((List<Object>) ((Map<String, Object>) lcObj).get('records')).size(); }
+if (lcCount == 2) { pass++; } else { fail++; System.debug('FAIL T8: Legacy contacts count=' + lcCount); }
+
+// =====================================================================
+// 5. IMAGE CV VALIDATION
+// =====================================================================
+
+// Test 9: Image CV ID format
+if (String.valueOf(imgCv.Id).startsWith('068')) { pass++; } else { fail++; System.debug('FAIL T9: Image CV ID format'); }
+
+// Test 10: Image CV accessible with correct extension
+List<ContentVersion> imgCheck = [SELECT Id, FileExtension, ContentSize FROM ContentVersion WHERE Id = :imgCv.Id];
+if (!imgCheck.isEmpty() && imgCheck[0].FileExtension == 'png') { pass++; } else { fail++; System.debug('FAIL T10: Image CV not accessible'); }
+
+// =====================================================================
+// 6. DOCUMENT GENERATION (full pipeline: template → merge → output)
+// =====================================================================
+
+// Test 11 + 12: Generate document from template we just created
 try {
-    acct = new Account(Name='E2E Test Corp', Industry='Technology', Phone='555-0100', Website='https://e2etest.example.com',
-        BillingStreet='123 Test St', BillingCity='Indianapolis', BillingState='IN', BillingPostalCode='46204');
-    insert acct; acctId = acct.Id;
-    cons = new List<Contact>{
-        new Contact(FirstName='Alice', LastName='Johnson', Email='alice@e2etest.example.com', Title='CEO', AccountId=acctId),
-        new Contact(FirstName='Bob', LastName='Smith', Email='bob@e2etest.example.com', Title='CTO', AccountId=acctId),
-        new Contact(FirstName='Carol', LastName='Davis', Email='carol@e2etest.example.com', Title='CFO', AccountId=acctId)
-    };
-    insert cons;
-    opp = new Opportunity(Name='E2E Test Opp', StageName='Prospecting', Amount=75000, CloseDate=Date.today().addDays(30), AccountId=acctId);
-    insert opp;
-    if (acct.Id != null && cons.size() == 3 && opp.Id != null) { pass++; System.debug('TEST 2: Test data created... PASS'); }
-    else { fail++; System.debug('TEST 2: Test data... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 2: Test data... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 3: Template Creation =====
-try {
-    String qc = 'Name, Industry, Phone, Website, (SELECT FirstName, LastName, Email, Title FROM Contacts)';
-    DocGen_Template__c t = new DocGen_Template__c(Name='E2E Test Template', Base_Object_API__c='Account', Type__c='Word', Output_Format__c='PDF', Query_Config__c=qc, Description__c='E2E test', Category__c='Test');
-    insert t; tmplId = t.Id;
-    DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c=tmplId, Is_Active__c=true, Query_Config__c=qc, Type__c='Word', Base_Object_API__c='Account', Category__c='Test', Description__c='E2E test');
-    insert ver;
-    List<DocGen_Template_Version__c> v = [SELECT Id FROM DocGen_Template_Version__c WHERE Template__c = :tmplId AND Is_Active__c = true];
-    if (!v.isEmpty()) { pass++; System.debug('TEST 3: Template + active version created... PASS'); }
-    else { fail++; System.debug('TEST 3: Template creation... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 3: Template creation... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 4: Template Update =====
-try {
-    Integer vBefore = [SELECT COUNT() FROM DocGen_Template_Version__c WHERE Template__c = :tmplId];
-    DocGen_Template__c tUpd = [SELECT Id, Description__c FROM DocGen_Template__c WHERE Id = :tmplId];
-    tUpd.Description__c = 'Updated desc';
-    update tUpd;
-    Integer vAfter = [SELECT COUNT() FROM DocGen_Template_Version__c WHERE Template__c = :tmplId];
-    DocGen_Template__c u = [SELECT Description__c FROM DocGen_Template__c WHERE Id = :tmplId];
-    if (u.Description__c == 'Updated desc' && vBefore == vAfter) { pass++; System.debug('TEST 4a: Update without version... PASS'); }
-    else { fail++; System.debug('TEST 4a: Update without version... FAIL'); }
-
-    List<DocGen_Template_Version__c> actVers = [SELECT Id FROM DocGen_Template_Version__c WHERE Template__c = :tmplId AND Is_Active__c = true];
-    for (DocGen_Template_Version__c av : actVers) { av.Is_Active__c = false; }
-    if (!actVers.isEmpty()) { update actVers; }
-    DocGen_Template_Version__c ver2 = new DocGen_Template_Version__c(Template__c=tmplId, Is_Active__c=true, Query_Config__c='Name, Industry', Type__c='Word', Base_Object_API__c='Account');
-    insert ver2;
-    Integer vNew = [SELECT COUNT() FROM DocGen_Template_Version__c WHERE Template__c = :tmplId];
-    Integer activeCount = [SELECT COUNT() FROM DocGen_Template_Version__c WHERE Template__c = :tmplId AND Is_Active__c = true];
-    if (vNew == vAfter + 1 && activeCount == 1) { pass++; System.debug('TEST 4b: New version, old deactivated... PASS'); }
-    else { fail++; System.debug('TEST 4b: New version... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 4: Template update... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 5: Version Management =====
-try {
-    List<DocGen_Template_Version__c> vers = DocGenController.getTemplateVersions(tmplId);
-    if (vers != null && vers.size() >= 2) { pass++; System.debug('TEST 5a: getTemplateVersions >= 2... PASS'); }
-    else { fail++; System.debug('TEST 5a: getTemplateVersions... FAIL — count: ' + (vers != null ? vers.size() : 0)); }
-
-    DocGenController.activateVersion(vers[0].Id);
-    DocGen_Template_Version__c r = [SELECT Is_Active__c FROM DocGen_Template_Version__c WHERE Id = :vers[0].Id];
-    if (r.Is_Active__c) { pass++; System.debug('TEST 5b: activateVersion... PASS'); }
-    else { fail++; System.debug('TEST 5b: activateVersion... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 5: Version mgmt... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 6: Data Retrieval =====
-try {
-    Map<String, Object> d = DocGenController.previewRecordData(acctId, 'Account', 'Name, Industry, (SELECT FirstName, LastName FROM Contacts)');
-    if (d != null && d.get('Name') == 'E2E Test Corp') { pass++; System.debug('TEST 6a: previewRecordData name... PASS'); }
-    else { fail++; System.debug('TEST 6a: previewRecordData name... FAIL — ' + d); }
-    if (d.containsKey('Contacts')) { pass++; System.debug('TEST 6b: previewRecordData children... PASS'); }
-    else { fail++; System.debug('TEST 6b: previewRecordData children... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 6: Data retrieval... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 6c: Single Document Generation (with output file) =====
-try {
-    // Build a minimal DOCX template with merge tags
-    String docXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-        + '<w:body>'
-        + '<w:p><w:r><w:t>Company: {Name}</w:t></w:r></w:p>'
-        + '<w:p><w:r><w:t>Industry: {Industry}</w:t></w:r></w:p>'
-        + '<w:p><w:r><w:t>Contacts:</w:t></w:r></w:p>'
-        + '<w:p><w:r><w:t>{#Contacts}</w:t></w:r></w:p>'
-        + '<w:p><w:r><w:t>- {FirstName} {LastName} ({Title})</w:t></w:r></w:p>'
-        + '<w:p><w:r><w:t>{/Contacts}</w:t></w:r></w:p>'
-        + '<w:p><w:r><w:t>Active: {IsActive:checkbox}</w:t></w:r></w:p>'
-        + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>'
-        + '</w:body></w:document>';
-    String relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-        + '</Relationships>';
-    String contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-        + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-        + '<Default Extension="xml" ContentType="application/xml"/>'
-        + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-        + '</Types>';
-
-    Compression.ZipWriter zw = new Compression.ZipWriter();
-    zw.addEntry('[Content_Types].xml', Blob.valueOf(contentTypes));
-    zw.addEntry('_rels/.rels', Blob.valueOf(relsXml));
-    zw.addEntry('word/document.xml', Blob.valueOf(docXml));
-    Blob docxBlob = zw.getArchive();
-
-    // Upload as ContentVersion linked to the template
-    ContentVersion cv = new ContentVersion(Title='E2E Test Template', PathOnClient='e2e_test.docx', VersionData=docxBlob, FirstPublishLocationId=tmplId);
-    insert cv;
-    cv = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
-
-    // Update the active version to point to this ContentVersion
-    List<DocGen_Template_Version__c> activeVers = [SELECT Id, Content_Version_Id__c FROM DocGen_Template_Version__c WHERE Template__c = :tmplId AND Is_Active__c = true LIMIT 1];
-    if (!activeVers.isEmpty()) {
-        activeVers[0].Content_Version_Id__c = cv.Id;
-        activeVers[0].Query_Config__c = 'Name, Industry, (SELECT FirstName, LastName, Title FROM Contacts)';
-        update activeVers;
-    }
-
-    // Generate PDF document
-    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId);
-    String base64Pdf = (String) genResult.get('base64');
-    String docTitle = (String) genResult.get('title');
-
-    if (String.isNotBlank(base64Pdf)) {
-        // Save the generated PDF to the Account so user can download and inspect
-        ContentVersion pdfCv = new ContentVersion(Title='E2E Generated PDF - ' + docTitle, PathOnClient='e2e_output.pdf',
-            VersionData=EncodingUtil.base64Decode(base64Pdf), FirstPublishLocationId=acctId);
-        insert pdfCv;
-        pass++; System.debug('TEST 6c: PDF generated and saved to Account... PASS');
-        System.debug('>>> DOWNLOAD PDF: Navigate to Account "E2E Test Corp" > Files tab to inspect the generated PDF');
+    Id cdId = DocGenService.generateDocument(tmpl.Id, acc.Id);
+    if (cdId != null) {
+        pass++;
+        System.debug('Generated ContentDocument: ' + cdId);
     } else {
-        fail++; System.debug('TEST 6c: PDF generation returned empty... FAIL');
+        fail++;
+        System.debug('FAIL T11: generateDocument returned null');
     }
-
-    // Switch template to DOCX output and generate
-    DocGen_Template__c tDocx = [SELECT Id, Output_Format__c FROM DocGen_Template__c WHERE Id = :tmplId];
-    tDocx.Output_Format__c = 'Native';
-    update tDocx;
-    Map<String, Object> docxResult = DocGenController.processAndReturnDocument(tmplId, acctId);
-    String base64Docx = (String) docxResult.get('base64');
-    if (String.isNotBlank(base64Docx)) {
-        ContentVersion docxCv = new ContentVersion(Title='E2E Generated DOCX', PathOnClient='e2e_output.docx',
-            VersionData=EncodingUtil.base64Decode(base64Docx), FirstPublishLocationId=acctId);
-        insert docxCv;
-        pass++; System.debug('TEST 6d: DOCX generated and saved to Account... PASS');
-        System.debug('>>> DOWNLOAD DOCX: Navigate to Account "E2E Test Corp" > Files tab to inspect the generated DOCX');
+    List<ContentVersion> cvs = [SELECT ContentSize, FileExtension FROM ContentVersion WHERE ContentDocumentId = :cdId LIMIT 1];
+    if (!cvs.isEmpty() && cvs[0].ContentSize > 0) {
+        pass++;
+        System.debug('Generated file: ' + cvs[0].FileExtension + ' — ' + cvs[0].ContentSize + ' bytes');
     } else {
-        fail++; System.debug('TEST 6d: DOCX generation returned empty... FAIL');
+        fail++;
+        System.debug('FAIL T12: Generated file empty or missing');
     }
-} catch (Exception e) { fail++; System.debug('TEST 6c/d: Document generation... FAIL — ' + e.getMessage()); }
+    // Test 13: Generated document has reasonable size (merge pipeline produced output)
+    if (!cvs.isEmpty() && cvs[0].ContentSize > 500) {
+        pass++;
+        System.debug('Generated PDF size: ' + cvs[0].ContentSize + ' bytes');
+    } else {
+        fail++;
+        System.debug('FAIL T13: Generated file too small (' + (cvs.isEmpty() ? '0' : String.valueOf(cvs[0].ContentSize)) + ' bytes)');
+    }
+} catch (Exception e) {
+    fail += 3;
+    System.debug('FAIL T11/12/13: Generation error: ' + e.getMessage() + ' | ' + e.getStackTraceString());
+}
 
-// ===== TEST 7: Bulk Generation =====
-try {
-    Integer ct = DocGenBulkController.validateFilter('Account', 'Name = \'E2E Test Corp\'');
-    if (ct > 0) { pass++; System.debug('TEST 7a: validateFilter > 0... PASS'); }
-    else { fail++; System.debug('TEST 7a: validateFilter... FAIL — count: ' + ct); }
+// =====================================================================
+// 7. V2 JUNCTION TEST
+// =====================================================================
 
-    jobId = DocGenBulkController.submitJob(tmplId, 'Name = \'E2E Test Corp\'', 'E2E Test Job', false, 1, false);
-    if (jobId != null) { pass++; System.debug('TEST 7b: submitJob... PASS'); }
-    else { fail++; System.debug('TEST 7b: submitJob... FAIL'); }
+// Test 14: V2 config with junction stitching (OCR → Contact)
+String v2Junction = '{"v":2,"baseObject":"Opportunity","baseFields":["Name","Amount"],"parentFields":["Account.Name"],"children":[],"junctions":[{"junctionRel":"OpportunityContactRoles","junctionFields":["Role"],"targetObject":"Contact","targetIdField":"ContactId","targetFields":["FirstName","LastName","Email"]}]}';
+Map<String, Object> jData = DocGenDataRetriever.getRecordData(opp.Id, 'Opportunity', v2Junction);
+Object ocrObj = jData.get('OpportunityContactRoles');
+if (ocrObj instanceof Map<String, Object>) {
+    List<Object> ocrRecs = (List<Object>) ((Map<String, Object>) ocrObj).get('records');
+    if (!ocrRecs.isEmpty()) {
+        Map<String, Object> firstOcr = (Map<String, Object>) ocrRecs[0];
+        Object contactData = firstOcr.get('Contact');
+        if (contactData instanceof Map<String, Object> && ((Map<String, Object>) contactData).get('FirstName') != null) {
+            pass++;
+            System.debug('Junction: ' + firstOcr.get('Role') + ' => ' + ((Map<String, Object>) contactData).get('FirstName'));
+        } else { fail++; System.debug('FAIL T14: Junction Contact data not stitched'); }
+    } else { fail++; System.debug('FAIL T14: No OCR records found'); }
+} else { fail++; System.debug('FAIL T14: No OpportunityContactRoles in data'); }
 
-    DocGen_Job__c j = DocGenBulkController.getJobStatus(jobId);
-    if (j != null && j.Status__c != null) { pass++; System.debug('TEST 7c: getJobStatus... PASS'); }
-    else { fail++; System.debug('TEST 7c: getJobStatus... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 7: Bulk gen... FAIL — ' + e.getMessage()); }
+// =====================================================================
+// 8. AGGREGATE TAG TESTS (processXml with aggregate tags)
+// =====================================================================
 
-// ===== TEST 8: Signature Objects =====
-try {
-    signerToken = EncodingUtil.convertToHex(Crypto.generateAesKey(256));
-    DocGen_Signature_Request__c sr = new DocGen_Signature_Request__c(
-        Status__c='Sent', Related_Record_Id__c=acctId, Template__c=tmplId,
-        Signer_Name__c='Alice Johnson', Signer_Email__c='alice@e2etest.example.com');
-    insert sr; sigReqId = sr.Id;
+// Build a simple XML string with aggregate tags and run through processXml
+// Data: Account with Contacts (2) and Opportunities (1) with LineItems (2: Qty=10,UnitPrice=5000 + Qty=5,UnitPrice=1000)
+// LineItem TotalPrice = Quantity * UnitPrice: 50000 + 5000 = 55000
 
-    DocGen_Signer__c sg = new DocGen_Signer__c(
-        Signature_Request__c=sigReqId, Signer_Name__c='Alice Johnson',
-        Signer_Email__c='alice@e2etest.example.com', Role_Name__c='Signer',
-        Secure_Token__c=signerToken, Status__c='Pending', Sort_Order__c=1);
-    insert sg; signerId = sg.Id;
+// Test 15: COUNT:Contacts
+String countXml = '<w:t>{COUNT:Contacts}</w:t>';
+String countResult = DocGenService.processXmlForTest(countXml, data);
+if (countResult.contains('2')) { pass++; } else { fail++; System.debug('FAIL T15: COUNT:Contacts expected 2, got: ' + countResult); }
 
-    DocGenSignatureController.SignatureInitResponse vr = DocGenSignatureController.validateToken(signerToken);
-    if (vr.isValid) { pass++; System.debug('TEST 8a: validateToken valid... PASS'); }
-    else { fail++; System.debug('TEST 8a: validateToken... FAIL — ' + vr.errorMessage); }
+// Test 15: SUM on line items (via Opportunities child data — need to test at Opportunity level)
+// Get the first opportunity's data for line item aggregates
+Map<String, Object> oppData = (Map<String, Object>) ((List<Object>) ((Map<String, Object>) data.get('Opportunities')).get('records'))[0];
+String sumXml = '<w:t>{SUM:OpportunityLineItems.TotalPrice}</w:t>';
+String sumResult = DocGenService.processXmlForTest(sumXml, oppData);
+// TotalPrice = 10*5000 + 5*1000 = 55000
+if (sumResult.contains('55000')) { pass++; } else { fail++; System.debug('FAIL T16: SUM:LineItems.TotalPrice expected 55000, got: ' + sumResult); }
 
-    DocGen_Signature_Audit__c au = new DocGen_Signature_Audit__c(
-        Signature_Request__c=sigReqId, Signer__c=signerId,
-        Signer_Name__c='Alice Johnson', Signer_Email__c='alice@e2etest.example.com',
-        Signed_Date__c=System.now(), IP_Address__c='127.0.0.1', Consent_Captured__c=true,
-        Document_Hash_SHA256__c=EncodingUtil.convertToHex(Crypto.generateAesKey(256)));
-    insert au;
-    if (au.Id != null) { pass++; System.debug('TEST 8b: Audit record created... PASS'); }
-    else { fail++; System.debug('TEST 8b: Audit record... FAIL'); }
+// Test 16: SUM with format specifier
+String sumFmtXml = '<w:t>{SUM:OpportunityLineItems.TotalPrice:currency}</w:t>';
+String sumFmtResult = DocGenService.processXmlForTest(sumFmtXml, oppData);
+if (sumFmtResult.contains('$55,000.00')) { pass++; } else { fail++; System.debug('FAIL T17: SUM:currency expected $55,000.00, got: ' + sumFmtResult); }
 
-    List<DocGenAuthenticatorController.VerificationResult> vrs = DocGenAuthenticatorController.verifyByRequestId(sigReqId);
-    if (vrs != null && !vrs.isEmpty()) { pass++; System.debug('TEST 8c: verifyByRequestId... PASS'); }
-    else { fail++; System.debug('TEST 8c: verifyByRequestId... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 8: Signatures... FAIL — ' + e.getMessage()); }
+// Test 17: AVG
+String avgXml = '<w:t>{AVG:OpportunityLineItems.UnitPrice}</w:t>';
+String avgResult = DocGenService.processXmlForTest(avgXml, oppData);
+if (avgResult.contains('3000')) { pass++; } else { fail++; System.debug('FAIL T18: AVG:UnitPrice expected 3000, got: ' + avgResult); }
 
-// ===== TEST 9: Signature PIN Flow =====
-try {
-    Map<String, Object> pinResult = DocGenSignatureController.sendPin(signerToken, 'alice@e2etest.example.com');
-    if ((Boolean)pinResult.get('success')) { pass++; System.debug('TEST 9a: sendPin success... PASS'); }
-    else { fail++; System.debug('TEST 9a: sendPin... FAIL — ' + pinResult.get('message')); }
+// Test 18: MIN/MAX
+String minXml = '<w:t>{MIN:OpportunityLineItems.Quantity}</w:t>';
+String minResult = DocGenService.processXmlForTest(minXml, oppData);
+if (minResult.contains('5')) { pass++; } else { fail++; System.debug('FAIL T19: MIN:Quantity expected 5, got: ' + minResult); }
 
-    DocGen_Signer__c sg2 = [SELECT PIN_Hash__c, PIN_Expires_At__c FROM DocGen_Signer__c WHERE Id = :signerId];
-    if (sg2.PIN_Hash__c != null && sg2.PIN_Expires_At__c != null) { pass++; System.debug('TEST 9b: PIN hash + expiry set... PASS'); }
-    else { fail++; System.debug('TEST 9b: PIN fields... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 9: PIN flow... FAIL — ' + e.getMessage()); }
+String maxXml = '<w:t>{MAX:OpportunityLineItems.Quantity}</w:t>';
+String maxResult = DocGenService.processXmlForTest(maxXml, oppData);
+if (maxResult.contains('10')) { pass++; } else { fail++; System.debug('FAIL T20: MAX:Quantity expected 10, got: ' + maxResult); }
 
-// ===== TEST 10: Settings =====
-try {
-    DocGen_Settings__c s = DocGenSetupController.getSettings();
-    if (s != null) { pass++; System.debug('TEST 10a: getSettings... PASS'); }
-    else { fail++; System.debug('TEST 10a: getSettings... FAIL'); }
+// =====================================================================
+// 9. V4 APEX DATA PROVIDER TEST (custom data source)
+// =====================================================================
 
-    DocGenSetupController.saveSignatureSettings('#FF0000', null, null, null, null, 'E2E Corp', '');
-    DocGen_Settings__c s2 = DocGenSetupController.getSettings();
-    if (s2.Signature_Email_Brand_Color__c == '#FF0000' && s2.Company_Name__c == 'E2E Corp') { pass++; System.debug('TEST 10b: saveSignatureSettings... PASS'); }
-    else { fail++; System.debug('TEST 10b: saveSignatureSettings... FAIL'); }
-
-    List<Map<String, String>> owas = DocGenSetupController.getOrgWideEmailAddresses();
-    if (owas != null && !owas.isEmpty()) { pass++; System.debug('TEST 10c: getOrgWideEmailAddresses... PASS'); }
-    else { fail++; System.debug('TEST 10c: OWAs... FAIL'); }
-} catch (Exception e) { fail++; System.debug('TEST 10: Settings... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 11: Conditional Logic =====
-try {
-    String r1 = DocGenService.processXmlForTest('<w:t>{#IsVIP}VIP{/IsVIP}</w:t>', new Map<String, Object>{'IsVIP'=>true});
-    if (r1.contains('VIP')) { pass++; System.debug('TEST 11a: True conditional... PASS'); }
-    else { fail++; System.debug('TEST 11a: True conditional... FAIL — ' + r1); }
-
-    String r2 = DocGenService.processXmlForTest('<w:t>{#IsVIP}VIP{/IsVIP}</w:t>', new Map<String, Object>{'IsVIP'=>false});
-    if (!r2.contains('VIP')) { pass++; System.debug('TEST 11b: False conditional... PASS'); }
-    else { fail++; System.debug('TEST 11b: False conditional... FAIL — ' + r2); }
-
-    String r3 = DocGenService.processXmlForTest('<w:t>{^IsVIP}Standard{/IsVIP}</w:t>', new Map<String, Object>{'IsVIP'=>false});
-    if (r3.contains('Standard')) { pass++; System.debug('TEST 11c: Inverted conditional... PASS'); }
-    else { fail++; System.debug('TEST 11c: Inverted... FAIL — ' + r3); }
-
-    String r4 = DocGenService.processXmlForTest('<w:t>{#IsVIP}VIP{:else}Standard{/IsVIP}</w:t>', new Map<String, Object>{'IsVIP'=>false});
-    if (r4.contains('Standard') && !r4.contains('VIP')) { pass++; System.debug('TEST 11d: Else blocks... PASS'); }
-    else { fail++; System.debug('TEST 11d: Else... FAIL — ' + r4); }
-
-    String r5 = DocGenService.processXmlForTest('<w:t>{Active:checkbox}</w:t>', new Map<String, Object>{'Active'=>true});
-    String r6 = DocGenService.processXmlForTest('<w:t>{Active:checkbox}</w:t>', new Map<String, Object>{'Active'=>false});
-    if (r5.contains('[X]') && r6.contains('[ ]')) { pass++; System.debug('TEST 11e: Checkbox format... PASS'); }
-    else { fail++; System.debug('TEST 11e: Checkbox... FAIL — true=' + r5 + ' false=' + r6); }
-
-    String r7 = DocGenService.processXmlForTest('<w:t>{#IF Amt > 50000}Big{/IF}</w:t>', new Map<String, Object>{'Amt'=>75000});
-    if (r7.contains('Big')) { pass++; System.debug('TEST 11f: IF comparison... PASS'); }
-    else { fail++; System.debug('TEST 11f: IF comparison... FAIL — ' + r7); }
-
-    String r8 = DocGenService.processXmlForTest('<w:t>{#IF Stage = \'Won\'}Closed{:else}Open{/IF}</w:t>', new Map<String, Object>{'Stage'=>'Lost'});
-    if (r8.contains('Open') && !r8.contains('Closed')) { pass++; System.debug('TEST 11g: IF with else... PASS'); }
-    else { fail++; System.debug('TEST 11g: IF else... FAIL — ' + r8); }
-} catch (Exception e) { fail++; System.debug('TEST 11: Conditionals... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 12: Formatting =====
-try {
-    String oc = DocGenService.processXmlForTest('<w:t>{Amt:currency}</w:t>', new Map<String, Object>{'Amt'=>75000.50});
-    if (oc.contains('$')) { pass++; System.debug('TEST 12a: Currency... PASS'); }
-    else { fail++; System.debug('TEST 12a: Currency... FAIL — ' + oc); }
-
-    String op = DocGenService.processXmlForTest('<w:t>{R:percent}</w:t>', new Map<String, Object>{'R'=>15.5});
-    if (op.contains('%')) { pass++; System.debug('TEST 12b: Percent... PASS'); }
-    else { fail++; System.debug('TEST 12b: Percent... FAIL — ' + op); }
-
-    // Use DateTime to avoid timezone date shift
-    String od = DocGenService.processXmlForTest('<w:t>{D:MM/dd/yyyy}</w:t>', new Map<String, Object>{'D'=>DateTime.newInstance(2026, 4, 8, 12, 0, 0)});
-    if (od.contains('04/08/2026')) { pass++; System.debug('TEST 12c: Date format... PASS'); }
-    else { fail++; System.debug('TEST 12c: Date format... FAIL — ' + od); }
-} catch (Exception e) { fail++; System.debug('TEST 12: Formatting... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 13: Aggregates =====
-try {
-    Map<String, Object> aggData = new Map<String, Object>{
-        'Items' => new List<Object>{
-            new Map<String, Object>{'Amount'=>100, 'Name'=>'A'},
-            new Map<String, Object>{'Amount'=>200, 'Name'=>'B'}
+// Test 21: Generate document from custom data map (same path as V4 provider)
+Map<String, Object> providerData = new Map<String, Object>{
+    'CompanyName' => 'Portwood Global Solutions',
+    'InvoiceNumber' => 'INV-2026-001',
+    'Amount' => 50000.00,
+    'TaxAmount' => 4125.00,
+    'Total' => 54125.00,
+    'Account' => new Map<String, Object>{ 'Name' => acc.Name },
+    'LineItems' => new Map<String, Object>{
+        'records' => new List<Object>{
+            new Map<String, Object>{ 'Product' => 'Widget', 'Qty' => 10 },
+            new Map<String, Object>{ 'Product' => 'Support', 'Qty' => 5 }
         }
-    };
-    String s1 = DocGenService.processXmlForTest('<w:t>{SUM:Items.Amount}</w:t>', aggData);
-    if (s1.contains('300')) { pass++; System.debug('TEST 13a: SUM... PASS'); }
-    else { fail++; System.debug('TEST 13a: SUM... FAIL — ' + s1); }
-
-    String s2 = DocGenService.processXmlForTest('<w:t>{COUNT:Items}</w:t>', aggData);
-    if (s2.contains('2')) { pass++; System.debug('TEST 13b: COUNT... PASS'); }
-    else { fail++; System.debug('TEST 13b: COUNT... FAIL — ' + s2); }
-} catch (Exception e) { fail++; System.debug('TEST 13: Aggregates... FAIL — ' + e.getMessage()); }
-
-// ===== TEST 14: Cleanup =====
+    }
+};
 try {
-    delete [SELECT Id FROM DocGen_Signature_Audit__c WHERE Signature_Request__c = :sigReqId];
-    delete [SELECT Id FROM DocGen_Signer__c WHERE Signature_Request__c = :sigReqId];
-    delete [SELECT Id FROM DocGen_Signature_Request__c WHERE Id = :sigReqId];
-    if (jobId != null) { delete [SELECT Id FROM DocGen_Job__c WHERE Id = :jobId]; }
-    delete [SELECT Id FROM DocGen_Template_Version__c WHERE Template__c = :tmplId];
-    delete [SELECT Id FROM DocGen_Template__c WHERE Id = :tmplId];
-    delete [SELECT Id FROM Opportunity WHERE AccountId = :acctId];
-    delete [SELECT Id FROM Contact WHERE AccountId = :acctId];
-    delete [SELECT Id FROM Account WHERE Id = :acctId];
-    // Reset signature settings
-    DocGenSetupController.saveSignatureSettings(null, null, null, null, null, null, '');
-    pass++; System.debug('TEST 14: Cleanup... PASS');
-} catch (Exception e) { fail++; System.debug('TEST 14: Cleanup... FAIL — ' + e.getMessage()); }
+    Id providerDocId = DocGenService.generateDocumentFromData(tmpl.Id, acc.Id, providerData);
+    if (providerDocId != null) {
+        pass++;
+        System.debug('V4 provider path: generated doc ' + providerDocId);
+    } else { fail++; System.debug('FAIL T21: V4 provider returned null'); }
+} catch (Exception e) {
+    fail++;
+    System.debug('FAIL T21: V4 provider error: ' + e.getMessage());
+}
 
-System.debug('========================================');
-System.debug('PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED'));
-System.debug('========================================');
+// Test 22: V4 config routing — error for missing class
+try {
+    DocGenDataRetriever.getRecordData(acc.Id, 'Account', '{"v":4,"provider":"FakeClass"}');
+    fail++;
+    System.debug('FAIL T22: should have thrown');
+} catch (DocGenException e) {
+    if (e.getMessage().contains('FakeClass')) { pass++; } else { fail++; System.debug('FAIL T22: wrong error'); }
+}
+
+// =====================================================================
+// 10. NULL PARENT LOOKUP IN LOOPS TEST (Issue #48)
+// =====================================================================
+
+// Test 23: Null parent lookup in child records should render blank, not the child's Name
+// Simulate a child record with a null parent relationship (e.g., ReportsTo__r is null)
+Map<String, Object> childWithNullParent = new Map<String, Object>{
+    'FirstName' => 'Alice',
+    'LastName' => 'Johnson',
+    'Name' => 'Alice Johnson'
+};
+// No 'ReportsTo__r' key — simulates a null parent lookup
+Map<String, Object> parentWithChildren = new Map<String, Object>{
+    'Name' => 'Test Account',
+    'Contacts' => new Map<String, Object>{
+        'records' => new List<Object>{ childWithNullParent }
+    }
+};
+String nullParentXml = '<w:t>{#Contacts}</w:t><w:t>{ReportsTo__r.Name}</w:t><w:t>{/Contacts}</w:t>';
+String nullParentResult = DocGenService.processXmlForTest(nullParentXml, parentWithChildren);
+// Should NOT contain 'Alice Johnson' (the child's own Name)
+if (!nullParentResult.contains('Alice Johnson') && !nullParentResult.contains('Alice')) {
+    pass++;
+} else {
+    fail++;
+    System.debug('FAIL T23: Null parent lookup rendered child Name instead of blank: ' + nullParentResult);
+}
+
+// =====================================================================
+// 11. TEMPLATE EXPORT / IMPORT ROUND-TRIP
+// =====================================================================
+
+// Test 24: Export template to JSON, import it, verify the copy works
+try {
+    String exportJson = DocGenController.exportTemplate(tmpl.Id);
+    Map<String, Object> parsed = (Map<String, Object>) JSON.deserializeUntyped(exportJson);
+    Map<String, Object> expTmpl = (Map<String, Object>) parsed.get('template');
+    Boolean hasFile = parsed.containsKey('templateFile');
+    Boolean nameMatches = expTmpl.get('Name') == tmpl.Name;
+    Boolean hasVersion = parsed.get('docgenExportVersion') == '1';
+
+    if (nameMatches && hasFile && hasVersion) {
+        // Now import it
+        Id importedId = DocGenController.importTemplate(exportJson);
+        List<DocGen_Template__c> imported = [
+            SELECT Name, Base_Object_API__c, Type__c, Query_Config__c
+            FROM DocGen_Template__c WHERE Id = :importedId LIMIT 1
+        ];
+        if (!imported.isEmpty() && imported[0].Name == tmpl.Name && imported[0].Base_Object_API__c == tmpl.Base_Object_API__c) {
+            pass++;
+            // Clean up imported template
+            delete imported;
+        } else {
+            fail++;
+            System.debug('FAIL T24: Imported template data mismatch');
+        }
+    } else {
+        fail++;
+        System.debug('FAIL T24: Export JSON missing fields. name=' + nameMatches + ' file=' + hasFile + ' ver=' + hasVersion);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('FAIL T24: Export/Import error: ' + e.getMessage());
+}
+
+// =====================================================================
+// RESULTS
+// =====================================================================
+
+System.debug('');
+System.debug('==============================================');
+System.debug('  PASS: ' + pass + '  FAIL: ' + fail);
+System.debug('  ' + (fail == 0 ? 'ALL TESTS PASSED' : fail + ' TEST(S) FAILED'));
+System.debug('==============================================');
+System.debug('Tests: T1 Account name, T2 Owner.Name, T3 Contacts(2),');
+System.debug('  T4 Opps(1), T5 Product2.Name, T6 LineItems(2),');
+System.debug('  T7 Description CV, T8 Legacy V1, T9 Image CV format,');
+System.debug('  T10 Image CV access, T11 Doc generation, T12 Doc not empty,');
+System.debug('  T13 Image render size, T14 Junction stitching, T15 COUNT,');
+System.debug('  T16 SUM, T17 SUM:currency, T18 AVG, T19 MIN, T20 MAX,');
+System.debug('  T21 V4 provider doc gen, T22 V4 missing class error,');
+System.debug('  T23 Null parent lookup in loop, T24 Export/Import round-trip');
+System.debug('  (Sample template tests: run scripts/e2e-sample-templates.apex)');
+
+// =====================================================================
+// CLEANUP — delete everything we created
+// =====================================================================
+
+// NOTE: Salesforce throws "entity is deleted" if you delete ContentDocuments
+// and their linked entities in the same transaction. Delete non-content records
+// only — content documents become orphaned but don't affect future test runs.
+
+// Delete template first (cascades to template version)
+try { delete tmpl; } catch (Exception ex) { System.debug('Cleanup tmpl: ' + ex.getMessage()); }
+
+// Delete children before parents
+try { delete [SELECT Id FROM OpportunityContactRole WHERE OpportunityId = :opp.Id]; } catch (Exception ex) {}
+try { delete [SELECT Id FROM OpportunityLineItem WHERE OpportunityId = :opp.Id]; } catch (Exception ex) {}
+try { delete [SELECT Id FROM Opportunity WHERE Id = :opp.Id]; } catch (Exception ex) {}
+try { delete [SELECT Id FROM Contact WHERE AccountId = :acc.Id]; } catch (Exception ex) {}
+try { if (p1 != null) delete [SELECT Id FROM Product2 WHERE Id IN (:p1.Id, :p2.Id)]; } catch (Exception ex) {}
+try { delete [SELECT Id FROM Account WHERE Id = :acc.Id]; } catch (Exception ex) {}
+System.debug('Cleanup: DONE');

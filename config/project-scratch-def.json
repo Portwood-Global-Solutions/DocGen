@@ -1,15 +1,17 @@
 {
-  "orgName": "DocGen Signatures Dev",
-  "edition": "developer",
-  "features": ["EnableSetPasswordInApi", "Sites"],
+  "orgName": "Portwood Global DocGen",
+  "namespace": "portwoodglobal",
+  "edition": "Developer",
+  "features": ["EnableSetPasswordInApi"],
   "settings": {
     "lightningExperienceSettings": {
       "enableS1DesktopEnabled": true
     },
-    "securitySettings": {
-      "sessionSettings": {
-        "forceRelogin": false
-      }
+    "mobileSettings": {
+      "enableS1EncryptedStoragePref2": false
+    },
+    "quoteSettings": {
+      "enableQuote": true
     }
   }
 }

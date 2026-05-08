@@ -21,6 +21,7 @@
         <members>DocGenPdfRendererController</members>
         <members>DocGenService</members>
         <members>DocGenSetupController</members>
+        <members>DocGenSharingTests</members>
         <members>DocGenPdfQueueable</members>
         <members>DocGenTemplateManager</members>
         <members>DocGenTests</members>
@@ -57,6 +58,7 @@
         <members>docGenQueryBuilder</members>
         <members>docGenRunner</members>
         <members>docGenSetupWizard</members>
+        <members>docGenSharing</members>
         <members>docGenTitleEditor</members>
         <members>docGenAdminGuide</members>
         <name>LightningComponentBundle</name>

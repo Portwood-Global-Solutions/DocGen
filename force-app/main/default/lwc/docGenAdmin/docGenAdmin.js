@@ -3,7 +3,7 @@ import { createRecord } from 'lightning/uiRecordApi';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { refreshApex } from '@salesforce/apex';
-import { downloadBase64 as downloadBase64Util, parseSOQLFields, stripOuterSelectFrom } from 'c/docGenUtils';
+import { downloadBase64 as downloadBase64Util } from 'c/docGenUtils';
 
 // Apex
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
@@ -16,11 +16,6 @@ import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import createSampleTemplates from '@salesforce/apex/DocGenController.createSampleTemplates';
 import exportTemplate from '@salesforce/apex/DocGenController.exportTemplate';
 import importTemplate from '@salesforce/apex/DocGenController.importTemplate';
-import getObjectFields from '@salesforce/apex/DocGenController.getObjectFields';
-import getObjectOptions from '@salesforce/apex/DocGenController.getObjectOptions';
-import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
-import getParentRelationships from '@salesforce/apex/DocGenController.getParentRelationships';
-import previewRecordData from '@salesforce/apex/DocGenController.previewRecordData';
 
 // Schema
 import DOCGEN_TEMPLATE_OBJECT from '@salesforce/schema/DocGen_Template__c';
@@ -34,13 +29,6 @@ import OUTPUT_FORMAT_FIELD from '@salesforce/schema/DocGen_Template__c.Output_Fo
 import TEST_RECORD_FIELD from '@salesforce/schema/DocGen_Template__c.Test_Record_Id__c';
 import DOC_TITLE_FIELD from '@salesforce/schema/DocGen_Template__c.Document_Title_Format__c';
 import IS_DEFAULT_FIELD from '@salesforce/schema/DocGen_Template__c.Is_Default__c';
-// 1.47 — runner visibility & sort
-import SORT_ORDER_FIELD from '@salesforce/schema/DocGen_Template__c.Sort_Order__c';
-import LOCK_OUTPUT_FORMAT_FIELD from '@salesforce/schema/DocGen_Template__c.Lock_Output_Format__c';
-import SPECIFIC_RECORD_IDS_FIELD from '@salesforce/schema/DocGen_Template__c.Specific_Record_Ids__c';
-import REQUIRED_PERM_SETS_FIELD from '@salesforce/schema/DocGen_Template__c.Required_Permission_Sets__c';
-import RECORD_FILTER_FIELD from '@salesforce/schema/DocGen_Template__c.Record_Filter__c';
-import testRecordFilter from '@salesforce/apex/DocGenController.testRecordFilter';
 // Version fields (DocGen_Template_Version__c)
 import VER_IS_ACTIVE_FIELD from '@salesforce/schema/DocGen_Template_Version__c.Is_Active__c';
 import VER_CV_ID_FIELD from '@salesforce/schema/DocGen_Template_Version__c.Content_Version_Id__c';
@@ -57,12 +45,6 @@ const F = {
     TestRecordId: TEST_RECORD_FIELD.fieldApiName,
     DocTitleFormat: DOC_TITLE_FIELD.fieldApiName,
     IsDefault: IS_DEFAULT_FIELD.fieldApiName,
-    // 1.47 — runner visibility & sort
-    SortOrder: SORT_ORDER_FIELD.fieldApiName,
-    LockOutputFormat: LOCK_OUTPUT_FORMAT_FIELD.fieldApiName,
-    SpecificRecordIds: SPECIFIC_RECORD_IDS_FIELD.fieldApiName,
-    RequiredPermSets: REQUIRED_PERM_SETS_FIELD.fieldApiName,
-    RecordFilter: RECORD_FILTER_FIELD.fieldApiName,
     // Version fields
     VerIsActive: VER_IS_ACTIVE_FIELD.fieldApiName,
     VerCvId: VER_CV_ID_FIELD.fieldApiName
@@ -80,6 +62,7 @@ const COLUMNS = [
         { label: 'View', name: 'view' },
         { label: 'Edit', name: 'edit' },
         { label: 'Export', name: 'export' },
+        { label: 'Share', name: 'share' },
         { label: 'Delete', name: 'delete' }
     ] } }
 ];
@@ -122,8 +105,6 @@ const VERSION_COLUMNS = [
     newTemplateObject = 'Account';
     newTemplateDesc = '';
     newTemplateQuery = '';
-    @track newTemplateSampleRecordId = '';
-    @track sampleRecordData = null;
     isCreating = true;
     createdTemplateId;
 
@@ -137,339 +118,23 @@ const VERSION_COLUMNS = [
     editTemplateObject;
     @track editTemplateOutputFormat;
     editTemplateDesc;
-    @track editTemplateQuery;
+    editTemplateQuery;
     editTemplateTestRecordId;
     editTemplateTitleFormat;
     editTemplateIsDefault = false;
-    // 1.47 — runner visibility & sort
-    editTemplateSortOrder;
-    editTemplateLockOutputFormat = false;
-    editTemplateSpecificRecordIds;
-    editTemplateRequiredPermissionSets;
-    editTemplateRecordFilter;
-    @track editTemplateRecordFilterResult = '';
-    @track editTemplateRecordFilterResultMessage = '';
-    @track editTemplateRecordFilterTesting = false;
 
     @track currentFileId;
     @track uploadedFileName = '';
-    @track uploadedContentVersionId;
 
     // Preview/Restore State
     @track isPreviewModalOpen = false;
     @track previewVersion = {};
     isLoadingVersions = false;
 
-    // Visual builder toggle (wizard + edit modal)
-    @track useVisualBuilder = false;
-    @track editUseVisualBuilder = false;
-
-    // Edit modal manual query toggle (for backward compat with existing V3 configs)
+    // Manual Query Toggle (Edit modal)
     @track isManualQuery = false;
-    // Context flag: true when editing in modal, false when in wizard
-    _editContext = false;
-
-    get _activeQuery() { return this._editContext ? this.editTemplateQuery : this.newTemplateQuery; }
-    set _activeQuery(v) { if (this._editContext) { this.editTemplateQuery = v; } else { this.newTemplateQuery = v; } }
-    get _activeObject() { return this._editContext ? this.editTemplateObject : this.newTemplateObject; }
-    get _activeSampleId() { return this._editContext ? this.editTemplateTestRecordId : this.newTemplateSampleRecordId; }
-    // Builder 2.0 state
-    @track objectOptions = [];
-    @track filteredObjectOptions = [];
-    @track showObjectSuggestions = false;
-    @track queryTreeNodes = [];
-    @track queryWarnings = null;
-    @track builderTab = 'fields';
-    @track builderSearchTerm = '';
-    @track _allFields = [];
-    @track _allChildren = [];
-    @track _allParents = [];
-
-    get builderFieldsTabClass() { return this.builderTab === 'fields' ? 'builder-tab-active' : ''; }
-    get builderRelatedTabClass() { return this.builderTab === 'related' ? 'builder-tab-active' : ''; }
-    get builderParentsTabClass() { return this.builderTab === 'parents' ? 'builder-tab-active' : ''; }
-    get builderPanelItems() {
-        const s = (this.builderSearchTerm || '').toLowerCase();
-        if (this.builderTab === 'fields') {
-            return (this._allFields || [])
-                .filter(f => !s || f.label.toLowerCase().includes(s) || f.value.toLowerCase().includes(s))
-                .slice(0, 150)
-                .map(f => ({ value: f.value, label: f.label, extra: f.type || '' }));
-        } else if (this.builderTab === 'related') {
-            return (this._allChildren || [])
-                .filter(c => !s || c.label.toLowerCase().includes(s) || c.value.toLowerCase().includes(s))
-                .slice(0, 80)
-                .map(c => ({ value: c.value, label: c.label, extra: c.childObjectApiName || '' }));
-        } else if (this.builderTab === 'parents') {
-            return (this._allParents || [])
-                .filter(p => !s || p.label.toLowerCase().includes(s) || p.value.toLowerCase().includes(s))
-                .slice(0, 80)
-                .map(p => ({ value: p.value, label: p.label, extra: p.targetObject || '' }));
-        }
-        return [];
-    }
-
-    handleBuilderTabClick(event) {
-        this.builderTab = event.currentTarget.dataset.tab;
-        this.builderSearchTerm = '';
-    }
-
-    handleBuilderSearch(event) {
-        this.builderSearchTerm = event.target.value;
-    }
-
-    handleBuilderItemClick(event) {
-        const val = event.currentTarget.dataset.value;
-        const q = (this.newTemplateQuery || '').trim();
-        const sep = q && !q.endsWith(',') ? ', ' : '';
-
-        let insert = '';
-        if (this.builderTab === 'fields') {
-            insert = sep + val;
-        } else if (this.builderTab === 'related') {
-            insert = (q ? ',\n' : '') + '(SELECT Id FROM ' + val + ')';
-        } else if (this.builderTab === 'parents') {
-            insert = sep + val + '.Name';
-        }
-
-        this.newTemplateQuery = q + insert;
-        this._updateQueryTree();
-    }
-
-    @track suggestions = [];
-    @track showSuggestions = false;
-
-    handleDirectQueryEdit(event) {
-        this.newTemplateQuery = event.target.value;
-        this._updateQueryTree();
-        this._updateSuggestions(event.target);
-        // Debounced sample data refresh
-        clearTimeout(this._sampleDebounce);
-        this._sampleDebounce = setTimeout(() => { this._loadSampleData(); }, 800);
-    }
-
-    _findUnmatchedParen(str) {
-        let depth = 0;
-        for (let i = str.length - 1; i >= 0; i--) {
-            if (str[i] === ')') depth++;
-            if (str[i] === '(') { if (depth === 0) return i; depth--; }
-        }
-        return -1;
-    }
-
-    _getToken(before) {
-        // Token = text after the last comma, open-paren, or newline
-        let sepIdx = -1;
-        for (let i = before.length - 1; i >= 0; i--) {
-            const ch = before[i];
-            if (ch === ',' || ch === '(' || ch === '\n') { sepIdx = i; break; }
-        }
-        return { token: before.substring(sepIdx + 1).trim(), sepChar: sepIdx >= 0 ? before[sepIdx] : '', start: sepIdx + 1 };
-    }
-
-    _updateSuggestions(textarea) {
-        const text = textarea.value;
-        const cursor = textarea.selectionStart || text.length;
-        const before = text.substring(0, cursor);
-        this._suggestCursor = cursor;
-
-        const { token, sepChar, start } = this._getToken(before);
-        this._tokenReplaceStart = start;
-
-        // Skip SOQL keywords
-        const upper = token.toUpperCase();
-        if (['SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'ORDER', 'BY', 'LIMIT', 'ASC', 'DESC', 'LIKE', 'IN', 'NOT', 'NULL', '=', '!=', '>', '<', '>=', '<='].includes(upper)) {
-            this.showSuggestions = false;
-            return;
-        }
-
-        // 1) Just typed "(" — show child relationships
-        if (sepChar === '(' && token === '') {
-            this._suggestMode = 'related-scaffold';
-            this.suggestions = (this._allChildren || []).slice(0, 15)
-                .map(c => ({ value: c.value, label: c.label, extra: c.childObjectApiName || '' }));
-            this.showSuggestions = this.suggestions.length > 0;
-            return;
-        }
-
-        // 2) Are we inside an unmatched paren? (subquery context)
-        const parenIdx = this._findUnmatchedParen(before);
-        if (parenIdx !== -1) {
-            const insideParen = before.substring(parenIdx + 1).trim();
-            const upperInside = insideParen.toUpperCase();
-
-            // 2a) After FROM with no space after relationship name yet — suggest child relationships
-            const fromAtEnd = upperInside.match(/FROM\s*(\S*)$/);
-            if (fromAtEnd) {
-                this._suggestMode = 'related';
-                const s = (fromAtEnd[1] || '').toLowerCase();
-                this.suggestions = (this._allChildren || [])
-                    .filter(c => !s || c.value.toLowerCase().includes(s) || c.label.toLowerCase().includes(s))
-                    .slice(0, 15)
-                    .map(c => ({ value: c.value, label: c.label, extra: c.childObjectApiName || '' }));
-                this.showSuggestions = this.suggestions.length > 0;
-                return;
-            }
-
-            // 2b) We know the FROM object — suggest that child object's fields
-            const fromMatch = insideParen.match(/FROM\s+(\w+)/i);
-            if (fromMatch && token.length >= 1) {
-                const relName = fromMatch[1];
-                const childRel = (this._allChildren || []).find(c => c.value.toLowerCase() === relName.toLowerCase());
-                if (childRel) {
-                    this._suggestMode = 'child-field';
-                    const cacheKey = '_cache_' + childRel.childObjectApiName;
-                    const s = token.toLowerCase();
-                    if (this[cacheKey]) {
-                        this._showSimpleSuggestions(this[cacheKey], s);
-                    } else {
-                        getObjectFields({ objectName: childRel.childObjectApiName }).then(data => {
-                            this[cacheKey] = data || [];
-                            this._showSimpleSuggestions(data || [], s);
-                        }).catch(() => { this.showSuggestions = false; });
-                    }
-                    return;
-                }
-            }
-
-            // 2c) Inside paren but no FROM yet and token has text — could be typing SELECT fields or relationship name
-            if (token.length >= 1 && !upperInside.includes('FROM')) {
-                this._suggestMode = 'related';
-                const s = token.toLowerCase();
-                this.suggestions = (this._allChildren || [])
-                    .filter(c => c.value.toLowerCase().includes(s) || c.label.toLowerCase().includes(s))
-                    .slice(0, 15)
-                    .map(c => ({ value: c.value, label: c.label, extra: c.childObjectApiName || '' }));
-                this.showSuggestions = this.suggestions.length > 0;
-                return;
-            }
-        }
-
-        // 3) After a dot — parent field lookup
-        if (token.includes('.')) {
-            const dot = token.lastIndexOf('.');
-            const parentName = token.substring(0, dot);
-            const fieldSearch = token.substring(dot + 1).toLowerCase();
-            const parentRel = (this._allParents || []).find(p => p.value.toLowerCase() === parentName.toLowerCase());
-            if (parentRel) {
-                this._suggestMode = 'parent-field';
-                this._suggestParent = parentName;
-                const cacheKey = '_cache_' + parentRel.targetObject;
-                if (this[cacheKey]) {
-                    this._showParentFieldSuggestions(this[cacheKey], fieldSearch, parentName);
-                } else {
-                    getObjectFields({ objectName: parentRel.targetObject }).then(data => {
-                        this[cacheKey] = data || [];
-                        this._showParentFieldSuggestions(data || [], fieldSearch, parentName);
-                    }).catch(() => { this.showSuggestions = false; });
-                }
-                return;
-            }
-        }
-
-        // 4) Default — base object fields + parent relationship names
-        if (token.length >= 1) {
-            this._suggestMode = 'field';
-            const s = token.toLowerCase();
-            const fieldResults = (this._allFields || [])
-                .filter(f => f.value.toLowerCase().includes(s) || f.label.toLowerCase().includes(s))
-                .slice(0, 8)
-                .map(f => ({ value: f.value, label: f.label, extra: f.type || '' }));
-            const parentResults = (this._allParents || [])
-                .filter(p => p.value.toLowerCase().includes(s) || p.label.toLowerCase().includes(s))
-                .slice(0, 4)
-                .map(p => ({ value: p.value + '.', label: p.label, extra: '→ ' + (p.targetObject || '') }));
-            this.suggestions = [...fieldResults, ...parentResults];
-            this.showSuggestions = this.suggestions.length > 0;
-        } else {
-            this.showSuggestions = false;
-        }
-    }
-
-    _showSimpleSuggestions(fields, search) {
-        this.suggestions = (fields || [])
-            .filter(f => !search || f.value.toLowerCase().includes(search) || f.label.toLowerCase().includes(search))
-            .slice(0, 10)
-            .map(f => ({ value: f.value, label: f.label, extra: f.type || '' }));
-        this.showSuggestions = this.suggestions.length > 0;
-    }
-
-    _showParentFieldSuggestions(fields, search, parentName) {
-        this.suggestions = (fields || [])
-            .filter(f => !search || f.value.toLowerCase().includes(search) || f.label.toLowerCase().includes(search))
-            .slice(0, 10)
-            .map(f => ({ value: parentName + '.' + f.value, label: f.label, extra: f.type || '' }));
-        this.showSuggestions = this.suggestions.length > 0;
-    }
-
-    handleSuggestionClick(event) {
-        const val = event.currentTarget.dataset.value;
-        const text = this._activeQuery || '';
-        const cursor = this._suggestCursor || text.length;
-
-        // Find the token boundaries fresh — don't rely on cached values
-        const before = text.substring(0, cursor);
-        let sepIdx = -1;
-        for (let i = before.length - 1; i >= 0; i--) {
-            const ch = before[i];
-            if (ch === ',' || ch === '(' || ch === '\n') { sepIdx = i; break; }
-        }
-        // prefix = everything up to and including the separator
-        // after = everything after cursor
-        const prefix = text.substring(0, sepIdx + 1);
-        const after = text.substring(cursor);
-        // Add a space after separator if needed
-        const needSpace = prefix.length > 0 && !prefix.endsWith(' ') && !prefix.endsWith('(') && !prefix.endsWith('\n');
-
-        let result;
-        if (this._suggestMode === 'related-scaffold') {
-            // Typed "(" — scaffold full subquery, prefix already ends with "("
-            result = prefix + 'SELECT Id FROM ' + val + ')' + after;
-        } else if (this._suggestMode === 'related') {
-            // Replacing relationship name (after FROM)
-            result = prefix + (needSpace ? ' ' : '') + val + after;
-        } else if (val.endsWith('.')) {
-            // Parent relationship — "Owner." — no comma, they pick a field next
-            result = prefix + (needSpace ? ' ' : '') + val + after;
-        } else {
-            // Regular field — replace token, add trailing comma
-            result = prefix + (needSpace ? ' ' : '') + val + ', ' + after;
-        }
-
-        this._activeQuery = result;
-        // Native textarea doesn't re-render from tracked property after user input — set DOM directly
-        const taSelector = this._editContext ? '.edit-query-textarea' : '.wizard-query-textarea';
-        const ta = this.template.querySelector(taSelector);
-        if (ta) { ta.value = result; }
-        this.showSuggestions = false;
-        this._updateQueryTree();
-
-        // If parent with dot, re-trigger to show that parent's fields
-        if (val.endsWith('.')) {
-            // eslint-disable-next-line @lwc/lwc/no-async-operation
-            setTimeout(() => {
-                const ta = this.template.querySelector(taSelector);
-                if (ta) {
-                    const newPos = prefix.length + (needSpace ? 1 : 0) + val.length;
-                    ta.setSelectionRange(newPos, newPos);
-                    ta.focus();
-                    this._updateSuggestions(ta);
-                }
-            }, 50);
-        }
-    }
-
-    handleSuggestionMouseDown(event) {
-        // Prevent textarea blur from firing before onclick
-        event.preventDefault();
-    }
-
-    handleQueryKeyDown(event) {
-        if (event.key === 'Escape' && this.showSuggestions) {
-            this.showSuggestions = false;
-            event.stopPropagation();
-        }
-    }
+    // Manual Query Toggle (Create wizard)
+    @track isNewManualQuery = false;
 
     // Filter State
     searchKey = '';
@@ -486,7 +151,11 @@ const VERSION_COLUMNS = [
                 defaultLabel: t[F.IsDefault] ? '★' : '',
                 defaultClass: t[F.IsDefault] ? 'slds-text-color_success slds-text-title_bold' : ''
             }));
-            this._samplesChecked = true;
+            // Auto-install sample templates on first load if org has none
+            if (this.templates.length === 0 && !this._samplesChecked && !this.isInstallingSamples) {
+                this._samplesChecked = true;
+                this.installSampleTemplates();
+            }
         } else if (result.error) {
            this.showToast('Error', 'Error loading templates', 'error');
         }
@@ -517,7 +186,6 @@ const VERSION_COLUMNS = [
     async installSampleTemplates() {
         this.isInstallingSamples = true;
         try {
-            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
             const count = await createSampleTemplates();
             this.showToast('Welcome to DocGen!', count + ' sample templates installed. Open any template to see how merge tags work.', 'success');
             await refreshApex(this.wiredTemplatesResult);
@@ -532,22 +200,6 @@ const VERSION_COLUMNS = [
 
     // --- Wizard Logic ---
 
-    renderedCallback() {
-        // Sync native textarea DOM value with tracked property after re-render
-        if (this.currentWizardStep === '2' && this.newTemplateQuery) {
-            const ta = this.template.querySelector('.wizard-query-textarea');
-            if (ta && ta.value !== this.newTemplateQuery) {
-                ta.value = this.newTemplateQuery;
-            }
-        }
-        if (this._editContext && this.isEditModalOpen && this.editTemplateQuery) {
-            const ta = this.template.querySelector('.edit-query-textarea');
-            if (ta && ta.value !== this.editTemplateQuery) {
-                ta.value = this.editTemplateQuery;
-            }
-        }
-    }
-
     get isStep1() { return this.currentWizardStep === '1'; }
     get isStep2() { return this.currentWizardStep === '2'; }
     get isStep3() { return this.currentWizardStep === '3'; }
@@ -556,25 +208,13 @@ const VERSION_COLUMNS = [
     handleNextStep() {
         if (this.currentWizardStep === '1') {
             if (!this.newTemplateName || !this.newTemplateType) {
-                this.showToast('Error', 'Please fill in the template name and type.', 'error');
+                this.showToast('Error', 'Please fill required fields.', 'error');
                 return;
             }
-            if (!this.newTemplateObject) {
-                this.showToast('Error', 'Please select a base object.', 'error');
-                return;
-            }
-            // Load metadata for step 2 before transitioning
-            this._loadObjectMetadata(this.newTemplateObject);
             this.currentWizardStep = '2';
         } else if (this.currentWizardStep === '2') {
-             // Clean up trailing commas/whitespace
-             let q = (this.newTemplateQuery || '').replace(/[\s,]+$/, '').replace(/^[\s,]+/, '');
-             this.newTemplateQuery = q;
-             const ta = this.template.querySelector('.wizard-query-textarea');
-             if (ta) { ta.value = q; }
-
-             if (!q) {
-                this.showToast('Error', 'Please add at least one field to the query.', 'error');
+             if (!this.newTemplateObject || !this.newTemplateQuery) {
+                this.showToast('Error', 'Please configure the query.', 'error');
                 return;
              }
              this.currentWizardStep = '3';
@@ -611,28 +251,6 @@ const VERSION_COLUMNS = [
     handleConfigChange(event) {
         this.newTemplateObject = event.detail.objectName;
         this.newTemplateQuery = event.detail.queryConfig;
-        this._updateQueryTree();
-    }
-
-    toggleVisualBuilder() {
-        this.useVisualBuilder = !this.useVisualBuilder;
-    }
-
-    toggleEditVisualBuilder() {
-        this.editUseVisualBuilder = !this.editUseVisualBuilder;
-    }
-
-    handleEditConfigChange(event) {
-        this.editTemplateObject = event.detail.objectName;
-        this.editTemplateQuery = event.detail.queryConfig;
-    }
-
-    get visualBuilderToggleIcon() {
-        return this.useVisualBuilder ? 'utility:edit' : 'utility:builder';
-    }
-
-    get editVisualBuilderToggleIcon() {
-        return this.editUseVisualBuilder ? 'utility:edit' : 'utility:builder';
     }
 
     get readableQueryConfig() {
@@ -659,37 +277,52 @@ const VERSION_COLUMNS = [
             const cfg = JSON.parse(configStr);
             if (cfg.v !== 3 || !cfg.nodes) { return configStr; }
 
+            // Build V1-style SOQL field list from V3 tree
             const root = cfg.nodes.find(n => !n.parentNode);
             if (!root) { return configStr; }
 
-            // Recursively build subqueries — supports any depth
-            const buildSubqueries = (parentId) => {
-                const children = cfg.nodes.filter(n => n.parentNode === parentId);
-                const subs = [];
-                for (const child of children) {
-                    const subFields = [
-                        ...(child.fields || []),
-                        ...(child.parentFields || [])
-                    ];
-                    // Recurse: grandchildren become nested subqueries
-                    const nestedSubs = buildSubqueries(child.id);
-                    subFields.push(...nestedSubs);
-                    if (subFields.length === 0) { subFields.push('Id'); }
-                    let sq = '(SELECT ' + subFields.join(', ') + ' FROM ' + child.relationshipName;
-                    if (child.where) { sq += ' WHERE ' + child.where; }
-                    if (child.orderBy) { sq += ' ORDER BY ' + child.orderBy; }
-                    if (child.limit) { sq += ' LIMIT ' + child.limit; }
-                    sq += ')';
-                    subs.push(sq);
-                }
-                return subs;
-            };
+            const parts = [];
 
-            const parts = [
-                ...(root.fields || []),
-                ...(root.parentFields || []),
-                ...buildSubqueries(root.id)
-            ];
+            // Root fields
+            if (root.fields && root.fields.length) {
+                parts.push(...root.fields);
+            }
+            // Root parent fields (e.g., Owner.Name)
+            if (root.parentFields && root.parentFields.length) {
+                parts.push(...root.parentFields);
+            }
+
+            // Child subqueries
+            const buildSubquery = (parentId) => {
+                const children = cfg.nodes.filter(n => n.parentNode === parentId);
+                for (const child of children) {
+                    const subFields = [];
+                    if (child.fields && child.fields.length) {
+                        subFields.push(...child.fields);
+                    }
+                    if (child.parentFields && child.parentFields.length) {
+                        subFields.push(...child.parentFields);
+                    }
+                    let subquery = '(SELECT ' + subFields.join(', ') + ' FROM ' + child.relationshipName;
+                    if (child.where) { subquery += ' WHERE ' + child.where; }
+                    if (child.orderBy) { subquery += ' ORDER BY ' + child.orderBy; }
+                    if (child.limit) { subquery += ' LIMIT ' + child.limit; }
+                    subquery += ')';
+                    parts.push(subquery);
+
+                    // Recurse for grandchildren (nested in comment for clarity)
+                    const grandchildren = cfg.nodes.filter(n => n.parentNode === child.id);
+                    if (grandchildren.length > 0) {
+                        for (const gc of grandchildren) {
+                            const gcFields = [...(gc.fields || []), ...(gc.parentFields || [])];
+                            let gcQuery = '  \u2192 ' + gc.relationshipName + ': ' + gcFields.join(', ');
+                            if (gc.where) { gcQuery += ' WHERE ' + gc.where; }
+                            parts.push(gcQuery);
+                        }
+                    }
+                }
+            };
+            buildSubquery(root.id);
 
             return parts.join(', ');
         } catch {
@@ -697,145 +330,16 @@ const VERSION_COLUMNS = [
         }
     }
 
+    handleNewManualQueryToggle(event) {
+        this.isNewManualQuery = event.target.checked;
+    }
+
     handleNewQueryStringChange(event) {
-        this.newTemplateQuery = event.detail ? event.detail.value : event.target.value;
+        this.newTemplateQuery = event.target.value;
     }
 
-    handleSampleRecordChange(event) {
-        this.newTemplateSampleRecordId = event.detail.recordId || '';
-        this._loadSampleData();
-    }
-
-    _loadSampleData() {
-        const recordId = this._activeSampleId;
-        const objectName = this._activeObject;
-        const query = this._activeQuery;
-        if (!recordId || !objectName || !query) {
-            this.sampleRecordData = null;
-            return;
-        }
-        previewRecordData({
-            recordId: recordId,
-            baseObject: objectName,
-            queryConfig: query
-        }).then(data => {
-            this.sampleRecordData = data;
-            this._updateQueryTree();
-        }).catch(() => {
-            this.sampleRecordData = null;
-        });
-    }
-
-    handleObjectSearchInput(event) {
-        const term = (event.detail ? event.detail.value : event.target.value) || '';
-        this.newTemplateObject = term;
-        if (term.length >= 2) {
-            if (this.objectOptions.length === 0) {
-                getObjectOptions().then(data => {
-                    this.objectOptions = data;
-                    this._filterObjects(term);
-                });
-            } else {
-                this._filterObjects(term);
-            }
-        } else {
-            this.showObjectSuggestions = false;
-        }
-    }
-
-    _filterObjects(term) {
-        const t = term.toLowerCase();
-        this.filteredObjectOptions = this.objectOptions
-            .filter(o => o.label.toLowerCase().includes(t) || o.value.toLowerCase().includes(t))
-            .slice(0, 12);
-        this.showObjectSuggestions = this.filteredObjectOptions.length > 0;
-    }
-
-    handleObjectSuggestionClick(event) {
-        const apiName = event.currentTarget.dataset.value;
-        this.newTemplateObject = apiName;
-        this.showObjectSuggestions = false;
-        this._loadObjectMetadata(apiName);
-    }
-
-    _loadObjectMetadata(objectName) {
-        // Load fields, children, and parents in parallel for slash commands
-        getObjectFields({ objectName }).then(data => { this._allFields = data || []; }).catch(() => { this._allFields = []; });
-        getChildRelationships({ objectName }).then(data => { this._allChildren = data || []; }).catch(() => { this._allChildren = []; });
-        getParentRelationships({ objectName }).then(data => { this._allParents = data || []; }).catch(() => { this._allParents = []; });
-    }
-
-
-    // --- Live Query Tree ---
-    _updateQueryTree() {
-        const q = (this._activeQuery || '').trim();
-        if (!q || !this._activeObject) { this.queryTreeNodes = []; return; }
-        try {
-            const nodes = [];
-            const data = this.sampleRecordData || {};
-            // Parse using nesting-aware SOQL parser
-            const parsed = parseSOQLFields(q);
-            this.queryWarnings = parsed.warnings.length > 0 ? parsed.warnings : null;
-            const directFields = parsed.baseFields;
-            const parentFields = parsed.parentFields;
-
-            // Build field display with sample values
-            const fieldPills = directFields.map(f => {
-                const val = data[f];
-                return { key: f, name: f, sample: val != null ? String(val) : '' };
-            });
-            const parentPills = parentFields.map(f => {
-                // Resolve dot notation: "Owner.Name" → data.Owner.Name
-                const parts = f.split('.');
-                let val = data;
-                for (const p of parts) { val = val && typeof val === 'object' ? val[p] : undefined; }
-                return { key: f, name: f, sample: val != null ? String(val) : '' };
-            });
-
-            // Flatten child subqueries recursively into a single list with depth
-            // so the template can render any nesting level with one for:each
-            const flatChildren = [];
-            const flattenChildren = (subqueries, depth) => {
-                for (let i = 0; i < subqueries.length; i++) {
-                    const sq = subqueries[i];
-                    const directF = sq.fields.filter(f => !f.includes('.'));
-                    const parentF = sq.fields.filter(f => f.includes('.'));
-                    flatChildren.push({
-                        id: 'child_' + flatChildren.length,
-                        label: sq.relationshipName,
-                        fields: directF,
-                        parentFields: parentF,
-                        hasParentFields: parentF.length > 0,
-                        fieldCount: sq.fields.length,
-                        where: sq.whereClause || '',
-                        depth,
-                        indentStyle: 'margin-left: ' + (depth * 20) + 'px; margin-bottom: 6px; padding: 8px 10px; background: #fff; border: 1px solid #e5e5e5; border-radius: 6px;'
-                    });
-                    if (sq.children && sq.children.length > 0) {
-                        flattenChildren(sq.children, depth + 1);
-                    }
-                }
-            };
-            flattenChildren(parsed.subqueries, 0);
-
-            nodes.push({
-                id: 'root',
-                label: this._activeObject,
-                icon: 'standard:account',
-                isRoot: true,
-                fields: directFields,
-                parentFields: parentFields,
-                fieldPills: fieldPills,
-                parentPills: parentPills,
-                flatChildren: flatChildren,
-                hasFields: fieldPills.length > 0,
-                hasParentFields: parentPills.length > 0,
-                hasFlatChildren: flatChildren.length > 0
-            });
-            this.queryTreeNodes = nodes;
-        } catch (err) { // eslint-disable-line no-unused-vars
-            this.queryTreeNodes = [];
-        }
+    handleNewManualObjectChange(event) {
+        this.newTemplateObject = event.detail.value;
     }
 
     // --- Edit Handlers ---
@@ -850,73 +354,11 @@ const VERSION_COLUMNS = [
     handleEditOutputFormatChange(event) { this.editTemplateOutputFormat = event.detail.value; }
     handleEditDescChange(event) { this.editTemplateDesc = event.detail.value; }
     handleEditDefaultChange(event) { this.editTemplateIsDefault = event.target.checked; }
-    // 1.47 — runner visibility & sort handlers
-    handleEditSortOrderChange(event) { this.editTemplateSortOrder = event.detail.value; }
-    handleEditLockOutputChange(event) { this.editTemplateLockOutputFormat = event.target.checked; }
-    handleEditSpecificRecordIdsChange(event) { this.editTemplateSpecificRecordIds = event.detail.value; }
-    handleEditRequiredPermSetsChange(event) { this.editTemplateRequiredPermissionSets = event.detail.value; }
-    handleEditRecordFilterChange(event) {
-        this.editTemplateRecordFilter = event.detail.value;
-        this.editTemplateRecordFilterResult = '';
-        this.editTemplateRecordFilterResultMessage = '';
-    }
-
-    async handleTestRecordFilter() {
-        if (!this.editTemplateRecordFilter || !this.editTemplateTestRecordId || !this.editTemplateObject) {
-            this.editTemplateRecordFilterResult = 'error';
-            this.editTemplateRecordFilterResultMessage = 'Need Base Object, Sample Test Record Id (set on the template), and a Record Filter clause to test.';
-            return;
-        }
-        this.editTemplateRecordFilterTesting = true;
-        this.editTemplateRecordFilterResult = '';
-        this.editTemplateRecordFilterResultMessage = '';
-        try {
-            const res = await testRecordFilter({
-                baseObjectApiName: this.editTemplateObject,
-                sampleRecordId: this.editTemplateTestRecordId,
-                whereClause: this.editTemplateRecordFilter
-            });
-            if (res.error) {
-                this.editTemplateRecordFilterResult = 'error';
-                this.editTemplateRecordFilterResultMessage = res.error;
-            } else if (res.matched) {
-                this.editTemplateRecordFilterResult = 'matched';
-                this.editTemplateRecordFilterResultMessage = '✓ Match — this template would appear for the test record.';
-            } else {
-                this.editTemplateRecordFilterResult = 'nomatch';
-                this.editTemplateRecordFilterResultMessage = '✗ No match — the test record does not satisfy this filter.';
-            }
-        } catch (e) {
-            this.editTemplateRecordFilterResult = 'error';
-            this.editTemplateRecordFilterResultMessage = (e.body && e.body.message) ? e.body.message : e.message;
-        } finally {
-            this.editTemplateRecordFilterTesting = false;
-        }
-    }
-
-    get recordFilterResultClass() {
-        if (this.editTemplateRecordFilterResult === 'matched') return 'slds-text-color_success slds-var-m-top_x-small';
-        if (this.editTemplateRecordFilterResult === 'nomatch') return 'slds-text-color_weak slds-var-m-top_x-small';
-        if (this.editTemplateRecordFilterResult === 'error') return 'slds-text-color_error slds-var-m-top_x-small';
-        return 'slds-hide';
-    }
-
-    handleQueryTabActive() {
-        // lightning-tab lazy-renders content — sync textarea when query tab first activates
-        // eslint-disable-next-line @lwc/lwc/no-async-operation
-        setTimeout(() => {
-            const ta = this.template.querySelector('.edit-query-textarea');
-            if (ta && this.editTemplateQuery && ta.value !== this.editTemplateQuery) {
-                ta.value = this.editTemplateQuery;
-            }
-            this._updateQueryTree();
-        }, 50);
-    }
 
     handleManualQueryToggle(event) {
         this.isManualQuery = event.target.checked;
-        // Convert V3 JSON to V1 flat string when switching to manual mode (toggle OFF)
-        if (!this.isManualQuery && this.isEditV3Query) {
+        // Convert V3 JSON to V1 flat string when switching to manual mode
+        if (this.isManualQuery && this.isEditV3Query) {
             const v1 = this._formatQueryConfig(this.editTemplateQuery);
             if (v1 && v1 !== this.editTemplateQuery) {
                 this.editTemplateQuery = v1;
@@ -928,33 +370,13 @@ const VERSION_COLUMNS = [
         this.editTemplateQuery = event.target.value;
     }
 
-    handleEditDirectQueryEdit(event) {
-        this.editTemplateQuery = event.target.value;
-        this._updateQueryTree();
-        this._updateSuggestions(event.target);
-        clearTimeout(this._sampleDebounce);
-        this._sampleDebounce = setTimeout(() => { this._loadSampleData(); }, 800);
-    }
-
     handleEditConfigChange(event) {
         this.editTemplateObject = event.detail.objectName;
         this.editTemplateQuery = event.detail.queryConfig;
     }
 
-    /**
-     * Strips outer SELECT and FROM clauses from a query config string.
-     * Delegates to the shared stripOuterSelectFrom utility in docGenUtils.
-     */
-    _sanitizeQueryConfig(queryConfig) {
-        if (!queryConfig) return queryConfig;
-        const cleaned = queryConfig.trim();
-        if (cleaned.startsWith('{')) return cleaned;
-        return stripOuterSelectFrom(cleaned);
-    }
-
     handleEditTestRecordChange(event) {
         this.editTemplateTestRecordId = event.detail.recordId;
-        this._loadSampleData();
     }
 
     // Generate a flat tag list from the query config for the tags view
@@ -993,34 +415,32 @@ const VERSION_COLUMNS = [
                 }
             }
 
-            // V1 / full SOQL: parse using shared nesting-aware parser
-            const parsed = parseSOQLFields(qc);
+            // Legacy: parse field names from the query string
+            const fields = qc.split(',').map(f => f.trim()).filter(f => !f.startsWith('('));
+            const subqueries = qc.match(/\(\s*SELECT\s+([\s\S]+?)\s+FROM\s+(\S+)/gi) || [];
             const sections = [];
 
-            const buildTagSections = (subqueries) => {
-                for (const sq of subqueries) {
-                    sections.push({
-                        name: sq.relationshipName,
-                        isLoop: true,
-                        loopStart: '{#' + sq.relationshipName + '}',
-                        loopEnd: '{/' + sq.relationshipName + '}',
-                        tags: sq.fields.filter(f => f).map(f => ({ code: '{' + f + '}' }))
-                    });
-                    if (sq.children && sq.children.length > 0) {
-                        buildTagSections(sq.children);
-                    }
-                }
-            };
-
-            const baseFields = [...parsed.baseFields, ...parsed.parentFields];
-            buildTagSections(parsed.subqueries);
-
-            if (baseFields.length > 0) {
-                sections.unshift({
+            if (fields.length > 0) {
+                sections.push({
                     name: this.editTemplateObject || 'Base Fields',
                     isLoop: false,
-                    tags: baseFields.map(f => ({ code: '{' + f + '}' }))
+                    tags: fields.map(f => ({ code: '{' + f + '}' }))
                 });
+            }
+
+            for (const sq of subqueries) {
+                const match = sq.match(/SELECT\s+([\s\S]+?)\s+FROM\s+(\S+)/i);
+                if (match) {
+                    const childFields = match[1].split(',').map(f => f.trim());
+                    const relName = match[2].replace(')', '');
+                    sections.push({
+                        name: relName,
+                        isLoop: true,
+                        loopStart: '{#' + relName + '}',
+                        loopEnd: '{/' + relName + '}',
+                        tags: childFields.map(f => ({ code: '{' + f + '}' }))
+                    });
+                }
             }
 
             return sections.length > 0 ? sections : null;
@@ -1038,26 +458,6 @@ const VERSION_COLUMNS = [
         } catch {
             this.dispatchEvent(new ShowToastEvent({ title: 'Copy Failed', message: 'Unable to copy to clipboard.', variant: 'error' }));
         }
-    }
-
-    // Split a string on commas, but only at parentheses depth 0
-    _splitTopLevel(str) {
-        const tokens = [];
-        let depth = 0;
-        let current = '';
-        for (let i = 0; i < str.length; i++) {
-            const ch = str[i];
-            if (ch === '(') { depth++; current += ch; }
-            else if (ch === ')') { depth--; current += ch; }
-            else if (ch === ',' && depth === 0) {
-                tokens.push(current.trim());
-                current = '';
-            } else {
-                current += ch;
-            }
-        }
-        if (current.trim()) { tokens.push(current.trim()); }
-        return tokens;
     }
 
     _copyToClipboard(text) {
@@ -1124,11 +524,8 @@ const VERSION_COLUMNS = [
         fields[TYPE_FIELD.fieldApiName] = this.newTemplateType;
         fields[OUTPUT_FORMAT_FIELD.fieldApiName] = this.newTemplateOutputFormat;
         fields[BASE_OBJECT_FIELD.fieldApiName] = this.newTemplateObject;
-        fields[QUERY_CONFIG_FIELD.fieldApiName] = this._sanitizeQueryConfig(this.newTemplateQuery);
+        fields[QUERY_CONFIG_FIELD.fieldApiName] = this.newTemplateQuery;
         fields[DESC_FIELD.fieldApiName] = this.newTemplateDesc;
-        if (this.newTemplateSampleRecordId) {
-            fields[TEST_RECORD_FIELD.fieldApiName] = this.newTemplateSampleRecordId;
-        }
 
         try {
             const record = await createRecord({ apiName: DOCGEN_TEMPLATE_OBJECT.objectApiName, fields });
@@ -1145,7 +542,7 @@ const VERSION_COLUMNS = [
                 [F.BaseObject]: this.newTemplateObject,
                 [F.Desc]: this.newTemplateDesc,
                 [F.QueryConfig]: this.newTemplateQuery,
-                [F.TestRecordId]: this.newTemplateSampleRecordId || null,
+                [F.TestRecordId]: null,
                 [F.DocTitleFormat]: null,
                 ContentDocumentLinks: []
             };
@@ -1162,6 +559,14 @@ const VERSION_COLUMNS = [
         }
     }
 
+    // --- Sharing Logic ---
+    @track isSharingModalOpen = false;
+    sharingTemplateId;
+
+    handleCloseSharing() {
+        this.isSharingModalOpen = false;
+    }
+
     // --- Row Action ---
     async handleRowAction(event) {
         const actionName = event.detail.action.name;
@@ -1169,7 +574,6 @@ const VERSION_COLUMNS = [
 
         if (actionName === 'delete') {
             try {
-                // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
                 await deleteTemplate({ templateId: row.Id });
                 this.showToast('Success', 'Template deleted', 'success');
                 return refreshApex(this.wiredTemplatesResult);
@@ -1182,6 +586,9 @@ const VERSION_COLUMNS = [
             this.openEditModal(row, 'tags');
         } else if (actionName === 'export') {
             this.handleExportTemplate(row);
+        } else if (actionName === 'share') {
+            this.sharingTemplateId = row.Id;
+            this.isSharingModalOpen = true;
         }
     }
 
@@ -1228,7 +635,6 @@ const VERSION_COLUMNS = [
                 this.showToast('Invalid File', 'This file is not a valid DocGen export.', 'error');
                 return;
             }
-            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
             await importTemplate({ jsonData: jsonStr });
             this.showToast('Imported', (parsed.template.Name || 'Template') + ' imported successfully', 'success');
             return refreshApex(this.wiredTemplatesResult);
@@ -1247,17 +653,10 @@ const VERSION_COLUMNS = [
             this.editTemplateObject = row[F.BaseObject];
             this.editTemplateOutputFormat = row[F.OutputFormat] || 'Native';
             this.editTemplateDesc = row[F.Desc];
-            this.editTemplateQuery = this._formatQueryConfig(row[F.QueryConfig]);
+            this.editTemplateQuery = row[F.QueryConfig];
             this.editTemplateTestRecordId = row[F.TestRecordId];
             this.editTemplateTitleFormat = row[F.DocTitleFormat];
             this.editTemplateIsDefault = row[F.IsDefault] || false;
-            this.editTemplateSortOrder = row[F.SortOrder];
-            this.editTemplateLockOutputFormat = row[F.LockOutputFormat] || false;
-            this.editTemplateSpecificRecordIds = row[F.SpecificRecordIds];
-            this.editTemplateRequiredPermissionSets = row[F.RequiredPermSets];
-            this.editTemplateRecordFilter = row[F.RecordFilter];
-            this.editTemplateRecordFilterResult = '';
-            this.editTemplateRecordFilterResultMessage = '';
 
             let cdLinks = [];
             if (row.ContentDocumentLinks) {
@@ -1283,17 +682,6 @@ const VERSION_COLUMNS = [
             this.loadVersions(row.Id);
             this.isCreating = false;
             this.isEditModalOpen = true;
-            this._editContext = true;
-            this._loadObjectMetadata(this.editTemplateObject);
-            // Initialize query tree + sync textarea after DOM renders
-            // eslint-disable-next-line @lwc/lwc/no-async-operation
-            setTimeout(() => {
-                this._updateQueryTree();
-                this._loadSampleData();
-                // Native textarea doesn't reliably pick up value from LWC reactivity — set DOM directly
-                const ta = this.template.querySelector('.edit-query-textarea');
-                if (ta && this.editTemplateQuery) { ta.value = this.editTemplateQuery; }
-            }, 300);
         } catch (e) {
             this.showToast('Error', 'Failed to open modal: ' + e.message, 'error');
         }
@@ -1301,10 +689,6 @@ const VERSION_COLUMNS = [
 
     closeEditModal() {
         this.isEditModalOpen = false;
-        this._editContext = false;
-        this.queryTreeNodes = [];
-        this.sampleRecordData = null;
-        this.showSuggestions = false;
     }
 
     // --- Versions Logic ---
@@ -1350,12 +734,11 @@ const VERSION_COLUMNS = [
         if (action === 'restore') {
             try {
                 this.isLoadingVersions = true;
-                // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
                 await activateVersion({ versionId: row.Id });
 
                 this.showToast('Success', 'Version activated.', 'success');
 
-                this.editTemplateQuery = this._formatQueryConfig(row[F.QueryConfig]);
+                this.editTemplateQuery = row[F.QueryConfig];
                 this.editTemplateCategory = row[F.Category];
                 this.editTemplateDesc = row[F.Desc];
                 this.editTemplateType = row[F.Type];
@@ -1452,10 +835,9 @@ const VERSION_COLUMNS = [
         try {
             // Activate this version first so generation uses its file and config
             if (!this.previewVersion[F.VerIsActive]) {
-                // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
                 await activateVersion({ versionId: this.previewVersion.Id });
                 // Sync version config to local edit state
-                this.editTemplateQuery = this._formatQueryConfig(this.previewVersion[F.QueryConfig]);
+                this.editTemplateQuery = this.previewVersion[F.QueryConfig];
                 this.editTemplateCategory = this.previewVersion[F.Category];
                 this.editTemplateDesc = this.previewVersion[F.Desc];
                 this.editTemplateType = this.previewVersion[F.Type];
@@ -1516,21 +898,14 @@ const VERSION_COLUMNS = [
             'Output_Format__c': this.editTemplateOutputFormat,
             'Base_Object_API__c': this.editTemplateObject,
             'Description__c': this.editTemplateDesc,
-            'Query_Config__c': this._sanitizeQueryConfig(this.editTemplateQuery),
+            'Query_Config__c': this.editTemplateQuery,
             'Test_Record_Id__c': this.editTemplateTestRecordId,
             'Document_Title_Format__c': this.editTemplateTitleFormat,
-            'Is_Default__c': this.editTemplateIsDefault,
-            'Sort_Order__c': this.editTemplateSortOrder,
-            'Lock_Output_Format__c': this.editTemplateLockOutputFormat,
-            'Specific_Record_Ids__c': this.editTemplateSpecificRecordIds,
-            'Required_Permission_Sets__c': this.editTemplateRequiredPermissionSets,
-            'Record_Filter__c': this.editTemplateRecordFilter
+            'Is_Default__c': this.editTemplateIsDefault
         };
-        this.editTemplateQuery = fields['Query_Config__c'];
 
         try {
-            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-            await saveTemplate({ fields: fields, createVersion: false, contentVersionId: null });
+            await saveTemplate({ fields: fields, createVersion: false });
             this.showToast('Success', 'Template Details saved.', 'success');
             return refreshApex(this.wiredTemplatesResult);
         } catch (error) {
@@ -1552,21 +927,14 @@ const VERSION_COLUMNS = [
             'Output_Format__c': this.editTemplateOutputFormat,
             'Base_Object_API__c': this.editTemplateObject,
             'Description__c': this.editTemplateDesc,
-            'Query_Config__c': this._sanitizeQueryConfig(this.editTemplateQuery),
+            'Query_Config__c': this.editTemplateQuery,
             'Test_Record_Id__c': this.editTemplateTestRecordId,
             'Document_Title_Format__c': this.editTemplateTitleFormat,
-            'Is_Default__c': this.editTemplateIsDefault,
-            'Sort_Order__c': this.editTemplateSortOrder,
-            'Lock_Output_Format__c': this.editTemplateLockOutputFormat,
-            'Specific_Record_Ids__c': this.editTemplateSpecificRecordIds,
-            'Required_Permission_Sets__c': this.editTemplateRequiredPermissionSets,
-            'Record_Filter__c': this.editTemplateRecordFilter
+            'Is_Default__c': this.editTemplateIsDefault
         };
-        this.editTemplateQuery = fields['Query_Config__c'];
 
         try {
-            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-            await saveTemplate({ fields: fields, createVersion: true, contentVersionId: this.uploadedContentVersionId });
+            await saveTemplate({ fields: fields, createVersion: true });
             this.showToast('Success', 'Template and Version saved.', 'success');
             this.closeEditModal();
             return refreshApex(this.wiredTemplatesResult);
@@ -1661,7 +1029,6 @@ const VERSION_COLUMNS = [
             const file = uploadedFiles[0];
             this.showToast('Success', 'File Uploaded: ' + file.name, 'success');
             this.currentFileId = file.documentId;
-            this.uploadedContentVersionId = file.contentVersionId;
             this.uploadedFileName = file.name;
         }
     }
@@ -1679,7 +1046,6 @@ const VERSION_COLUMNS = [
 
     resetForm() {
         this.uploadedFileName = '';
-        this.uploadedContentVersionId = null;
         this.currentWizardStep = '1';
         this.newTemplateName = '';
         this.newTemplateCategory = '';
@@ -1689,14 +1055,7 @@ const VERSION_COLUMNS = [
         this.newTemplateObject = 'Account';
         this.createdTemplateId = null;
         this.isCreating = true;
-        this.queryTreeNodes = [];
-        this.builderTab = 'fields';
-        this.builderSearchTerm = '';
-        this.newTemplateSampleRecordId = '';
-        this.sampleRecordData = null;
-        this._allFields = [];
-        this._allChildren = [];
-        this._allParents = [];
+        this.isNewManualQuery = false;
         return refreshApex(this.wiredTemplatesResult);
     }
 

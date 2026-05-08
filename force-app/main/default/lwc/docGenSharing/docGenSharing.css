@@ -1,0 +1,8 @@
+.search-results-container {
+    z-index: 9999;
+    background: var(--lwc-colorBackgroundAlt, white);
+    margin-top: var(--lwc-varSpacingVerticalXxxSmall, 2px);
+    border: var(--lwc-borderWidthThin, 1px) solid var(--lwc-colorBorder, #dddbda);
+    border-radius: var(--lwc-borderRadiusMedium, .25rem);
+    box-shadow: var(--lwc-shadowDropDown, 0 2px 3px 0 rgba(0,0,0,0.16));
+}

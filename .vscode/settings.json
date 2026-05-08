@@ -1,3 +1,11 @@
 {
-    "xml.preferences.showSchemaDocumentationType": "none"
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "**/.sf": true,
+    "**/.sfdx": true
+  },
+  "xml.preferences.showSchemaDocumentationType": "none",
+  "salesforcedx-vscode-apex.java.home": "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home",
+  "xml.server.vmargs": "-Xmx512m"
 }

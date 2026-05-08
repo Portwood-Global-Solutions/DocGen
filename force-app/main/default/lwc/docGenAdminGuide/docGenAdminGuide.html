@@ -1,3 +1,802 @@
 <template>
-    <!-- Deprecated stub — learning content lives in DocGen Command Hub. Kept for subscriber upgrade safety. -->
+    <div class="slds-grid slds-gutters" style="min-height: 80vh;">
+
+        <!-- Left Nav -->
+        <div class="slds-col slds-size_1-of-5 slds-theme_shade" style="border-right: 1px solid #d8dde6;">
+            <div class="slds-var-p-around_medium">
+                <h1 class="slds-text-heading_medium slds-var-m-bottom_small">
+                    <lightning-icon icon-name="standard:article" size="small" class="slds-var-m-right_x-small"></lightning-icon>
+                    Admin Guide
+                </h1>
+            </div>
+            <nav class="slds-nav-vertical" aria-label="Admin Guide Navigation">
+                <div class="slds-nav-vertical__section">
+                    <ul>
+                        <template for:each={computedSections} for:item="sec">
+                            <li key={sec.name} class={sec.cssClass}>
+                                <a href="#" class="slds-nav-vertical__action" data-section={sec.name} onclick={handleSectionClick} aria-current={sec.ariaCurrent}>
+                                    <lightning-icon icon-name={sec.icon} size="x-small" class="slds-var-m-right_x-small"></lightning-icon>
+                                    {sec.label}
+                                </a>
+                            </li>
+                        </template>
+                    </ul>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Content -->
+        <div class="slds-col slds-size_4-of-5 slds-var-p-around_large" style="max-width: 900px; overflow-y: auto;">
+
+            <!-- ==================== OVERVIEW ==================== -->
+            <template if:true={isOverview}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Welcome to DocGen</h2>
+                <p class="slds-text-body_regular slds-var-m-bottom_medium">
+                    DocGen is a 100% native Salesforce application for generating documents by merging live Salesforce data into Microsoft Word (.docx) and PowerPoint (.pptx) templates. It runs entirely on-platform with zero external dependencies.
+                </p>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Key Capabilities</h3>
+                    <div class="slds-grid slds-wrap slds-gutters">
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
+                            <lightning-icon icon-name="utility:check" size="x-small" variant="success" class="slds-var-m-right_x-small"></lightning-icon>
+                            <strong>Word &amp; PowerPoint</strong> template merge with live data
+                        </div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
+                            <lightning-icon icon-name="utility:check" size="x-small" variant="success" class="slds-var-m-right_x-small"></lightning-icon>
+                            <strong>PDF output</strong> via native Blob.toPdf()
+                        </div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
+                            <lightning-icon icon-name="utility:check" size="x-small" variant="success" class="slds-var-m-right_x-small"></lightning-icon>
+                            <strong>Bulk generation</strong> for hundreds of records at once
+                        </div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
+                            <lightning-icon icon-name="utility:check" size="x-small" variant="success" class="slds-var-m-right_x-small"></lightning-icon>
+                            <strong>Flow actions</strong> for automation and triggers
+                        </div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
+                            <lightning-icon icon-name="utility:check" size="x-small" variant="success" class="slds-var-m-right_x-small"></lightning-icon>
+                            <strong>Template versioning</strong> with rollback capability
+                        </div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
+                            <lightning-icon icon-name="utility:check" size="x-small" variant="success" class="slds-var-m-right_x-small"></lightning-icon>
+                            <strong>DOCX and PDF</strong> output formats
+                        </div>
+                        <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_small">
+                            <lightning-icon icon-name="utility:check" size="x-small" variant="success" class="slds-var-m-right_x-small"></lightning-icon>
+                            <strong>No external services</strong> — no HTTP callouts
+                        </div>
+                    </div>
+                </div>
+
+                <div class="slds-box slds-theme_error slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">
+                        <lightning-icon icon-name="utility:warning" size="x-small" variant="inverse" class="slds-var-m-right_x-small"></lightning-icon>
+                        Required: Enable Blob.toPdf() Release Update
+                    </h3>
+                    <p class="slds-var-m-bottom_small">Before generating PDFs, you <strong>must</strong> enable the Spring '26 Release Update in your org. Without it, PDFs will show raw CSS text instead of formatted content, and images will not render.</p>
+                    <p class="slds-var-m-bottom_small">Go to <a href="/lightning/setup/ReleaseUpdates/home" target="_blank"><strong>Setup &gt; Release Updates</strong></a> and enable <strong>"Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations"</strong>.</p>
+                    <p class="slds-text-body_small">This is opt-in until Summer '26 when Salesforce enforces it for all orgs. See the <strong>Installation &amp; Setup</strong> section for full details.</p>
+                </div>
+
+                <div class="slds-box slds-theme_info slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">How It Works</h3>
+                    <ol class="slds-list_ordered">
+                        <li class="slds-var-p-bottom_x-small"><strong>Create a Template Record</strong> — Define the base Salesforce object and select the fields you need.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Upload a Word or PowerPoint file</strong> — Add merge tags like <code>&#123;Name&#125;</code> where you want data inserted.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Generate</strong> — From any record, click Generate to produce a merged document (DOCX, PPTX, or PDF).</li>
+                    </ol>
+                </div>
+
+                <div class="slds-box slds-theme_shade">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Permission Sets</h3>
+                    <p class="slds-var-m-bottom_small">Assign one of the following permission sets to your users:</p>
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <th scope="col">Permission Set</th>
+                                <th scope="col">Purpose</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>DocGen Admin</strong></td>
+                                <td>Full access to all DocGen features including template management, setup, and all records.</td>
+                            </tr>
+                            <tr>
+                                <td><strong>DocGen User</strong></td>
+                                <td>Generate documents and view templates (read-only).</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </template>
+
+            <!-- ==================== INSTALLATION & SETUP ==================== -->
+            <template if:true={isInstallation}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Installation &amp; Setup</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Step 1: Install the Package</h3>
+                    <p class="slds-var-m-bottom_small">Install DocGen using the package installation URL provided on the project's GitHub page. Choose "Install for Admins Only" to start, then assign permission sets as needed.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Step 2: Assign Permission Sets</h3>
+                    <ol class="slds-list_ordered">
+                        <li>Go to <strong>Setup &gt; Permission Sets</strong>.</li>
+                        <li>Click <strong>DocGen Admin</strong> and assign it to administrators who will manage templates.</li>
+                        <li>Click <strong>DocGen User</strong> and assign it to end-users who will generate documents.</li>
+                    </ol>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Step 3: Add the Document Generator to Record Pages</h3>
+                    <p class="slds-var-m-bottom_small">To let users generate documents from record pages:</p>
+                    <ol class="slds-list_ordered">
+                        <li>Navigate to a record page (e.g., Account) and click the gear icon &gt; <strong>Edit Page</strong>.</li>
+                        <li>Drag the <strong>docGenRunner</strong> component onto the page layout.</li>
+                        <li>Save and activate the page.</li>
+                    </ol>
+                    <p class="slds-text-body_small slds-text-color_weak">The Document Generator component automatically detects the record's object type and shows matching templates.</p>
+                </div>
+
+                <div class="slds-box slds-theme_error slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Required: Enable Updated Blob.toPdf() (Spring '26)</h3>
+                    <p class="slds-var-m-bottom_small">This Release Update is <strong>required for all PDF generation</strong>. Without it, the old <code>Blob.toPdf()</code> engine does not understand <code>&lt;style&gt;</code> blocks or <code>&lt;img&gt;</code> tags — it dumps them as visible text in your PDF output. The updated engine uses the same Visualforce PDF rendering service (Flying Saucer) that powers <code>renderAs="pdf"</code>, giving you proper CSS, image, and font support.</p>
+                    <p class="slds-var-m-bottom_small"><strong>To enable:</strong></p>
+                    <ol class="slds-list_ordered">
+                        <li>Go to <a href="/lightning/setup/ReleaseUpdates/home" target="_blank"><strong>Setup &gt; Release Updates</strong></a></li>
+                        <li>Find <strong>"Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations"</strong></li>
+                        <li>Click <strong>Get Started</strong> &gt; <strong>Enable</strong></li>
+                    </ol>
+                    <p class="slds-var-m-top_small"><strong>Without this:</strong> PDFs will contain raw CSS text instead of formatted content, and images will not render. This Release Update is opt-in until Summer '26 when Salesforce enforces it for all orgs.</p>
+                </div>
+            </template>
+
+            <!-- ==================== CREATING TEMPLATES ==================== -->
+            <template if:true={isTemplates}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Creating Templates</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Template Manager Overview</h3>
+                    <p class="slds-var-m-bottom_small">The <strong>Template Manager</strong> tab is your central hub. Here you can create, edit, version, share, and test templates.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Creating a New Template</h3>
+                    <ol class="slds-list_ordered">
+                        <li class="slds-var-p-bottom_x-small"><strong>Click the "New Template" tab</strong> in the Template Manager.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Step 1 — Details:</strong> Enter the template name, category (for organization), type (Word or PowerPoint), and output format (PDF or Native).</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Step 2 — Query Configuration:</strong> Select the base Salesforce object (e.g., Account, Opportunity, Quote). Use the visual builder to pick the fields you want available in your document. You can also add parent fields (e.g., Account.Owner.Name) and child relationships (e.g., OpportunityLineItems, Contacts).</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Step 3 — Finish:</strong> Click Create. The system will prompt you to upload your template file.</li>
+                    </ol>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Editing a Template</h3>
+                    <p class="slds-var-m-bottom_small">Click the row actions menu on any template and choose <strong>Edit</strong>. The edit modal has four tabs:</p>
+                    <ul class="slds-list_dotted">
+                        <li class="slds-var-p-bottom_x-small"><strong>Settings</strong> — Update name, category, type, output format, default status, and document title format.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Query Configuration</strong> — Modify the fields included in the query. Add/remove parent fields, child relationships, and configure WHERE, ORDER BY, and LIMIT clauses on child lists.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Template Tags</strong> — View all available merge tags with sample values from a test record. Use the copy buttons to grab tags for your template file. Select a <strong>Test Record ID</strong> here to see real data and to enable sample document generation.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Document &amp; History</strong> — Upload new template files and view version history. You can preview, download, or activate any previous version.</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Saving: Details vs. New Version</h3>
+                    <ul class="slds-list_dotted">
+                        <li class="slds-var-p-bottom_x-small"><strong>Save Details</strong> — Updates the template record (name, category, query config, etc.) without creating a version snapshot. Use this for minor edits.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Save as New Version</strong> — Creates a versioned snapshot that includes the current query configuration AND the currently uploaded file. Use this whenever you upload a new template file or make significant query changes you may want to roll back.</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Dynamic Document Titles</h3>
+                    <p class="slds-var-m-bottom_small">In the Settings tab, use the <strong>Document Title Format</strong> field to create dynamic file names using merge tags:</p>
+                    <p class="slds-var-m-bottom_small"><code>&#123;Name&#125;_Proposal_&#123;CreatedDate&#125;</code> would produce: <strong>Acme Corp_Proposal_2026-03-18.pdf</strong></p>
+                    <p class="slds-text-body_small slds-text-color_weak">If left blank, the template name is used as the document title.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Default Templates</h3>
+                    <p>Mark a template as <strong>Default</strong> in the Settings tab. When users open the Document Generator on a record page, the default template for that object is pre-selected. Only one template per object should be marked as default.</p>
+                </div>
+
+                <div class="slds-box slds-theme_shade">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Query Builder Limits</h3>
+                    <p class="slds-var-m-bottom_small">DocGen runs entirely within Salesforce and is subject to <a href="https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm" target="_blank">Apex Governor Limits</a>. The Query Builder enforces these caps to keep your templates within safe operating bounds:</p>
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-var-m-bottom_small">
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <th scope="col">Limit</th>
+                                <th scope="col">Value</th>
+                                <th scope="col">Why</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Parent fields</td><td>10 max</td><td>Each parent lookup (e.g., <code>Account.Owner.Name</code>) adds a relationship traversal to the SOQL query. Salesforce allows up to 5 levels of parent relationships per query, and more fields means more data loaded into memory. 10 keeps queries fast and readable.</td></tr>
+                            <tr><td>Child relationships</td><td>5 max</td><td>Each child list (e.g., Contacts, OpportunityLineItems) becomes a <a href="https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_relationships_query_using.htm" target="_blank">SOQL subquery</a>. Salesforce limits a single query to 20 subqueries per transaction. DocGen caps at 5 to leave room for other automation in your org and to keep heap usage manageable — each child list multiplies the amount of data loaded.</td></tr>
+                            <tr><td>Total fields</td><td>60+ triggers warning</td><td>Every field value is held in memory during document generation. With 60+ fields across parent and child objects, the data footprint approaches the 6 MB synchronous heap limit — especially when generating PDFs (which hold the template, data, HTML, and output simultaneously). The warning doesn't block you, but watch for <code>LimitException: Apex heap size too large</code> errors.</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="slds-text-body_small slds-text-color_weak">These limits exist because Salesforce enforces strict memory and CPU budgets on every Apex transaction. DocGen's caps are conservative by design — they keep you safely within governor limits even when other automation (triggers, flows, validation rules) runs alongside document generation.</p>
+                </div>
+            </template>
+
+            <!-- ==================== MERGE TAGS & SYNTAX ==================== -->
+            <template if:true={isTags}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Merge Tags &amp; Syntax</h2>
+
+                <div class="slds-box slds-theme_warning slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">How Merge Tags Work</h3>
+                    <p class="slds-var-m-bottom_small">DocGen uses <strong>plain text replacement</strong>. When a document is generated, each merge tag in your template is replaced with the corresponding field value from the Salesforce record. That's it — simple, predictable, and reliable.</p>
+                    <p class="slds-text-title_bold slds-var-m-bottom_x-small">What this means in practice:</p>
+                    <ul class="slds-list_dotted">
+                        <li class="slds-var-p-bottom_x-small">Most tags are replaced with <strong>plain text values</strong>. Special prefixes enable other content: <code>&#123;%Field&#125;</code> inserts images, <code>&#123;*Field&#125;</code> renders barcodes, and <code>&#123;SUM:...&#125;</code> computes aggregates.</li>
+                        <li class="slds-var-p-bottom_x-small">Tables do not dynamically expand or resize. If you need repeating rows, use <strong>loop tags</strong> (<code>&#123;#ListName&#125;</code> / <code>&#123;/ListName&#125;</code>) — each child record creates a new row by duplicating the row containing the loop tags.</li>
+                        <li class="slds-var-p-bottom_x-small">Formatting (bold, font size, color) comes from your template, not from the data. The replaced text inherits whatever formatting the tag had in the original document.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>Rich Text fields</strong> automatically preserve basic formatting (bold, italic, underline) and embedded images in Word and PDF output. See the <strong>Rich Text Fields</strong> section below for details.</li>
+                    </ul>
+                    <p class="slds-var-m-top_small slds-text-body_small"><strong>Tip:</strong> For standard text fields, design your template with final formatting in mind — the replacement value inherits whatever font/style the tag had. For Rich Text Area fields, the formatting comes from the data itself.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Basic Field Tags</h3>
+                    <p class="slds-var-m-bottom_small">Place merge tags in your Word, Excel, or PowerPoint template wherever you want Salesforce data to appear:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;Name&#125;</code> — Inserts the record's Name field<br/>
+                        <code>&#123;Account.Name&#125;</code> — Inserts a parent field value<br/>
+                        <code>&#123;Owner.Email&#125;</code> — Inserts the record owner's email
+                    </div>
+                    <p class="slds-text-body_small slds-text-color_weak">Tags are case-sensitive and must match the API field names exactly. Use the Template Tags tab in the editor to copy the correct tags.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Child Record Loops</h3>
+                    <p class="slds-var-m-bottom_small">To repeat rows in a table for child records (e.g., line items, contacts), use loop tags:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;#OpportunityLineItems&#125;</code> — Start of loop<br/>
+                        <code>&nbsp;&nbsp;&#123;Product2.Name&#125; | &#123;Quantity&#125; | &#123;UnitPrice&#125;</code><br/>
+                        <code>&#123;/OpportunityLineItems&#125;</code> — End of loop
+                    </div>
+                    <p class="slds-var-m-bottom_small">In Word, place the loop start and end tags in the <strong>first cell of a table row</strong>. Each child record will generate a new row. In PowerPoint, the loop duplicates the content between the start and end tags.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Conditional Content</h3>
+                    <p class="slds-var-m-bottom_small">Show or hide content based on field values:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;%IsActive&#125;</code> — Content here only appears if IsActive is truthy<br/>
+                        <code>&#123;%/IsActive&#125;</code> — End of conditional block
+                    </div>
+                    <p class="slds-text-body_small slds-text-color_weak">Conditional blocks work with boolean fields, or any field value that is non-null and non-empty.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Date Formatting</h3>
+                    <p class="slds-var-m-bottom_small">Format date fields using pipe syntax:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;CreatedDate|MM/dd/yyyy&#125;</code> — Outputs: 03/18/2026<br/>
+                        <code>&#123;CloseDate|MMMM d, yyyy&#125;</code> — Outputs: March 18, 2026
+                    </div>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Dynamic Images with the % Tag</h3>
+                    <p class="slds-var-m-bottom_small">Use the <code>&#123;%FieldName&#125;</code> tag to dynamically insert images into your Word document from Salesforce data. This is the one exception to the "plain text only" rule — the <code>%</code> prefix tells DocGen to treat the field value as an image source.</p>
+
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;%Company_Logo__c&#125;</code> — Insert image at default size (4" x 3")<br/>
+                        <code>&#123;%Photo__c:200x150&#125;</code> — Insert image at 200px wide by 150px tall<br/>
+                        <code>&#123;%Headshot__c:100x100&#125;</code> — Insert a 100x100px square image
+                    </div>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Supported Image Sources</h4>
+                    <p class="slds-var-m-bottom_small">The field value referenced by the <code>%</code> tag can be any of the following:</p>
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-var-m-bottom_small">
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <th scope="col">Source Type</th>
+                                <th scope="col">What to Store in the Field</th>
+                                <th scope="col">Example</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>ContentVersion ID</strong> (Recommended)</td>
+                                <td>The 18-character ID of a ContentVersion record (starts with <code>068</code>). Upload the image as a Salesforce File and store the ID in a text field on your record.</td>
+                                <td><code>068xx0000012345AAA</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Rich Text HTML</strong></td>
+                                <td>A Rich Text Area field that contains an embedded image. DocGen extracts the <code>&lt;img&gt;</code> tag and resolves the Salesforce URL.</td>
+                                <td>Any Rich Text Area field with an inserted image</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Base64 Data URI</strong></td>
+                                <td>A base64-encoded image string with the data URI prefix.</td>
+                                <td><code>data:image/png;base64,iVBOR...</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Raw Base64</strong></td>
+                                <td>A long base64 string without a prefix (auto-detected).</td>
+                                <td><code>iVBORw0KGgoAAAANSUhEU...</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Salesforce File URL</strong></td>
+                                <td>A URL pointing to a Salesforce file (servlet or sfc pattern).</td>
+                                <td><code>/sfc/servlet.shepherd/version/download/068...</code></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="slds-box slds-theme_info slds-var-m-bottom_small">
+                        <p><strong>Best practice:</strong> Use a <strong>ContentVersion ID</strong> stored in a custom text field. Upload your image as a Salesforce File, copy its ContentVersion ID, and store it in a field like <code>Company_Logo_CV__c</code>. Then use <code>&#123;%Company_Logo_CV__c:200x60&#125;</code> in your template. This approach is reliable for both DOCX and PDF output.</p>
+                    </div>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Controlling Image Size</h4>
+                    <p class="slds-var-m-bottom_small">Append <code>:WIDTHxHEIGHT</code> in pixels to the tag to control the rendered size:</p>
+                    <ul class="slds-list_dotted slds-var-m-bottom_small">
+                        <li><code>&#123;%Logo__c:300x80&#125;</code> — 300px wide, 80px tall</li>
+                        <li><code>&#123;%Photo__c:150x150&#125;</code> — 150px square</li>
+                        <li><code>&#123;%Banner__c&#125;</code> — No size specified, defaults to 4" x 3" (288x216 pixels)</li>
+                    </ul>
+                    <p class="slds-text-body_small slds-text-color_weak">Size is in pixels. The default (no size suffix) is 4 inches wide by 3 inches tall. For logos, a good starting point is <code>:200x60</code>. For headshots, try <code>:100x100</code>.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Limitations</h4>
+                    <ul class="slds-list_dotted">
+                        <li>Image tags only work in <strong>Word (.docx)</strong> templates. PowerPoint templates skip image tags to avoid corrupting the file format.</li>
+                        <li>External URLs (e.g., <code>https://example.com/logo.png</code>) cannot be fetched server-side because DocGen does not make HTTP callouts. Use a ContentVersion ID instead.</li>
+                        <li>The image replaces the tag inline in the document. It does not resize table cells or page layout — design your template with the expected image dimensions in mind.</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Static Images in Templates</h3>
+                    <p class="slds-var-m-bottom_small">For images that are the same in every document (logos, watermarks, headers), just place them directly in your Word or PowerPoint file as normal images. DocGen preserves all embedded template images in the output — they are extracted and stored as ContentVersions for reliable rendering in both DOCX and PDF.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Rich Text Fields</h3>
+                    <p class="slds-var-m-bottom_small">When a merge tag references a <strong>Rich Text Area</strong> field, DocGen automatically detects the HTML content and preserves formatting in Word and PDF output. No special syntax is needed — just use the standard <code>&#123;FieldName&#125;</code> tag.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">What's Preserved (Word &amp; PDF)</h4>
+                    <ul class="slds-list_dotted slds-var-m-bottom_small">
+                        <li><strong>Bold</strong>, <em>italic</em>, and underline formatting</li>
+                        <li>Paragraph structure (line breaks, paragraph separators)</li>
+                        <li>Images embedded in the rich text field (Salesforce-hosted URLs are automatically resolved)</li>
+                    </ul>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">What's NOT Preserved</h4>
+                    <ul class="slds-list_dotted slds-var-m-bottom_small">
+                        <li>Font colors, font sizes, and font families</li>
+                        <li>Text alignment (center, right, justify)</li>
+                        <li>Bullet and numbered lists (rendered as plain text paragraphs)</li>
+                        <li>Tables within the rich text field</li>
+                        <li>Hyperlinks (text appears, but the link is not clickable)</li>
+                    </ul>
+
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <p><strong>PowerPoint:</strong> Rich text is stripped to plain text in <code>.pptx</code> output. Only Word and PDF preserve RTF formatting.</p>
+                    </div>
+
+                    <p class="slds-text-body_small slds-text-color_weak"><strong>How it works:</strong> DocGen detects HTML tags in the field value and converts them to native Word XML (bold, italic, underline runs, paragraph breaks). Images are extracted from <code>&lt;img&gt;</code> tags and embedded in the document. For PDF output, the same formatting carries through the DOCX-to-HTML-to-PDF pipeline.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Aggregate Tags</h3>
+                    <p class="slds-var-m-bottom_small">Compute totals, counts, and averages from child record lists — no formula fields needed:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;SUM:QuoteLineItems.TotalPrice&#125;</code> — Sum of all line item totals<br/>
+                        <code>&#123;COUNT:Contacts&#125;</code> — Number of contacts<br/>
+                        <code>&#123;AVG:OpportunityLineItems.UnitPrice&#125;</code> — Average unit price<br/>
+                        <code>&#123;MIN:QuoteLineItems.Quantity&#125;</code> — Minimum quantity<br/>
+                        <code>&#123;MAX:QuoteLineItems.Discount&#125;</code> — Maximum discount
+                    </div>
+                    <p class="slds-var-m-bottom_small">Place aggregate tags <strong>outside</strong> the loop block, typically below the table. The syntax is <code>&#123;FUNCTION:ChildList.FieldName&#125;</code>. COUNT does not require a field — <code>&#123;COUNT:Contacts&#125;</code> returns the number of records.</p>
+                    <p class="slds-text-body_small slds-text-color_weak">Aggregates use the child record data already loaded for loops — zero extra SOQL queries. Non-numeric values are silently skipped. AVG rounds to 2 decimal places.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Barcode &amp; QR Code Tags</h3>
+                    <p class="slds-var-m-bottom_small">Render scannable barcodes and QR codes from any field value:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;*ProductCode&#125;</code> — Code 128 barcode (default)<br/>
+                        <code>&#123;*Website:qr&#125;</code> — QR code at default size (150px)<br/>
+                        <code>&#123;*TrackingUrl:qr:200&#125;</code> — QR code at 200px square<br/>
+                        <code>&#123;*SKU:code128:300x80&#125;</code> — Barcode at 300px wide, 80px tall
+                    </div>
+                    <p class="slds-var-m-bottom_small">Barcodes and QR codes render in <strong>PDF output only</strong> as CSS bars/grids — no fonts or external images needed. QR codes support up to <strong>255 characters</strong> (a full Salesforce text field). They do not appear in DOCX, XLSX, or PPTX output.</p>
+                    <p class="slds-text-body_small slds-text-color_weak">Code 128 supports any printable ASCII text with checksum. QR uses byte mode with Level M error correction (Version 1-14).</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Number &amp; Currency Formatting</h3>
+                    <p class="slds-var-m-bottom_small">Format numbers with commas, decimal places, dollar signs, and percentage symbols:</p>
+                    <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                        <code>&#123;Amount:currency&#125;</code> — $500,000.00<br/>
+                        <code>&#123;Rate:percent&#125;</code> — 15.5%<br/>
+                        <code>&#123;Quantity:number&#125;</code> — 1,234 (no decimals)<br/>
+                        <code>&#123;Price:#,##0.00&#125;</code> — 1,234.56 (custom decimals)<br/>
+                        <code>&#123;Score:#,##0&#125;</code> — 1,234 (no decimals, with commas)
+                    </div>
+                    <p class="slds-text-body_small slds-text-color_weak">Works in all template formats (Word, Excel, PowerPoint). Use <code>:currency</code> for dollar amounts, <code>:percent</code> for percentages, or a custom pattern with <code>#</code> and <code>0</code> for precise control.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Excel Templates (.xlsx)</h3>
+                    <p class="slds-var-m-bottom_small">Create spreadsheet output by uploading an Excel file with merge tags in cells. All standard tags work — fields, parent lookups, loops, conditionals, and aggregates.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">How to set up an Excel template</h4>
+                    <ol class="slds-list_ordered slds-var-m-bottom_small">
+                        <li>Create a new template and select <strong>Excel</strong> as the type</li>
+                        <li>Upload a <code>.xlsx</code> file with merge tags directly in cells: <code>&#123;Name&#125;</code>, <code>&#123;Account.Name&#125;</code>, etc.</li>
+                        <li>For repeating rows, put <code>&#123;#ChildList&#125;</code> in a cell on one row, your field tags in the next row, and <code>&#123;/ChildList&#125;</code> on the row after. Each child record duplicates the middle row.</li>
+                        <li>For totals, use <code>&#123;SUM:ChildList.Field&#125;</code> in a cell below the loop.</li>
+                    </ol>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Limitations</h4>
+                    <ul class="slds-list_dotted slds-var-m-bottom_small">
+                        <li>Excel output is <strong>XLSX only</strong> — no PDF conversion. Use a Word template if you need PDF output.</li>
+                        <li>Dynamic images (<code>&#123;%Field&#125;</code>) and barcodes (<code>&#123;*Field&#125;</code>) are not supported in Excel.</li>
+                        <li>Rich text HTML is output as plain text in cells.</li>
+                        <li>Cell formatting (colors, borders, number formats) from the template is preserved. Merged tags inherit the cell's format.</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">PowerPoint Templates (.pptx)</h3>
+                    <p class="slds-var-m-bottom_small">Place merge tags in text boxes and shapes. All field tags, parent lookups, date formatting, loops, and aggregates work in PowerPoint.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Limitations</h4>
+                    <ul class="slds-list_dotted slds-var-m-bottom_small">
+                        <li>PowerPoint output is <strong>PPTX only</strong> — no PDF conversion.</li>
+                        <li>Dynamic images (<code>&#123;%Field&#125;</code>) are not supported — they would corrupt the slide XML. Place static images directly in your template.</li>
+                        <li>Barcodes (<code>&#123;*Field&#125;</code>) are not supported.</li>
+                        <li>Rich text fields are rendered as plain text (HTML tags stripped).</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">PDF Merger</h3>
+                    <p class="slds-var-m-bottom_small">Combine multiple PDFs into a single document — directly from any record page. Three modes available from the mode toggle in the Document Generator:</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Generate &amp; Merge</h4>
+                    <p class="slds-var-m-bottom_small">Generate a document from a PDF template, then append existing PDFs from the record. Check "Merge with existing PDFs" on the generate screen, select the files to include, and click Generate &amp; Merge.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Document Packets</h4>
+                    <p class="slds-var-m-bottom_small">Select multiple PDF templates and generate them all for the same record, merged into one combined document. Use the dual-listbox to choose templates and set the order. Optionally append existing PDFs at the end.</p>
+
+                    <h4 class="slds-text-title_bold slds-var-m-top_small slds-var-m-bottom_x-small">Merge Only</h4>
+                    <p class="slds-var-m-bottom_small">Combine existing PDFs already attached to the record without generating from a template. Use the dual-listbox to select files and drag them into the desired order. Requires at least 2 PDFs.</p>
+
+                    <p class="slds-text-body_small slds-text-color_weak">All merging runs client-side in the browser. Each PDF is fetched via a separate Apex call with fresh heap — no file size limits. The merged result can be downloaded or saved back to the record.</p>
+                </div>
+            </template>
+
+            <!-- ==================== GENERATING DOCUMENTS ==================== -->
+            <template if:true={isGeneration}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Generating Documents</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">From a Record Page</h3>
+                    <ol class="slds-list_ordered">
+                        <li class="slds-var-p-bottom_x-small">Navigate to a record (e.g., an Account, Opportunity, or Quote).</li>
+                        <li class="slds-var-p-bottom_x-small">Find the <strong>Document Generator</strong> component on the page.</li>
+                        <li class="slds-var-p-bottom_x-small">Select a template from the dropdown (the default template is pre-selected).</li>
+                        <li class="slds-var-p-bottom_x-small">Choose <strong>Download</strong> (saves to your computer) or <strong>Save to Record</strong> (attaches as a File on the record).</li>
+                        <li class="slds-var-p-bottom_x-small">Click <strong>Generate Document</strong>.</li>
+                    </ol>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Output Formats</h3>
+                    <ul class="slds-list_dotted">
+                        <li class="slds-var-p-bottom_x-small"><strong>Native (.docx / .pptx)</strong> — Preserves the original file format. Best for documents that recipients need to edit.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>PDF</strong> — Converts Word templates to PDF using Salesforce's native Blob.toPdf(). Best for finalized documents. Note: PowerPoint templates always output as .pptx (PDF conversion is not supported for PPT).</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Testing from the Template Manager</h3>
+                    <p class="slds-var-m-bottom_small">You can generate a sample document without leaving the Template Manager:</p>
+                    <ol class="slds-list_ordered">
+                        <li>Open a template for editing.</li>
+                        <li>Go to the <strong>Template Tags</strong> tab.</li>
+                        <li>Select a <strong>Test Record ID</strong> using the record picker.</li>
+                        <li>Click <strong>Generate Sample Document</strong> in the modal footer.</li>
+                    </ol>
+                    <p class="slds-text-body_small slds-text-color_weak">This is the fastest way to iterate on template design — make changes, re-upload, and test without navigating to a record page.</p>
+                </div>
+
+                <div class="slds-box slds-theme_shade">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">PDF Generation Notes</h3>
+                    <ul class="slds-list_dotted">
+                        <li>PDF generation runs asynchronously via a Queueable job. The UI polls for the result automatically.</li>
+                        <li>Images from Rich Text fields render in PDFs when they are hosted on Salesforce URLs.</li>
+                        <li>Complex Word formatting (multi-column layouts, text boxes) may not convert perfectly to PDF. Test your templates.</li>
+                        <li>PDF timeout is approximately 60 seconds. Very large documents may time out.</li>
+                    </ul>
+                </div>
+            </template>
+
+            <!-- ==================== BULK GENERATION ==================== -->
+            <template if:true={isBulk}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Bulk Generation</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Overview</h3>
+                    <p>Generate documents for multiple records at once. Each record produces its own document, saved as a File (ContentVersion) attached to that record.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">How to Use</h3>
+                    <ol class="slds-list_ordered">
+                        <li class="slds-var-p-bottom_x-small">Go to the <strong>Bulk Generation</strong> tab.</li>
+                        <li class="slds-var-p-bottom_x-small">Select a template from the dropdown.</li>
+                        <li class="slds-var-p-bottom_x-small">Enter a <strong>filter condition</strong> (SOQL WHERE clause) to target specific records. For example: <code>Industry = 'Technology'</code> or <code>StageName = 'Closed Won' AND CloseDate = THIS_YEAR</code>.</li>
+                        <li class="slds-var-p-bottom_x-small">Click <strong>Count Records</strong> to verify how many records will be processed.</li>
+                        <li class="slds-var-p-bottom_x-small">Click <strong>Generate</strong> to start the batch job.</li>
+                    </ol>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Saved Queries</h3>
+                    <p class="slds-var-m-bottom_small">Save frequently used filter conditions for reuse. Click <strong>Save Query</strong> after entering your condition, give it a name, and load it later from the dropdown.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Visual Filter Builder</h3>
+                    <p>Toggle from the text input to the <strong>visual filter builder</strong> for a point-and-click interface. Select fields, operators (equals, not equals, LIKE, greater than, less than, IN), and values. The builder generates the SOQL WHERE clause for you.</p>
+                </div>
+
+                <div class="slds-box slds-theme_shade">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Batch Job Monitoring</h3>
+                    <p class="slds-var-m-bottom_small">Once submitted, the job appears in the <strong>Recent Jobs</strong> section. The page auto-refreshes every 5 seconds while a job is running. Each job shows:</p>
+                    <ul class="slds-list_dotted">
+                        <li>Status: Queued, Running, Completed, Failed, or Completed with Errors</li>
+                        <li>Total records, success count, and error count</li>
+                        <li>Start and completion timestamps</li>
+                    </ul>
+                </div>
+            </template>
+
+
+            <!-- ==================== SHARING & PERMISSIONS ==================== -->
+            <template if:true={isSharing}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Sharing &amp; Permissions</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Template Sharing</h3>
+                    <p class="slds-var-m-bottom_small">By default, templates are visible based on org-wide defaults. To share specific templates with users or groups:</p>
+                    <ol class="slds-list_ordered">
+                        <li>In the Template Manager, click the row actions menu on a template and choose <strong>Share</strong>.</li>
+                        <li>Search for a user or public group.</li>
+                        <li>Select the access level: <strong>Read Only</strong> or <strong>Read/Write</strong>.</li>
+                        <li>Click <strong>Share</strong>.</li>
+                    </ol>
+                    <p class="slds-text-body_small slds-text-color_weak">Sharing rules are managed via manual sharing (DocGen_Template__Share). The template owner always has full access.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Permission Set Details</h3>
+                    <ul class="slds-list_dotted">
+                        <li class="slds-var-p-bottom_x-small"><strong>DocGen Admin</strong> — Full CRUD on all objects. Can manage templates, versions, sharing, settings, and view all audit records. Has modifyAllRecords and viewAllRecords on DocGen objects.</li>
+                        <li class="slds-var-p-bottom_x-small"><strong>DocGen User</strong> — Can create and generate documents. Read-only on templates and versions. Cannot modify templates or access setup.</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_shade">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Security Architecture</h3>
+                    <ul class="slds-list_dotted">
+                        <li class="slds-var-p-bottom_x-small">All controller classes use <code>with sharing</code> to enforce sharing rules.</li>
+                        <li class="slds-var-p-bottom_x-small">CRUD/FLS enforcement uses a mix of <code>WITH USER_MODE</code> (for user-context queries) and <code>Security.stripInaccessible()</code> (for DML operations).</li>
+                        <li class="slds-var-p-bottom_x-small">Dynamic SOQL in the data retriever validates all field names against the Schema before inclusion in queries.</li>
+                        <li class="slds-var-p-bottom_x-small">No HTTP callouts or session ID usage — fully self-contained on the Salesforce platform.</li>
+                    </ul>
+                </div>
+            </template>
+
+            <!-- ==================== DATA MODEL ==================== -->
+            <template if:true={isDataModel}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Data Model</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Document Generation Objects</h3>
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <th scope="col"><div class="slds-truncate">Object</div></th>
+                                <th scope="col"><div class="slds-truncate">API Name</div></th>
+                                <th scope="col"><div class="slds-truncate">Purpose</div></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><strong>DocGen Template</strong></td><td><code>DocGen_Template__c</code></td><td>Stores template configuration: name, type (Word/PowerPoint), output format (Native/PDF), base object, query config, and document title format.</td></tr>
+                            <tr><td><strong>DocGen Template Version</strong></td><td><code>DocGen_Template_Version__c</code></td><td>Snapshot of a template at a point in time. Tracks the file (ContentVersion ID), query config, and active status. Only one version is active at a time.</td></tr>
+                            <tr><td><strong>DocGen Job</strong></td><td><code>DocGen_Job__c</code></td><td>Tracks bulk generation jobs. Records the template, query condition, status (Processing/Completed/Failed), and success/error counts.</td></tr>
+                            <tr><td><strong>Saved DocGen Query</strong></td><td><code>DocGen_Saved_Query__c</code></td><td>Reusable filter conditions for bulk generation. Linked to a template via master-detail.</td></tr>
+                            <tr><td><strong>DocGen Settings</strong></td><td><code>DocGen_Settings__c</code></td><td>Hierarchy custom setting for org/profile/user-level config: Experience Site URL and company name.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="slds-box slds-theme_default">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Relationship Diagram</h3>
+                    <pre style="font-size: 11px; line-height: 1.4; background: #f4f6f9; padding: 12px; border-radius: 4px; overflow-x: auto;">
+DocGen_Template__c
+  ├── DocGen_Template_Version__c  (Master-Detail)
+  └── DocGen_Saved_Query__c      (Master-Detail)
+
+DocGen_Job__c
+  └── Template__c                (Lookup → DocGen_Template__c)</pre>
+                </div>
+            </template>
+
+            <!-- ==================== TEMPLATE VERSIONING ==================== -->
+            <template if:true={isVersions}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Template Versioning</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">How Versioning Works</h3>
+                    <p class="slds-var-m-bottom_small">Every time you click <strong>Save as New Version</strong>, DocGen creates a snapshot that captures:</p>
+                    <ul class="slds-list_dotted">
+                        <li>The current template file (Word/PowerPoint)</li>
+                        <li>The query configuration (all selected fields, child lists, and clauses)</li>
+                        <li>Template metadata (type, category, description, base object)</li>
+                    </ul>
+                    <p class="slds-var-m-top_small">Only one version is <strong>Active</strong> at a time. When a document is generated, the system uses the active version's file and configuration.</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Viewing Version History</h3>
+                    <ol class="slds-list_ordered">
+                        <li>Open a template for editing.</li>
+                        <li>Go to the <strong>Document &amp; History</strong> tab.</li>
+                        <li>The version history table shows all versions with their version number, created date, creator, and active status.</li>
+                    </ol>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Previewing a Version</h3>
+                    <p class="slds-var-m-bottom_small">Click <strong>Preview</strong> on any version to see:</p>
+                    <ul class="slds-list_dotted">
+                        <li>Version metadata (created date, creator, status, object, type, category)</li>
+                        <li>The full query configuration that was active at that time</li>
+                        <li>A <strong>Download Template</strong> button to download the exact file that was used</li>
+                        <li>A <strong>Generate Sample</strong> button to produce a document using that version's template against your test record</li>
+                    </ul>
+                </div>
+
+                <div class="slds-box slds-theme_default">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Activating (Rolling Back) a Version</h3>
+                    <p class="slds-var-m-bottom_small">To roll back to a previous version:</p>
+                    <ol class="slds-list_ordered">
+                        <li>Click <strong>Activate</strong> on the desired version (or click <strong>Activate This Version</strong> from the preview modal).</li>
+                        <li>The system deactivates all other versions and marks the selected one as active.</li>
+                        <li>The template record is updated with the activated version's query config, type, category, and description.</li>
+                        <li>All subsequent document generation will use the activated version's file.</li>
+                    </ol>
+                </div>
+            </template>
+
+            <!-- ==================== FLOW & AUTOMATION ==================== -->
+            <template if:true={isFlows}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Flow &amp; Automation</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Invocable Actions</h3>
+                    <p class="slds-var-m-bottom_small">DocGen provides Flow-compatible actions that you can use in Record-Triggered Flows, Screen Flows, or Scheduled Flows:</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Generate Document (Single Record)</h3>
+                    <p class="slds-var-m-bottom_small">Action: <code>DocGenFlowAction</code></p>
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <th scope="col">Input</th>
+                                <th scope="col">Type</th>
+                                <th scope="col">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>templateId</td><td>Text</td><td>ID of the DocGen Template record</td></tr>
+                            <tr><td>recordId</td><td>Text</td><td>ID of the source record to merge data from</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="slds-var-m-top_small">Returns: <code>contentDocumentId</code> — the ID of the generated document (saved as a File).</p>
+                </div>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Generate Documents (Bulk)</h3>
+                    <p class="slds-var-m-bottom_small">Action: <code>DocGenBulkFlowAction</code></p>
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                        <thead>
+                            <tr class="slds-line-height_reset">
+                                <th scope="col">Input</th>
+                                <th scope="col">Type</th>
+                                <th scope="col">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>templateId</td><td>Text</td><td>ID of the DocGen Template record</td></tr>
+                            <tr><td>queryCondition</td><td>Text</td><td>SOQL WHERE clause to filter records</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="slds-var-m-top_small">Returns: <code>jobId</code> — the ID of the bulk job record for monitoring.</p>
+                </div>
+
+            </template>
+
+            <!-- ==================== TROUBLESHOOTING ==================== -->
+            <template if:true={isTroubleshooting}>
+                <h2 class="slds-text-heading_large slds-var-m-bottom_medium">Troubleshooting</h2>
+
+                <div class="slds-box slds-theme_default slds-var-m-bottom_medium">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Common Issues</h3>
+
+                    <div class="slds-var-m-bottom_medium">
+                        <h4 class="slds-text-title_bold">PDF shows raw CSS text or metadata instead of formatted content</h4>
+                        <p class="slds-var-m-bottom_x-small">This is the most common issue and has a simple fix:</p>
+                        <ul class="slds-list_dotted">
+                            <li>You need to enable the Spring '26 Release Update: <strong>"Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations"</strong>.</li>
+                            <li>Go to <a href="/lightning/setup/ReleaseUpdates/home" target="_blank"><strong>Setup &gt; Release Updates</strong></a>, find the update, and click <strong>Get Started &gt; Enable</strong>.</li>
+                            <li>The old <code>Blob.toPdf()</code> engine doesn't understand <code>&lt;style&gt;</code> blocks in HTML — it renders them as visible text. The updated engine processes CSS, images, and fonts correctly.</li>
+                            <li>After enabling, re-generate your document. No template changes are needed.</li>
+                        </ul>
+                    </div>
+
+                    <div class="slds-var-m-bottom_medium">
+                        <h4 class="slds-text-title_bold">"Template file not found" error</h4>
+                        <ul class="slds-list_dotted">
+                            <li>Ensure a file is uploaded to the template (Document &amp; History tab).</li>
+                            <li>Check that at least one version is marked as Active.</li>
+                            <li>The file must be a .docx or .pptx format.</li>
+                        </ul>
+                    </div>
+
+                    <div class="slds-var-m-bottom_medium">
+                        <h4 class="slds-text-title_bold">Merge tags show as literal text (not replaced)</h4>
+                        <ul class="slds-list_dotted">
+                            <li>Tags are case-sensitive. Verify the exact API name in the Template Tags tab.</li>
+                            <li>In Word, sometimes formatting splits a tag across multiple XML runs. Type the tag in a plain text editor first, then paste it into Word.</li>
+                            <li>Ensure the field is included in the query configuration.</li>
+                        </ul>
+                    </div>
+
+                    <div class="slds-var-m-bottom_medium">
+                        <h4 class="slds-text-title_bold">PDF generation times out</h4>
+                        <ul class="slds-list_dotted">
+                            <li>Very large documents (many pages, many images) may exceed the timeout.</li>
+                            <li>Reduce the number of fields or child records in the query.</li>
+                            <li>Consider using Native (.docx) output instead of PDF for complex documents.</li>
+                        </ul>
+                    </div>
+
+                    <div class="slds-var-m-bottom_medium">
+                        <h4 class="slds-text-title_bold">Images don't appear in PDF</h4>
+                        <ul class="slds-list_dotted">
+                            <li>Images must be hosted on Salesforce URLs for PDF rendering via Blob.toPdf().</li>
+                            <li>External image URLs will not render in server-side PDF generation.</li>
+                            <li>Template images (embedded in the .docx) are automatically handled.</li>
+                        </ul>
+                    </div>
+
+                </div>
+
+                <div class="slds-box slds-theme_shade">
+                    <h3 class="slds-text-heading_small slds-var-m-bottom_small">Debug Tips</h3>
+                    <ul class="slds-list_dotted">
+                        <li>Use the <strong>Generate Sample Document</strong> button in the Template Manager to test without navigating away.</li>
+                        <li>Check Salesforce Debug Logs (Setup &gt; Debug Logs) for detailed error messages — look for entries starting with "DocGen:".</li>
+                        <li>For bulk job failures, check the DocGen Job record for error counts and individual record errors.</li>
+                    </ul>
+                </div>
+            </template>
+
+        </div>
+    </div>
 </template>

@@ -27,19 +27,18 @@ public with sharing class DocGenMergeJob implements Queueable {
      * @param ctx The queueable context provided by the platform
      */
     public void execute(QueueableContext ctx) {
-        System.attachFinalizer(new DocGenMergeJobFinalizer(this.jobId));
         try {
             // Read all HTML snippets in order
             String prefix = 'docgen_merge_' + jobId + '_';
             List<ContentVersion> snippets = [
                 SELECT VersionData, ContentDocumentId FROM ContentVersion
                 WHERE Title LIKE :(prefix + '%')
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 ORDER BY Title
             ];
 
             if (snippets.isEmpty()) {
-                update new DocGen_Job__c(Id = jobId, Status__c = 'Completed'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
+                update new DocGen_Job__c(Id = jobId, Status__c = 'Completed');
                 return;
             }
 
@@ -72,27 +71,27 @@ public with sharing class DocGenMergeJob implements Queueable {
                 IsMajorVersion = true,
                 FirstPublishLocationId = jobId
             );
-            SObjectAccessDecision cvDec = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentVersion>{ pdfCv });
-            insert cvDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-            pdfCv.Id = cvDec.getRecords()[0].Id;
+            insert pdfCv; // NOPMD ApexCRUDViolation - internal bulk merge output
 
             // Update Job with merged PDF CV Id
-            update new DocGen_Job__c(Id = jobId, Status__c = 'Completed', Merged_PDF_CV__c = pdfCv.Id); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
+            update new DocGen_Job__c(
+                Id = jobId,
+                Status__c = 'Completed',
+                Merged_PDF_CV__c = pdfCv.Id
+            );
 
             // Clean up HTML snippets
             List<ContentDocument> docsToDelete = new List<ContentDocument>();
             for (Id docId : docIdsToDelete) {
                 docsToDelete.add(new ContentDocument(Id = docId));
             }
-            if (Schema.sObjectType.ContentDocument.isDeletable()) {
-                delete docsToDelete; // NOPMD ApexCRUDViolation — CRUD checked above
-            }
+            delete docsToDelete; // NOPMD ApexCRUDViolation - cleaning up internal temp files
 
             // Send bell + push notification to the job submitter
             sendCompletionNotification(job, fileName, snippets.size());
 
         } catch (Exception e) {
-            update new DocGen_Job__c(Id = jobId, Status__c = 'Completed with Errors'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
+            update new DocGen_Job__c(Id = jobId, Status__c = 'Completed with Errors');
         }
     }
 
@@ -116,23 +115,8 @@ public with sharing class DocGenMergeJob implements Queueable {
             notification.send(new Set<String>{ job.CreatedById });
 
         } catch (Exception e) {
-            // Intentionally swallowed — notification failure is non-fatal
-            String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
-        }
-    }
-
-    public with sharing class DocGenMergeJobFinalizer implements Finalizer {
-        private Id jobId;
-        public DocGenMergeJobFinalizer(Id jobId) { this.jobId = jobId; }
-        public void execute(FinalizerContext ctx) {
-            if (ctx.getResult() == ParentJobResult.UNHANDLED_EXCEPTION) {
-                try {
-                    update new DocGen_Job__c(Id = jobId, Status__c = 'Failed'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
-                } catch (Exception e) {
-                    // Intentionally swallowed — best-effort; job record may not exist
-                    String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
-                }
-            }
+            // Non-fatal — don't fail the job
+            System.debug(LoggingLevel.ERROR, 'DocGenMergeJob: Job cleanup failed: ' + e.getMessage());
         }
     }
 }

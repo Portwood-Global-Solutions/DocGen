@@ -1,51 +1,5 @@
 public with sharing class DocGenService {
 
-    // Collector for images to inject after XML processing
-    private static List<Map<String, Object>> pendingImages = new List<Map<String, Object>>();
-    private static Integer imageCounter = 0;
-    private static String currentTemplateType = 'Word'; // Set before processXml calls
-    private static String currentOutputFormat = 'Native'; // Set before processXml — PDF skips blob loading for images
-
-    // Thread-local storage for pre-loaded record data. When set, mergeTemplate
-    // skips DocGenController.generateDocumentData() and uses this data instead. Cleared after each use.
-    private static Map<String, Object> preloadedRecordDataOverride;
-
-    // Static cache for pre-decomposed XML parts — same template, queried once, reused across batch
-    private static Id cachedPreDecompTemplateId;
-    private static Map<String, String> cachedXmlParts; // key (e.g. 'rels', 'word__document.xml') → raw XML
-    private static Boolean cachedPreDecompAvailable;
-
-    // Captured HTML from the last renderPdf() call. Used by bulk batch merge mode
-    // to accumulate HTML without re-merging the template. Cleared after reading.
-    public static String lastRenderedHtml;
-
-    /**
-     * without-sharing helper for loading package-internal pre-decomposed XML ContentVersions.
-     * Required because the signature PDF queueable runs as Automated Process user, which
-     * can't see ContentVersion records under `with sharing` — no ContentDocumentLink rows
-     * associate it with the files. The CVs are internal package metadata (not user data),
-     * so bypassing sharing is safe. Template access is still gated by DocGen_Admin/User
-     * permsets at the upstream entry points. (#28)
-     */
-    private without sharing class PreDecompXmlLoader {
-        public List<ContentVersion> loadByTitlePrefix(String titlePrefix) {
-            String likePattern = titlePrefix + '%';
-            return [
-                SELECT Id, Title, VersionData FROM ContentVersion
-                WHERE Title LIKE :likePattern
-                WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts
-            ];
-        }
-    }
-
-    private static final Set<String> AGGREGATE_FUNCTIONS = new Set<String>{
-        'SUM', 'COUNT', 'AVG', 'MIN', 'MAX'
-    };
-
-    private static final Set<String> NUMERIC_FORMATS = new Set<String>{
-        'currency', 'percent', 'number'
-    };
-
     /**
      * Creates an AuraHandledException with a user-facing message.
      * Centralizes exception creation for consistent error handling.
@@ -76,6 +30,12 @@ public with sharing class DocGenService {
         return ex;
     }
 
+    // Collector for images to inject after XML processing
+    private static List<Map<String, Object>> pendingImages = new List<Map<String, Object>>();
+    private static Integer imageCounter = 0;
+    private static String currentTemplateType = 'Word'; // Set before processXml calls
+    private static String currentOutputFormat = 'Native'; // Set before processXml — PDF skips blob loading for images
+
     /**
      * Public wrapper for processXml — used by e2e tests to validate tag processing.
      * @param xml The XML string containing merge tags
@@ -89,7 +49,7 @@ public with sharing class DocGenService {
     /**
      * Intermediate merge result containing processed XML, images, and passthrough ZIP entries.
      */
-    private class MergeResult { // NOPMD TooManyFields — data transfer object requires all fields
+    private class MergeResult {
         String documentXml;                                   // Processed word/document.xml
         Map<String, String> processedXmlEntries;              // All processed XML entries (name → xml)
         Map<String, Blob> passthroughEntries;                 // Non-XML ZIP entries passed through as-is
@@ -122,6 +82,13 @@ public with sharing class DocGenService {
     private static MergeResult mergeTemplate(Id templateId, Id recordId, Map<String, String> resolvedImages) {
         return mergeTemplate(templateId, recordId, resolvedImages, null);
     }
+
+    /**
+     * Thread-local storage for pre-loaded record data. When set, mergeTemplate
+     * skips DocGenController.generateDocumentData() and uses this data instead.
+     * Cleared after each use.
+     */
+    private static Map<String, Object> preloadedRecordDataOverride;
 
     private static MergeResult mergeTemplate(Id templateId, Id recordId, Map<String, String> resolvedImages, String outputFormatOverride) {
         pendingImages = new List<Map<String, Object>>();
@@ -306,7 +273,42 @@ public with sharing class DocGenService {
         }
 
         // Process pending images: update content types, rels, and collect base64 for HTML
-        applyPendingImages(mr, true);
+        if (!pendingImages.isEmpty()) {
+            if (mr.contentTypesXml != null) {
+                if (!mr.contentTypesXml.contains('Extension="png"')) {
+                    mr.contentTypesXml = mr.contentTypesXml.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
+                }
+                if (!mr.contentTypesXml.contains('Extension="jpeg"') && !mr.contentTypesXml.contains('Extension="jpg"')) {
+                    mr.contentTypesXml = mr.contentTypesXml.replace('</Types>', '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>');
+                }
+            }
+            if (mr.relsXml != null) {
+                for (Map<String, Object> img : pendingImages) {
+                    // Add relationship for ALL images (blob or URL-only)
+                    String relId = (String) img.get('relId');
+                    String fName = (String) img.get('fileName');
+                    String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
+                    mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
+                }
+            }
+            // Collect image data for rendering paths
+            for (Map<String, Object> img : pendingImages) {
+                String relId = (String) img.get('relId');
+                if (img.containsKey('blob')) {
+                    // Base64 for DOCX ZIP embedding and fallback
+                    Blob imgBlob = (Blob) img.get('blob');
+                    mr.imageBase64ByRelId.put(relId, EncodingUtil.base64Encode(imgBlob));
+                }
+                if (img.containsKey('url')) {
+                    // URL for PDF rendering via Blob.toPdf()
+                    mr.imageUrlByRelId.put(relId, (String) img.get('url'));
+                    // Also store in base64 map so PDF image map loop finds the relId
+                    if (!img.containsKey('blob')) {
+                        mr.imageBase64ByRelId.put(relId, (String) img.get('url'));
+                    }
+                }
+            }
+        }
 
         // Generate document title
         mr.docTitle = generateDocTitle((String) dataMap.get('titleFormat'), recordDataMap);
@@ -358,6 +360,11 @@ public with sharing class DocGenService {
      * Skips full ZIP decompression — saves ~1.5-2MB heap for PDF generation.
      * Returns null if pre-decomposed parts are not available (older templates).
      */
+    // Static cache for pre-decomposed XML parts — same template, queried once, reused across batch
+    private static Id cachedPreDecompTemplateId;
+    private static Map<String, String> cachedXmlParts; // key (e.g. 'rels', 'word__document.xml') → raw XML
+    private static Boolean cachedPreDecompAvailable;
+
     private static MergeResult tryMergeFromPreDecomposed(Id templateId, Map<String, Object> recordDataMap, MergeResult mr) {
         // Cache the template version + XML CV query — identical for every record
         if (cachedPreDecompTemplateId != templateId || cachedXmlParts == null) {
@@ -375,12 +382,11 @@ public with sharing class DocGenService {
             }
 
             String xmlPrefix = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_';
-            // Use `without sharing` helper: in async contexts (Automated Process user from
-            // platform-event-triggered queueable), `with sharing` + SYSTEM_MODE combined
-            // still can't see these ContentVersions due to Salesforce's ContentVersion
-            // sharing quirk — the user has no ContentDocumentLink rows. Bypass sharing
-            // for this internal package-metadata read. (#28)
-            List<ContentVersion> xmlCvs = new PreDecompXmlLoader().loadByTitlePrefix(xmlPrefix);
+            List<ContentVersion> xmlCvs = [
+                SELECT Id, Title, VersionData FROM ContentVersion
+                WHERE Title LIKE :(xmlPrefix + '%')
+                WITH SYSTEM_MODE
+            ];
 
             if (xmlCvs.isEmpty()) {
                 return null;
@@ -405,9 +411,6 @@ public with sharing class DocGenService {
             } else if (key == 'word__styles.xml') {
                 // Store styles.xml for table style resolution (not merged with record data)
                 mr.processedXmlEntries.put('word/styles.xml', rawXml);
-            } else if (key == 'word__numbering.xml') {
-                // Store numbering.xml for numbered vs bullet list detection
-                mr.passthroughEntries.put('word/numbering.xml', Blob.valueOf(rawXml));
             } else {
                 // Restore original path: word__document.xml → word/document.xml
                 String originalPath = key.replace('__', '/');
@@ -417,8 +420,9 @@ public with sharing class DocGenService {
                 mr.processedXmlEntries.put(originalPath, xml);
                 if (originalPath == 'word/document.xml') {
                     mr.documentXml = xml;
+                } else if (originalPath.startsWith('word/header') || originalPath.startsWith('word/footer')) {
+                    // Headers and footers are already in processedXmlEntries via the put() above
                 }
-                // Headers and footers are already in processedXmlEntries via the put() above
             }
         }
 
@@ -427,44 +431,16 @@ public with sharing class DocGenService {
         }
 
         // Process pending images from merge field processing (RTF images, {%Field} images)
-        applyPendingImages(mr, true);
-
-        return mr;
-    }
-
-    /**
-     * Applies pendingImages to the MergeResult:
-     *  - Adds PNG/JPEG declarations to [Content_Types].xml (idempotent).
-     *  - Adds a <Relationship> entry for each pending image in the rels XML.
-     *  - If collectRenderMaps is true, also populates imageBase64ByRelId / imageUrlByRelId
-     *    so the HTML renderer and PDF path can resolve each relId.
-     *
-     * Callers: mergeTemplate (full ZIP path, collectRenderMaps=true),
-     *          tryMergeFromPreDecomposed (collectRenderMaps=true),
-     *          generateDocumentPartsGiantQuery (collectRenderMaps=false — URL-only, client assembles).
-     */
-    private static void applyPendingImages(MergeResult mr, Boolean collectRenderMaps) {
-        if (pendingImages.isEmpty()) return;
-
-        if (mr.contentTypesXml != null) {
-            if (!mr.contentTypesXml.contains('Extension="png"')) {
-                mr.contentTypesXml = mr.contentTypesXml.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
+        if (!pendingImages.isEmpty()) {
+            if (mr.relsXml != null) {
+                for (Map<String, Object> img : pendingImages) {
+                    // Add relationship for ALL images (blob or URL-only)
+                    String relId = (String) img.get('relId');
+                    String fName = (String) img.get('fileName');
+                    String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
+                    mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
+                }
             }
-            if (!mr.contentTypesXml.contains('Extension="jpeg"') && !mr.contentTypesXml.contains('Extension="jpg"')) {
-                mr.contentTypesXml = mr.contentTypesXml.replace('</Types>', '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>');
-            }
-        }
-
-        if (mr.relsXml != null) {
-            for (Map<String, Object> img : pendingImages) {
-                String relId = (String) img.get('relId');
-                String fName = (String) img.get('fileName');
-                String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
-                mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
-            }
-        }
-
-        if (collectRenderMaps) {
             for (Map<String, Object> img : pendingImages) {
                 String relId = (String) img.get('relId');
                 if (img.containsKey('blob')) {
@@ -479,6 +455,8 @@ public with sharing class DocGenService {
                 }
             }
         }
+
+        return mr;
     }
 
     /**
@@ -538,25 +516,8 @@ public with sharing class DocGenService {
      * @return Map with keys: blob, title, outputFormat, templateType
      */
     public static Map<String, Object> processDocument(Id templateId, Id recordId, Map<String, String> resolvedImages) {
-        return processDocument(templateId, recordId, resolvedImages, null);
-    }
-
-    /**
-     * Processes a template with optional pre-resolved images AND an optional output format override.
-     * outputFormatOverride: 'PDF', 'Word', or 'PowerPoint'. Null = use template's Output_Format__c.
-     * Throws DocGenException if the override is incompatible with the template type
-     * (e.g. PowerPoint template + PDF override) or if the template has Lock_Output_Format__c = true.
-     */
-    public static Map<String, Object> processDocument(Id templateId, Id recordId, Map<String, String> resolvedImages, String outputFormatOverride) {
-        validateOutputFormatOverride(templateId, outputFormatOverride);
-        MergeResult mr = mergeTemplate(templateId, recordId, resolvedImages, outputFormatOverride);
-
-        Blob resultBlob;
-        if (mr.outputFormat == 'PDF' && mr.templateType == 'Word') {
-            resultBlob = renderPdf(mr, templateId, recordId);
-        } else {
-            resultBlob = assembleZip(mr);
-        }
+        MergeResult mr = mergeTemplate(templateId, recordId, resolvedImages);
+        Blob resultBlob = assembleZip(mr);
 
         return new Map<String, Object>{
             'blob' => resultBlob,
@@ -564,35 +525,6 @@ public with sharing class DocGenService {
             'outputFormat' => mr.outputFormat,
             'templateType' => mr.templateType
         };
-    }
-
-    /**
-     * Validates that a runtime output-format override is allowed for a given template.
-     * Rules:
-     *   - If template has Lock_Output_Format__c = true, no override is permitted (must be null).
-     *   - PowerPoint templates cannot render to PDF (Blob.toPdf only handles Word source).
-     *   - Override values must be one of: 'PDF', 'Word', 'PowerPoint'.
-     * Throws DocGenException on violation.
-     */
-    @TestVisible
-    private static void validateOutputFormatOverride(Id templateId, String outputFormatOverride) {
-        if (String.isBlank(outputFormatOverride)) return;
-        if (outputFormatOverride != 'PDF' && outputFormatOverride != 'Word' && outputFormatOverride != 'PowerPoint') {
-            throw new DocGenException('Invalid output format override: ' + outputFormatOverride + '. Expected PDF, Word, or PowerPoint.');
-        }
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<DocGen_Template__c> tpls = [
-            SELECT Lock_Output_Format__c, Type__c FROM DocGen_Template__c
-            WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1
-        ];
-        if (tpls.isEmpty()) return; // mergeTemplate will throw a clearer "template not found" error
-        DocGen_Template__c t = tpls[0];
-        if (t.Lock_Output_Format__c == true) {
-            throw new DocGenException('This template locks its output format. Override not permitted.');
-        }
-        if (t.Type__c == 'PowerPoint' && outputFormatOverride == 'PDF') {
-            throw new DocGenException('PowerPoint templates cannot render to PDF.');
-        }
     }
 
     /**
@@ -670,405 +602,6 @@ public with sharing class DocGenService {
     }
 
     /**
-     * Generates document parts for Giant Query DOCX assembly. Merges the template
-     * with a placeholder where the giant child loop belongs. The client injects
-     * pre-rendered XML fragments from the harvest batch into this placeholder,
-     * then assembles the DOCX ZIP.
-     * @param templateId The DocGen_Template__c record ID
-     * @param recordId The source record ID for parent-level merge tags
-     * @param giantRelationshipName The child relationship processed by the harvest batch
-     * @return Map containing allXmlParts (with placeholder), image maps, title, and placeholder token
-     */
-    public static Map<String, Object> generateDocumentPartsGiantQuery(Id templateId, Id recordId, String giantRelationshipName) {
-        // Use PDF output format to skip image blob loading during merge
-        currentOutputFormat = 'PDF';
-
-        // Unique placeholder for the giant loop — client replaces with concatenated fragment XML
-        String placeholder = '<!--DOCGEN_GIANT_LOOP_PLACEHOLDER-->';
-
-        pendingImages = new List<Map<String, Object>>();
-        imageCounter = 0;
-
-        Map<String, Object> dataMap;
-        try {
-            dataMap = DocGenController.generateDocumentData(templateId, recordId);
-        } catch (Exception e) {
-            throw new DocGenException('Error retrieving template data: ' + e.getMessage());
-        }
-
-        String base64File = (String) dataMap.get('templateFile');
-        Object dataObj = dataMap.get('data');
-        String templateType = (String) dataMap.get('templateType');
-        String titleFormat = (String) dataMap.get('titleFormat');
-
-        if (base64File == null) {
-            throw new DocGenException('Template file content is missing.');
-        }
-
-        Map<String, Object> recordDataMap;
-        if (dataObj instanceof Map<String, Object>) {
-            recordDataMap = (Map<String, Object>) dataObj;
-        } else if (dataObj instanceof SObject) {
-            recordDataMap = ((SObject) dataObj).getPopulatedFieldsAsMap();
-        } else {
-            throw new DocGenException('Invalid data format.');
-        }
-
-        currentTemplateType = templateType;
-
-        MergeResult mr = new MergeResult();
-        mr.templateType = templateType;
-        mr.outputFormat = 'Native';
-        mr.relsPath = 'word/_rels/document.xml.rels';
-        mr.mediaPath = 'word/media/';
-
-        Blob templateBlob = EncodingUtil.base64Decode(base64File);
-        Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
-        String rawDocumentXml = null;
-
-        for (Compression.ZipEntry entry : reader.getEntries()) {
-            String name = entry.getName();
-            if (name == 'word/document.xml') {
-                rawDocumentXml = reader.extract(name).toString();
-            } else if (name == '[Content_Types].xml') {
-                mr.contentTypesXml = reader.extract(name).toString();
-            } else if (name == mr.relsPath) {
-                mr.relsXml = reader.extract(name).toString();
-            } else {
-                Boolean isProcessedXml = (name.startsWith('word/header') && name.endsWith('.xml')) ||
-                                         (name.startsWith('word/footer') && name.endsWith('.xml'));
-                if (isProcessedXml) {
-                    String xml = mergeRunsInTags(reader.extract(name).toString());
-                    xml = processXml(xml, recordDataMap);
-                    mr.processedXmlEntries.put(name, xml);
-                } else {
-                    mr.passthroughEntries.put(name, reader.extract(name));
-                }
-            }
-        }
-
-        if (rawDocumentXml == null) {
-            throw new DocGenException('Template does not contain word/document.xml.');
-        }
-
-        // Merge runs first, then inject placeholder for the giant loop
-        rawDocumentXml = mergeRunsInTags(rawDocumentXml);
-
-        Map<String, String> loopParts = extractLoopBody(rawDocumentXml, giantRelationshipName);
-        String giantLoopBodyXml = '';
-        if (loopParts != null) {
-            giantLoopBodyXml = loopParts.get('innerXml');
-            rawDocumentXml = loopParts.get('beforeLoop') + placeholder + loopParts.get('afterLoop');
-        }
-
-        // Process remaining merge tags (parent-level fields, other loops)
-        String processedXml = processXml(rawDocumentXml, recordDataMap);
-        mr.documentXml = processedXml;
-        mr.processedXmlEntries.put('word/document.xml', processedXml);
-
-        mr.docTitle = generateDocTitle(titleFormat, recordDataMap);
-        if (mr.docTitle == null) {
-            mr.docTitle = (String) resolveValue(recordDataMap, 'Name');
-        }
-
-        // Handle pending images (rels entries needed for DOCX; URL-only for client assembly)
-        applyPendingImages(mr, false);
-
-        // Build return maps (same as generateDocumentParts)
-        Map<String, String> allXmlParts = new Map<String, String>(mr.processedXmlEntries);
-        if (mr.contentTypesXml != null) {
-            allXmlParts.put('[Content_Types].xml', mr.contentTypesXml);
-        }
-        if (mr.relsXml != null) {
-            allXmlParts.put(mr.relsPath, mr.relsXml);
-        }
-        for (String path : mr.passthroughEntries.keySet()) {
-            Blob entryBlob = mr.passthroughEntries.get(path);
-            if (!path.startsWith(mr.mediaPath)) {
-                allXmlParts.put(path, entryBlob.toString());
-            }
-        }
-
-        Map<String, String> imageBase64Map = new Map<String, String>();
-        for (String path : mr.passthroughEntries.keySet()) {
-            if (path.startsWith(mr.mediaPath)) {
-                imageBase64Map.put(path, EncodingUtil.base64Encode(mr.passthroughEntries.get(path)));
-            }
-        }
-
-        Map<String, String> imageCvIdMap = new Map<String, String>();
-        for (Map<String, Object> img : pendingImages) {
-            String fileName = (String) img.get('fileName');
-            String mediaPath = 'word/media/' + fileName;
-            if (img.containsKey('url')) {
-                String url = (String) img.get('url');
-                if (url.contains('/version/download/')) {
-                    imageCvIdMap.put(mediaPath, url.substringAfterLast('/'));
-                }
-            }
-        }
-
-        currentOutputFormat = 'Native';
-
-        return new Map<String, Object>{
-            'allXmlParts' => allXmlParts,
-            'imageBase64Map' => imageBase64Map,
-            'imageCvIdMap' => imageCvIdMap,
-            'title' => mr.docTitle,
-            'templateType' => mr.templateType,
-            'placeholder' => placeholder,
-            'giantLoopBodyXml' => giantLoopBodyXml
-        };
-    }
-
-    /**
-     * Generates a shell PDF for Giant Query: parent data merged, giant loop removed,
-     * rendered to PDF via Blob.toPdf(). Also extracts table properties and header row
-     * from the template so fragment PDFs can match the table styling.
-     * @param templateId The DocGen_Template__c record ID
-     * @param recordId The parent record ID for merge tag resolution
-     * @param giantRelationshipName The child relationship being harvested
-     * @param jobId The DocGen_Job__c record ID (for ContentVersion naming)
-     * @return Map with shellCvId, tablePropertiesXml, headerRowXml
-     */
-    /**
-     * Lightweight extraction of table properties, header row, and styles.xml from
-     * the template for Giant Query PDF fragment rendering. No record data, no PDF
-     * rendering — just reads pre-decomposed XML and extracts structural elements.
-     * Shell PDF generation is deferred to a future enhancement.
-     */
-    public static Map<String, Object> extractGiantQueryFragmentConfig(Id templateId, String giantRelationshipName) {
-        // Load only document.xml and styles.xml from pre-decomposed parts
-        List<DocGen_Template_Version__c> activeVersions = [
-            SELECT Id FROM DocGen_Template_Version__c
-            WHERE Template__c = :templateId AND Is_Active__c = true
-            WITH SYSTEM_MODE LIMIT 1
-        ];
-        if (activeVersions.isEmpty()) {
-            throw new DocGenException('No active template version found.');
-        }
-
-        String xmlPrefix = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_';
-        String docKey = xmlPrefix + 'word__document.xml';
-        String stylesKey = xmlPrefix + 'word__styles.xml';
-
-        String rawDocumentXml = null;
-        String capturedStylesXml = null;
-
-        List<ContentVersion> xmlCvs = [
-            SELECT Title, VersionData FROM ContentVersion
-            WHERE Title IN (:docKey, :stylesKey) WITH USER_MODE // NOPMD — internal pre-decomposed parts
-        ];
-        for (ContentVersion cv : xmlCvs) {
-            if (cv.Title == docKey) {
-                rawDocumentXml = cv.VersionData.toString();
-            } else if (cv.Title == stylesKey) {
-                capturedStylesXml = cv.VersionData.toString();
-            }
-        }
-        xmlCvs = null;
-
-        if (rawDocumentXml == null) {
-            throw new DocGenException('Pre-decomposed template parts not found. Please re-save the template.');
-        }
-
-        // Extract <w:sectPr> for page dimensions before mergeRunsInTags modifies content
-        String sectPrXml = '';
-        Integer sectPrStart = rawDocumentXml.lastIndexOf('<w:sectPr');
-        if (sectPrStart != -1) {
-            Integer sectPrEnd = rawDocumentXml.indexOf('</w:sectPr>', sectPrStart);
-            if (sectPrEnd != -1) {
-                sectPrXml = rawDocumentXml.substring(sectPrStart, sectPrEnd + 11);
-            }
-        }
-
-        rawDocumentXml = mergeRunsInTags(rawDocumentXml);
-
-        Map<String, String> loopParts = extractLoopBody(rawDocumentXml, giantRelationshipName);
-        rawDocumentXml = null;
-        String tablePropertiesXml = '';
-        String headerRowXml = '';
-
-        if (loopParts != null) {
-            String beforeLoop = loopParts.get('beforeLoop');
-
-            // Extract <w:tblPr> for fragment table styling
-            Integer tblPrStart = beforeLoop.lastIndexOf('<w:tblPr');
-            if (tblPrStart != -1) {
-                Integer tblPrEnd = beforeLoop.indexOf('</w:tblPr>', tblPrStart);
-                if (tblPrEnd != -1) {
-                    tablePropertiesXml = beforeLoop.substring(tblPrStart, tblPrEnd + 10);
-                }
-            }
-
-            // Extract <w:tblGrid> for column widths
-            Integer tblGridStart = beforeLoop.lastIndexOf('<w:tblGrid');
-            if (tblGridStart != -1) {
-                Integer tblGridEnd = beforeLoop.indexOf('</w:tblGrid>', tblGridStart);
-                if (tblGridEnd != -1) {
-                    tablePropertiesXml += beforeLoop.substring(tblGridStart, tblGridEnd + 12);
-                }
-            }
-
-            // Extract last <w:tr> as header row (column labels)
-            Integer lastTrStart = beforeLoop.lastIndexOf('<w:tr');
-            if (lastTrStart != -1) {
-                Integer trEnd = beforeLoop.indexOf('</w:tr>', lastTrStart);
-                if (trEnd != -1) {
-                    headerRowXml = beforeLoop.substring(lastTrStart, trEnd + 7);
-                }
-            }
-        }
-
-        // Extract per-column CSS from the loop row's formatting
-        String columnCss = '';
-        if (loopParts != null) {
-            columnCss = DocGenGiantQueryBatch.extractColumnCss(loopParts.get('innerXml'));
-        }
-
-        return new Map<String, Object>{
-            'tablePropertiesXml' => tablePropertiesXml,
-            'headerRowXml' => headerRowXml,
-            'stylesXml' => capturedStylesXml,
-            'sectPrXml' => sectPrXml,
-            'columnCss' => columnCss
-        };
-    }
-
-    /**
-     * Merges the full template with parent record data, removes the giant loop,
-     * converts to HTML, and injects a placeholder where the table rows should go.
-     * Called by DocGenGiantQueryAssembler (Queueable, 12MB heap) to produce
-     * a complete HTML document with before/after content, headers, footers, images.
-     * @param templateId The DocGen_Template__c record ID
-     * @param recordId The parent record ID for merge tag resolution
-     * @param giantRelationshipName The child relationship being harvested
-     * @param placeholder String to inject where the giant loop table rows go
-     * @return Complete HTML string with placeholder for table row injection
-     */
-    public static String mergeTemplateForGiantQueryPdf(Id templateId, Id recordId, String giantRelationshipName, String placeholder) {
-        currentOutputFormat = 'PDF';
-        pendingImages = new List<Map<String, Object>>();
-        imageCounter = 0;
-
-        // Get parent-only record data (strip all children from config)
-        // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
-        List<DocGen_Template__c> templates = [
-            SELECT Base_Object_API__c, Query_Config__c, Type__c, Document_Title_Format__c
-            FROM DocGen_Template__c WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1
-        ];
-        DocGen_Template__c template = templates[0];
-
-        String shellConfig = template.Query_Config__c;
-        if (shellConfig != null && shellConfig.trim().startsWith('{')) {
-            Map<String, Object> configMap = (Map<String, Object>) JSON.deserializeUntyped(shellConfig.trim());
-            List<Object> nodes = (List<Object>) configMap.get('nodes');
-            if (nodes != null) {
-                List<Object> rootOnly = new List<Object>();
-                for (Object nodeObj : nodes) {
-                    Map<String, Object> node = (Map<String, Object>) nodeObj;
-                    if (node.get('parentNode') == null) { rootOnly.add(node); }
-                }
-                configMap.put('nodes', rootOnly);
-                shellConfig = JSON.serialize(configMap);
-            }
-        } else if (shellConfig != null) {
-            shellConfig = shellConfig.replaceAll('\\(\\s*SELECT\\s+[^)]+\\)', '');
-            shellConfig = shellConfig.replaceAll(',\\s*,', ',').replaceAll(',\\s*$', '').trim();
-        }
-
-        Map<String, Object> recordDataMap = DocGenDataRetriever.getRecordData(
-            recordId, template.Base_Object_API__c, shellConfig
-        );
-        shellConfig = null;
-
-        currentTemplateType = template.Type__c;
-
-        MergeResult mr = new MergeResult();
-        mr.templateType = template.Type__c;
-        mr.outputFormat = 'PDF';
-        mr.relsPath = 'word/_rels/document.xml.rels';
-        mr.mediaPath = 'word/media/';
-
-        // Load pre-decomposed XML parts
-        List<DocGen_Template_Version__c> activeVersions = [
-            SELECT Id FROM DocGen_Template_Version__c
-            WHERE Template__c = :templateId AND Is_Active__c = true
-            WITH SYSTEM_MODE LIMIT 1
-        ];
-        String xmlPrefix = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_';
-        // SYSTEM_MODE is required: this runs in async contexts (signature PDF queueable
-        // triggered by platform event → Automated Process user) that don't have FLS access
-        // to the package-internal pre-decomposed XML ContentVersions. USER_MODE silently
-        // returned empty in that context, which is why the signed PDF path lost table-style
-        // borders for guest-triggered signatures (#28). Template access is already gated by
-        // DocGen permission sets; reading the pre-decomposed artifacts in system mode is safe.
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<ContentVersion> xmlCvs = [
-            SELECT Title, VersionData FROM ContentVersion
-            WHERE Title LIKE :(xmlPrefix + '%') WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts
-        ];
-
-        String rawDocumentXml = null;
-        for (ContentVersion cv : xmlCvs) {
-            String key = cv.Title.substring(xmlPrefix.length());
-            String rawXml = cv.VersionData.toString();
-            if (key == 'rels') {
-                mr.relsXml = rawXml;
-            } else if (key == 'word__styles.xml') {
-                mr.processedXmlEntries.put('word/styles.xml', rawXml);
-            } else if (key == 'word__document.xml') {
-                rawDocumentXml = rawXml;
-            } else {
-                String originalPath = key.replace('__', '/');
-                if (originalPath.startsWith('word/header') || originalPath.startsWith('word/footer')) {
-                    rawXml = mergeRunsInTags(rawXml);
-                    rawXml = processXml(rawXml, recordDataMap);
-                    mr.processedXmlEntries.put(originalPath, rawXml);
-                }
-            }
-        }
-        xmlCvs = null;
-
-        rawDocumentXml = mergeRunsInTags(rawDocumentXml);
-
-        // Replace giant loop with placeholder wrapped in a DOCX paragraph so it
-        // survives the XML→HTML conversion (XML comments get stripped by the renderer)
-        Map<String, String> loopParts = extractLoopBody(rawDocumentXml, giantRelationshipName);
-        if (loopParts != null) {
-            String xmlPlaceholder = '<w:p><w:r><w:t>' + placeholder + '</w:t></w:r></w:p>';
-            rawDocumentXml = loopParts.get('beforeLoop') + xmlPlaceholder + loopParts.get('afterLoop');
-        }
-        loopParts = null;
-
-        String processedXml = processXml(rawDocumentXml, recordDataMap);
-        rawDocumentXml = null;
-        recordDataMap = null;
-        mr.documentXml = processedXml;
-        mr.processedXmlEntries.put('word/document.xml', processedXml);
-
-        // Handle images
-        for (Map<String, Object> img : pendingImages) {
-            String relId = (String) img.get('relId');
-            if (img.containsKey('url')) {
-                mr.imageUrlByRelId.put(relId, (String) img.get('url'));
-            }
-        }
-
-        Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-        if (mr.processedXmlEntries.containsKey('word/styles.xml')) {
-            DocGenHtmlRenderer.stylesXml = mr.processedXmlEntries.get('word/styles.xml');
-        }
-        setNumberingXml(mr);
-        String html = DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
-        mr = null;
-        pdfImages = null;
-
-        currentOutputFormat = 'Native';
-        return html;
-    }
-
-    /**
      * Extracts images from a template DOCX/PPTX file and saves them as ContentVersion
      * records linked to the template version. These committed CVs provide stable URLs
      * for Blob.toPdf() which cannot render data URI images (Flying Saucer limitation).
@@ -1139,11 +672,10 @@ public with sharing class DocGenService {
             if (templateType == 'Word') {
                 if (name == 'word/document.xml' ||
                     name == 'word/styles.xml' ||
-                    name == 'word/numbering.xml' ||
                     (name.startsWith('word/header') && name.endsWith('.xml')) ||
                     (name.startsWith('word/footer') && name.endsWith('.xml'))) {
                     xmlEntries.put(name, entryBlob.toString());
-                    if (name != 'word/styles.xml' && name != 'word/numbering.xml') {
+                    if (name != 'word/styles.xml') {
                         isDocumentXml = true;
                         documentXmlPaths.add(name);
                     }
@@ -1258,68 +790,6 @@ public with sharing class DocGenService {
         shellCv.FirstPublishLocationId = versionId;
         newCvs.add(shellCv);
 
-        // Insert image + XML CVs BEFORE building pre-baked HTML, so buildPdfImageMap
-        // can find the image ContentVersions via SOQL.
-        if (!newCvs.isEmpty()) {
-            SObjectAccessDecision preDec = Security.stripInaccessible(AccessType.CREATABLE, newCvs);
-            insert preDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-            newCvs.clear();
-        }
-
-        // Pre-bake HTML version of the template for Giant Query PDF.
-        // Loop tags ({#Rel}...{/Rel}) are preserved as HTML comments so the
-        // assembler can find and replace them with rendered data at generation time.
-        // This avoids all DOCX XML parsing at generation time — just string replace + Blob.toPdf().
-        if (templateType == 'Word' && xmlEntries.containsKey('word/document.xml')) {
-            try {
-                String docXml = xmlEntries.get('word/document.xml');
-                MergeResult htmlMr = new MergeResult();
-                htmlMr.templateType = 'Word';
-                htmlMr.outputFormat = 'PDF';
-                htmlMr.relsPath = relsPath;
-                htmlMr.mediaPath = mediaPath;
-                htmlMr.relsXml = relsXml;
-
-                // Add styles, headers, footers to the MergeResult
-                for (String xmlName : xmlEntries.keySet()) {
-                    if (xmlName == 'word/styles.xml') {
-                        htmlMr.processedXmlEntries.put(xmlName, xmlEntries.get(xmlName));
-                    } else if (xmlName.startsWith('word/header') || xmlName.startsWith('word/footer')) {
-                        htmlMr.processedXmlEntries.put(xmlName, xmlEntries.get(xmlName));
-                    }
-                }
-
-                // Merge runs so tags are complete, but DON'T process merge fields —
-                // leave {Field} tags intact for generation-time replacement
-                docXml = mergeRunsInTags(docXml);
-                htmlMr.documentXml = docXml;
-                htmlMr.processedXmlEntries.put('word/document.xml', docXml);
-
-                // Build image map — image CVs were inserted above so SOQL can find them
-                Map<String, String> pdfImages = buildPdfImageMap(htmlMr, templateId);
-                if (htmlMr.processedXmlEntries.containsKey('word/styles.xml')) {
-                    DocGenHtmlRenderer.stylesXml = htmlMr.processedXmlEntries.get('word/styles.xml');
-                }
-                setNumberingXml(htmlMr);
-
-                String templateHtml = DocGenHtmlRenderer.convertToHtml(
-                    combineXmlWithHeadersFooters(htmlMr), pdfImages
-                );
-                htmlMr = null;
-
-                // Save pre-baked HTML as ContentVersion
-                ContentVersion htmlCv = new ContentVersion();
-                htmlCv.Title = 'docgen_tmpl_html_' + versionId;
-                htmlCv.PathOnClient = 'docgen_tmpl_html_' + versionId + '.html';
-                htmlCv.VersionData = Blob.valueOf(templateHtml);
-                htmlCv.FirstPublishLocationId = versionId;
-                newCvs.add(htmlCv);
-            } catch (Exception htmlErr) {
-                // Non-fatal — Giant Query will fall back to runtime conversion
-                String noop = htmlErr.getMessage(); // NOPMD
-            }
-        }
-
         if (!newCvs.isEmpty()) {
             SObjectAccessDecision cvDecision = Security.stripInaccessible(AccessType.CREATABLE, newCvs);
             insert cvDecision.getRecords();
@@ -1334,6 +804,7 @@ public with sharing class DocGenService {
      */
     private static Map<String, String> buildPdfImageMap(MergeResult mr, Id templateId) {
         Map<String, String> pdfImages = new Map<String, String>();
+        String baseUrl = URL.getOrgDomainUrl().toExternalForm();
 
         // 1. Template-embedded images: committed CVs linked to active version
         List<DocGen_Template_Version__c> activeVersions = [
@@ -1346,7 +817,7 @@ public with sharing class DocGenService {
             List<ContentVersion> tmplCvs = [
                 SELECT Id, Title FROM ContentVersion
                 WHERE Title LIKE :(prefix + '%')
-                WITH USER_MODE
+                WITH SYSTEM_MODE
             ];
             for (ContentVersion cv : tmplCvs) {
                 String relId = cv.Title.substring(prefix.length());
@@ -1376,6 +847,10 @@ public with sharing class DocGenService {
      * Single entry point for all PDF rendering — used by generateDocument()
      * and generatePdfBlob().
      */
+    // Captured HTML from the last renderPdf() call. Used by bulk batch merge mode
+    // to accumulate HTML without re-merging the template. Cleared after reading.
+    public static String lastRenderedHtml;
+
     private static Blob renderPdf(MergeResult mr, Id templateId, Id recordId) {
         if (Test.isRunningTest()) {
             lastRenderedHtml = '<html><body><p>Test PDF</p></body></html>';
@@ -1387,7 +862,6 @@ public with sharing class DocGenService {
         if (mr.processedXmlEntries != null && mr.processedXmlEntries.containsKey('word/styles.xml')) {
             DocGenHtmlRenderer.stylesXml = mr.processedXmlEntries.get('word/styles.xml');
         }
-        setNumberingXml(mr);
         String html = DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
         lastRenderedHtml = html;
 
@@ -1425,20 +899,19 @@ public with sharing class DocGenService {
             if (url != null && url.contains('/version/download/')) {
                 String cvId = url.substringAfterLast('/');
                 try {
-                    ContentVersion cv = [SELECT VersionData, FileExtension FROM ContentVersion WHERE Id = :cvId WITH USER_MODE LIMIT 1]; // NOPMD ApexCRUDViolation - ContentVersion read access required for PDF image preview; gated by template ownership
+                    ContentVersion cv = [SELECT VersionData, FileExtension FROM ContentVersion WHERE Id = :cvId LIMIT 1]; // NOPMD ApexCRUDViolation - ContentVersion read access required for PDF image preview; gated by template ownership
                     String ext = cv.FileExtension != null ? cv.FileExtension.toLowerCase() : 'png';
                     String mime = (ext == 'jpg' || ext == 'jpeg') ? 'image/jpeg' : 'image/png';
                     previewImages.put(relId, 'data:' + mime + ';base64,' + EncodingUtil.base64Encode(cv.VersionData));
                 } catch (Exception e) {
-                    // Intentionally swallowed — unresolvable image, skip
-                    String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+                    // Skip unresolvable images
+                    System.debug(LoggingLevel.ERROR, 'DocGenService: Unresolvable image skipped: ' + e.getMessage());
                 }
             } else if (url != null) {
                 previewImages.put(relId, url);
             }
         }
 
-        setNumberingXml(mr);
         return DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), previewImages);
     }
 
@@ -1491,7 +964,6 @@ public with sharing class DocGenService {
             }
         }
 
-        setNumberingXml(mr);
         String html = DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), mergedMap);
 
         return new Map<String, Object>{
@@ -1510,17 +982,7 @@ public with sharing class DocGenService {
      * @return ContentDocumentId of the saved file
      */
     public static Id generateDocument(Id templateId, Id recordId) {
-        return generateDocument(templateId, recordId, null);
-    }
-
-    /**
-     * Same as generateDocument(templateId, recordId) but honors a runtime output-format override.
-     * outputFormatOverride: 'PDF', 'Word', or 'PowerPoint'. Null = use template's Output_Format__c.
-     * Throws DocGenException if Lock_Output_Format__c is true on the template, or if PowerPoint→PDF.
-     */
-    public static Id generateDocument(Id templateId, Id recordId, String outputFormatOverride) {
-        validateOutputFormatOverride(templateId, outputFormatOverride);
-        MergeResult mr = mergeTemplate(templateId, recordId, null, outputFormatOverride);
+        MergeResult mr = mergeTemplate(templateId, recordId);
 
         if (mr.outputFormat == 'PDF' && mr.templateType == 'Word') {
             Blob pdfBlob = renderPdf(mr, templateId, recordId);
@@ -1552,17 +1014,6 @@ public with sharing class DocGenService {
      * processes all template content (not just the main body).
      * Image relIds in header/footer XML are namespaced to prevent collisions.
      */
-    /**
-     * Sets DocGenHtmlRenderer.numberingXml from the template's word/numbering.xml
-     * passthrough entry, enabling accurate numbered vs bullet list detection.
-     */
-    private static void setNumberingXml(MergeResult mr) {
-        DocGenHtmlRenderer.numberingXml = null;
-        if (mr.passthroughEntries != null && mr.passthroughEntries.containsKey('word/numbering.xml')) {
-            DocGenHtmlRenderer.numberingXml = mr.passthroughEntries.get('word/numbering.xml').toString();
-        }
-    }
-
     private static String combineXmlWithHeadersFooters(MergeResult mr) {
         if (mr.processedXmlEntries == null) { return mr.documentXml; }
 
@@ -1603,11 +1054,11 @@ public with sharing class DocGenService {
     private static String namespaceImageRelIds(String xml, String partPrefix) {
         String result = xml;
         Integer cursor = 0;
-        String embedMarker = 'r:embed="';
+        String searchToken = 'r:embed="';
         while (cursor < result.length()) {
-            Integer embedStart = result.indexOf(embedMarker, cursor);
+            Integer embedStart = result.indexOf(searchToken, cursor);
             if (embedStart == -1) { break; }
-            Integer valStart = embedStart + embedMarker.length();
+            Integer valStart = embedStart + searchToken.length();
             Integer valEnd = result.indexOf('"', valStart);
             if (valEnd == -1) { break; }
             String relId = result.substring(valStart, valEnd);
@@ -1634,7 +1085,6 @@ public with sharing class DocGenService {
         MergeResult mr = mergeTemplate(templateId, recordId, null, 'PDF');
 
         Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-        setNumberingXml(mr);
         return DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
     }
 
@@ -1644,8 +1094,8 @@ public with sharing class DocGenService {
      * After merging, processXml can find complete tags like {#QuoteLineItems}.
      */
     private static String mergeRunsInTags(String xml) {
-        // 1. Find all <w:t...>text</w:t> and <a:t>text</a:t> elements (Word + PowerPoint)
-        Pattern wtPattern = Pattern.compile('<[wa]:t(?:\\s[^>]*)?>([^<]*)</[wa]:t>');
+        // 1. Find all <w:t...>text</w:t> elements and their text content positions
+        Pattern wtPattern = Pattern.compile('<w:t(?:\\s[^>]*)?>([^<]*)</w:t>');
         Matcher m = wtPattern.matcher(xml);
 
         List<Integer> contentStarts = new List<Integer>();
@@ -1759,26 +1209,17 @@ public with sharing class DocGenService {
             String rawTag = xml.substring(cursor + 1, tagClose);
             String tagContent = rawTag.trim();
 
-            // Preserve {@Signature_*} tags — handled by the signature service after merge
-            if (tagContent.startsWith('@')) {
-                output += '{' + rawTag + '}';
-                cursor = tagClose + 1;
-                continue;
-            }
-
             // Strip Salesforce-style {!Field} prefix — treat {!X} the same as {X}
             if (tagContent.startsWith('!')) {
                 tagContent = tagContent.substring(1).trim();
             }
-
+            
             if (tagContent.startsWith('#')) {
                 String key = tagContent.substring(1).trim();
-                // For {#IF ...} expressions, the closing tag is {/IF} not {/IF expression}
-                String balanceKey = (key.startsWith('IF ') || key.startsWith('if ')) ? 'IF' : key;
-                Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, balanceKey);
+                Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
                 if (sectionEnd == -1) {
                     throw new DocGenException(
-                        'Malformed loop tag: missing closing "{/' + balanceKey + '}" for "{#' + key + '}".'
+                        'Malformed loop tag: missing closing "{/' + key + '}" for "{#' + key + '}".'
                     );
                 } else {
                     // Default: Content between tags
@@ -1853,103 +1294,34 @@ public with sharing class DocGenService {
                         cursor = closeTagEnd + 1;
                     }
 
-                    // Split on {:else} if present
-                    String trueBranch = innerXml;
-                    String elseBranch = null;
-                    Integer elsePos = innerXml.indexOf('{:else}');
-                    if (elsePos != -1) {
-                        trueBranch = innerXml.substring(0, elsePos);
-                        elseBranch = innerXml.substring(elsePos + 7); // 7 = '{:else}'.length()
-                    }
-
-                    // Check for {#IF Field op Value} comparison conditional
-                    if (key.startsWith('IF ') || key.startsWith('if ')) {
-                        Boolean ifResult = evaluateIfExpression(key.substring(3).trim(), data);
-                        if (ifResult) {
-                            output += processXml(trueBranch, data);
-                        } else if (elseBranch != null) {
-                            output += processXml(elseBranch, data);
-                        }
-                        cursor = (closeTagEnd != -1 ? closeTagEnd + 1 : sectionEnd);
-                        continue;
-                    }
-
                     // Process Data
                     Object val = resolveValue(data, key);
                     String sectionResult = '';
-                    Boolean isTruthy = false;
                     if (val instanceof Boolean && (Boolean)val) {
-                         isTruthy = true;
-                         sectionResult = processXml(trueBranch, data);
+                         sectionResult = processXml(innerXml, data);
                     } else if (val instanceof Map<String, Object>) {
-                        isTruthy = true;
                         Map<String, Object> mapVal = (Map<String, Object>) val;
                         if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
                             List<Object> records = (List<Object>) mapVal.get('records');
                             for (Object item : records) {
                                 if (item instanceof Map<String, Object>) {
-                                    sectionResult += processXml(trueBranch, (Map<String, Object>) item);
+                                    sectionResult += processXml(innerXml, (Map<String, Object>) item);
                                 }
                             }
                         } else {
-                             sectionResult = processXml(trueBranch, mapVal);
+                             sectionResult = processXml(innerXml, mapVal);
                         }
                     } else if (val instanceof List<Object>) {
                          List<Object> listVal = (List<Object>) val;
-                         if (!listVal.isEmpty()) { isTruthy = true; }
                          for (Object item : listVal) {
-                              if (item instanceof Map<String, Object>) { sectionResult += processXml(trueBranch, (Map<String, Object>) item); }
+                              if (item instanceof Map<String, Object>) { sectionResult += processXml(innerXml, (Map<String, Object>) item); }
                          }
-                    } else if (val != null && !(val instanceof Boolean)) {
-                         // Non-null, non-boolean, non-list, non-map value (e.g., non-blank string)
-                         isTruthy = true;
-                         sectionResult = processXml(trueBranch, data);
-                    }
-
-                    if (!isTruthy && elseBranch != null) {
-                        sectionResult = processXml(elseBranch, data);
+                    } else if (val != null) {
+                         sectionResult = processXml(innerXml, data);
                     }
                     output += sectionResult;
                 }
                 
-            } else if (tagContent.startsWith('^')) {
-                // Inverse conditional: {^BoolField}content{/BoolField}
-                // Shows content when field is false, null, blank, or empty list
-                String key = tagContent.substring(1).trim();
-                Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
-                if (sectionEnd == -1) {
-                    throw new DocGenException(
-                        'Malformed inverse tag: missing closing "{/' + key + '}" for "{^' + key + '}".'
-                    );
-                } else {
-                    Integer contentStart = tagClose + 1;
-                    Integer contentEnd = sectionEnd;
-                    String innerXml = xml.substring(contentStart, contentEnd);
-                    Integer closeTagEnd = xml.indexOf('}', sectionEnd);
-                    // Split on {:else} if present
-                    String inverseTrueBranch = innerXml;
-                    String inverseElseBranch = null;
-                    Integer inverseElsePos = innerXml.indexOf('{:else}');
-                    if (inverseElsePos != -1) {
-                        inverseTrueBranch = innerXml.substring(0, inverseElsePos);
-                        inverseElseBranch = innerXml.substring(inverseElsePos + 7);
-                    }
-
-                    String sectionResult = '';
-                    Object val = resolveValue(data, key);
-                    Boolean isFalsy = (val == null) ||
-                        (val instanceof Boolean && !(Boolean)val) ||
-                        (val instanceof String && String.isBlank((String)val)) ||
-                        (val instanceof List<Object> && ((List<Object>)val).isEmpty());
-                    if (isFalsy) {
-                        sectionResult = processXml(inverseTrueBranch, data);
-                    } else if (inverseElseBranch != null) {
-                        sectionResult = processXml(inverseElseBranch, data);
-                    }
-                    output += sectionResult;
-                    cursor = (closeTagEnd != -1 ? closeTagEnd + 1 : sectionEnd);
-                }
-
             } else if (tagContent.startsWith('/')) {
                 output += '{' + rawTag + '}';
                 cursor = tagClose + 1;
@@ -2012,12 +1384,6 @@ public with sharing class DocGenService {
                     } else if (dateFormat != null && val instanceof Date) {
                         DateTime dt = DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
                         strVal = dt.format(dateFormat);
-                    } else if (dateFormat != null && dateFormat.toLowerCase().trim() == 'checkbox') {
-                        // {IsActive:checkbox} → [X] or [ ]
-                        // Uses ASCII representation for universal font compatibility in PDF/DOCX
-                        Boolean checked = val instanceof Boolean ? (Boolean) val :
-                            String.valueOf(val).equalsIgnoreCase('true');
-                        strVal = checked ? '[X]' : '[ ]';
                     } else if (dateFormat != null && isNumericFormat(dateFormat)) {
                         strVal = formatNumber(val, dateFormat);
                     } else {
@@ -2066,7 +1432,7 @@ public with sharing class DocGenService {
                 return -1;
             }
             String content = xml.substring(nextStart + 1, nextClose).trim();
-            if (content.equals('#' + key) || content.equals('^' + key)) {
+            if (content.equals('#' + key)) {
                 depth++;
             }
             else if (content.equals('/' + key)) {
@@ -2078,67 +1444,6 @@ public with sharing class DocGenService {
             cursor = nextClose + 1;
         }
         return -1;
-    }
-
-    /**
-     * Evaluates an IF expression like "Amount > 10000" or "Stage = 'Closed Won'".
-     * Supports operators: =, !=, >, <, >=, <=
-     * Values can be numbers, quoted strings, or field references.
-     * Credit: conditional logic approach inspired by @ssk42 (PR #15)
-     */
-    private static Boolean evaluateIfExpression(String expression, Map<String, Object> data) {
-        // Parse: "Field op Value" — find the operator
-        String[] operators = new String[]{ '!=', '>=', '<=', '=', '>', '<' };
-        String op = null;
-        String fieldPart = null;
-        String valuePart = null;
-
-        for (String testOp : operators) {
-            Integer opIdx = expression.indexOf(testOp);
-            if (opIdx > 0) {
-                op = testOp;
-                fieldPart = expression.substring(0, opIdx).trim();
-                valuePart = expression.substring(opIdx + testOp.length()).trim();
-                break;
-            }
-        }
-
-        if (op == null || fieldPart == null || valuePart == null) {
-            return false; // Unparseable expression
-        }
-
-        // Resolve field value
-        Object fieldVal = resolveValue(data, fieldPart);
-        String fieldStr = fieldVal != null ? String.valueOf(fieldVal) : '';
-
-        // Strip quotes from value if present
-        if (valuePart.startsWith('\'') && valuePart.endsWith('\'')) {
-            valuePart = valuePart.substring(1, valuePart.length() - 1);
-        }
-
-        // Try numeric comparison first
-        try {
-            Decimal fieldNum = Decimal.valueOf(fieldStr);
-            Decimal valueNum = Decimal.valueOf(valuePart);
-            if (op == '=' || op == '==') { return fieldNum == valueNum; }
-            if (op == '!=') { return fieldNum != valueNum; }
-            if (op == '>') { return fieldNum > valueNum; }
-            if (op == '<') { return fieldNum < valueNum; }
-            if (op == '>=') { return fieldNum >= valueNum; }
-            if (op == '<=') { return fieldNum <= valueNum; }
-        } catch (Exception e) {
-            // Not numeric — fall through to string comparison
-        }
-
-        // String comparison
-        if (op == '=' || op == '==') { return fieldStr == valuePart; }
-        if (op == '!=') { return fieldStr != valuePart; }
-        if (op == '>') { return fieldStr > valuePart; }
-        if (op == '<') { return fieldStr < valuePart; }
-        if (op == '>=') { return fieldStr >= valuePart; }
-        if (op == '<=') { return fieldStr <= valuePart; }
-
-        return false;
     }
 
     private static Integer lastIndexOfTagStart(String xml, String tagName, Integer fromIndex) {
@@ -2227,6 +1532,10 @@ public with sharing class DocGenService {
     // ---------------------------------------------------------------------------
     // Aggregate Tags: {SUM:List.Field}, {COUNT:List}, {AVG:...}, {MIN:...}, {MAX:...}
     // ---------------------------------------------------------------------------
+
+    private static final Set<String> AGGREGATE_FUNCTIONS = new Set<String>{
+        'SUM', 'COUNT', 'AVG', 'MIN', 'MAX'
+    };
 
     // ---------------------------------------------------------------------------
     // Excel Shared String Inlining
@@ -2367,6 +1676,10 @@ public with sharing class DocGenService {
     // {Price:#,##0.00} → 1,234.56
     // {Rate:percent} → 15.5%
     // ---------------------------------------------------------------------------
+
+    private static final Set<String> NUMERIC_FORMATS = new Set<String>{
+        'currency', 'percent', 'number'
+    };
 
     private static Boolean isNumericFormat(String fmt) {
         if (fmt == null) {
@@ -2509,8 +1822,8 @@ public with sharing class DocGenService {
                     try {
                         values.add(Decimal.valueOf(String.valueOf(fieldVal)));
                     } catch (Exception e) {
-                        // Intentionally swallowed — non-numeric value, skip
-                        String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+                        // Skip non-numeric values
+                        System.debug(LoggingLevel.ERROR, 'DocGenService: Non-numeric value in merge: ' + e.getMessage());
                     }
                 }
             }
@@ -2704,6 +2017,8 @@ public with sharing class DocGenService {
                     cursor = closeA + 4; // skip past </a>
                     continue;
                 }
+            } else if (tag.startsWith('</a')) {
+                // Already handled above; skip
             } else if (tag.startsWith('<img')) {
                 // Extract image from <img> tag
                 String imgTag = html.substring(nextTag, tagEnd);
@@ -2712,7 +2027,7 @@ public with sharing class DocGenService {
                     result += imgResult;
                 }
             }
-            // Closing </a> tags and other tags (spans, etc.) are skipped — just process their text content
+            // Skip other tags (spans, etc.) — just process their text content
 
             cursor = tagEnd;
         }
@@ -2829,8 +2144,8 @@ public with sharing class DocGenService {
             // Blob.toPdf() resolves Salesforce URLs natively via the VF engine.
             if (src.containsIgnoreCase('.jpg') || src.containsIgnoreCase('.jpeg')) { ext = 'jpeg'; }
         } catch (Exception e) {
-            // Intentionally swallowed — image source parsing failed, fall through to URL handling
-            String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+            // Image source parsing failed (invalid data URI, malformed HTML) — fall through to URL handling
+            System.debug(LoggingLevel.ERROR, 'DocGenService: Image source parsing failed: ' + e.getMessage());
         }
 
         // Register image — store blob for DOCX and URL for PDF rendering.
@@ -2987,14 +2302,14 @@ public with sharing class DocGenService {
                 if (currentOutputFormat == 'PDF') {
                     // PDF path: only need the URL — Blob.toPdf() fetches images server-side.
                     // Skip loading the blob entirely to save heap.
-                    List<ContentVersion> cvs = [SELECT Id, FileExtension FROM ContentVersion WHERE Id = :spec.fieldValue WITH USER_MODE LIMIT 1];
+                    List<ContentVersion> cvs = [SELECT Id, FileExtension FROM ContentVersion WHERE Id = :spec.fieldValue WITH SYSTEM_MODE LIMIT 1];
                     if (!cvs.isEmpty()) {
                         if (cvs[0].FileExtension != null) { ext = cvs[0].FileExtension.toLowerCase(); }
                         spec.contentVersionImageUrl = '/sfc/servlet.shepherd/version/download/' + cvs[0].Id;
                     }
                 } else {
                     // DOCX path: need the blob for ZIP embedding
-                    List<ContentVersion> cvs = [SELECT Id, VersionData, FileExtension FROM ContentVersion WHERE Id = :spec.fieldValue WITH USER_MODE LIMIT 1];
+                    List<ContentVersion> cvs = [SELECT Id, VersionData, FileExtension FROM ContentVersion WHERE Id = :spec.fieldValue WITH SYSTEM_MODE LIMIT 1];
                     if (!cvs.isEmpty()) {
                         spec.imageBlobData = cvs[0].VersionData;
                         if (cvs[0].FileExtension != null) { ext = cvs[0].FileExtension.toLowerCase(); }
@@ -3015,7 +2330,9 @@ public with sharing class DocGenService {
                 spec.imageBlobData = fetchSalesforceImage(docId);
             }
             // 7. Generic HTTPS URL — can't fetch without session ID (AppExchange safe).
-            // External URL images are skipped — cannot be fetched without session ID.
+            else if (spec.fieldValue.startsWith('https://')) {
+                // External URL images cannot be fetched without session ID
+            }
 
             // If no blob but we have a URL, store it for PDF rendering
             spec.sourceUrl = spec.contentVersionImageUrl;
@@ -3367,17 +2684,17 @@ public with sharing class DocGenService {
         try {
             // Try as ContentVersion ID first
             if (fileRef.startsWith('068')) {
-                List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :fileRef WITH USER_MODE LIMIT 1];
+                List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :fileRef WITH SYSTEM_MODE LIMIT 1];
                 if (!cvs.isEmpty()) {
                     return cvs[0].VersionData;
                 }
             }
             // Try as ContentDocument ID
             if (fileRef.startsWith('069')) {
-                List<ContentDocument> docs = [SELECT LatestPublishedVersionId FROM ContentDocument WHERE Id = :fileRef WITH USER_MODE LIMIT 1];
+                List<ContentDocument> docs = [SELECT LatestPublishedVersionId FROM ContentDocument WHERE Id = :fileRef WITH SYSTEM_MODE LIMIT 1];
                 if (!docs.isEmpty() && docs[0].LatestPublishedVersionId != null) {
                     Id latestCvId = docs[0].LatestPublishedVersionId;
-                    List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :latestCvId WITH USER_MODE LIMIT 1];
+                    List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :latestCvId WITH SYSTEM_MODE LIMIT 1];
                     if (!cvs.isEmpty()) {
                         return cvs[0].VersionData;
                     }
@@ -3385,14 +2702,14 @@ public with sharing class DocGenService {
             }
             // Try as a generic ID that could be linked
             if (fileRef.length() >= 15) {
-                List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :fileRef WITH USER_MODE LIMIT 1];
+                List<ContentVersion> cvs = [SELECT VersionData FROM ContentVersion WHERE Id = :fileRef WITH SYSTEM_MODE LIMIT 1];
                 if (!cvs.isEmpty()) {
                     return cvs[0].VersionData;
                 }
             }
         } catch (Exception e) {
-            // Intentionally swallowed — image fetch failed (invalid ID, access denied)
-            String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+            // Image fetch failed (invalid ID, access denied) — return null to skip this image
+            System.debug(LoggingLevel.ERROR, 'DocGenService: Image content fetch failed: ' + e.getMessage());
         }
         return null;
     }
@@ -3437,7 +2754,7 @@ public with sharing class DocGenService {
                 insert cvDecision2.getRecords();
                 savedCvId = cvDecision2.getRecords()[0].Id;
 
-                Id docId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :savedCvId WITH USER_MODE].ContentDocumentId;
+                Id docId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :savedCvId WITH SYSTEM_MODE].ContentDocumentId;
                 // Try to link the file to the source record — some objects (e.g. Pricebook2) don't support CDLs
                 try {
                     ContentDocumentLink cdl = new ContentDocumentLink(
@@ -3446,18 +2763,16 @@ public with sharing class DocGenService {
                         ShareType = 'V',
                         Visibility = 'AllUsers'
                     );
-                    SObjectAccessDecision cdlDec = Security.stripInaccessible(AccessType.CREATABLE, new List<ContentDocumentLink>{ cdl });
-                    insert cdlDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+                    insert cdl; // NOPMD ApexCRUDViolation - linking generated document to source record
                 } catch (DmlException linkErr) {
-                    // Intentionally swallowed — object may not support ContentDocumentLink
-                    String noop = linkErr.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+                    System.debug(LoggingLevel.WARN, 'Could not link file to record ' + recordId + ' — object may not support ContentDocumentLink: ' + linkErr.getMessage());
                 }
                 return docId;
             }
             throw dml;
         }
 
-        return [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :savedCvId WITH USER_MODE].ContentDocumentId;
+        return [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :savedCvId WITH SYSTEM_MODE].ContentDocumentId;
     }
     /**
      * Extracts an attribute value from an XML tag string.
@@ -3505,301 +2820,12 @@ public with sharing class DocGenService {
     // =========================================================================
 
     /**
-     * Merges a template with record data and returns intermediate XML parts + image map.
-     * Used by the signature flow to pre-compute merge data and render signed PDFs.
+     * Backward-compatibility stub — always throws. Signatures have been removed from DocGen.
+     * @param templateId Unused — stub only
+     * @param recordIdStr Unused — stub only
+     * @return Never returns — always throws DocGenException
      */
     public static Map<String, Object> mergeTemplateForSignature(Id templateId, String recordIdStr) {
-        MergeResult mr = mergeTemplate(templateId, recordIdStr, null, 'PDF');
-
-        if (mr.templateType == 'PowerPoint') {
-            throw new DocGenException('Signature PDF generation is only supported for Word templates.');
-        }
-
-        Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-
-        // Prime the HTML renderer's static context so tables using Word "table styles"
-        // (which reference styles.xml for borders) render with their borders, and numbered
-        // lists render correctly. Side-effect priming covers sync callers that call
-        // convertToHtml immediately after. Also return the XMLs in the map so async callers
-        // (queueables) can re-prime right before their convertToHtml call — statics can
-        // silently fail to survive intermediate calls in some async execution contexts.
-        String stylesXml = null;
-        String numberingXml = null;
-        if (mr.processedXmlEntries != null && mr.processedXmlEntries.containsKey('word/styles.xml')) {
-            stylesXml = mr.processedXmlEntries.get('word/styles.xml');
-        }
-        if (mr.passthroughEntries != null && mr.passthroughEntries.containsKey('word/numbering.xml')) {
-            numberingXml = mr.passthroughEntries.get('word/numbering.xml').toString();
-        }
-        DocGenHtmlRenderer.stylesXml = stylesXml;
-        DocGenHtmlRenderer.numberingXml = numberingXml;
-
-        return new Map<String, Object>{
-            'documentXml' => mr.documentXml,
-            'relsXml' => mr.relsXml,
-            'contentTypesXml' => mr.contentTypesXml,
-            'pdfImageMap' => pdfImages,
-            'docTitle' => mr.docTitle,
-            'stylesXml' => stylesXml,
-            'numberingXml' => numberingXml
-        };
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // Giant Query helpers — extract, render, and inject pre-rendered loop content
-    // ──────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Extracts the loop body XML from a template for a specific relationship.
-     * Returns the XML between {#relationshipName} and {/relationshipName} tags,
-     * plus the surrounding context (before/after the loop) for final assembly.
-     * Uses the same loop detection logic as processXml but only extracts — does not render.
-     * @param templateXml The raw template XML (e.g., word/document.xml)
-     * @param relationshipName The loop tag key (e.g., "Contacts", "OpportunityLineItems")
-     * @return Map with keys: 'innerXml', 'beforeLoop', 'afterLoop'
-     */
-    public static Map<String, String> extractLoopBody(String templateXml, String relationshipName) {
-        Map<String, String> result = new Map<String, String>();
-
-        // Merge runs first so we find complete tags
-        String xml = mergeRunsInTags(templateXml);
-
-        // Find the opening tag {#relationshipName}
-        String openTag = '{#' + relationshipName + '}';
-        Integer openIdx = xml.indexOf(openTag);
-        if (openIdx == -1) {
-            // Try with whitespace variations
-            Pattern openPattern = Pattern.compile('\\{\\s*#\\s*' + Pattern.quote(relationshipName) + '\\s*\\}');
-            Matcher openMatcher = openPattern.matcher(xml);
-            if (openMatcher.find()) {
-                openIdx = openMatcher.start();
-                openTag = openMatcher.group();
-            } else {
-                return null;
-            }
-        }
-
-        Integer contentStart = openIdx + openTag.length();
-        Integer sectionEnd = findBalancedEnd(xml, contentStart, relationshipName);
-        if (sectionEnd == -1) {
-            return null;
-        }
-
-        Integer closeTagEnd = xml.indexOf('}', sectionEnd) + 1;
-
-        // Determine container boundaries (same logic as processXml — expand to w:tr if applicable)
-        Integer containerStart = openIdx;
-        Integer containerEnd = closeTagEnd;
-
-        // Check for table row container
-        Integer rowContainerStart = lastIndexOfTagStart(xml, 'w:tr', openIdx);
-        if (rowContainerStart != -1) {
-            Integer rowContainerEnd = xml.indexOf('</w:tr>', rowContainerStart);
-            Boolean rowClosedBeforeOpen = xml.substring(rowContainerStart, openIdx).contains('</w:tr>');
-            if (!rowClosedBeforeOpen && rowContainerEnd != -1 && rowContainerEnd >= closeTagEnd) {
-                containerStart = rowContainerStart;
-                containerEnd = rowContainerEnd + 7; // </w:tr>
-            }
-        }
-
-        // Build inner XML (container content minus the open/close tags)
-        String innerXml = xml.substring(containerStart, containerEnd);
-        innerXml = innerXml.replace(openTag, '');
-        String closeTag = xml.substring(sectionEnd, closeTagEnd);
-        innerXml = innerXml.replace(closeTag, '');
-
-        result.put('innerXml', innerXml);
-        result.put('beforeLoop', xml.substring(0, containerStart));
-        result.put('afterLoop', xml.substring(containerEnd));
-
-        return result;
-    }
-
-    /**
-     * Renders the loop body XML for a list of child records.
-     * Each record gets its merge tags replaced via processXml, producing repeated content.
-     * @param innerXml The loop body template XML (one iteration)
-     * @param relationshipName The relationship name (used for context)
-     * @param records List of SObject child records to render
-     * @param fieldNames List of field API names to include in the data map
-     * @return Concatenated rendered XML for all records
-     */
-    public static String renderLoopBodyForRecords(String innerXml, String relationshipName, List<SObject> records, List<String> fieldNames) {
-        String rendered = '';
-        for (SObject rec : records) {
-            Map<String, Object> dataMap = new Map<String, Object>();
-            for (String field : fieldNames) {
-                try {
-                    // Handle parent fields (e.g., Product2.Name) — store as nested map
-                    // so resolveValue() can traverse: dataMap['Product2']['Name']
-                    if (field.contains('.')) {
-                        List<String> parts = field.split('\\.');
-                        SObject current = rec;
-                        for (Integer i = 0; i < parts.size() - 1; i++) {
-                            current = current.getSObject(parts[i]);
-                            if (current == null) { break; }
-                        }
-                        Object val = (current != null) ? current.get(parts[parts.size() - 1]) : null;
-                        // Build nested map structure for resolveValue traversal
-                        Map<String, Object> nested = dataMap;
-                        for (Integer i = 0; i < parts.size() - 1; i++) {
-                            if (!nested.containsKey(parts[i])) {
-                                nested.put(parts[i], new Map<String, Object>());
-                            }
-                            nested = (Map<String, Object>) nested.get(parts[i]);
-                        }
-                        nested.put(parts[parts.size() - 1], val);
-                    } else {
-                        dataMap.put(field, rec.get(field));
-                    }
-                } catch (Exception e) {
-                    dataMap.put(field, null);
-                }
-            }
-            rendered += processXml(innerXml, dataMap);
-        }
-        return rendered;
-    }
-
-    /**
-     * Merges a template but injects pre-rendered content for specified relationships
-     * instead of processing the loop normally. The pre-rendered content replaces the
-     * entire loop section (including container) for each specified relationship.
-     * @param templateId The DocGen_Template__c record ID
-     * @param recordId The source record ID for parent-level merge tags
-     * @param preRenderedLoops Map of relationship name to pre-rendered XML content
-     * @param outputFormat The desired output format ('PDF' or 'Native')
-     * @return ContentDocumentId of the saved document
-     */
-    public static Id mergeTemplateWithPreRenderedLoops(Id templateId, Id recordId, Map<String, String> preRenderedLoops, String outputFormat) {
-        pendingImages = new List<Map<String, Object>>();
-        imageCounter = 0;
-
-        Map<String, Object> dataMap;
-        try {
-            dataMap = DocGenController.generateDocumentData(templateId, recordId);
-        } catch (Exception e) {
-            throw new DocGenException('Error retrieving template data: ' + e.getMessage());
-        }
-
-        String base64File = (String) dataMap.get('templateFile');
-        Object dataObj = dataMap.get('data');
-        String templateType = (String) dataMap.get('templateType');
-        String titleFormat = (String) dataMap.get('titleFormat');
-
-        if (base64File == null) {
-            throw new DocGenException('Template file content is missing.');
-        }
-
-        Map<String, Object> recordDataMap;
-        if (dataObj instanceof Map<String, Object>) {
-            recordDataMap = (Map<String, Object>) dataObj;
-        } else if (dataObj instanceof SObject) {
-            recordDataMap = ((SObject) dataObj).getPopulatedFieldsAsMap();
-        } else {
-            throw new DocGenException('Invalid data format.');
-        }
-
-        // For PDF output, use pre-decomposed path if available
-        currentOutputFormat = (outputFormat == 'PDF') ? 'PDF' : 'Native';
-        currentTemplateType = templateType;
-
-        MergeResult mr = new MergeResult();
-        mr.templateType = templateType;
-        mr.outputFormat = outputFormat;
-        mr.relsPath = 'word/_rels/document.xml.rels';
-        mr.mediaPath = 'word/media/';
-
-        // Decode template ZIP to get the raw document XML
-        Blob templateBlob = EncodingUtil.base64Decode(base64File);
-        Compression.ZipReader reader = new Compression.ZipReader(templateBlob);
-        String rawDocumentXml = null;
-
-        for (Compression.ZipEntry entry : reader.getEntries()) {
-            String name = entry.getName();
-            if (name == 'word/document.xml') {
-                rawDocumentXml = reader.extract(name).toString();
-            } else if (name == '[Content_Types].xml') {
-                mr.contentTypesXml = reader.extract(name).toString();
-            } else if (name == mr.relsPath) {
-                mr.relsXml = reader.extract(name).toString();
-            } else {
-                Boolean isProcessedXml = (name.startsWith('word/header') && name.endsWith('.xml')) ||
-                                         (name.startsWith('word/footer') && name.endsWith('.xml'));
-                if (isProcessedXml) {
-                    String xml = mergeRunsInTags(reader.extract(name).toString());
-                    xml = processXml(xml, recordDataMap);
-                    mr.processedXmlEntries.put(name, xml);
-                } else {
-                    mr.passthroughEntries.put(name, reader.extract(name));
-                }
-            }
-        }
-
-        if (rawDocumentXml == null) {
-            throw new DocGenException('Template does not contain word/document.xml.');
-        }
-
-        // Merge runs first, then inject pre-rendered loops before processXml
-        rawDocumentXml = mergeRunsInTags(rawDocumentXml);
-
-        // For each pre-rendered relationship, replace the loop section with pre-rendered content
-        for (String relName : preRenderedLoops.keySet()) {
-            Map<String, String> loopParts = extractLoopBody(rawDocumentXml, relName);
-            if (loopParts != null) {
-                rawDocumentXml = loopParts.get('beforeLoop') +
-                    preRenderedLoops.get(relName) +
-                    loopParts.get('afterLoop');
-            }
-        }
-
-        // Now process remaining merge tags (parent-level fields, other loops)
-        String processedXml = processXml(rawDocumentXml, recordDataMap);
-        mr.documentXml = processedXml;
-        mr.processedXmlEntries.put('word/document.xml', processedXml);
-
-        // Generate document title
-        mr.docTitle = generateDocTitle(titleFormat, recordDataMap);
-        if (mr.docTitle == null) {
-            mr.docTitle = (String) resolveValue(recordDataMap, 'Name');
-        }
-
-        // Handle pending images
-        if (!pendingImages.isEmpty()) {
-            if (mr.contentTypesXml != null) {
-                if (!mr.contentTypesXml.contains('Extension="png"')) {
-                    mr.contentTypesXml = mr.contentTypesXml.replace('</Types>', '<Default Extension="png" ContentType="image/png"/></Types>');
-                }
-                if (!mr.contentTypesXml.contains('Extension="jpeg"') && !mr.contentTypesXml.contains('Extension="jpg"')) {
-                    mr.contentTypesXml = mr.contentTypesXml.replace('</Types>', '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>');
-                }
-            }
-            if (mr.relsXml != null) {
-                for (Map<String, Object> img : pendingImages) {
-                    String relId = (String) img.get('relId');
-                    String fName = (String) img.get('fileName');
-                    String newRel = '<Relationship Id="' + relId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + fName + '"/>';
-                    mr.relsXml = mr.relsXml.replace('</Relationships>', newRel + '</Relationships>');
-                }
-            }
-            for (Map<String, Object> img : pendingImages) {
-                String relId = (String) img.get('relId');
-                if (img.containsKey('blob')) {
-                    mr.imageBase64ByRelId.put(relId, EncodingUtil.base64Encode((Blob) img.get('blob')));
-                }
-                if (img.containsKey('url')) {
-                    mr.imageUrlByRelId.put(relId, (String) img.get('url'));
-                }
-            }
-        }
-
-        // Render to final format
-        if (outputFormat == 'PDF' && templateType == 'Word') {
-            Blob pdfBlob = renderPdf(mr, templateId, recordId);
-            return savePdfFile(pdfBlob, mr.docTitle, recordId);
-        }
-
-        Blob resultBlob = assembleZip(mr);
-        return saveFile(resultBlob, mr.docTitle, recordId, outputFormat, templateType);
+        throw new DocGenException('Signatures have been removed from DocGen. Please delete the old signature classes from your org.');
     }
 }
