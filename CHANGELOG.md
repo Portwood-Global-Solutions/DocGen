@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.85.0 — Multipath signature dedup + Apex Provider UI
+
+Promoted package: `04tVx000000QlePIAS` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QlePIAS)
+
+Three customer-reported bugs in v1.84's signature and Apex Provider features.
+
+### Bug fixes
+
+- **Multipath signature duplicate documents (#61, #65).** Reporters with multi-template signature packets saw the same template body rendered under different "Document N of N" headers, with patterns varying by reporter (e.g. `1, 2, 1, 2` from one tester, `Doc1=T1, Doc2=T4, Doc3=T1, Doc5=T4` from another with a 5-doc set). Root cause: `docGenSignatureSender.handleTemplateSelected` ran a synchronous dedup check against `selectedTemplates`, but that array is only mutated _after_ an awaited `getTemplateSignaturePlacements` call resolves. Rapid clicks all see an empty list before any await resolves, all pass dedup, all push their templateId. The fix tracks in-flight ids in a `_pendingTemplateIds` Set, mutated synchronously before the await and cleared in `finally`. Server-side `parseAndDedupTemplateIds` (`@TestVisible`) collapses any duplicates that still slip through (defense-in-depth for Flow / custom Apex callers). New `scripts/diag-multipath{,-seed,-dump}.apex` diagnostics seed sentinel-marker templates and assert per-iteration content uniqueness end-to-end.
+- **#62 — Apex Provider wizard couldn't accept a base SObject.** Reported by Konrad while testing v1.84's cross-object aggregation feature with an SObject as Base. The wizard hardcoded `Base_Object_API__c = 'ApexProvider'` whenever a provider class was picked, blocking any cross-object use case that needed a real record type for filtering or signature placement. Konrad confirmed the export/import JSON path already accepted a real SObject — only the UI was missing. Fix: optional Base Object input next to the connected-provider chip in Step 1 of the wizard; sentinel guard in `handleConfigChange` / `handleEditConfigChange` prevents `docGenColumnBuilder`'s downstream `objectName: 'ApexProvider'` emit from clobbering the user's choice on Step 2.
+- **#63 — DataProvider picker invisible in namespaced orgs.** Surfaced while testing #62. `DocGenController.searchDataProviders` filtered `WHERE NamespacePrefix = null`, so any provider class deployed to a namespaced scratch (every `dev-only-deploy/` class in `docgen-designer`) was invisible to the picker. Subscriber orgs aren't affected (no namespace), but a packaged sample provider would have been invisible too. SOQL widened to `IN (null, 'portwoodglobal')`, mirroring the runtime resolution in `DocGenDataRetriever.getRecordDataV4`.
+
+### Validation
+
+- E2E suite: 192/192 assertions across 9 scripts
+- Apex tests: 1203/1203 passing, 75% org-wide coverage
+- Code Analyzer: 0 High severity violations (41 Moderate false positives — same documented pattern as v1.84)
+
+### Known follow-ups for v1.86
+
+- **HTML template embedded `<style>` rendering as raw text (#60).** Konrad reported this on v1.84.0 with a 7.3KB `quote.html` containing flexbox + linear-gradient CSS. Not reproducible against current `main` on `docgen-designer` with the same exact bytes — suspected environmental on his subscriber instance, or already incidentally fixed by something between v1.84 release and now (no diff in `DocGenService.cls` / `DocGenHtmlRenderer.cls` since the v1.84 tag). Need a managed-package install repro or Konrad's deployed package version to make progress.
+- **Apex Provider Base Object input in the edit modal.** This release adds the input to the wizard only. The sentinel guard in `handleEditConfigChange` is in place so when the field is added to the edit modal later, it won't get clobbered by the column builder.
+
 ## v1.84.0 — Visual builder accessibility
 
 Promoted package: `04tVx000000QL2PIAW` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QL2PIAW)

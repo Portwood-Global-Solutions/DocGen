@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.84.0 — Visual Builder Accessibility",
-      "versionNumber": "1.84.0.NEXT",
-      "ancestorId": "04tVx000000QKRJIA4",
+      "versionName": "1.85.0 — Multipath signature dedup + Apex Provider UI",
+      "versionNumber": "1.85.0.NEXT",
+      "ancestorId": "04tVx000000QL2PIAW",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
@@ -128,6 +128,7 @@
     "Portwood DocGen Managed@1.83.0-3": "04tVx000000Q4b3IAC",
     "Portwood DocGen Managed@1.83.0-4": "04tVx000000QE7NIAW",
     "Portwood DocGen Managed@1.83.0-5": "04tVx000000QKRJIA4",
-    "Portwood DocGen Managed@1.84.0-1": "04tVx000000QL2PIAW"
+    "Portwood DocGen Managed@1.84.0-1": "04tVx000000QL2PIAW",
+    "Portwood DocGen Managed@1.85.0-1": "04tVx000000QlePIAS"
   }
 }
