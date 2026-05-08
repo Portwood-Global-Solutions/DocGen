@@ -475,6 +475,63 @@ try {
     System.debug('GUEST PERMS: FAIL — ' + e.getMessage());
 }
 
+// ===== DocGen_Guest_Runner Permission Set =====
+try {
+    List<PermissionSet> grps = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_Guest_Runner' LIMIT 1];
+    if (grps.isEmpty()) {
+        fail++;
+        System.debug('GUEST_RUNNER EXISTS: FAIL');
+    } else {
+        pass++;
+        System.debug('GUEST_RUNNER EXISTS: PASS');
+        Id grId = grps[0].Id;
+        Set<String> grc = new Set<String>();
+        for (SetupEntityAccess s : [
+            SELECT SetupEntityId
+            FROM SetupEntityAccess
+            WHERE ParentId = :grId AND SetupEntityType = 'ApexClass'
+        ]) {
+            grc.add([SELECT Name FROM ApexClass WHERE Id = :s.SetupEntityId LIMIT 1].Name);
+        }
+        for (
+            String cls : new List<String>{
+                'DocGenController',
+                'DocGenService',
+                'DocGenHtmlRenderer',
+                'DocGenDataRetriever',
+                'DocGenGiantQueryAssembler'
+            }
+        ) {
+            if (grc.contains(cls)) {
+                pass++;
+            } else {
+                fail++;
+                System.debug('GUEST_RUNNER CLASS ' + cls + ': FAIL');
+            }
+        }
+        Set<String> grObj = new Set<String>();
+        for (ObjectPermissions op : [
+            SELECT SobjectType
+            FROM ObjectPermissions
+            WHERE ParentId = :grId AND PermissionsRead = TRUE
+        ]) {
+            grObj.add(op.SobjectType);
+        }
+        for (String o : new List<String>{ 'DocGen_Template__c', 'DocGen_Template_Version__c' }) {
+            if (containsNs(grObj, o)) {
+                pass++;
+            } else {
+                fail++;
+                System.debug('GUEST_RUNNER OBJ ' + o + ': FAIL');
+            }
+        }
+        System.debug('GUEST_RUNNER CHECKS: ' + (grc.size() + grObj.size()) + ' verified');
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('GUEST_RUNNER PERMS: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-01 PERMISSIONS — PASS: ' +

@@ -10,6 +10,8 @@
         <target>lightning__AppPage</target>
         <target>lightning__FlowScreen</target>
         <target>lightning__UtilityBar</target>
+        <target>lightningCommunity__Page</target>
+        <target>lightningCommunity__Default</target>
     </targets>
     <targetConfigs>
         <targetConfig targets="lightning__RecordPage">
@@ -56,6 +58,48 @@
                 type="Boolean"
                 label="Show Combine with Existing PDFs Option"
                 default="true"
+            />
+        </targetConfig>
+        <targetConfig targets="lightningCommunity__Default">
+            <property
+                name="recordId"
+                type="String"
+                label="Record ID"
+                description="Record ID to generate against. Bind to {!recordId} when placed on a record-detail community page, or set a fixed Id for a public landing page."
+            />
+            <property
+                name="objectApiName"
+                type="String"
+                label="Object API Name"
+                description="Object API name for the recordId. Optional — engine resolves from the Id prefix when blank."
+            />
+            <property
+                name="showDownloadOption"
+                type="Boolean"
+                label="Show Download Option"
+                default="true"
+                description="Guest users typically download. Leave on."
+            />
+            <property
+                name="showSaveToRecordOption"
+                type="Boolean"
+                label="Show Save to Record Option"
+                default="false"
+                description="Guest users can't save back to records. Leave off."
+            />
+            <property
+                name="showDocumentPacketOption"
+                type="Boolean"
+                label="Show Document Packet Mode"
+                default="false"
+                description="Multi-template packets are an internal admin feature. Leave off for self-service portals."
+            />
+            <property name="showCombinePdfsOption" type="Boolean" label="Show Combine PDFs Mode" default="false" />
+            <property
+                name="showCombineWithExistingPdfsOption"
+                type="Boolean"
+                label="Show Combine with Existing PDFs Option"
+                default="false"
             />
         </targetConfig>
     </targetConfigs>
