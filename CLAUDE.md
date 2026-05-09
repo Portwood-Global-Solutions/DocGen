@@ -24,7 +24,7 @@ If your fix touches `processXml`, do not add `VersionData` to the PDF-path SOQL 
 ## Package info
 
 - Package: Portwood DocGen, Unlocked 2GP, namespace `portwoodglobal`
-- Current shipped version: v1.86.0 (`04tVx000000QtorIAC`)
+- Current shipped version: v1.87.0 (`04tVx000000QtqTIAS`)
 - DevHub: `Portwood Global - Production` (dave@portwoodglobalsolutions.com)
 - Staging org for release validation: `portwood-staging`
 - Dev scratch: `docgen-designer`

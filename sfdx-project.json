@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.86.0 — Experience Cloud guest runner",
-      "versionNumber": "1.86.0.NEXT",
-      "ancestorId": "04tVx000000QlePIAS",
+      "versionName": "1.87.0 — Guest PDF download site-prefix fix",
+      "versionNumber": "1.87.0.NEXT",
+      "ancestorId": "04tVx000000QtorIAC",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
@@ -130,6 +130,7 @@
     "Portwood DocGen Managed@1.83.0-5": "04tVx000000QKRJIA4",
     "Portwood DocGen Managed@1.84.0-1": "04tVx000000QL2PIAW",
     "Portwood DocGen Managed@1.85.0-1": "04tVx000000QlePIAS",
-    "Portwood DocGen Managed@1.86.0-1": "04tVx000000QtorIAC"
+    "Portwood DocGen Managed@1.86.0-1": "04tVx000000QtorIAC",
+    "Portwood DocGen Managed@1.87.0-1": "04tVx000000QtqTIAS"
   }
 }

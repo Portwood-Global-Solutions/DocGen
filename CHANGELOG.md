@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.87.0 — Guest PDF download site-prefix fix
+
+Promoted package: `04tVx000000QtqTIAS` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QtqTIAS)
+
+Single-fix patch release for v1.86's Experience Cloud guest runner: PDF downloads on any site with a `UrlPathPrefix` returned a 90-byte JSON redirect instead of the rendered file.
+
+### Bug fix
+
+- **Guest PDF download URL missing site prefix.** The runner LWC's `_generateGuestPdf` constructed `/sfc/servlet.shepherd/version/download/<cvId>` as a relative URL — fine for sites at the org root, broken for any site with a `UrlPathPrefix` (most production sites). The browser hit the bare org domain instead of the site's path, the guest session wasn't recognized, and shepherd returned `top.location='https://<host>.my.site.com/ex/errorduringprocessing.jsp'` — a 90-byte text-as-JSON redirect to an error page. Fix: import `@salesforce/community/basePath` (returns `/<sitePrefix>/s` or `/s`), strip the trailing `/s` to get the site root, and prepend that to the shepherd URL. Sites without a path prefix (basePath = `/s`) keep working unchanged. CDL `Visibility=AllUsers` (which v1.86's queueable already sets on the result PDF) is sufficient — no profile-level `ContentVersion` Read required, since AllUsers opens the file to anyone with the URL.
+
+### Validation
+
+- Apex tests: 1230/1230 passing, 75% org-wide coverage (no Apex changes in this release)
+- Code Analyzer: 0 High severity violations
+- Manual end-to-end on `Portwood - DemoBox` (site at `/PublicFacingDownloadDemo/s`): pre-fix, guest download returned 90-byte JSON; post-fix, anonymous curl against the site-prefixed URL returns the PDF (HTTP 200, 9903 bytes).
+
+### Known follow-ups for v1.88
+
+- **#71** — Rich-text-pasted images render at natural size in PDF output (DOCX correct).
+- **#72** — Guest DOCX silently skips fresh rich-text images with `Visibility=InternalUsers`.
+
 ## v1.86.0 — Experience Cloud guest runner
 
 Promoted package: `04tVx000000QtorIAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000QtorIAC)
