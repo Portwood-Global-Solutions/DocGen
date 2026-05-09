@@ -1756,16 +1756,33 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             LIMIT 1
         ];
         if (!activeVersions.isEmpty()) {
-            String prefix = 'docgen_tmpl_img_' + activeVersions[0].Id + '_';
-            List<ContentVersion> tmplCvs = [
-                SELECT Id, Title
-                FROM ContentVersion
-                WHERE Title LIKE :(prefix + '%') AND IsLatest = TRUE
-                WITH USER_MODE
-            ];
-            for (ContentVersion cv : tmplCvs) {
-                String relId = cv.Title.substring(prefix.length());
-                pdfImages.put(relId, '/sfc/servlet.shepherd/version/download/' + cv.Id);
+            Id versionId = activeVersions[0].Id;
+            String prefix = 'docgen_tmpl_img_' + versionId + '_';
+            // Two-step lookup: a plain `Title LIKE …` query against ContentVersion silently
+            // returns zero rows when run as the Automated Process user (the runner used by
+            // the DocGen_Guest_Render__e platform event trigger), which breaks guest PDFs by
+            // emptying the image map. Direct Id-based and ContentDocumentId-IN queries
+            // succeed under that user, so scope through the version's CDLs first to get the
+            // file IDs the user can see, then apply the title-prefix filter.
+            Set<Id> versionDocIds = new Set<Id>();
+            for (ContentDocumentLink cdl : [
+                SELECT ContentDocumentId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :versionId
+            ]) {
+                versionDocIds.add(cdl.ContentDocumentId);
+            }
+            if (!versionDocIds.isEmpty()) {
+                List<ContentVersion> tmplCvs = [
+                    SELECT Id, Title
+                    FROM ContentVersion
+                    WHERE ContentDocumentId IN :versionDocIds AND Title LIKE :(prefix + '%') AND IsLatest = TRUE
+                    WITH SYSTEM_MODE
+                ]; // NOPMD ApexCRUDViolation — package-internal decomposed CVs, see comment above
+                for (ContentVersion cv : tmplCvs) {
+                    String relId = cv.Title.substring(prefix.length());
+                    pdfImages.put(relId, '/sfc/servlet.shepherd/version/download/' + cv.Id);
+                }
             }
         }
 

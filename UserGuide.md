@@ -158,11 +158,12 @@ Or use the install links at the top of this guide. The install bundles the merge
 
 Three permission sets ship with the package. Assign what each user needs.
 
-| Permission set           | Who gets it                                           | What they can do                                                                                                                                                                   |
-| ------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DocGen_Admin`           | Template authors, system admins                       | Full CRUD on templates, query configs, signature objects, settings. Can create/edit/delete templates. Can "Sign In Person" bypass for signatures.                                  |
-| `DocGen_User`            | End users generating docs                             | Read/edit templates (no delete). Generate single + bulk documents. Create signature requests. Can't modify templates or settings.                                                  |
-| `DocGen_Guest_Signature` | The Salesforce Site guest user (for external signers) | Read access to signature requests, signers, and placements. Create access on audit records. Access to the signing pages. Required for external signers without a Salesforce login. |
+| Permission set           | Who gets it                                           | What they can do                                                                                                                                                                                                                                                                                                                      |
+| ------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DocGen_Admin`           | Template authors, system admins                       | Full CRUD on templates, query configs, signature objects, settings. Can create/edit/delete templates. Can "Sign In Person" bypass for signatures.                                                                                                                                                                                     |
+| `DocGen_User`            | End users generating docs                             | Read/edit templates (no delete). Generate single + bulk documents. Create signature requests. Can't modify templates or settings.                                                                                                                                                                                                     |
+| `DocGen_Guest_Signature` | The Salesforce Site guest user (for external signers) | Read access to signature requests, signers, and placements. Create access on audit records. Access to the signing pages. Required for external signers without a Salesforce login.                                                                                                                                                    |
+| `DocGen_Guest_Runner`    | Experience Cloud guest user (public landing pages)    | Read on `DocGen_Template__c` / `DocGen_Template_Version__c` plus execute on the render-pipeline Apex classes. Lets the **DocGen Runner** LWC run against a public record from an unauthenticated page. Read-only — no save-to-record, no async jobs. See [§8.6](#86-from-an-experience-cloud-public-page-guest-users) for full setup. |
 
 ### Assigning a permission set
 
@@ -1087,6 +1088,35 @@ When the template output is PDF and the record has PDF ContentVersions attached,
 ### 8.5 Document packets
 
 A packet is multiple templates generated in one action and merged (or sent as a signature packet). Select multiple templates in the runner, hit Generate, and they're combined. For signature packets, see [§10.3](#103-packets-multi-template-signing).
+
+### 8.6 From an Experience Cloud public page (guest users)
+
+The DocGen Runner can run on an unauthenticated Experience Cloud page — useful for public proposal viewers, self-service quote downloads, or any "give the prospect a link, they get the doc" flow.
+
+Setup is a three-legged stool. Miss any one and the runner silently disappears from the page (no error, no console warning — just empty space where the component should be):
+
+**1. Component plumbing (already shipped).** The runner exposes `lightningCommunity__Page` / `lightningCommunity__Default` targets. Drop it on any LWR or Aura community page; for a public landing page, hardcode `recordId` to a single fixed Id.
+
+**2. Permset on the site guest user.** Assign **DocGen Guest Runner** to the site's guest user (path: Setup → Digital Experiences → All Sites → your site → **Workspaces → Administration → Pages → Go to Force.com** → **Public Access Settings** → **View Users** → guest user → Permission Set Assignments → add `DocGen Guest Runner`). This grants the Apex classes and template-object reads.
+
+**3. Record-level sharing.** This is the one that bites. Guest users do **not** honor org-wide defaults — Public Read/Write to guests was a security hole Salesforce closed in the Winter '22 secure-guest-user update. The only way a guest sees a record is via a **guest user sharing rule**:
+
+- Setup → **Sharing Settings** → scroll to your object (e.g. Account) → **New** under sharing rules.
+- Rule Type: **Guest user access, based on criteria** (this radio option only appears if you have an active site and the OWD is Private or Public Read Only).
+- If your OWD is currently Public Read/Write, drop it to Private first or the rule type won't be available.
+- Criteria: filter to the records you want public (e.g. `Public_Quote__c equals true`, or `Name not equal to ""` to share all).
+- Share with: **Guest user** → pick your site's guest user.
+- Access: Read Only (Salesforce won't let you grant Edit to guests anyway).
+
+After saving the rule, refresh the public page in incognito. Sharing recalculation can take a minute on busy orgs.
+
+**Debugging tip.** If the runner doesn't appear on the public page, before chasing perms or component exposure, drop a no-record test LWC on the same page (any "hello world" component with no `@wire` and no `recordId`). If it renders and the runner doesn't, the issue is record visibility — a guest sharing rule on the target record's object will fix it. If neither renders, the issue is site / component publishing.
+
+**Image rendering for guest PDFs.** `Blob.toPdf()` resolves relative image URLs against the org's internal lightning subdomain, which guest users have no session against — running the render under the guest user produces broken images. The runner detects guest context automatically and routes PDF generation through a platform event (`DocGen_Guest_Render__e`), which fires a trigger that runs as the **Automated Process** internal user. The actual `Blob.toPdf()` call happens in that elevated context, so embedded image URLs fetch successfully. The resulting ContentVersion's CDL is auto-flipped to `Visibility=AllUsers` so the guest's browser can download it via the site domain.
+
+User experience: guest clicks **Generate** → sees a "running in the background" toast → LWC polls the tracking `DocGen_Job__c` every 2s → when the queueable finishes (typically 5–15s for a single record), the file downloads. No admin steps required after template upload — just mark the template's Category as containing "Public" so the guest sharing rule picks it up.
+
+DOCX/XLSX/PowerPoint stay on the synchronous path for guests (image bytes are embedded directly in those file formats and don't require URL fetching), so they render instantly without going through the queue.
 
 ---
 

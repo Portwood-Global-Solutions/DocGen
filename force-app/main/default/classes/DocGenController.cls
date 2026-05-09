@@ -2435,6 +2435,101 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         }
     }
 
+    /**
+     * Returns true when the running user is an Experience Cloud guest. The runner
+     * LWC calls this once on init and routes PDF generation through the platform
+     * event path (queueGuestRender + getGuestRenderStatus) when guest, since the
+     * inline Blob.toPdf path can't fetch image URLs against the lightning subdomain.
+     */
+    @AuraEnabled(cacheable=true)
+    public static Boolean isCurrentUserGuest() {
+        return UserInfo.getUserType() == 'Guest';
+    }
+
+    /**
+     * Queues guest-context PDF generation via a platform event so the actual
+     * render runs as Automated Process (system context) instead of the guest.
+     *
+     * Why: when a guest user calls Blob.toPdf, the rendering pipeline tries to
+     * fetch embedded image URLs against the org's lightning subdomain — which
+     * has no guest session — and every image comes back blank. Running the
+     * render under Automated Process (an internal user with a real session)
+     * fixes image fetching. The platform event is the context-swap mechanism.
+     *
+     * Returns the DocGen_Job__c Id which the LWC polls via getGuestRenderStatus.
+     */
+    @AuraEnabled
+    public static Id queueGuestRender(Id templateId, Id recordId) {
+        try {
+            return new GuestRenderHelper().doQueue(templateId, recordId);
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error queueing guest render.');
+        }
+    }
+
+    /**
+     * Returns the current state of a guest render job. Called by the LWC every
+     * couple seconds while waiting for the Automated Process queueable to finish.
+     * Result map: { status, cvId, errorMessage }.
+     *
+     * Implementation runs `without sharing` because Experience Cloud guests don't
+     * honor OWD on DocGen_Job__c — they can only see the job they just inserted
+     * via this same path. The job Id is effectively the access token.
+     */
+    @AuraEnabled
+    public static Map<String, Object> getGuestRenderStatus(Id jobId) {
+        try {
+            return new GuestRenderHelper().doGetStatus(jobId);
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error fetching guest render status.');
+        }
+    }
+
+    /**
+     * `without sharing` helper for the guest render queue/poll path. Lives inside
+     * the `with sharing` controller because @AuraEnabled methods must be on the
+     * outer class, but the actual DML/SOQL on DocGen_Job__c needs to bypass
+     * sharing — guests don't honor OWD and won't see their just-created tracking
+     * row otherwise.
+     */
+    private without sharing class GuestRenderHelper {
+        public Id doQueue(Id templateId, Id recordId) {
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Draft',
+                Template__c = templateId,
+                Parent_Record_Id__c = recordId
+            );
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            insert as system job; // NOPMD — package-internal tracking row, FLS bypassed for guest
+            DocGen_Guest_Render__e evt = new DocGen_Guest_Render__e(
+                Job_Id__c = job.Id,
+                Template_Id__c = templateId,
+                Record_Id__c = recordId
+            );
+            EventBus.publish(evt);
+            return job.Id;
+        }
+
+        public Map<String, Object> doGetStatus(Id jobId) {
+            List<DocGen_Job__c> jobs = [
+                SELECT Id, Status__c, Merged_PDF_CV__c, Label__c
+                FROM DocGen_Job__c
+                WHERE Id = :jobId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (jobs.isEmpty()) {
+                return new Map<String, Object>{ 'status' => 'NotFound' };
+            }
+            DocGen_Job__c j = jobs[0];
+            return new Map<String, Object>{
+                'status' => j.Status__c,
+                'cvId' => j.Merged_PDF_CV__c,
+                'errorMessage' => j.Status__c == 'Failed' ? j.Label__c : null
+            };
+        }
+    }
+
     @AuraEnabled
     public static Map<String, Object> generatePdf(Id templateId, Id recordId, Boolean saveToRecord) {
         try {
