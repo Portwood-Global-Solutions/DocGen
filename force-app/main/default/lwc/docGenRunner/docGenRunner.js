@@ -148,7 +148,16 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     }
 
     get allowedOutputModes() {
-        if (this._isMobile) {
+        // Authenticated mobile path historically had Blob.toPdf base64 +
+        // blob-URL download issues (iOS Safari especially), so we restricted
+        // mobile to save-to-record only. The guest Experience Cloud path
+        // is different: it routes through DocGen_Guest_Render__e and
+        // downloads via a real shepherd URL link (no base64, no blob URL),
+        // which mobile browsers handle natively. Guests on community pages
+        // typically don't have save-to-record either, so blocking download
+        // would leave them with no output mode at all and a greyed-out
+        // generate button. Exempt guests from the mobile restriction.
+        if (this._isMobile && !this._isGuest) {
             return this.canSaveToRecord ? ['save'] : [];
         }
         // Combine PDFs (mergeOnly) and Document Packet are download-only.
