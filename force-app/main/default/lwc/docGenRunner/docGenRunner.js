@@ -10,6 +10,7 @@ import generatePdfAsync from '@salesforce/apex/DocGenController.generatePdfAsync
 import isCurrentUserGuest from '@salesforce/apex/DocGenController.isCurrentUserGuest';
 import queueGuestRender from '@salesforce/apex/DocGenController.queueGuestRender';
 import getGuestRenderStatus from '@salesforce/apex/DocGenController.getGuestRenderStatus';
+import getSiteUrlPathPrefix from '@salesforce/apex/DocGenController.getSiteUrlPathPrefix';
 import scoutAttachedImageSize from '@salesforce/apex/DocGenController.scoutAttachedImageSize';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
 import getChildRecordPdfs from '@salesforce/apex/DocGenController.getChildRecordPdfs';
@@ -34,7 +35,6 @@ import OUT_FMT_FIELD from '@salesforce/schema/DocGen_Template__c.Output_Format__
 import TYPE_FIELD from '@salesforce/schema/DocGen_Template__c.Type__c';
 import IS_DEFAULT_FIELD from '@salesforce/schema/DocGen_Template__c.Is_Default__c';
 import CATEGORY_FIELD from '@salesforce/schema/DocGen_Template__c.Category__c';
-import COMMUNITY_BASE_PATH from '@salesforce/community/basePath';
 
 export default class DocGenRunner extends NavigationMixin(LightningElement) {
     @api recordId;
@@ -736,10 +736,16 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         // against the site, not the lightning subdomain, so this fetch succeeds.
         // The site URL path prefix matters: the bare org host returns a JSON error
         // redirect for guests; only paths under the site's base recognize the session.
-        // `@salesforce/community/basePath` returns "/<sitePrefix>/s" (or "/s" if the
-        // site has no prefix) — strip the trailing "/s" to get just the site root.
-        const bp = typeof COMMUNITY_BASE_PATH === 'string' ? COMMUNITY_BASE_PATH : '';
-        const sitePrefix = bp.endsWith('/s') ? bp.slice(0, -2) : bp;
+        // Fetch the prefix from Apex (via Site.getPathPrefix()) instead of importing
+        // `@salesforce/community/basePath` statically — the latter resolves at module-
+        // load time and breaks the LWC on internal lightning__RecordPage targets,
+        // showing an endless spinner that also blocks the rest of the record page.
+        let sitePrefix = '';
+        try {
+            sitePrefix = (await getSiteUrlPathPrefix()) || '';
+        } catch (e) {
+            // Non-Site context — leave prefix empty.
+        }
         const url = sitePrefix + '/sfc/servlet.shepherd/version/download/' + result.cvId;
         const link = document.createElement('a');
         link.href = url;
