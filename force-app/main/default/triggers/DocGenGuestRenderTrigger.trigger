@@ -22,10 +22,17 @@ trigger DocGenGuestRenderTrigger on DocGen_Guest_Render__e(after insert) {
                 'DocGenGuestRenderTrigger enqueue failed for job ' + evt.Job_Id__c + ': ' + e.getMessage()
             );
             try {
-                update new DocGen_Job__c(
-                    Id = (Id) evt.Job_Id__c,
-                    Status__c = 'Failed',
-                    Label__c = ('Enqueue error: ' + e.getMessage()).left(255)
+                // Explicit USER_MODE silences the analyzer's CRUD-validation
+                // rule. Trigger runs as Automated Process here, which has full
+                // access to the package's own DocGen_Job__c so USER_MODE is
+                // effectively the same as system access.
+                Database.update(
+                    new DocGen_Job__c(
+                        Id = (Id) evt.Job_Id__c,
+                        Status__c = 'Failed',
+                        Label__c = ('Enqueue error: ' + e.getMessage()).left(255)
+                    ),
+                    AccessLevel.USER_MODE
                 );
             } catch (Exception ignored) {
                 // best-effort — job may not exist or be inaccessible
