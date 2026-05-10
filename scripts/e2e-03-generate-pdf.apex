@@ -448,7 +448,7 @@ try {
         '</w:tbl>' +
         '</w:tc></w:tr></w:tbl>' +
         '</w:body></w:document>';
-    String html = portwoodglobal.DocGenHtmlRenderer.convertToHtml(d, new Map<String, String>());
+    String html = DocGenHtmlRenderer.convertToHtml(d, new Map<String, String>());
     Boolean ok = html.contains('<tr><td><table') && !html.contains('<b>D</b>');
     if (ok) {
         pass++;
