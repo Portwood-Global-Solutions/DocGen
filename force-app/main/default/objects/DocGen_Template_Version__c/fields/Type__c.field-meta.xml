@@ -5,6 +5,7 @@
     <required>false</required>
     <type>Picklist</type>
     <valueSet>
+        <restricted>true</restricted>
         <valueSetDefinition>
             <sorted>false</sorted>
             <value>
@@ -16,6 +17,16 @@
                 <fullName>PowerPoint</fullName>
                 <default>false</default>
                 <label>PowerPoint</label>
+            </value>
+            <value>
+                <fullName>Excel</fullName>
+                <default>false</default>
+                <label>Excel</label>
+            </value>
+            <value>
+                <fullName>HTML</fullName>
+                <default>false</default>
+                <label>HTML</label>
             </value>
         </valueSetDefinition>
     </valueSet>

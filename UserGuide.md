@@ -276,7 +276,342 @@ HTML templates let you author in any tool that produces HTML — Google Docs is 
 
 For single-file uploads (`.html` / `.htm`), DocGen scans for inline `<img src="data:image/...">` URIs — common in Notion / ChatGPT / rich-text paste output — and extracts each to a ContentVersion with the `src` rewritten. `Blob.toPdf` can't decode data URIs directly, so this conversion is what makes those images render.
 
-#### 5.7.3 Header / Footer fields
+#### 5.7.3 CSS rules — what works, what doesn't, and an LLM prompt
+
+PDF rendering goes through Salesforce's `Blob.toPdf()`, which is a Flying Saucer engine under the hood. **Flying Saucer is essentially a CSS 2.1 renderer with a small CSS 3 subset.** Modern layout primitives are silently ignored — the page still renders, but your layout collapses to default block flow. The result is a PDF that "looks wrong" without any error message.
+
+This section gives you the rules and a paste-ready prompt for ChatGPT / Claude / Gemini so you can have an LLM produce templates that render correctly the first time.
+
+##### Quick reference
+
+| Use                                      | Don't use                                          | Replacement                                           |
+| ---------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
+| `<table>` for side-by-side layout        | `display: flex`, `display: grid`                   | One `<table>` with one `<tr>`, columns become `<td>`s |
+| Solid `background-color`                 | `linear-gradient(...)`, `radial-gradient(...)`     | Pick the dominant color, drop the gradient            |
+| `padding`, `margin`                      | `gap` (CSS 3 grid/flex gap)                        | `padding` on cells, `margin` on blocks                |
+| Fixed `width`/`height` in `pt`/`in`/`px` | `calc(...)`, CSS variables (`--foo`, `var(--foo)`) | Compute the literal value in your template            |
+| `font-size` in `pt`                      | `rem`, `em` based on a non-default root            | Pt is most predictable for print                      |
+| `border`, `border-radius` (basic)        | `box-shadow`, `text-shadow`                        | Drop shadows; they're print-noisy anyway              |
+| `:nth-child(even)` for zebra striping    | `:has(...)`, `:is(...)`, container queries         | nth-child + nth-of-type are supported                 |
+| `<table>`-based two/three-column layouts | `column-count`, `columns`                          | Tables work everywhere                                |
+| `text-align`, `vertical-align` on `<td>` | `place-items`, `align-self`                        | Old-school alignment on cells                         |
+
+##### Paste-ready LLM prompt
+
+Copy this verbatim into ChatGPT / Claude / Gemini. Replace the bracketed sections with what you want:
+
+```
+Generate a single self-contained HTML file for Salesforce DocGen.
+
+Audience: rendered to PDF by Flying Saucer (CSS 2.1 + small CSS 3 subset). Modern CSS layout features are silently ignored.
+
+HARD RULES — never use these (Flying Saucer drops them):
+- display: flex, display: grid, gap
+- linear-gradient(...), radial-gradient(...), conic-gradient(...)
+- calc(...), CSS variables (--name, var(--name))
+- transform, transition, animation, @keyframes
+- position: absolute or position: fixed (use @page running elements only)
+- box-shadow, text-shadow
+- :has(), :is(), :where(), container queries
+
+USE INSTEAD:
+- <table> for any side-by-side layout. One <tr>, columns are <td>s with explicit widths.
+- Solid background-color (no gradients).
+- padding/margin in pt or in. gap is not a thing.
+- font-size in pt. Standard fonts: Helvetica, Arial, "Times New Roman", Courier.
+- text-align / vertical-align on <td> for alignment.
+- Fixed width/height in pt or in.
+
+PAGE SETUP — put a single <style> in <head> with:
+  @page { size: 8.5in 11in; margin: 0.6in; }    /* US Letter portrait */
+  /* or @page { size: 8.27in 11.69in; margin: 1.5cm; }   for A4 */
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #333; }
+Do NOT include @media queries — Flying Saucer ignores them.
+
+DOCGEN MERGE TAGS — use these as plain text:
+- Field merge:        {FieldApiName}              e.g. {Name}, {Account.Name}, {Amount}
+- Built-ins:          {Today}, {Now}, {RunningUser.Name}, {RunningUser.Email}
+- Format suffixes:    {Amount:currency}, {CloseDate:MM/dd/yyyy}, {Quantity:#,##0}
+- Loop:               {#RelationshipName} ... {/RelationshipName}
+                      e.g. {#OpportunityLineItems} <tr>...</tr> {/OpportunityLineItems}
+- Conditional:        {#IF Field = "Value"} ... {:else} ... {/IF}
+                      Use double quotes around string literals; numeric needs no quotes.
+- Page counters:      {PageNumber}, {TotalPages}   (only inside header/footer fields, not body)
+
+OUTPUT: a single .html file. No external CSS, no <script>, no web fonts, no <link rel="stylesheet">.
+Inline everything. The file uploads as one piece.
+
+Now generate a [PURCHASE ORDER / QUOTE / INVOICE / etc.] template for the [Opportunity / Account / Order]
+record, with these sections: [list your sections, e.g. header with logo + date, customer info, line items
+table, totals, notes, signature]. Use the merge tag syntax above.
+```
+
+##### Skeleton template (copy + adapt)
+
+A minimal CSS 2.1-clean starting point. Side-by-side header, two-column "for/from" block, line-item loop, totals, signature row, footer. Drop in your fields and adjust colors/typography:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Document</title>
+        <style>
+            @page {
+                size: 8.5in 11in;
+                margin: 0.6in;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                color: #08163a;
+                font-size: 11pt;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            td {
+                vertical-align: top;
+            }
+
+            .hdr {
+                border-bottom: 3px solid #004693;
+                padding-bottom: 8px;
+            }
+            .hdr-logo {
+                font-size: 22pt;
+                font-weight: bold;
+                color: #004693;
+            }
+            .hdr-meta {
+                font-size: 9pt;
+                text-align: right;
+            }
+            .accent-bar {
+                height: 4px;
+                background-color: #35c6f4;
+                margin: 8px 0 18px 0;
+            }
+
+            .section-title {
+                font-size: 10pt;
+                font-weight: bold;
+                color: #004693;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                border-bottom: 1px solid #e6ecf4;
+                padding-bottom: 3px;
+                margin-bottom: 6px;
+            }
+
+            .grid-table td {
+                width: 50%;
+                padding-right: 18px;
+            }
+            .grid-table td.r {
+                padding-right: 0;
+                padding-left: 18px;
+            }
+
+            .items th {
+                background-color: #004693;
+                color: #ffffff;
+                font-size: 10pt;
+                padding: 6px 8px;
+                text-align: left;
+            }
+            .items th.r,
+            .items td.r {
+                text-align: right;
+            }
+            .items td {
+                font-size: 10pt;
+                padding: 6px 8px;
+                border-bottom: 1px solid #edf1f7;
+            }
+
+            .totals tr.final td {
+                font-size: 13pt;
+                font-weight: bold;
+                padding-top: 8px;
+            }
+
+            .sig-line {
+                border-bottom: 1px solid #8899b5;
+                height: 30px;
+                margin-top: 4px;
+            }
+            .footer {
+                margin-top: 36px;
+                border-top: 1px solid #d9e2ef;
+                padding-top: 8px;
+                font-size: 8pt;
+                color: #8899b5;
+            }
+        </style>
+    </head>
+    <body>
+        <table class="hdr">
+            <tr>
+                <td>
+                    <div class="hdr-logo">{Account.Name}</div>
+                </td>
+                <td class="hdr-meta">
+                    Quote #: {Name}<br />
+                    Date: {Today}
+                </td>
+            </tr>
+        </table>
+        <div class="accent-bar"></div>
+
+        <table class="grid-table">
+            <tr>
+                <td>
+                    <div class="section-title">Prepared For</div>
+                    <strong>{Account.Name}</strong><br />
+                    {Account.ShippingAddress}
+                </td>
+                <td class="r">
+                    <div class="section-title">Prepared By</div>
+                    {RunningUser.Name}<br />
+                    {RunningUser.Email}
+                </td>
+            </tr>
+        </table>
+
+        <div class="section-title" style="margin-top: 18px;">Line Items</div>
+        <table class="items">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th class="r">Qty</th>
+                    <th class="r">Price</th>
+                    <th class="r">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {#OpportunityLineItems}
+                <tr>
+                    <td>{Product2.Name}</td>
+                    <td class="r">{Quantity}</td>
+                    <td class="r">{UnitPrice:currency}</td>
+                    <td class="r">{TotalPrice:currency}</td>
+                </tr>
+                {/OpportunityLineItems}
+            </tbody>
+        </table>
+
+        <table class="totals" style="margin-top: 8px;">
+            <tr class="final">
+                <td></td>
+                <td class="r">Total</td>
+                <td class="r">{Amount:currency}</td>
+            </tr>
+        </table>
+
+        <table style="margin-top: 36px;">
+            <tr>
+                <td style="width: 50%; padding-right: 24px;">
+                    Customer Signature
+                    <div class="sig-line">{@Signature_Buyer}</div>
+                </td>
+                <td style="width: 50%; padding-left: 24px;">
+                    Date
+                    <div class="sig-line">{@Signature_Buyer:1:Date}</div>
+                </td>
+            </tr>
+        </table>
+
+        <table class="footer">
+            <tr>
+                <td>{Account.Name} &bull; {Account.BillingCity}, {Account.BillingState}</td>
+                <td style="text-align: right;">{Account.Website}</td>
+            </tr>
+        </table>
+    </body>
+</html>
+```
+
+##### Common conversion patterns
+
+When an LLM (or a designer) hands you a template using modern CSS, here are the mechanical rewrites:
+
+**Flex header → table header**
+
+```html
+<!-- BEFORE: ignored by Flying Saucer -->
+<div style="display: flex; justify-content: space-between;">
+    <div class="logo">ACME</div>
+    <div class="meta">Date: {Today}</div>
+</div>
+
+<!-- AFTER: works -->
+<table style="width: 100%;">
+    <tr>
+        <td>ACME</td>
+        <td style="text-align: right;">Date: {Today}</td>
+    </tr>
+</table>
+```
+
+**Grid columns → table columns**
+
+```html
+<!-- BEFORE -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <div>Left content</div>
+    <div>Right content</div>
+</div>
+
+<!-- AFTER -->
+<table style="width: 100%;">
+    <tr>
+        <td style="width: 50%; padding-right: 12px;">Left content</td>
+        <td style="width: 50%; padding-left: 12px;">Right content</td>
+    </tr>
+</table>
+```
+
+**Gradient → solid color**
+
+```css
+/* BEFORE */
+.accent-bar {
+    background: linear-gradient(to right, #004693, #35c6f4);
+}
+
+/* AFTER */
+.accent-bar {
+    background-color: #35c6f4;
+}
+```
+
+**`gap` between rows → margin**
+
+```css
+/* BEFORE */
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* AFTER */
+.stack > * {
+    margin-bottom: 12px;
+}
+```
+
+##### `@page` rules — don't double-declare
+
+Two ways to control the page size, margins, and orientation:
+
+1. **Template fields** — `Page_Size__c`, `Page_Orientation__c`, `Page_Margins__c`, `Custom_Margins__c` on the DocGen Template record. DocGen wraps the template's HTML with an engine `<style>` block declaring `@page` from these fields.
+2. **Source CSS** — your HTML's own `<style>` declares `@page { size: ... }`.
+
+Pick one. If both are set, you get **two `<style>` blocks each declaring `@page`**, the cascade is non-deterministic, and dimensions can come out wrong. Recommended: leave the template fields blank when your source HTML already specifies `@page`. If you author in Google Docs (which sometimes injects an `@page` block on export) and then set `Page_Size__c` to "Legal", the conflict will silently produce a Letter document because the source CSS wins.
+
+#### 5.7.4 Header / Footer fields
 
 HTML templates gain two optional fields on a dedicated **Header / Footer** tab in the template edit modal:
 
@@ -285,7 +620,7 @@ HTML templates gain two optional fields on a dedicated **Header / Footer** tab i
 
 Each field has a WYSIWYG rich-text editor with a **Show HTML** / **Show Editor** toggle that flips to a monospace textarea showing the raw HTML (for image widths, inline styles, or any markup the rich editor can't expose). Every merge tag that works in the body works in these fields.
 
-#### 5.7.4 Page numbers
+#### 5.7.5 Page numbers
 
 Put `{PageNumber}` and `{TotalPages}` in the Header HTML or Footer HTML field. These compile to Flying Saucer CSS page counters inside the PDF's `@page` margin boxes — "Page 3 of 17" renders correctly on every page automatically.
 
@@ -297,7 +632,7 @@ Example footer HTML:
 
 **Flying Saucer limitation:** page counters only resolve inside `@page` rules, not on DOM elements. When a header/footer contains counter tokens, DocGen renders that margin as plain text (no inline images or rich formatting). A header _without_ counters stays rich HTML via CSS running elements. Practical workaround: logo in the header (no counters), page count in the footer (counters only). Both fields can be populated simultaneously.
 
-#### 5.7.5 Images
+#### 5.7.6 Images
 
 Three ways to get images into an HTML template:
 
@@ -305,7 +640,7 @@ Three ways to get images into an HTML template:
 2. **Inline data URIs** — `<img src="data:image/png;base64,...">` in the HTML (Notion / ChatGPT / pasted rich text) is scanned on upload; each is saved as its own ContentVersion and the `src` is rewritten.
 3. **`{%Image:N}` / `{%FieldName}` merge tags** — same syntax as Word templates. Renders the Nth record-attached image, or a ContentVersion ID stored in a field. Emits `<img src="/sfc/...">` at merge time.
 
-#### 5.7.6 Loops in tables
+#### 5.7.7 Loops in tables
 
 Loop auto-expansion works the same as Word. Either pattern produces one repeated row per record:
 
@@ -338,18 +673,18 @@ Loop auto-expansion works the same as Word. Either pattern produces one repeated
 
 `<li>` list items auto-expand the same way.
 
-#### 5.7.7 Bulk generation + Giant Query
+#### 5.7.8 Bulk generation + Giant Query
 
 HTML templates work with every generation path: single-record, bulk (individual PDFs or merged), and Giant Query (60K+ row child relationships via batched rendering). Same 12 MB Queueable heap envelope, same 50,000-row batch ceiling, same Flow action.
 
-#### 5.7.8 Known limitations
+#### 5.7.9 Known limitations
 
 - **Barcodes / QR codes** — `{*Field:qr}` etc. are Word-only today; in HTML templates the tag falls back to plain text. On the roadmap.
 - **DOCX output** — not applicable. HTML templates are PDF-only.
 - **Signatures** — `{@Signature_Role}` flows haven't been validated against HTML templates yet. Use Word templates if you need signatures today.
-- **Page counters + rich header/footer content** — see §5.7.4. Flying Saucer flattens the margin to text when counters are present.
+- **Page counters + rich header/footer content** — see §5.7.5. Flying Saucer flattens the margin to text when counters are present.
 
-#### 5.7.9 Troubleshooting
+#### 5.7.10 Troubleshooting
 
 - **"Your company doesn't support the following file types: .zip"** — DocGen's LWC extracts the zip client-side and never uploads the zip itself, so this org-level File Upload Security error shouldn't appear in normal use. If you see it, hard-refresh the page (Cmd+Shift+R / Ctrl+Shift+R) to clear any cached LWC bundle.
 - **Images show as broken squares in the PDF** — `Blob.toPdf` can only fetch images via relative `/sfc/` URLs; it can't reach arbitrary HTTPS URLs (no session ID). Make sure the image source is in the zip, a data URI in the HTML, a `{%Image:N}` tag, or a `{%FieldName}` pointing at a real ContentVersion.

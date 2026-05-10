@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.88.0 — Parser & retriever bug-fix dot release",
-      "versionNumber": "1.88.0.NEXT",
-      "ancestorId": "04tVx000000QtqTIAS",
+      "versionName": "1.89.0 — Template_Version Type picklist fix + CSS 2.1 guidance",
+      "versionNumber": "1.89.0.NEXT",
+      "ancestorId": "04tVx000000Qu09IAC",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
@@ -132,6 +132,7 @@
     "Portwood DocGen Managed@1.85.0-1": "04tVx000000QlePIAS",
     "Portwood DocGen Managed@1.86.0-1": "04tVx000000QtorIAC",
     "Portwood DocGen Managed@1.87.0-1": "04tVx000000QtqTIAS",
-    "Portwood DocGen Managed@1.88.0-2": "04tVx000000Qu09IAC"
+    "Portwood DocGen Managed@1.88.0-2": "04tVx000000Qu09IAC",
+    "Portwood DocGen Managed@1.89.0-1": "04tVx000000Qu1lIAC"
   }
 }

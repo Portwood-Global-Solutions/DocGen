@@ -2,7 +2,7 @@
 
 ## Triage
 
-See `TRIAGE.md` at the repo root for the priority rubric (P0/P1/P2/P3 + severity labels + milestone scheme). Apply it when classifying new issues or proposing what to work on next. Current milestones live on GitHub: `v1.88.0` (next bug-fix dot release), `v1.89.0`, `v1.90.0`, `Backlog`.
+See `TRIAGE.md` at the repo root for the priority rubric (P0/P1/P2/P3 + severity labels + milestone scheme). Apply it when classifying new issues or proposing what to work on next. Current milestones live on GitHub: `v1.89.0` (in flight — Template_Version Type picklist fix + CSS 2.1 guidance + #60/#72), `v1.90.0`, `Backlog`.
 
 ## Mission
 
@@ -93,6 +93,6 @@ Several subsystems are tightly coupled and easy to break with surgical fixes —
 
 - **Signatures (especially v3 packets / multi-template)** — three hand-rolled loops, no content-correctness tests, two divergent creation paths. Read the `project_signature_v3_fragility.md` memory before changing anything here.
 - **Client-side DOCX assembly** (`docGenZipWriter.js`) — splits work between server (XML merge) and browser (ZIP repack). The boundary is load-bearing; don't move work across it without checking guest/Experience Cloud paths.
-- **HTML templates and `Blob.toPdf` rendering** — Flying Saucer is finicky about CSS, image dimensions, and absolute vs relative URLs. Issues #60 and #71 both live here.
+- **HTML templates and `Blob.toPdf` rendering** — Flying Saucer is essentially **CSS 2.1** plus a small CSS 3 subset. `display: flex`/`grid`, `gap`, `linear-gradient(...)`, `calc(...)`, CSS variables, and most CSS 3 layout features are silently ignored — the page renders but layout collapses to default block flow. When troubleshooting "the PDF looks wrong," first check whether the source HTML uses any of these and rewrite to `<table>`-based layout + solid colors. Also: when both the engine `<style>` (built from `Page_Size__c`/`Page_Orientation__c`/`Custom_Margins__c` template fields) and the source HTML's own `<style>` declare `@page`, you get a conflict — recommend authors clear the template page fields when their source CSS already specifies `@page`. Issues #60 and #71 both live here.
 - **Query Config formats** (V1 flat string, V3 node tree) — V3's `processChildNodes` and V1's `stitchGrandchildren` reproduce similar patterns; bug fixes often need to land in both (see #67).
 - **Watermarks, font handling, command hub** — light traffic, but the test coverage is sparse, so verify visually after edits.
