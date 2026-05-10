@@ -2447,6 +2447,24 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * Returns the running user's site URL path prefix (e.g. "/PublicFacing").
+     * Empty string outside of a Site context (internal record pages, app pages,
+     * Flow screens). The runner LWC uses this to prepend the prefix to the
+     * shepherd download URL — guest sessions only authenticate against site-
+     * domain paths, so the bare org host returns a 90-byte JSON redirect.
+     *
+     * Replaces a `@salesforce/community/basePath` static import that broke the
+     * LWC on internal lightning__RecordPage targets (the import resolves at
+     * module-load time and fails outside community contexts, which manifested
+     * as an endless spinner that also blocked the rest of the record page).
+     */
+    @AuraEnabled(cacheable=true)
+    public static String getSiteUrlPathPrefix() {
+        String prefix = Site.getPathPrefix();
+        return prefix == null ? '' : prefix;
+    }
+
+    /**
      * Queues guest-context PDF generation via a platform event so the actual
      * render runs as Automated Process (system context) instead of the guest.
      *
