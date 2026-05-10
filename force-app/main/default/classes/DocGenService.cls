@@ -3422,8 +3422,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         Object fieldVal = resolveValue(data, fieldPart);
         String fieldStr = fieldVal != null ? String.valueOf(fieldVal) : '';
 
-        // Strip quotes from value if present
-        if (valuePart.startsWith('\'') && valuePart.endsWith('\'')) {
+        // Strip surrounding quotes from value literal — accept both single
+        // and double quotes. Issue #69: double-quoted form silently failed
+        // because only single quotes were stripped, so `"X"` was compared
+        // against the unquoted field value verbatim and never matched.
+        if (
+            (valuePart.startsWith('\'') && valuePart.endsWith('\'')) ||
+            (valuePart.startsWith('"') && valuePart.endsWith('"'))
+        ) {
             valuePart = valuePart.substring(1, valuePart.length() - 1);
         }
 

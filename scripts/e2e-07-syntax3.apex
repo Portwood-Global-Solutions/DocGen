@@ -311,6 +311,27 @@ try {
     System.debug('IF-IN-ROW (issue #53): FAIL — ' + e.getMessage());
 }
 
+// ===== IF double-quoted literal (issue #69) =====
+// Pre-fix: only single quotes were stripped from the value side, so the
+// double-quoted form compared `Won` against `"Won"` (10 chars) and never
+// matched. Asserts symmetry with single-quote form for both = and !=.
+try {
+    String t =
+        '<w:t>{#IF S = "Won"}M{/IF}|{#IF S != "Won"}N{/IF}|' + '{#IF S = \'Won\'}m{/IF}|{#IF S != \'Won\'}n{/IF}</w:t>';
+    String hit = DocGenService.processXmlForTest(t, new Map<String, Object>{ 'S' => 'Won' });
+    String miss = DocGenService.processXmlForTest(t, new Map<String, Object>{ 'S' => 'Lost' });
+    if (hit == '<w:t>M||m|</w:t>' && miss == '<w:t>|N||n</w:t>') {
+        pass++;
+        System.debug('IF DBLQUOTE LITERAL (#69): PASS');
+    } else {
+        fail++;
+        System.debug('IF DBLQUOTE LITERAL (#69): FAIL hit=' + hit + ' miss=' + miss);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('IF DBLQUOTE LITERAL (#69): FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX3 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

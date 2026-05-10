@@ -51,10 +51,11 @@ sf apex run --target-org <org> -f scripts/e2e-05-generate-bulk.apex
 sf apex run --target-org <org> -f scripts/e2e-06-signatures.apex
 sf apex run --target-org <org> -f scripts/e2e-07-syntax1.apex
 sf apex run --target-org <org> -f scripts/e2e-07-syntax2.apex
+sf apex run --target-org <org> -f scripts/e2e-07-syntax3.apex
 sf apex run --target-org <org> -f scripts/e2e-08-cleanup.apex
 ```
 
-Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03–06 depend on 02, 07-syntax1/2 standalone (use `processXmlForTest`), 08 cleans up.
+Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03–06 depend on 02, 07-syntax1/2/3 standalone (use `processXmlForTest`), 08 cleans up.
 
 When fixing a parser-level bug, add a regression assertion in `e2e-07-syntax1` or `e2e-07-syntax2` that exercises the offending pattern via `processXmlForTest`. Each script must stay under 18,000 chars (Anonymous Apex limit is 20,000).
 
