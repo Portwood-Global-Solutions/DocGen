@@ -862,31 +862,70 @@ public with sharing class DocGenDataRetriever {
             // Allowlist validation: get field map for ORDER BY field validation
             Map<String, Schema.SObjectField> childNodeFieldMap = childObjType.getDescribe().fields.getMap();
 
-            String childQuery =
-                'SELECT ' +
-                String.join(selectFields, ', ') +
-                ' FROM ' +
-                String.escapeSingleQuotes(child.objectApiName) +
-                ' WHERE ' +
-                String.escapeSingleQuotes(child.lookupField) +
-                ' IN :parentIds';
-            List<SObject> childResults;
-            try {
-                if (String.isNotBlank(child.whereClause)) {
-                    childQuery += ' AND ' + sanitizeClause(child.whereClause, 'WHERE');
-                }
-                // Allowlist validation: ORDER BY fields verified against Schema.describeSObjects() field map
-                if (String.isNotBlank(child.orderByClause)) {
-                    childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY', childNodeFieldMap);
-                }
-                if (String.isNotBlank(child.limitClause)) {
-                    childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
-                }
+            // Issue #67: ProcessInstanceHistory and ProcessInstanceWorkitem
+            // are NOT standalone-queryable. Route through a parent subquery
+            // from ProcessInstance and unwrap.
+            Boolean isProcessInstanceChild =
+                child.objectApiName == 'ProcessInstanceHistory' ||
+                child.objectApiName == 'ProcessInstanceWorkitem';
 
-                childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
-            } catch (Exception e) {
-                // Child query failed — skip this child relationship
-                continue;
+            List<SObject> childResults;
+            if (isProcessInstanceChild) {
+                String piQuery =
+                    'SELECT Id, (SELECT ' +
+                    String.join(selectFields, ', ') +
+                    ' FROM ' +
+                    String.escapeSingleQuotes(child.relationshipName);
+                try {
+                    if (String.isNotBlank(child.whereClause)) {
+                        piQuery += ' WHERE ' + sanitizeClause(child.whereClause, 'WHERE');
+                    }
+                    if (String.isNotBlank(child.orderByClause)) {
+                        piQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY', childNodeFieldMap);
+                    }
+                    if (String.isNotBlank(child.limitClause)) {
+                        piQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
+                    }
+                    piQuery += ') FROM ProcessInstance WHERE Id IN :parentIds';
+
+                    List<SObject> piResults = Database.query(piQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
+                    childResults = new List<SObject>();
+                    for (SObject pi : piResults) {
+                        SObject[] piChildren = pi.getSObjects(child.relationshipName);
+                        if (piChildren != null) {
+                            childResults.addAll(piChildren);
+                        }
+                    }
+                } catch (Exception e) {
+                    // ProcessInstance subquery failed — skip this child relationship
+                    continue;
+                }
+            } else {
+                String childQuery =
+                    'SELECT ' +
+                    String.join(selectFields, ', ') +
+                    ' FROM ' +
+                    String.escapeSingleQuotes(child.objectApiName) +
+                    ' WHERE ' +
+                    String.escapeSingleQuotes(child.lookupField) +
+                    ' IN :parentIds';
+                try {
+                    if (String.isNotBlank(child.whereClause)) {
+                        childQuery += ' AND ' + sanitizeClause(child.whereClause, 'WHERE');
+                    }
+                    // Allowlist validation: ORDER BY fields verified against Schema.describeSObjects() field map
+                    if (String.isNotBlank(child.orderByClause)) {
+                        childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY', childNodeFieldMap);
+                    }
+                    if (String.isNotBlank(child.limitClause)) {
+                        childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
+                    }
+
+                    childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
+                } catch (Exception e) {
+                    // Child query failed — skip this child relationship
+                    continue;
+                }
             }
 
             // Group by parent lookup field
@@ -996,33 +1035,72 @@ public with sharing class DocGenDataRetriever {
             // Allowlist validation: get field map for ORDER BY field validation
             Map<String, Schema.SObjectField> bulkChildFieldMap = bulkChildObjType.getDescribe().fields.getMap();
 
-            // Single query for ALL parents
-            String childQuery =
-                'SELECT ' +
-                String.join(selectFields, ', ') +
-                ' FROM ' +
-                String.escapeSingleQuotes(child.objectApiName) +
-                ' WHERE ' +
-                String.escapeSingleQuotes(child.lookupField) +
-                ' IN :parentIds';
+            // Issue #67: ProcessInstanceHistory and ProcessInstanceWorkitem
+            // are NOT standalone-queryable. Route through a parent subquery
+            // from ProcessInstance and unwrap.
+            Boolean isProcessInstanceChild =
+                child.objectApiName == 'ProcessInstanceHistory' ||
+                child.objectApiName == 'ProcessInstanceWorkitem';
 
             List<SObject> childResults;
-            try {
-                if (String.isNotBlank(child.whereClause)) {
-                    childQuery += ' AND ' + sanitizeClause(child.whereClause, 'WHERE');
-                }
-                // Allowlist validation: ORDER BY fields verified against Schema.describeSObjects() field map
-                if (String.isNotBlank(child.orderByClause)) {
-                    childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY', bulkChildFieldMap);
-                }
-                if (String.isNotBlank(child.limitClause)) {
-                    childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
-                }
+            if (isProcessInstanceChild) {
+                String piQuery =
+                    'SELECT Id, (SELECT ' +
+                    String.join(selectFields, ', ') +
+                    ' FROM ' +
+                    String.escapeSingleQuotes(child.relationshipName);
+                try {
+                    if (String.isNotBlank(child.whereClause)) {
+                        piQuery += ' WHERE ' + sanitizeClause(child.whereClause, 'WHERE');
+                    }
+                    if (String.isNotBlank(child.orderByClause)) {
+                        piQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY', bulkChildFieldMap);
+                    }
+                    if (String.isNotBlank(child.limitClause)) {
+                        piQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
+                    }
+                    piQuery += ') FROM ProcessInstance WHERE Id IN :parentIds';
 
-                childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
-            } catch (Exception e) {
-                // Bulk child query failed — skip this child relationship
-                continue;
+                    List<SObject> piResults = Database.query(piQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
+                    childResults = new List<SObject>();
+                    for (SObject pi : piResults) {
+                        SObject[] piChildren = pi.getSObjects(child.relationshipName);
+                        if (piChildren != null) {
+                            childResults.addAll(piChildren);
+                        }
+                    }
+                } catch (Exception e) {
+                    // ProcessInstance bulk subquery failed — skip this child relationship
+                    continue;
+                }
+            } else {
+                // Single query for ALL parents
+                String childQuery =
+                    'SELECT ' +
+                    String.join(selectFields, ', ') +
+                    ' FROM ' +
+                    String.escapeSingleQuotes(child.objectApiName) +
+                    ' WHERE ' +
+                    String.escapeSingleQuotes(child.lookupField) +
+                    ' IN :parentIds';
+
+                try {
+                    if (String.isNotBlank(child.whereClause)) {
+                        childQuery += ' AND ' + sanitizeClause(child.whereClause, 'WHERE');
+                    }
+                    // Allowlist validation: ORDER BY fields verified against Schema.describeSObjects() field map
+                    if (String.isNotBlank(child.orderByClause)) {
+                        childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY', bulkChildFieldMap);
+                    }
+                    if (String.isNotBlank(child.limitClause)) {
+                        childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
+                    }
+
+                    childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
+                } catch (Exception e) {
+                    // Bulk child query failed — skip this child relationship
+                    continue;
+                }
             }
 
             // Group by parent lookup field
@@ -1562,31 +1640,73 @@ public with sharing class DocGenDataRetriever {
                 gcValidatedFields.add(String.escapeSingleQuotes(grandchildSpec.parentIdField));
             }
 
-            String gcQuery =
-                'SELECT ' +
-                String.join(gcValidatedFields, ', ') +
-                ' FROM ' +
-                String.escapeSingleQuotes(grandchildSpec.childObjectApiName) +
-                ' WHERE ' +
-                String.escapeSingleQuotes(grandchildSpec.parentIdField) +
-                ' IN :parentIds';
-            if (String.isNotBlank(grandchildSpec.whereClause)) {
-                gcQuery += ' AND ' + sanitizeClause(grandchildSpec.whereClause, 'WHERE');
-            }
-            // Allowlist validation: ORDER BY fields verified against Schema.describeSObjects() field map
-            if (String.isNotBlank(grandchildSpec.orderByClause)) {
-                gcQuery += ' ORDER BY ' + sanitizeClause(grandchildSpec.orderByClause, 'ORDER BY', gcFieldMap);
-            }
-            if (String.isNotBlank(grandchildSpec.limitClause)) {
-                gcQuery += ' LIMIT ' + sanitizeClause(grandchildSpec.limitClause, 'LIMIT');
-            }
+            // Issue #67: ProcessInstanceHistory and ProcessInstanceWorkitem
+            // are NOT standalone-queryable. Route through a parent subquery
+            // from ProcessInstance and unwrap. Other objects use the regular
+            // standalone-query path.
+            Boolean isProcessInstanceChild =
+                grandchildSpec.childObjectApiName == 'ProcessInstanceHistory' ||
+                grandchildSpec.childObjectApiName == 'ProcessInstanceWorkitem';
 
             List<SObject> gcResults;
-            try {
-                gcResults = Database.query(gcQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
-            } catch (Exception e) {
-                // Grandchild query failed — skip this relationship
-                continue;
+            if (isProcessInstanceChild) {
+                String piQuery =
+                    'SELECT Id, (SELECT ' +
+                    String.join(gcValidatedFields, ', ') +
+                    ' FROM ' +
+                    String.escapeSingleQuotes(grandchildSpec.relationshipName);
+                if (String.isNotBlank(grandchildSpec.whereClause)) {
+                    piQuery += ' WHERE ' + sanitizeClause(grandchildSpec.whereClause, 'WHERE');
+                }
+                if (String.isNotBlank(grandchildSpec.orderByClause)) {
+                    piQuery += ' ORDER BY ' + sanitizeClause(grandchildSpec.orderByClause, 'ORDER BY', gcFieldMap);
+                }
+                if (String.isNotBlank(grandchildSpec.limitClause)) {
+                    piQuery += ' LIMIT ' + sanitizeClause(grandchildSpec.limitClause, 'LIMIT');
+                }
+                piQuery += ') FROM ProcessInstance WHERE Id IN :parentIds';
+
+                List<SObject> piResults;
+                try {
+                    piResults = Database.query(piQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
+                } catch (Exception e) {
+                    // ProcessInstance subquery failed — skip this relationship
+                    continue;
+                }
+
+                gcResults = new List<SObject>();
+                for (SObject pi : piResults) {
+                    SObject[] children = pi.getSObjects(grandchildSpec.relationshipName);
+                    if (children != null) {
+                        gcResults.addAll(children);
+                    }
+                }
+            } else {
+                String gcQuery =
+                    'SELECT ' +
+                    String.join(gcValidatedFields, ', ') +
+                    ' FROM ' +
+                    String.escapeSingleQuotes(grandchildSpec.childObjectApiName) +
+                    ' WHERE ' +
+                    String.escapeSingleQuotes(grandchildSpec.parentIdField) +
+                    ' IN :parentIds';
+                if (String.isNotBlank(grandchildSpec.whereClause)) {
+                    gcQuery += ' AND ' + sanitizeClause(grandchildSpec.whereClause, 'WHERE');
+                }
+                // Allowlist validation: ORDER BY fields verified against Schema.describeSObjects() field map
+                if (String.isNotBlank(grandchildSpec.orderByClause)) {
+                    gcQuery += ' ORDER BY ' + sanitizeClause(grandchildSpec.orderByClause, 'ORDER BY', gcFieldMap);
+                }
+                if (String.isNotBlank(grandchildSpec.limitClause)) {
+                    gcQuery += ' LIMIT ' + sanitizeClause(grandchildSpec.limitClause, 'LIMIT');
+                }
+
+                try {
+                    gcResults = Database.query(gcQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
+                } catch (Exception e) {
+                    // Grandchild query failed — skip this relationship
+                    continue;
+                }
             }
 
             // Group grandchild records by parent ID
