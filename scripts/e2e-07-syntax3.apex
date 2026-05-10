@@ -332,6 +332,69 @@ try {
     System.debug('IF DBLQUOTE LITERAL (#69): FAIL — ' + e.getMessage());
 }
 
+// ===== Nested IF/else ownership across outer section (issue #68) =====
+// Pre-fix: outer section's split-on-{:else} grabbed the inner IF's
+// {:else} as its own split point; recursing into trueBranch (now with
+// an unclosed {#IF} opener) threw "Malformed loop tag". Post-fix:
+// findElseAtDepthZero ignores nested {:else}s. Verifies all three
+// section types: regular loop, regular loop with its own outer
+// {:else}, and inverse {^X}.
+try {
+    // Case 1 — Joe's repro: non-IF loop with nested IF/else, multi-iter.
+    String t1 = '<w:t>{#Steps}{#IF S = \'Started\'}A{:else}B{/IF}|{/Steps}</w:t>';
+    Map<String, Object> d1 = new Map<String, Object>{
+        'Steps' => new List<Object>{
+            new Map<String, Object>{ 'S' => 'Started' },
+            new Map<String, Object>{ 'S' => 'Pending' },
+            new Map<String, Object>{ 'S' => 'Started' }
+        }
+    };
+    String r1 = DocGenService.processXmlForTest(t1, d1);
+
+    // Case 2 — outer {:else} must still be found AFTER a nested IF/else.
+    // The depth-aware scan must walk past inner {#IF}, {:else}, {/IF}
+    // and identify the OUTER {:else} that comes after {/IF}.
+    String t2 = '<w:t>{#Recs}{#IF X = \'a\'}Y{:else}N{/IF}{:else}EMPTY{/Recs}</w:t>';
+    String r2empty = DocGenService.processXmlForTest(t2, new Map<String, Object>{ 'Recs' => new List<Object>() });
+    String r2match = DocGenService.processXmlForTest(
+        t2,
+        new Map<String, Object>{ 'Recs' => new List<Object>{ new Map<String, Object>{ 'X' => 'a' } } }
+    );
+
+    // Case 3 — inverse section {^X} with nested IF/else.
+    String t3 = '<w:t>{^Empty}{#IF X = \'a\'}YES{:else}NO{/IF}{/Empty}</w:t>';
+    String r3 = DocGenService.processXmlForTest(t3, new Map<String, Object>{ 'Empty' => null, 'X' => 'a' });
+
+    Boolean ok1 = (r1 == '<w:t>A|B|A|</w:t>');
+    Boolean ok2 = (r2empty == '<w:t>EMPTY</w:t>' && r2match == '<w:t>Y</w:t>');
+    Boolean ok3 = (r3 == '<w:t>YES</w:t>');
+    if (ok1 && ok2 && ok3) {
+        pass++;
+        System.debug('NESTED IF/ELSE OWNERSHIP (#68): PASS');
+    } else {
+        fail++;
+        System.debug(
+            'NESTED IF/ELSE OWNERSHIP (#68): FAIL ok1=' +
+                ok1 +
+                ' ok2=' +
+                ok2 +
+                ' ok3=' +
+                ok3 +
+                ' r1=' +
+                r1 +
+                ' r2empty=' +
+                r2empty +
+                ' r2match=' +
+                r2match +
+                ' r3=' +
+                r3
+        );
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('NESTED IF/ELSE OWNERSHIP (#68): FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX3 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

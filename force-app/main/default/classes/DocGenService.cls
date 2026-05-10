@@ -2770,10 +2770,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         cursor = closeTagEnd + 1;
                     }
 
-                    // Split on {:else} if present
+                    // Split on {:else} if present. Issue #68: scan must
+                    // ignore {:else} inside any nested section opener so
+                    // an inner {#IF}{:else}{/IF} does not get split open
+                    // by the outer scope.
                     String trueBranch = innerXml;
                     String elseBranch = null;
-                    Integer elsePos = innerXml.indexOf('{:else}');
+                    Integer elsePos = findElseAtDepthZero(innerXml);
                     if (elsePos != -1) {
                         trueBranch = innerXml.substring(0, elsePos);
                         elseBranch = innerXml.substring(elsePos + 7); // 7 = '{:else}'.length()
@@ -2896,10 +2899,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     Integer contentEnd = sectionEnd;
                     String innerXml = xml.substring(contentStart, contentEnd);
                     Integer closeTagEnd = xml.indexOf('}', sectionEnd);
-                    // Split on {:else} if present
+                    // Split on {:else} if present. Same depth-aware scan
+                    // as the truthy path (issue #68).
                     String inverseTrueBranch = innerXml;
                     String inverseElseBranch = null;
-                    Integer inverseElsePos = innerXml.indexOf('{:else}');
+                    Integer inverseElsePos = findElseAtDepthZero(innerXml);
                     if (inverseElsePos != -1) {
                         inverseTrueBranch = innerXml.substring(0, inverseElsePos);
                         inverseElseBranch = innerXml.substring(inverseElsePos + 7);
@@ -3125,6 +3129,38 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 if (depth == 0) {
                     return nextStart;
                 }
+            }
+            cursor = nextClose + 1;
+        }
+        return -1;
+    }
+
+    // Find the {:else} that belongs to the *current* section, ignoring any
+    // {:else} that belongs to a nested {#X}/{^X}/{#IF}/{^IF} block. Without
+    // this, an outer loop body containing a nested {#IF}{:else}{/IF} would
+    // mis-split on the inner {:else} (issue #68) — the engine would later
+    // throw "Malformed loop tag" because the recursed trueBranch ended up
+    // with an unclosed opener.
+    private static Integer findElseAtDepthZero(String xml) {
+        Integer depth = 0;
+        Integer cursor = 0;
+        while (cursor < xml.length()) {
+            Integer nextOpen = xml.indexOf('{', cursor);
+            if (nextOpen == -1) {
+                return -1;
+            }
+            Integer nextClose = xml.indexOf('}', nextOpen);
+            if (nextClose == -1) {
+                return -1;
+            }
+            String content = xml.substring(nextOpen + 1, nextClose).trim();
+            if (depth == 0 && content == ':else') {
+                return nextOpen;
+            }
+            if (content.startsWith('#') || content.startsWith('^')) {
+                depth++;
+            } else if (content.startsWith('/')) {
+                depth--;
             }
             cursor = nextClose + 1;
         }
