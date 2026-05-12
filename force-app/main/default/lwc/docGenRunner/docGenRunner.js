@@ -10,7 +10,6 @@ import generatePdfAsync from '@salesforce/apex/DocGenController.generatePdfAsync
 import isCurrentUserGuest from '@salesforce/apex/DocGenController.isCurrentUserGuest';
 import queueGuestRender from '@salesforce/apex/DocGenController.queueGuestRender';
 import getGuestRenderStatus from '@salesforce/apex/DocGenController.getGuestRenderStatus';
-import getSiteUrlPathPrefix from '@salesforce/apex/DocGenController.getSiteUrlPathPrefix';
 import scoutAttachedImageSize from '@salesforce/apex/DocGenController.scoutAttachedImageSize';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
 import getChildRecordPdfs from '@salesforce/apex/DocGenController.getChildRecordPdfs';
@@ -720,9 +719,13 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             templateId: this.selectedTemplateId,
             recordId: this.recordId
         });
-        // Poll every 2s up to 60s.
+        // v1.90 — bumped from 60s to 180s. Scratch / sandbox orgs have shown
+        // tail-latency past 60s on simple Word→PDF renders; the previous 60s
+        // ceiling produced a confusing "spins forever then dies" UX when the
+        // queueable was still in flight. 3 min covers the worst observed case
+        // while still bailing out if the queueable truly stalls.
         const start = Date.now();
-        const TIMEOUT_MS = 60000;
+        const TIMEOUT_MS = 180000;
         const POLL_INTERVAL_MS = 2000;
         let result = null;
         while (Date.now() - start < TIMEOUT_MS) {
@@ -743,22 +746,33 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         }
         // Download via the site-domain shepherd URL — guest's browser is authenticated
         // against the site, not the lightning subdomain, so this fetch succeeds.
-        // The site URL path prefix matters: the bare org host returns a JSON error
-        // redirect for guests; only paths under the site's base recognize the session.
-        // Fetch the prefix from Apex (via Site.getPathPrefix()) instead of importing
-        // `@salesforce/community/basePath` statically — the latter resolves at module-
-        // load time and breaks the LWC on internal lightning__RecordPage targets,
-        // showing an endless spinner that also blocks the rest of the record page.
+        //
+        // v1.90 — derive the prefix from window.location.pathname only. The shepherd
+        // endpoint lives at the BARE host `/sfc/servlet.shepherd/...`. For Aura
+        // communities at `/<sitename>/s/<route>`, Salesforce maps the site's URL
+        // namespace so `/<sitename>/sfc/...` is also valid and required (the bare
+        // path returns a JSON redirect). For LWR sites the shepherd endpoint stays
+        // at the bare host regardless of the Site's UrlPathPrefix.
+        //
+        // The earlier Apex fallback (Site.getPathPrefix) returned the Site's
+        // configured prefix (e.g. `/s`) which is correct for page routes but wrong
+        // for shepherd — prepending it produced URLs like `/s/sfc/...` that the
+        // LWR site returns as 404 HTML, which the browser saved as the file.
+        const pathname = window.location.pathname || '';
         let sitePrefix = '';
-        try {
-            sitePrefix = (await getSiteUrlPathPrefix()) || '';
-        } catch (e) {
-            // Non-Site context — leave prefix empty.
+        const auraMatch = pathname.match(/^(.+?)\/s(?:\/|$)/);
+        if (auraMatch && auraMatch[1] && !auraMatch[1].startsWith('/lightning')) {
+            sitePrefix = auraMatch[1];
         }
         const url = sitePrefix + '/sfc/servlet.shepherd/version/download/' + result.cvId;
         const link = document.createElement('a');
         link.href = url;
-        link.download = '';
+        // v1.90 — explicit download filename. With download="" + target="_blank",
+        // some browsers drop the server's Content-Disposition and fall back to
+        // the URL's last path segment (the CV Id), so the file saves as
+        // "068xxx" with no extension or with an arbitrary .txt appended.
+        // Server returns docTitle = "<Title>.<ext>" derived from the CV.
+        link.download = result.docTitle || 'Document.pdf';
         link.target = '_blank';
         link.rel = 'noopener';
         document.body.appendChild(link);
@@ -1650,7 +1664,11 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 const mergedPdf = mergePdfs(pdfParts);
                 const mergedBase64 = this._uint8ArrayToBase64(mergedPdf);
                 const fileSizeMB = ((mergedBase64.length * 0.75) / 1048576).toFixed(1);
-                this.downloadBase64(mergedBase64, 'Document.pdf', 'application/pdf');
+                // v1.90 — use the Document_Title_Format__c title from the
+                // server so the download filename matches the saved-to-record
+                // CV name instead of a generic 'Document.pdf'.
+                const docTitle = (fragResult && fragResult.docTitle) || 'Document';
+                this.downloadBase64(mergedBase64, docTitle + '.pdf', 'application/pdf');
                 this.progressPercent = 100;
                 this.showToast(
                     'Success',

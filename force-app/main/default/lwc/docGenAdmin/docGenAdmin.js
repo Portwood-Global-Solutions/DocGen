@@ -242,6 +242,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // inline styles, merge-tag attributes the WYSIWYG can't expose).
     @track showHeaderHtmlSource = false;
     @track showFooterHtmlSource = false;
+    // v1.90 — set true when an uploaded HTML body contains its own @page CSS rule.
+    // Drives the "your HTML defines its own page setup" banner and hides the
+    // template-level page-layout fields, which the engine ignores in this case.
+    @track editHtmlBodyOwnsPageRule = false;
 
     @track currentFileId;
     @track uploadedFileName = '';
@@ -1893,6 +1897,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return fmt === 'PDF';
     }
 
+    // v1.90 — for the create wizard, hide page-layout fields when Type=HTML.
+    // HTML templates almost always declare their own @page CSS, so these fields
+    // are a UX trap (engine ignores them, but the wizard pre-fills them with
+    // Portrait/Letter/Default and makes users feel they're a required choice).
+    // After the template is created and the body is uploaded, the edit modal
+    // re-evaluates and shows them only if the uploaded HTML lacks @page.
+    get showNewPageLayoutFields() {
+        return this.showPageOrientation && this.newTemplateType !== 'HTML';
+    }
+
+    get isCreatingHtmlPdf() {
+        return this.newTemplateType === 'HTML' && this.newTemplateOutputFormat === 'PDF';
+    }
+
     /** Show Custom Margins text field only when "Custom" preset is selected. */
     get showNewCustomMargins() {
         return this.showPageOrientation && this.newTemplatePageMargins === 'Custom';
@@ -1906,6 +1924,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.editTemplateType === 'HTML';
     }
 
+    // v1.90 — page-layout fields are dead inputs when the HTML body owns @page.
+    // The engine ignores them and they only confuse authors, so hide them and
+    // show an explanatory banner in their place.
+    get showEditPageLayoutFields() {
+        return this.showPageOrientation && !this.editHtmlBodyOwnsPageRule;
+    }
+
+    get showEditHtmlOwnsPageBanner() {
+        return this.isEditTypeHtml && this.editHtmlBodyOwnsPageRule;
+    }
+
     // --- Create Logic ---
     async createTemplate() {
         const fields = {};
@@ -1913,8 +1942,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         fields[CATEGORY_FIELD.fieldApiName] = this.newTemplateCategory;
         fields[TYPE_FIELD.fieldApiName] = this.newTemplateType;
         fields[OUTPUT_FORMAT_FIELD.fieldApiName] = this.newTemplateOutputFormat;
-        // Page setup only meaningful for PDF output
-        if (this.newTemplateOutputFormat === 'PDF') {
+        // Page setup only meaningful for PDF output. v1.90 — skip for HTML
+        // templates: their @page CSS owns page layout, and engine suppresses
+        // template-level overrides when source @page is present. Saving the
+        // create-wizard defaults would just leave conflicting values that
+        // confuse later editors.
+        if (this.newTemplateOutputFormat === 'PDF' && this.newTemplateType !== 'HTML') {
             fields[PAGE_ORIENTATION_FIELD.fieldApiName] = this.newTemplatePageOrientation;
             fields[PAGE_SIZE_FIELD.fieldApiName] = this.newTemplatePageSize;
             fields[PAGE_MARGINS_FIELD.fieldApiName] = this.newTemplatePageMargins;
@@ -2581,6 +2614,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     @track isUploadingHtml = false;
 
+    // v1.90 — true when the HTML source declares an @page rule in any <style> block.
+    // Mirrors DocGenService.hasSourcePageRule so the wizard's clear/hide decision
+    // matches the engine's suppress decision.
+    htmlContainsPageRule(htmlText) {
+        if (!htmlText || typeof htmlText !== 'string') {
+            return false;
+        }
+        // Cheap, lowercase substring scan — same approach used server-side.
+        return htmlText.toLowerCase().indexOf('@page') !== -1;
+    }
+
     triggerHtmlFilePicker() {
         const input = this.template.querySelector('.docgen-html-file-input');
         if (input) {
@@ -2703,7 +2747,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.uploadedFileName = file.name;
             const imgMsg =
                 totalImages > 0 ? ' (' + totalImages + ' image' + (totalImages === 1 ? '' : 's') + ' extracted)' : '';
-            this.showToast('Uploaded', file.name + imgMsg + ' — click "Save as New Version" to activate.', 'success');
+            // v1.90 — detect author-declared @page rule; if present, the engine suppresses
+            // its own size/margin and the template-level page fields are dead inputs. Hide
+            // them and clear in-memory values so a subsequent Save doesn't silently
+            // re-introduce conflicting values.
+            this.editHtmlBodyOwnsPageRule = this.htmlContainsPageRule(rewritten);
+            if (this.editHtmlBodyOwnsPageRule) {
+                this.editTemplatePageOrientation = null;
+                this.editTemplatePageSize = null;
+                this.editTemplatePageMargins = null;
+                this.editTemplateCustomMargins = '';
+            }
+            const pageMsg = this.editHtmlBodyOwnsPageRule
+                ? ' Your HTML defines its own @page CSS — template page-layout fields cleared.'
+                : '';
+            this.showToast(
+                'Uploaded',
+                file.name + imgMsg + '.' + pageMsg + ' Click "Save as New Version" to activate.',
+                'success'
+            );
         } catch (err) {
             const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
             this.showToast('Upload Failed', msg, 'error');

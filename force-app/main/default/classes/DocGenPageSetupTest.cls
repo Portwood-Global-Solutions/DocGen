@@ -266,4 +266,71 @@ private class DocGenPageSetupTest {
         System.assertEquals('Landscape', found.Page_Orientation__c);
         System.assertEquals('Wide', found.Page_Margins__c);
     }
+
+    // v1.90 — when source HTML declares @page itself, the engine must NOT emit
+    // size:/margin: in its own @page rule (would fight the author CSS and could
+    // override the author's intended margin). Confirms `hasSourcePageRule` short
+    // circuit and the conditional emission path in wrapHtmlForPdf.
+    // Returns the contents of the FIRST <style> block (the engine-injected one)
+    // so assertions target only what the engine wrote, not the author's CSS.
+    private static String engineStyleBlock(String wrapped) {
+        Integer open = wrapped.indexOf('<style>');
+        System.assertNotEquals(-1, open, 'wrapped HTML missing <style>: ' + wrapped);
+        Integer close = wrapped.indexOf('</style>', open);
+        return wrapped.substring(open + 7, close);
+    }
+
+    @IsTest
+    static void sourcePageRuleSuppressesEngineSizeAndMargin() {
+        DocGenHtmlRenderer.pageSizeOverride = null;
+        DocGenHtmlRenderer.orientationOverride = null;
+        DocGenHtmlRenderer.marginsOverride = null;
+        DocGenHtmlRenderer.customMarginsOverride = null;
+        String authored = '@page { size: A4 landscape; margin: 15mm; } table { border: 1px solid #000; }';
+        String wrapped = DocGenService.wrapHtmlForPdf('<p>hi</p>', authored, null, null);
+
+        // No header/footer + author owns @page → engine emits no @page rule at all
+        String engine = engineStyleBlock(wrapped);
+        System.assert(!engine.contains('@page'), 'Engine block must not emit @page: ' + engine);
+        System.assert(!engine.contains('margin: 1in'), 'Engine must not inject default 1in margin: ' + engine);
+        // Author CSS must still be present (in the second <style>)
+        System.assert(wrapped.contains('size: A4 landscape'), 'Author @page size must survive');
+        System.assert(wrapped.contains('margin: 15mm'), 'Author @page margin must survive');
+    }
+
+    @IsTest
+    static void sourcePageRulePlusHeaderEmitsOnlyMarginBox() {
+        DocGenHtmlRenderer.pageSizeOverride = null;
+        DocGenHtmlRenderer.orientationOverride = null;
+        DocGenHtmlRenderer.marginsOverride = null;
+        DocGenHtmlRenderer.customMarginsOverride = null;
+        String authored = '@page { size: A4 landscape; margin: 15mm; }';
+        String wrapped = DocGenService.wrapHtmlForPdf('<p>body</p>', authored, '<span>My header</span>', null);
+
+        // Engine must still emit @page so it can set @top-center, but the @page rule
+        // itself must not contain size: or margin: (those belong to the author).
+        String engine = engineStyleBlock(wrapped);
+        System.assert(engine.contains('@page {'), 'Engine emits @page wrapper for margin-box');
+        System.assert(engine.contains('@top-center'), 'Engine emits @top-center for header');
+        Integer pageStart = engine.indexOf('@page {');
+        // Walk forward to the matching } that closes the @page rule (accounting for
+        // the nested @top-center). Two opens, two closes.
+        Integer firstClose = engine.indexOf('}', pageStart);
+        Integer secondClose = engine.indexOf('}', firstClose + 1);
+        String pageRule = engine.substring(pageStart, secondClose + 1);
+        System.assert(!pageRule.contains('size:'), 'Engine @page must not declare size: ' + pageRule);
+        System.assert(!pageRule.contains('margin:'), 'Engine @page must not declare margin: ' + pageRule);
+    }
+
+    @IsTest
+    static void noSourcePageRuleStillInjectsEngineDefaults() {
+        DocGenHtmlRenderer.pageSizeOverride = null;
+        DocGenHtmlRenderer.orientationOverride = null;
+        DocGenHtmlRenderer.marginsOverride = null;
+        DocGenHtmlRenderer.customMarginsOverride = null;
+        String wrapped = DocGenService.wrapHtmlForPdf('<p>x</p>', 'p { color: red; }', null, null);
+        // No author @page → engine MUST inject size + margin (existing behavior)
+        System.assert(wrapped.contains('size: letter'), 'Engine should inject default size when author has none');
+        System.assert(wrapped.contains('margin: 1in'), 'Engine should inject default margin when author has none');
+    }
 }

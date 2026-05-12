@@ -1348,4 +1348,41 @@ private class DocGenGiantQueryTest {
             System.assertEquals(3, totalComments, 'all three comments must land on correct cases');
         }
     }
+
+    // v1.90 regression — Giant Query path was emitting CV titles of the form
+    // `docgen_giant_<jobId>_final` regardless of Document_Title_Format__c.
+    // Customers saw that hardcoded name on the downloaded file in Files. The
+    // fix routes through DocGenService.computeDocTitle. This test exercises the
+    // helper directly (cheap, no Blob.toPdf) to lock the contract.
+    @IsTest
+    static void computeDocTitleHonorsDocumentTitleFormat() {
+        Account acc = [SELECT Id, Name FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
+        tpl.Document_Title_Format__c = 'XXXX-premium-{Name}';
+        update tpl;
+
+        Test.startTest();
+        String title = DocGenService.computeDocTitle(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(
+            'XXXX-premium-Giant Query Test Account',
+            title,
+            'computeDocTitle must substitute {Name} from the parent record'
+        );
+    }
+
+    @IsTest
+    static void computeDocTitleReturnsNullWhenFormatBlank() {
+        Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
+        tpl.Document_Title_Format__c = null;
+        update tpl;
+
+        Test.startTest();
+        String title = DocGenService.computeDocTitle(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(null, title, 'computeDocTitle returns null when no format is configured');
+    }
 }

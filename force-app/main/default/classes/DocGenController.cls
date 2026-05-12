@@ -916,15 +916,41 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             fragmentIds.add(cv.Id);
         }
 
-        // Look up the final assembled PDF if it exists (single-part result)
-        String finalTitle = 'docgen_giant_' + jobId + '_final';
-        List<ContentVersion> finalCvs = [
-            SELECT Id
-            FROM ContentVersion
-            WHERE Title = :finalTitle
+        // v1.90 — prefer Merged_PDF_CV__c on the Job for the final-PDF lookup so
+        // the controller works regardless of the CV's title (which now honors
+        // Document_Title_Format__c). Title-pattern lookup kept as a backwards-
+        // compat fallback for jobs queued by an older package version.
+        Id finalCvId = null;
+        Id templateId = null;
+        Id parentRecordId = null;
+        List<DocGen_Job__c> jobs = [
+            SELECT Merged_PDF_CV__c, Template__c, Parent_Record_Id__c
+            FROM DocGen_Job__c
+            WHERE Id = :jobId
             WITH USER_MODE
-            LIMIT 1 // NOPMD — internal lookup
+            LIMIT 1
         ];
+        if (!jobs.isEmpty()) {
+            if (String.isNotBlank(jobs[0].Merged_PDF_CV__c)) {
+                finalCvId = (Id) jobs[0].Merged_PDF_CV__c;
+            }
+            templateId = jobs[0].Template__c;
+            parentRecordId = jobs[0].Parent_Record_Id__c;
+        }
+        if (finalCvId == null) {
+            // Legacy lookup: title pattern (pre-v1.90 jobs)
+            String finalTitle = 'docgen_giant_' + jobId + '_final';
+            List<ContentVersion> finalCvs = [
+                SELECT Id
+                FROM ContentVersion
+                WHERE Title = :finalTitle
+                WITH USER_MODE
+                LIMIT 1 // NOPMD — internal lookup
+            ];
+            if (!finalCvs.isEmpty()) {
+                finalCvId = finalCvs[0].Id;
+            }
+        }
 
         // Look up PDF parts if multiple chunks were rendered
         String partPrefix = 'docgen_giant_' + jobId + '_part_';
@@ -940,11 +966,17 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             partIds.add(cv.Id);
         }
 
+        // Compute the user-facing document title once so the client can use it
+        // for the multi-part merge filename. Falls back to null when no
+        // Document_Title_Format__c is configured.
+        String docTitle = DocGenService.computeDocTitle(templateId, parentRecordId);
+
         return new Map<String, Object>{
             'fragmentIds' => fragmentIds,
             'fragmentCount' => fragments.size(),
-            'finalPdfCvId' => finalCvs.isEmpty() ? null : finalCvs[0].Id,
-            'partPdfCvIds' => partIds
+            'finalPdfCvId' => finalCvId,
+            'partPdfCvIds' => partIds,
+            'docTitle' => docTitle
         };
     }
 
@@ -2458,7 +2490,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * module-load time and fails outside community contexts, which manifested
      * as an endless spinner that also blocked the rest of the record page).
      */
-    @AuraEnabled(cacheable=true)
+    // v1.90 — dropped cacheable=true. The cache key didn't include the running
+    // user/context, so an empty value cached during an internal page invocation
+    // could be returned for subsequent guest calls — making the shepherd
+    // download URL miss its site prefix and the browser save a 90-byte JSON
+    // redirect as recordId.txt. Recomputing per-call is cheap (one Site method).
+    @AuraEnabled
     public static String getSiteUrlPathPrefix() {
         String prefix = Site.getPathPrefix();
         return prefix == null ? '' : prefix;
@@ -2540,9 +2577,28 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 return new Map<String, Object>{ 'status' => 'NotFound' };
             }
             DocGen_Job__c j = jobs[0];
+            // v1.90 — return the CV's Title so the LWC can set link.download
+            // explicitly. Some browsers drop Content-Disposition when an
+            // <a target="_blank" download=""> is clicked, causing the file
+            // to save with the URL's last segment (the CV Id) as the name.
+            String docTitle = null;
+            if (String.isNotBlank(j.Merged_PDF_CV__c)) {
+                List<ContentVersion> cvs = [
+                    SELECT Title, FileExtension
+                    FROM ContentVersion
+                    WHERE Id = :j.Merged_PDF_CV__c
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (!cvs.isEmpty()) {
+                    String ext = String.isBlank(cvs[0].FileExtension) ? 'pdf' : cvs[0].FileExtension;
+                    docTitle = cvs[0].Title + '.' + ext;
+                }
+            }
             return new Map<String, Object>{
                 'status' => j.Status__c,
                 'cvId' => j.Merged_PDF_CV__c,
+                'docTitle' => docTitle,
                 'errorMessage' => j.Status__c == 'Failed' ? j.Label__c : null
             };
         }
