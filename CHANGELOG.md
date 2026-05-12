@@ -1,5 +1,57 @@
 # Changelog
 
+## v1.90.0 — HTML @page engine fix + guest runner reliability + Word authoring docs
+
+Promoted package: `04tVx000000R8cbIAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000R8cbIAC)
+
+A bundle of three independent fixes that surfaced in subscriber testing this week: the engine-vs-author `@page` conflict that broke HTML template rendering, two distinct guest-runner regressions on Experience Cloud sites, and the long-standing giant-query path that ignored `Document_Title_Format__c` on the downloaded file. Plus a new UserGuide section codifying Word-template authoring gotchas after a customer hit the multi-table column-alignment trap.
+
+### Engine — HTML `@page` conflict (refs #60, #71)
+
+- **`DocGenService.wrapHtmlForPdf` suppresses size/margin in its injected `@page` rule when the source HTML already declares one.** Pre-fix, the engine emitted `@page { size: letter; margin: 1in; ... }` regardless, and the cascade with the author's `@page` produced inconsistent results — particularly for HTML templates exporting from Google Docs, Notion, or hand-authored templates with explicit `@page` rules. Header / footer margin boxes (`@top-center`, `@bottom-center`) still emit since authors can't supply those on their own. New `hasSourcePageRule` helper isolates the detection logic; three regression tests added in `DocGenPageSetupTest`.
+- **`DocGenService.computeDocTitle(templateId, recordId)` — new shared helper** that loads `Document_Title_Format__c`, queries the parent record for referenced fields, and runs `generateDocTitle`. Replaces ad-hoc title computation in two call sites (giant-query path and guest render status), reducing the surface area for future title-format bugs.
+
+### Giant Query — title format ignored on download
+
+- **`DocGenGiantQueryAssembler.renderFinalPdf` now honors `Document_Title_Format__c`** for the final ContentVersion's `Title` and `PathOnClient` (previously hardcoded to `docgen_giant_<jobId>_final` — that's the name customers saw on files downloaded from the record's Files section). Writes the result CV Id to `Job.Merged_PDF_CV__c` so `DocGenController.getGiantQueryFragments` can locate the CV regardless of its title.
+- **Multi-part client-merge filename** in `docGenRunner.js` swapped from the hardcoded `'Document.pdf'` to the server-returned `docTitle`.
+
+### Experience Cloud guest runner
+
+Three distinct guest-context bugs, all of which produced the same superficial failure ("file downloaded as `recordId.txt`"):
+
+1. **URL-prefix logic returning the wrong value for LWR sites.** The Apex `getSiteUrlPathPrefix()` fallback (added in v1.88) returned the Site's configured `UrlPathPrefix` (e.g. `/s`), and `docGenRunner` prepended that to the shepherd URL — producing `/s/sfc/servlet.shepherd/...` which the LWR site returned as 404 HTML. The browser then saved the HTML response with the CV Id as the filename. Fix: derive prefix from `window.location.pathname` regex only (Aura community pattern `/<sitename>/s/<route>` → strip after `/s/`); no Apex fallback. For LWR sites the bare-host shepherd URL works — verified empirically by curl returning the actual PDF with proper `Content-Disposition`.
+2. **Browser dropping `Content-Disposition` filename on `<a target="_blank" download="">` clicks.** Some Chrome versions ignore the server's filename header and fall back to the URL's last path segment (the CV Id) when both `target="_blank"` and an empty `download` attribute are set. Fix: `getGuestRenderStatus` now returns `docTitle` (CV Title + extension) and the LWC sets `link.download` explicitly.
+3. **Poll timeout firing during slow renders.** The LWC's 60-second poll ceiling was triggering on cold-start Word→PDF renders that occasionally tail past 60 s on scratch / sandbox orgs, producing a "spinner forever then dies" UX. Bumped to 180 s.
+
+Plus latent issues fixed in passing:
+
+- **`DocGenController.getSiteUrlPathPrefix` lost its `cacheable=true`** — the cache key wasn't scoped per user/context, so an empty value cached during an internal page load was being served to subsequent guest calls.
+- **`@salesforce/community/basePath` static import explicitly NOT reintroduced.** Earlier this session I tried adding it back with a `typeof` guard; the guard works at runtime but the static import flags the LWC bundle as community-context-dependent and breaks the runner on internal `lightning__RecordPage` placements (the spinner PR #77 fixed). The URL-pathname-only approach avoids the import entirely.
+
+### Admin wizard UX
+
+- **HTML templates no longer prompt for page-layout choices** in the create wizard. For Type=HTML, the Page Size / Orientation / Margins fields are hidden and replaced with a callout explaining that `@page` CSS owns page layout for HTML templates. `createTemplate` skips writing the wizard's default values for these fields when Type=HTML, preventing silent `Portrait/Letter/Default` saves that would have been ignored anyway.
+- **On HTML body upload, detect `@page` in source.** If present, auto-clear the four template-level page-layout fields and show an inline banner in the edit modal — _"Your HTML defines its own @page CSS, so Page Size / Orientation / Margins are ignored on render. Edit the @page rule inside your HTML to change page setup."_ New `htmlContainsPageRule` helper mirrors the server-side `hasSourcePageRule` so the wizard's clear/hide decision matches the engine's suppress decision exactly.
+
+### Guest permission set
+
+`DocGen_Guest_Runner.permissionset` had latent config gaps that surfaced when Experience Cloud guest testing kicked off this week:
+
+- **Added `DocGen_Settings__c` object read.** Two field perms were granted with no parent object access — invalid Salesforce metadata, dead config. Object-level read added.
+- **Added `DocGen_Job__c` create + read** plus field perms for `Label__c`, `Merged_PDF_CV__c`, `Parent_Record_Id__c`, `Status__c`. Required for the guest LWC to insert a tracking row via `queueGuestRender` and then poll `getGuestRenderStatus` until the platform-event-driven render completes.
+
+### Documentation
+
+- **UserGuide §5.8 "Word template authoring tips"** — new subsection prompted by a customer reporting that three "identical" Word tables rendered with different column widths in the PDF. Covers the `<w:tblGrid>` / `<w:tcW>` discrepancy that Word's display engine reconciles but Flying Saucer renders literally, the AutoFit setting matrix (Contents / Window / Fixed), the unzip-and-inspect diagnostic for `word/document.xml`, and a grab-bag of Word→PDF authoring gotchas (Track Changes, embedded objects, section-break orientation mixing, Wingdings, image compression).
+
+### Validation
+
+- E2E suite: 214/214 assertions across 10 scripts on `portwood-staging`.
+- Apex tests: **1223/1223 passing**, 75% org-wide coverage.
+- Code Analyzer: 0 High severity violations, 41 Moderate (within the documented baseline).
+- Manual verification on a guest user in Experience Cloud staging site: shared an Account record with the Site Guest Public Group, guest navigated to the site URL, generated PDF via the runner, and downloaded the file with the correct `Document_Title_Format__c`-derived filename.
+
 ## v1.89.0 — Template_Version Type picklist fix + CSS 2.1 guidance
 
 Promoted package: `04tVx000000Qu1lIAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000Qu1lIAC)
