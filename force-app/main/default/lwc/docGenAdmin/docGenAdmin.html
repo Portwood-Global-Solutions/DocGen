@@ -260,7 +260,7 @@
                                         class="slds-var-m-top_medium"
                                         required
                                     ></lightning-combobox>
-                                    <template if:true={showPageOrientation}>
+                                    <template if:true={showNewPageLayoutFields}>
                                         <lightning-combobox
                                             label="Page Orientation"
                                             value={newTemplatePageOrientation}
@@ -295,6 +295,21 @@
                                                 field-level-help="One value applies to all sides; four values are Top,Right,Bottom,Left in inches. Range 0.1–3.0."
                                             ></lightning-input>
                                         </template>
+                                    </template>
+                                    <template if:true={isCreatingHtmlPdf}>
+                                        <div class="slds-box slds-theme_shade slds-var-m-top_medium" role="status">
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:info"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                Page layout for HTML templates comes from your
+                                                <code>@page</code> CSS rule. Upload your HTML in the next step — if it
+                                                doesn't declare <code>@page</code>, you can set Letter/A4/Margins in the
+                                                template editor.
+                                            </p>
+                                        </div>
                                     </template>
                                     <template if:true={isRecordDataSource}>
                                         <template if:true={newTemplateObject}>
@@ -1096,7 +1111,25 @@
                                         class="slds-var-m-top_medium"
                                         required
                                     ></lightning-combobox>
-                                    <template if:true={showPageOrientation}>
+                                    <template if:true={showEditHtmlOwnsPageBanner}>
+                                        <div
+                                            class="slds-box slds-theme_shade slds-var-m-top_medium"
+                                            role="status"
+                                            aria-live="polite"
+                                        >
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:info"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                Your HTML defines its own <code>@page</code> CSS, so Page Size /
+                                                Orientation / Margins are ignored on render. Edit the
+                                                <code>@page</code> rule inside your HTML to change page setup.
+                                            </p>
+                                        </div>
+                                    </template>
+                                    <template if:true={showEditPageLayoutFields}>
                                         <lightning-combobox
                                             label="Page Orientation"
                                             value={editTemplatePageOrientation}

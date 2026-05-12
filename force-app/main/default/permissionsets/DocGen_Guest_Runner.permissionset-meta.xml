@@ -36,6 +36,28 @@
         <field>DocGen_Settings__c.Experience_Site_Url__c</field>
         <readable>true</readable>
     </fieldPermissions>
+    <!-- v1.90 — DocGen_Job__c fields the guest LWC reads while polling status. -->
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Job__c.Label__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Job__c.Merged_PDF_CV__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Job__c.Parent_Record_Id__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Job__c.Status__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <!-- DocGen_Job__c.Template__c is a required lookup; FLS auto-granted -->
     <fieldPermissions>
         <editable>false</editable>
         <field>DocGen_Template_Version__c.Base_Object_API__c</field>
@@ -209,6 +231,33 @@
         <allowRead>true</allowRead>
         <modifyAllRecords>false</modifyAllRecords>
         <object>DocGen_Template__c</object>
+        <viewAllFields>false</viewAllFields>
+        <viewAllRecords>false</viewAllRecords>
+    </objectPermissions>
+    <!-- v1.90 — DocGen_Settings__c object read so the two field perms above
+         (Company_Name__c, Experience_Site_Url__c) are actually usable. -->
+    <objectPermissions>
+        <allowCreate>false</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>false</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <object>DocGen_Settings__c</object>
+        <viewAllFields>false</viewAllFields>
+        <viewAllRecords>false</viewAllRecords>
+    </objectPermissions>
+    <!-- v1.90 — DocGen_Job__c create + read so guests can queue a guest render
+         via queueGuestRender, then poll getGuestRenderStatus until the
+         platform-event-driven render completes. The actual render runs as
+         Automated Process (system context); the guest only ever touches
+         their own job row. -->
+    <objectPermissions>
+        <allowCreate>true</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>false</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <object>DocGen_Job__c</object>
         <viewAllFields>false</viewAllFields>
         <viewAllRecords>false</viewAllRecords>
     </objectPermissions>

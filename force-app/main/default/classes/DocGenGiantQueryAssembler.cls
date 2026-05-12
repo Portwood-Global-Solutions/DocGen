@@ -142,9 +142,15 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         }
         html = null;
 
+        // v1.90 — honor template Document_Title_Format__c. Pre-fix the title was
+        // hardcoded to docgen_giant_<jobId>_final, which is what users saw in
+        // the Files section after downloading. Fall back to the legacy name
+        // only when no title format is configured on the template.
+        String docTitle = DocGenService.computeDocTitle(templateId, recordId);
+        String cvTitle = String.isBlank(docTitle) ? ('docgen_giant_' + jobId + '_final') : docTitle;
         ContentVersion pdfCv = new ContentVersion(
-            Title = 'docgen_giant_' + jobId + '_final',
-            PathOnClient = 'docgen_giant_' + jobId + '_final.pdf',
+            Title = cvTitle,
+            PathOnClient = cvTitle + '.pdf',
             VersionData = pdfBlob,
             IsMajorVersion = false
         );
@@ -172,7 +178,11 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             String noop = linkErr.getMessage(); // NOPMD EmptyCatchBlock — non-fatal
         }
 
-        update new DocGen_Job__c(Id = jobId, Status__c = 'Completed'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
+        // v1.90 — record the final CV ID on the job. The controller's
+        // getGiantQueryFragments uses this to locate the final PDF regardless
+        // of its title (the legacy title-pattern lookup breaks once we honor
+        // Document_Title_Format__c).
+        update new DocGen_Job__c(Id = jobId, Status__c = 'Completed', Merged_PDF_CV__c = String.valueOf(pdfCv.Id)); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
     }
 
     /**

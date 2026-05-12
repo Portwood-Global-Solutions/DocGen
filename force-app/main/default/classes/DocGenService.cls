@@ -5873,6 +5873,38 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * v1.90 — convenience wrapper: load template format + record data + return
+     * formatted title. Used by the Giant Query path and the Giant Query fragment
+     * lookup so the multi-part client merge and the saved-to-record CV use the
+     * same Document_Title_Format__c evaluation as the standard render path.
+     * Returns null if the format is blank or anything fails — callers fall back
+     * to a default name in that case.
+     */
+    public static String computeDocTitle(Id templateId, Id recordId) {
+        if (templateId == null || recordId == null) {
+            return null;
+        }
+        try {
+            List<DocGen_Template__c> tpls = [
+                SELECT Document_Title_Format__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (tpls.isEmpty() || String.isBlank(tpls[0].Document_Title_Format__c)) {
+                return null;
+            }
+            String fmt = tpls[0].Document_Title_Format__c;
+            Map<String, Object> data = loadRecordDataForTitle(recordId, fmt);
+            return generateDocTitle(fmt, data);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'computeDocTitle failed: ' + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Convenience overload — pulls a small set of standard fields without
      * needing a format string up front. Intended for callers that resolve
      * tokens later.
@@ -6678,6 +6710,10 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     public static String wrapHtmlForPdf(String body, String sourceStyles, String header, String footer) {
         Boolean headerHasCounters = hasPageCounterTokens(header);
         Boolean footerHasCounters = hasPageCounterTokens(footer);
+        // v1.90 — when the source HTML already declares @page, suppress the engine's
+        // size/margin so author CSS wins cleanly. Header/footer margin-box rules are
+        // still emitted because the source @page can't supply them on its own.
+        Boolean sourceHasPageRule = hasSourcePageRule(sourceStyles);
 
         // 1.68 — when admin set Page_Size__c or Page_Orientation__c, emit explicit
         // inch dimensions. Otherwise fall back to "size: letter" (the v1.61–1.67
@@ -6714,28 +6750,36 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             marginsCss = 'margin: 1in';
         }
 
-        String css = '@page { size: ' + sizeCss + '; ' + marginsCss + ';';
-        if (String.isNotBlank(header)) {
-            if (headerHasCounters) {
-                css +=
-                    ' @top-center { ' +
-                    buildPageMarginContentCss(header) +
-                    ' vertical-align: bottom; font-size: 9pt; color: #444; }';
-            } else {
-                css += ' @top-center { content: element(dgheader); vertical-align: bottom; }';
+        String css = '';
+        Boolean hasHeader = String.isNotBlank(header);
+        Boolean hasFooter = String.isNotBlank(footer);
+        if (!sourceHasPageRule || hasHeader || hasFooter) {
+            css = '@page {';
+            if (!sourceHasPageRule) {
+                css += ' size: ' + sizeCss + '; ' + marginsCss + ';';
             }
-        }
-        if (String.isNotBlank(footer)) {
-            if (footerHasCounters) {
-                css +=
-                    ' @bottom-center { ' +
-                    buildPageMarginContentCss(footer) +
-                    ' vertical-align: top; font-size: 9pt; color: #444; }';
-            } else {
-                css += ' @bottom-center { content: element(dgfooter); vertical-align: top; }';
+            if (hasHeader) {
+                if (headerHasCounters) {
+                    css +=
+                        ' @top-center { ' +
+                        buildPageMarginContentCss(header) +
+                        ' vertical-align: bottom; font-size: 9pt; color: #444; }';
+                } else {
+                    css += ' @top-center { content: element(dgheader); vertical-align: bottom; }';
+                }
             }
+            if (hasFooter) {
+                if (footerHasCounters) {
+                    css +=
+                        ' @bottom-center { ' +
+                        buildPageMarginContentCss(footer) +
+                        ' vertical-align: top; font-size: 9pt; color: #444; }';
+                } else {
+                    css += ' @bottom-center { content: element(dgfooter); vertical-align: top; }';
+                }
+            }
+            css += ' }';
         }
-        css += ' }';
         if (String.isNotBlank(header) && !headerHasCounters) {
             css += ' .docgen-running-header { position: running(dgheader); }';
         }
@@ -7003,6 +7047,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return false;
         }
         return html.contains('{PageNumber}') || html.contains('{TotalPages}');
+    }
+
+    // v1.90 — detect an author-declared @page rule in concatenated <style> blocks.
+    // Case-insensitive substring is sufficient: false positives in CSS comments or
+    // string literals are extremely rare in real template HTML, and the cost of a
+    // false positive (engine drops its size/margin defaults) is acceptable —
+    // Flying Saucer falls back to its own letter/1in defaults when @page omits them.
+    @TestVisible
+    private static Boolean hasSourcePageRule(String sourceStyles) {
+        if (String.isBlank(sourceStyles)) {
+            return false;
+        }
+        return sourceStyles.toLowerCase().contains('@page');
     }
 
     /**
