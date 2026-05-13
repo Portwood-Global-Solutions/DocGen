@@ -817,6 +817,24 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
             Map<String, String> loopParts = DocGenService.extractLoopBody(documentXml, giantRelationship);
             if (loopParts == null) {
+                // v1.91+: templates using {#ChartBucket:<rel>:...} aggregate via
+                // their own SOQL — they don't need an eager-loaded loop body.
+                // Surface that pattern in the error so authors know the fix
+                // is in Query_Config__c, not in the template body.
+                if (documentXml != null && documentXml.contains('{#ChartBucket:' + giantRelationship + ':')) {
+                    throw new DocGenException(
+                        'Template uses {#ChartBucket:' +
+                            giantRelationship +
+                            ':...} but Query_Config__c also lists ' +
+                            giantRelationship +
+                            ' as an eager-loaded child (currently ' +
+                            counts.get(giantRelationship) +
+                            ' rows, above the 2000-row giant-query threshold). ' +
+                            'Charts aggregate via their own SOQL, so remove ' +
+                            giantRelationship +
+                            ' from Query_Config__c to let the chart handle this relationship server-side.'
+                    );
+                }
                 throw new DocGenException('Could not find loop for relationship: ' + giantRelationship);
             }
 

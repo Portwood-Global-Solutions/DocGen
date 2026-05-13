@@ -52,9 +52,13 @@ code-analyzer*.json
 *.xlsx
 *.pptx
 *.pdf
+# Exception: the v1.91 chart-tag Word reference template lives in docs/
+!docs/SurveyChartExample.docx
 
 # Python scripts
 *.py
+# Exception: the python-docx builder for the chart Word reference template
+!scripts/build-word-chart-template.py
 
 # Python Salesforce Functions
 **/__pycache__/

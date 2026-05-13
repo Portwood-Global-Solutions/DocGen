@@ -2589,6 +2589,15 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     private static String processXml(String xml, Map<String, Object> data) {
+        // ChartBucket preprocessing: rewrites {#ChartBucket:rel:field}...{/ChartBucket}
+        // into synthetic {#_cb_N}...{/_cb_N} loops with bucket data injected into
+        // `data`. Runs at every recursion level so charts inside loop bodies resolve
+        // against the iteration item, not the outer parent. Cheap `contains` guard
+        // keeps the no-chart hot path at zero overhead.
+        if (xml != null && xml.contains('{#ChartBucket:')) {
+            xml = DocGenChartBucketResolver.preprocessInline(xml, data);
+        }
+
         String output = '';
         Integer len = xml.length();
         Integer cursor = 0;
@@ -4188,7 +4197,18 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // COUNT doesn't require a field
         if (fn == 'COUNT' && fieldName == null) {
             List<Object> records = getChildRecords(data, listName);
-            String countResult = records != null ? String.valueOf(records.size()) : '0';
+            Integer countNum;
+            if (records != null) {
+                countNum = records.size();
+            } else {
+                // Relationship not pre-loaded — try SOQL COUNT() fallback (mirrors
+                // ChartBucket's aggregation pattern so {COUNT:Rel} works when the
+                // template intentionally omits Rel from Query_Config__c to let a
+                // chart aggregate it server-side without heap pressure).
+                Integer fallbackCount = DocGenChartBucketResolver.tryCountFallback(data, listName);
+                countNum = fallbackCount >= 0 ? fallbackCount : 0;
+            }
+            String countResult = String.valueOf(countNum);
             if (numberFormat != null && isNumericFormat(numberFormat)) {
                 return formatNumber(Decimal.valueOf(countResult), numberFormat);
             }

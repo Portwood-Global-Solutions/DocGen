@@ -1242,7 +1242,173 @@ All five functions support any format suffix (`currency`, `number`, `percent`, c
 
 **Aggregate fields don't need to be rendered columns** — you can aggregate `UnitPrice` even if your loop table only shows `Product2.Name` and `Quantity`. The resolver validates field names against the child object's schema.
 
-### 7.6 Images
+### 7.6 Charts (`{#ChartBucket}`)
+
+Render bar charts, pivot tables, and survey-style cross-tabs inline in your generated documents. Charts are pure HTML/CSS — no JavaScript, no `<svg>`, no external libraries — so they render reliably through the Flying Saucer PDF engine.
+
+**Recommended source format: HTML.** CSS gives you direct control over bar widths, percent-based layouts, table-cell pivots, and accent styling. Word templates can technically use chart tags too, but Word's layout primitives (rows and cells only — no `<div>` equivalent) constrain side-by-side and stacked-segment patterns. See [§7.6.1 Authoring charts in Word](#761-authoring-charts-in-word--caveats) for the supported subset.
+
+A chart is a section tag that **groups a child relationship by a field** and exposes one row per distinct value to its body. You write the bar HTML once and DocGen repeats it for each bucket.
+
+#### Basic syntax
+
+```
+{#ChartBucket:Survey_Responses__r:Selected_Answer__c}
+  <tr>
+    <td>{key_label}</td>
+    <td><div style="background:{color};width:{percent}%;height:14px;"></div></td>
+    <td>{count} ({percent}%)</td>
+  </tr>
+{/ChartBucket}
+```
+
+- `Survey_Responses__r` — child relationship name on the current record (one-hop).
+- `Selected_Answer__c` — field on the child to group by.
+
+Buckets sort **descending by count**, alpha by key for ties. Null/blank values collapse into a single bucket labeled `"Not Specified"`.
+
+#### Body fields
+
+| Tag             | Type    | What it returns                                                                  |
+| --------------- | ------- | -------------------------------------------------------------------------------- |
+| `{key}`         | String  | Raw group value (HTML-escaped)                                                   |
+| `{key_label}`   | String  | Picklist label if available, else `{key}`; `"Not Specified"` for blanks          |
+| `{count}`       | Integer | Records in this bucket                                                           |
+| `{percent}`     | Decimal | Percent of total, 1 decimal place (use directly as `width:{percent}%`)           |
+| `{percent_int}` | Integer | Rounded integer percent                                                          |
+| `{max_percent}` | Decimal | Percent normalized so the largest bucket = 100 (for "longest bar = full" charts) |
+| `{index}`       | Integer | 1-based bucket index                                                             |
+| `{color}`       | String  | Cycled palette color, `#hex` form (override with `colors=` — see below)          |
+| `{color_hex}`   | String  | Same color without the leading `#` — for Word `w:shd w:fill` attributes          |
+
+Empty bucket lists render the body zero times. Add `{:else}No responses yet.{/:else}` inside the tag for a fallback.
+
+#### Modifiers (composable)
+
+Pass modifiers as a third colon segment using `key=value&key=value` syntax:
+
+```
+{#ChartBucket:Survey_Responses__r:Mode__c:colors=#1e40af,#b91c1c&where=Survey__c != null}
+  ...
+{/ChartBucket}
+```
+
+| Modifier   | Example                                              | What it does                                                                                                                                                                                     |
+| ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `colors=`  | `colors=#1e40af,#b91c1c,#16a34a`                     | Override the default 8-color palette; cycles by row index.                                                                                                                                       |
+| `where=`   | `where=Mode__c='Drive Alone' AND Reasons__c != null` | SOQL fragment appended to the chart's WHERE. Forces server-side aggregation (SOQL fallback).                                                                                                     |
+| `split=;`  | `split=;`                                            | Treat the field as multi-select (semicolon-separated). Each respondent's pick contributes to every value they selected; percentages sum to >100% by design.                                      |
+| `groupBy=` | `groupBy=Location__c`                                | Cross-tab pivot. Each bucket exposes a `cols` sub-list — iterate with `{#cols}{key}={count} ({percent}%){/cols}`. A synthetic **Total** column is appended last. Forces server-side aggregation. |
+| `colSort=` | `colSort=8000 Marina,3260 Bayshore`                  | (Pairs with `groupBy=`.) Author-controlled column order. Named values appear first in this order; remaining values alpha-sorted; Total always last.                                              |
+
+#### Pivot tables (`groupBy=`)
+
+A pivot chart turns the body into a row that contains another loop, `{#cols}`. Each col is one value of the `groupBy` field plus a final `Total` column.
+
+```
+<div class="row">
+  <div class="cell">{key_label}</div>
+  {#cols}<div class="cell">{count} ({percent}%)</div>{/cols}
+</div>
+```
+
+**Layout gotcha for pivot charts:** DocGen's HTML container auto-expansion (the same logic that turns one `<tr>` into one row per loop iteration) reacts to nested loops by duplicating the nearest open `<tr>`. If you put `{#cols}` directly inside `<tr>`, every column gets a whole row of its own. **Use `<div>` + `display: table-row` + `display: table-cell` for pivot bodies, not `<tr>`/`<td>`.** See `docs/CommuteSurveyExample.html` for the canonical pattern.
+
+#### Where to use what — author's quick rules
+
+- **Counts/percentages by one field?** Plain ChartBucket, no modifiers.
+- **Filter the population first?** Add `where=...`.
+- **Multi-select picklist?** Add `split=;` (or whatever your delimiter is).
+- **Cross-tab two dimensions?** `groupBy=...`; iterate `{#cols}` in your body.
+- **Brand colors?** `colors=#...,#...`. Authors can also ignore `{color}` entirely and put their own CSS in the body.
+
+#### Resolution paths (and how to set up `Query_Config__c`)
+
+This is the critical operational detail — **how you configure `Query_Config__c` determines whether a chart works at 30K rows, 300K rows, or doesn't render at all.**
+
+The chart resolver picks one of four paths automatically:
+
+1. **In-memory** — when the child collection is already loaded into the data map (small relationships, eagerly queried) and you used no `where=` / `groupBy=` modifiers. Aggregation runs in Apex. Fastest, zero extra SOQL.
+2. **SOQL fallback (recommended for large datasets)** — when the relationship is **not** in `Query_Config__c`, OR when `where=` / `groupBy=` is used. The chart issues one `GROUP BY` aggregate query, **constant cost regardless of row count**. This is how 30K-row and 300K-row charts work.
+3. **Parent-level** — when the chart sits outside any loop (header/summary section). Same in-memory or SOQL behavior as above.
+4. **Giant-query parent** — for charts targeting a relationship in giant-query templates (>2000 rows under the "giant" child). Same modifiers, same shape, server-side aggregation.
+
+**The author's rule of thumb — applies to the chart's _target_ relationship specifically:**
+
+> ✅ **DON'T pre-load the relationship the chart aggregates.** Leave it out of `Query_Config__c` (or omit it from any nested subquery). The chart aggregates it server-side at constant cost.
+>
+> ✅ **DO pre-load the relationship the chart's parent loop iterates.** If the chart sits inside `{#Survey_Questions__r}`, the **Questions** subquery is still required — but it must NOT include a nested `(SELECT … FROM Survey_Responses__r)` underneath it.
+>
+> ❌ **DON'T pre-load a relationship AND also use `{#ChartBucket}` against it** — at >2000 rows this triggers the giant-query path looking for a traditional loop body that isn't there.
+
+If you misconfigure this, DocGen throws an actionable error pointing you to the fix:
+
+> _Template uses `{#ChartBucket:Survey_Responses__r:...}` but `Query_Config__c` also lists `Survey_Responses__r` as an eager-loaded child (currently 30000 rows, above the 2000-row giant-query threshold). Charts aggregate via their own SOQL, so remove `Survey_Responses__r` from `Query_Config__c` to let the chart handle this relationship server-side._
+
+**Worked example — Survey at 30K responses, per-question chart inside a Question loop:**
+
+```
+Name, (SELECT Id, Question_Text__c, Display_Order__c FROM Survey_Questions__r ORDER BY Display_Order__c ASC)
+```
+
+What's happening:
+
+- `Name` loads onto the Survey for the title bar.
+- The `Survey_Questions__r` subquery loads each Question's `Id`, prompt, and order — needed because the template iterates `{#Survey_Questions__r}` to render one chart block per question.
+- **`Id` in the question subquery is required** — the chart's SOQL fallback uses each question's Id as the parent record to scope its `GROUP BY` aggregate.
+- **No nested `(SELECT … FROM Survey_Responses__r)`** under the Questions subquery — that's what makes responses load via the chart's own server-side aggregate instead of pre-loading 30K rows into Apex heap.
+
+The per-question `{#ChartBucket:Survey_Responses__r:Selected_Answer__c}` runs against each question's Id automatically. CPU stays under 500ms and SOQL queries stay under 10 regardless of whether the survey has 425 or 30,000 responses.
+
+**Subquery syntax note (V1 Query Config):** the Query Config flat-string format uses standard SOQL-style subqueries — `(SELECT field1, field2 FROM RelationshipName)`. Bare `RelationshipName(field1,field2)` syntax does NOT parse and the relationship silently won't load, which makes outer loops render nothing and charts inside those loops look broken. Always wrap child relationships in `(SELECT … FROM Rel)`.
+
+#### Security — field-level security and sharing
+
+Charts run with the same **`AccessLevel.USER_MODE`** as every other DocGen SOQL — Salesforce enforces object permissions, field-level security, sharing rules, and record-level access at the database layer. A user without read access to `Survey_Response__c` or to the grouped field will see empty buckets (catch with `{:else}`), never a leaked aggregate. The chart resolver also validates every dynamic identifier (relationship, child object, group field, lookup field, `groupBy` column) against `Schema.SObjectType.fields.getMap()` and `Schema.SObjectType.fields.ChildRelationship` before interpolation, and sanitizes `where=` fragments through the same keyword blocklist that protects the rest of the giant-query pipeline.
+
+#### Governor budget
+
+DocGen caps chart aggregates at **50 SOQL queries per transaction** (a static budget inside `DocGenChartBucketResolver`). This guards against a misconfigured template stacking pathologically many charts in one render. When the budget is exhausted, remaining charts render a single sentinel bucket labeled `"Chart limit reached"` — they never silently render as empty. Re-author the template to consolidate charts (or use a pivot instead of N single-dimension charts) if you hit this ceiling.
+
+#### Reference templates
+
+- `docs/SurveyChartExample.html` — per-question single-dimension chart, ideal starting point.
+- `docs/CommuteSurveyExample.html` — full composition of all five modifiers (pivot + filter + multi-select + colSort + palette override) using the div-based table-row layout pattern.
+
+#### CSS 2.1 reminders (PDF output)
+
+Because Flying Saucer renders PDFs as CSS 2.1:
+
+- ✅ `<table>` + `<tr>` + `<td>` for non-pivot charts
+- ✅ `<div>` with `display: table` / `table-row` / `table-cell` for pivot charts
+- ✅ Solid `background:#hex;` for bar fills (`{color}` returns `#hex` strings)
+- ❌ `flex`, `grid`, `gap`, `linear-gradient(...)`, `calc(...)` — silently ignored, layout collapses
+- ❌ CSS variables — `var(--brand)` is dropped
+
+For DOCX output, an HTML-authored chart template still renders the same way; Word treats the chart `<div>` blocks as styled boxes.
+
+#### 7.6.1 Authoring charts in Word — caveats
+
+You can put `{#ChartBucket:...}` tags in a Word `.docx` template. The aggregation logic is identical to the HTML path — same modifiers, same body fields, same SOQL fallback at scale. What's different is **layout**, because Word's only side-by-side primitive is `<w:tbl>` with `<w:tc>` cells and DocGen's per-row auto-expansion (which makes `{#Lines}` produce one Word row per line item) conflicts with `{#cols}` when both want to drive cell placement inside the same row.
+
+**Supported in Word today:**
+
+- ✅ Simple horizontal bars: one row per answer with `w:tcW w:type="pct" w:w="{percent_int}00"` to size the bar cell and `w:shd w:fill="{color_hex}"` to color it
+- ✅ Single-dimension chart driving rows-per-answer with text fields (`{key_label}: {count} ({percent}%)`)
+- ✅ All five modifiers (`colors=`, `where=`, `split=`, `groupBy=`, `colSort=`) — data resolves correctly
+- ✅ Outer record loops driving page-per-iteration layout (page-breaks via `<w:pageBreakBefore/>`)
+
+**Not supported in Word today (engine limitation):**
+
+- ❌ Pivot `{#cols}` rendering cells side-by-side inside a `<w:tr>` — the row auto-expansion replicates the whole row per col instead of producing cells
+- ❌ Stacked-segment horizontal bars (same root cause)
+- ❌ Vertical clustered bar charts (same)
+
+The HTML path dodges this entirely because `<div>` with `display:table-cell` is never recognized by row auto-expansion. Customers needing cross-tab / pivot / stacked visualizations should author in HTML.
+
+Reference Word template: `docs/SurveyChartExample.docx` (one chart per page; uses the supported simple-bar pattern). Open in Word to inspect how merge tags drop into normal table-cell properties.
+
+### 7.7 Images
 
 **Option 1 — record-attached (easiest).** `{%Image:N}` renders the Nth oldest image attached to the current record. No ContentVersion ID field, no query-builder setup — drag a photo onto the record in Files and the tag picks it up. Filters to PNG/JPG/GIF/BMP/TIFF/SVG automatically (non-image attachments are skipped).
 
@@ -1276,7 +1442,7 @@ Handles multiple sources automatically:
 
 **Image size limits.** PDFs with attached images are limited to roughly **30MB of total image content** for reliable Save-to-Record. Above that threshold, the save operation will error out (Salesforce platform limits on the ContentVersion insert path). If you need to include more images than this threshold allows, use **Download** instead of Save-to-Record — downloads work at a higher ceiling because they don't go through the same save pipeline. A typical inspection report with 20–30 phone photos fits within the 30MB ceiling; 50+ high-resolution photos may need to be downloaded and attached manually.
 
-### 7.7 Barcodes & QR codes
+### 7.8 Barcodes & QR codes
 
 ```
 {*OrderNumber}                  Code 128 barcode (default)
@@ -1288,7 +1454,7 @@ Handles multiple sources automatically:
 
 Barcodes are rendered as images in PDF and DOCX output. Types supported: `code128`, `qr`.
 
-### 7.8 Signatures
+### 7.9 Signatures
 
 See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:
 
@@ -1307,7 +1473,7 @@ See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:
 
 Pre-signing, tags are preserved in the output (not replaced). Post-signing, they're stamped with the signer's typed name or signed date + a subtle "Electronically signed by X on DATE" verification line.
 
-### 7.9 Rich text fields
+### 7.10 Rich text fields
 
 When a field value contains HTML (`<p>`, `<div>`, `<br>`, `<b>`, `<i>`, `<u>`, `<strong>`, `<em>`, `<span>`, `<img>`, `<a>`), DocGen converts it to proper OOXML formatting preserving paragraphs, line breaks, bold/italic/underline, hyperlinks, and embedded images. Works in PDF and DOCX. PowerPoint strips HTML to plain text.
 
@@ -1318,11 +1484,11 @@ A few caveats:
 - The **Generate Sample** button in the template builder doesn't render inline rich-text images — they show as broken placeholders. Test the real output via the runner instead.
 - For pixel-perfect images, use the `{%Image:N}` tag with an attached File rather than inline rich text — DOCX image quality is slightly lossy when sourced from rich-text inline images.
 - Inline-image rotation isn't preserved. Rotate the source before pasting.
-- **Pre-size images before pasting.** Lightning's rich text editor doesn't write `width=`/`height=`/`style=` to the HTML it stores — even when you drag-resize the image in the editor, the displayed size never makes it into the saved markup. (In Chrome, drag-resize is disabled outright; Firefox lets you drag but the resize still doesn't persist.) DocGen falls back to a 4-inch default for DOCX output and to natural pixel dimensions for PDF output, so a phone photo pasted at 4000×3000 will render correctly in DOCX but bleed off the page in PDF. The reliable fix is to **resize the image to your intended dimensions in an editor BEFORE pasting** — once it's in the rich text field, the size is locked to whatever the source pixels were. For pixel-precise sizing across both formats, prefer `{%Image:N}` with `:WxH` (§7.6).
+- **Pre-size images before pasting.** Lightning's rich text editor doesn't write `width=`/`height=`/`style=` to the HTML it stores — even when you drag-resize the image in the editor, the displayed size never makes it into the saved markup. (In Chrome, drag-resize is disabled outright; Firefox lets you drag but the resize still doesn't persist.) DocGen falls back to a 4-inch default for DOCX output and to natural pixel dimensions for PDF output, so a phone photo pasted at 4000×3000 will render correctly in DOCX but bleed off the page in PDF. The reliable fix is to **resize the image to your intended dimensions in an editor BEFORE pasting** — once it's in the rich text field, the size is locked to whatever the source pixels were. For pixel-precise sizing across both formats, prefer `{%Image:N}` with `:WxH` (§7.7).
 
 Plain multiline (long text, textarea) fields work too — newlines in the field value render as proper line breaks in the output. No manual `<br>` needed.
 
-### 7.10 Watermarks / page backgrounds (PDF output)
+### 7.11 Watermarks / page backgrounds (PDF output)
 
 Two ways to add a full-page watermark or background image to your PDF output:
 
@@ -1349,7 +1515,7 @@ Other limitations (apply to both options):
 - **Text watermarks** ("DRAFT", "CONFIDENTIAL" via Word's text watermark option) are not supported. Use a picture watermark with the text rendered into a PNG.
 - **DOCX output preserves whatever Word would render natively** — these constraints only apply to PDF output.
 
-### 7.11 Built-in date/time tags
+### 7.12 Built-in date/time tags
 
 Two special merge tags resolve to the current date/time without needing a formula field. They accept the same format suffixes as any date field:
 
@@ -1366,7 +1532,7 @@ Two special merge tags resolve to the current date/time without needing a formul
 
 Case-insensitive for the keyword itself (`{today}` works). Works in sync, giant-query, bulk, and signature-stamped documents. All format suffixes from §7.2 apply.
 
-### 7.12 Running user tags (Prepared by:)
+### 7.13 Running user tags (Prepared by:)
 
 `{RunningUser.X}` resolves against the **executing user's** record (whoever clicks Generate, runs the Flow, or owns the bulk job). No configuration — works on every template, every record, every output format.
 
@@ -1391,7 +1557,7 @@ Case-insensitive for the namespace (`{runninguser.name}` works). Format suffixes
 
 Works in sync generation, bulk runs, giant-query PDFs (headers/footers/title blocks), Flow-triggered docs, and HTML templates. The User row is queried **once per transaction** and cached, so a 60K-row PDF with `{RunningUser.Name}` in the header costs one extra SOQL total.
 
-### 7.13 Checkmarks & symbols (PDF-safe)
+### 7.14 Checkmarks & symbols (PDF-safe)
 
 Salesforce's PDF engine (Flying Saucer) only ships with four fonts (Helvetica, Times, Courier, Arial Unicode MS) and **cannot load Wingdings, Symbol, or any custom font**. Most "decorative" Word symbols (Wingdings checkboxes, custom dingbats) silently render as a blank box.
 
@@ -1479,7 +1645,7 @@ Or in tabular form for surveys / inspection forms:
 - **Emoji** (😀 🎉 etc.) — out of Arial Unicode MS coverage, render as tofu in PDF. Use the Unicode symbols above instead.
 - **Custom decorative fonts** (script, brand, etc.) — generate as DOCX and open in Word. See [§14.2](#142-pdf-font-limitations).
 
-### 7.14 Not implemented
+### 7.15 Not implemented
 
 - **Custom fonts in PDF** — the Salesforce PDF engine only supports Helvetica, Times, Courier, and Arial Unicode MS. `@font-face` is not supported. See [§14.2](#142-pdf-font-limitations). For custom fonts, generate as DOCX and open in Word — DOCX preserves template fonts.
 
@@ -1679,7 +1845,7 @@ Typed-name electronic signatures with PIN verification, audit trail, packets, an
 
 ### 10.2 Signature tag syntax
 
-See [§7.8](#78-signatures).
+See [§7.9](#79-signatures).
 
 ### 10.3 Packets (multi-template signing)
 
@@ -2167,7 +2333,7 @@ Salesforce's PDF engine can't render PPTX. PowerPoint templates can only output 
 
 ### 14.4 `{Today}` / `{Now}`
 
-Built-in tags for the current date and datetime. See [§7.11](#711-built-in-datetime-tags). Works with all the usual format suffixes (`:MM/dd/yyyy`, `:date`, `:date:de_DE`, etc.).
+Built-in tags for the current date and datetime. See [§7.12](#712-built-in-datetime-tags). Works with all the usual format suffixes (`:MM/dd/yyyy`, `:date`, `:date:de_DE`, etc.).
 
 ### 14.5 Browser payload limit
 

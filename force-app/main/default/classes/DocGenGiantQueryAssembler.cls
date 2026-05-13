@@ -265,6 +265,11 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             // via a single SOQL aggregate query — works for datasets of any size.
             html = resolveGiantAggregateTags(html);
 
+            // Resolve chart-bucket section tags against the giant relationship via a
+            // single SOQL GROUP BY aggregate. Each tag's body is repeated once per
+            // bucket with {key}/{count}/{percent}/{max_percent}/{color}/{index}.
+            html = resolveGiantChartBuckets(html);
+
             // Replace the loop row with a placeholder
             String openTag = '{#' + giantRelationshipName + '}';
             if (html.contains(openTag)) {
@@ -347,6 +352,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         // same implementation works for HTML-type templates.
         bodyContent = resolveParentMergeTags(bodyContent);
         bodyContent = resolveGiantAggregateTags(bodyContent);
+        bodyContent = resolveGiantChartBuckets(bodyContent);
 
         // Replace the giant-loop <tr>…</tr> (or <li>…</li>) section with a
         // {ROWS} placeholder. Same boundary logic the DOCX path uses — find
@@ -949,6 +955,241 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 replacement = String.valueOf(raw);
             }
             html = html.replace(fullMatches[i], replacement);
+        }
+        return html;
+    }
+
+    /**
+     * Resolves `{#ChartBucket:rel:field}body{/ChartBucket}` tags whose `rel`
+     * matches `giantRelationshipName`, using a single SOQL GROUP BY aggregate
+     * so it works for arbitrarily large datasets. Each chart tag is replaced
+     * in-place with the per-bucket-expanded body.
+     *
+     * Charts targeting non-giant relationships in a giant-query template are
+     * left untouched (documented v1 limitation): use the inline render path
+     * for those, or pre-aggregate via a formula/rollup field.
+     *
+     * Container caveat: unlike the inline path's auto-expansion at
+     * DocGenService.processXml line 2708, the giant-query path does NOT pick
+     * up a wrapping `<tr>` around the chart tag. Authors must wrap each
+     * bucket's row inside the chart body (e.g., `{#ChartBucket:...}<tr>...
+     * </tr>{/ChartBucket}`).
+     */
+    @TestVisible
+    private String resolveGiantChartBuckets(String html) {
+        if (String.isBlank(html) || String.isBlank(giantRelationshipName)) {
+            return html;
+        }
+        if (!html.contains('{#ChartBucket:')) {
+            return html;
+        }
+
+        // Locate every chart tag opener. Field/rel patterns mirror the strict
+        // identifier shape used by resolveGiantAggregateTags so SOQL injection
+        // can't get a foothold via the tag itself. Group 3 (optional) captures
+        // the modifier string after the 3rd colon — `colors=#aaa,#bbb` etc.
+        Pattern openerP = Pattern.compile(
+            '\\{#ChartBucket:([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)(?::([^}]+))?\\}'
+        );
+        Matcher openerM = openerP.matcher(html);
+
+        List<Integer> openerStarts = new List<Integer>();
+        List<Integer> openerEnds = new List<Integer>();
+        List<String> relNames = new List<String>();
+        List<String> groupFields = new List<String>();
+        List<String> tagModifiers = new List<String>();
+        while (openerM.find()) {
+            openerStarts.add(openerM.start());
+            openerEnds.add(openerM.end());
+            relNames.add(openerM.group(1));
+            groupFields.add(openerM.group(2));
+            tagModifiers.add(openerM.group(3)); // null when no 3rd segment
+        }
+        if (openerStarts.isEmpty()) {
+            return html;
+        }
+
+        // Resolve child/lookup/where — prefer constructor values, fall back to
+        // V3 JSON Query_Config__c parse. Mirrors resolveGiantAggregateTags.
+        String childObj = this.childObjectName;
+        String lookupFld = this.lookupFieldName;
+        String whereCls = this.whereClauseOverride;
+
+        if (String.isBlank(childObj) || String.isBlank(lookupFld)) {
+            try {
+                List<DocGen_Template__c> tpls = [
+                    SELECT Query_Config__c
+                    FROM DocGen_Template__c
+                    WHERE Id = :templateId
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (tpls.isEmpty() || String.isBlank(tpls[0].Query_Config__c)) {
+                    return html;
+                }
+                String cfgStr = tpls[0].Query_Config__c.trim();
+                if (!cfgStr.startsWith('{')) {
+                    return html;
+                }
+                Map<String, Object> cfg = (Map<String, Object>) JSON.deserializeUntyped(cfgStr);
+                List<Object> nodes = (List<Object>) cfg.get('nodes');
+                if (nodes == null) {
+                    return html;
+                }
+                for (Object nodeObj : nodes) {
+                    Map<String, Object> node = (Map<String, Object>) nodeObj;
+                    String nodeAlias = (String) node.get('alias');
+                    String effectiveKey = String.isNotBlank(nodeAlias)
+                        ? nodeAlias
+                        : (String) node.get('relationshipName');
+                    if (giantRelationshipName.equalsIgnoreCase(effectiveKey)) {
+                        childObj = (String) node.get('object');
+                        lookupFld = (String) node.get('lookupField');
+                        whereCls = (String) node.get('where');
+                        if (whereCls == null) {
+                            whereCls = (String) node.get('whereClause');
+                        }
+                        if (String.isNotBlank(whereCls)) {
+                            whereCls = DocGenDataRetriever.sanitizeWhereClause(whereCls);
+                        }
+                        break;
+                    }
+                }
+            } catch (DocGenException dge) {
+                return html;
+            } catch (Exception e) {
+                String noop = e.getMessage(); // NOPMD — non-fatal; leave tags unresolved
+                return html;
+            }
+        }
+
+        if (String.isBlank(childObj) || String.isBlank(lookupFld)) {
+            return html;
+        }
+        Schema.SObjectType childType = Schema.getGlobalDescribe().get(childObj);
+        if (childType == null) {
+            return html;
+        }
+        Map<String, Schema.SObjectField> childFieldMap = childType.getDescribe().fields.getMap();
+        if (!childFieldMap.containsKey(lookupFld.toLowerCase())) {
+            return html;
+        }
+
+        // Process matches in REVERSE so splicing doesn't shift later offsets.
+        for (Integer i = openerStarts.size() - 1; i >= 0; i--) {
+            String rel = relNames[i];
+            if (!giantRelationshipName.equalsIgnoreCase(rel)) {
+                continue; // Charts for non-giant rels: documented v1 limitation
+            }
+            String groupField = groupFields[i];
+            if (!childFieldMap.containsKey(groupField.toLowerCase())) {
+                continue; // Field doesn't exist on child — leave tag, render as-is
+            }
+
+            // Parse modifiers — same shape as the inline path. Recognized keys:
+            //   colors=#aaa,#bbb   palette override
+            //   where=Field='Val'  additional filter (appended to whereCls)
+            //   split=;            multi-select delimiter
+            //   groupBy=Field__c   pivot dimension (adds cols sub-list)
+            Map<String, String> chartMods = DocGenChartBucketResolver.parseTagModifiers(tagModifiers[i]);
+            String pivotField = chartMods.get('groupby');
+            String chartWhere = chartMods.get('where');
+            String splitDelim = chartMods.get('split');
+
+            // Validate pivot field exists on the child schema (when set).
+            if (String.isNotBlank(pivotField) && !childFieldMap.containsKey(pivotField.toLowerCase())) {
+                continue;
+            }
+
+            // Sanitize the optional chart-level where via the same sanitizer
+            // the V3 config uses. Any failure → skip this chart (safer than
+            // running an unsafe clause).
+            String safeChartWhere = null;
+            if (String.isNotBlank(chartWhere)) {
+                try {
+                    safeChartWhere = DocGenDataRetriever.sanitizeWhereClause(chartWhere);
+                } catch (Exception sanitizeErr) {
+                    continue;
+                }
+            }
+
+            Integer openerStart = openerStarts[i];
+            Integer openerEnd = openerEnds[i];
+            Integer closerStart = html.indexOf('{/ChartBucket}', openerEnd);
+            if (closerStart == -1) {
+                continue; // Unmatched closer — leave as-is
+            }
+            Integer closerEnd = closerStart + '{/ChartBucket}'.length();
+            String body = html.substring(openerEnd, closerStart);
+
+            // Build aggregate SOQL. groupField + childObj + lookupFld are
+            // identifier-only (regex enforced + schema validated). whereCls
+            // arrives pre-sanitized via the constructor or V3 fallback path.
+            String soql = 'SELECT ' + groupField;
+            if (String.isNotBlank(pivotField)) {
+                soql += ', ' + pivotField;
+            }
+            soql +=
+                ', COUNT(Id) cnt FROM ' +
+                String.escapeSingleQuotes(childObj) +
+                ' WHERE ' +
+                String.escapeSingleQuotes(lookupFld) +
+                ' = :recordId';
+            if (String.isNotBlank(whereCls)) {
+                soql += ' AND (' + whereCls + ')';
+            }
+            if (safeChartWhere != null) {
+                soql += ' AND (' + safeChartWhere + ')';
+            }
+            soql += ' GROUP BY ' + groupField;
+            if (String.isNotBlank(pivotField)) {
+                soql += ', ' + pivotField;
+            } else {
+                soql += ' ORDER BY COUNT(Id) DESC';
+            }
+
+            List<AggregateResult> rows;
+            try {
+                rows = Database.query(soql, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — identifier-only interpolation; child/field/lookup/pivot validated against Schema; whereCls + chartWhere pre-sanitized
+            } catch (Exception qErr) {
+                String noop = qErr.getMessage(); // NOPMD — non-fatal
+                continue;
+            }
+
+            // Dispatch to the right bucket-builder shape based on modifiers
+            List<String> chartColOrder = DocGenChartBucketResolver.parseColSortModifier(chartMods.get('colsort'));
+            List<Map<String, Object>> buckets = DocGenChartBucketResolver.buildBucketsFromAggregateRows(
+                rows,
+                groupField,
+                pivotField,
+                childType,
+                splitDelim,
+                chartColOrder
+            );
+
+            // Apply optional palette override from the `colors=` modifier on
+            // this chart's tag. Mirrors the inline path so behavior is
+            // consistent between in-memory and giant-query rendering.
+            List<String> customPalette = DocGenChartBucketResolver.parsePaletteModifier(tagModifiers[i]);
+            if (customPalette != null && !customPalette.isEmpty()) {
+                for (Integer bi = 0; bi < buckets.size(); bi++) {
+                    buckets[bi].put('color', customPalette[Math.mod(bi, customPalette.size())]);
+                }
+            }
+
+            // Expand body per bucket via processXmlForTest so all the standard
+            // merge-tag plumbing (escapeXml, format suffixes, conditionals)
+            // applies inside the chart body just like anywhere else.
+            String expansion = '';
+            for (Map<String, Object> bucket : buckets) {
+                try {
+                    expansion += DocGenService.processXmlForTest(body, bucket);
+                } catch (Exception expandErr) {
+                    String noop = expandErr.getMessage(); // NOPMD
+                }
+            }
+
+            html = html.substring(0, openerStart) + expansion + html.substring(closerEnd);
         }
         return html;
     }
