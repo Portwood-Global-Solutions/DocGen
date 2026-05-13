@@ -1312,6 +1312,13 @@ A pivot chart turns the body into a row that contains another loop, `{#cols}`. E
 </div>
 ```
 
+Inside `{#cols}` you get `{key}` / `{key_label}` / `{count}` / `{percent}` / `{percent_int}` / `{color}` / `{color_hex}` / `{index}` for the column, plus two pivot-only fields useful for stacked-segment bars:
+
+- `{percent_of_row}` — Decimal — this cell's count as a percent of its row's total (1 decimal).
+- `{percent_of_row_int}` — Integer — same, rounded.
+
+Use these when you want each row's segments to sum to 100% (stacked-bar composition) rather than each cell's value as a percent of the overall total.
+
 **Layout gotcha for pivot charts:** DocGen's HTML container auto-expansion (the same logic that turns one `<tr>` into one row per loop iteration) reacts to nested loops by duplicating the nearest open `<tr>`. If you put `{#cols}` directly inside `<tr>`, every column gets a whole row of its own. **Use `<div>` + `display: table-row` + `display: table-cell` for pivot bodies, not `<tr>`/`<td>`.** See `docs/CommuteSurveyExample.html` for the canonical pattern.
 
 #### Where to use what — author's quick rules
@@ -1475,9 +1482,13 @@ Pre-signing, tags are preserved in the output (not replaced). Post-signing, they
 
 ### 7.10 Rich text fields
 
-When a field value contains HTML (`<p>`, `<div>`, `<br>`, `<b>`, `<i>`, `<u>`, `<strong>`, `<em>`, `<span>`, `<img>`, `<a>`), DocGen converts it to proper OOXML formatting preserving paragraphs, line breaks, bold/italic/underline, hyperlinks, and embedded images. Works in PDF and DOCX. PowerPoint strips HTML to plain text.
+When a field value contains HTML (`<p>`, `<div>`, `<br>`, `<b>`, `<i>`, `<u>`, `<strong>`, `<em>`, `<span>`, `<img>`, `<a>`), DocGen preserves the formatting in the output — paragraphs, line breaks, bold/italic/underline, hyperlinks, and embedded images all carry through. Works in **Word templates** (DOCX or PDF output) and **HTML templates** (PDF output). PowerPoint strips HTML to plain text.
 
-**Inline images in rich text** (the kind you paste directly into a Rich Text Area field) render in both PDF and DOCX output when you generate from the runner on a record page.
+**Inline images in rich text** (the kind you paste directly into a Rich Text Area field) render across all three target formats — Word→PDF, Word→DOCX, and HTML→PDF — when you generate from the runner on a record page. Behind the scenes DocGen handles three flavors of image source automatically:
+
+- **Lightning inline images** (`/servlet/rtaImage?...&refid=…`) — refids that resolve to a `ContentVersion` (068/069 prefix) are rewritten to relative `/sfc/servlet.shepherd/…` URLs. `0EM` Lightning ContentReference refids aren't queryable, so they keep their absolute `*.file.force.com` URL — works in authenticated server-side rendering and in the guest-render queueable (which runs as Automated Process), but not in environments that lack reach to the file subdomain.
+- **Inline data URIs** (`<img src="data:image/...">`) — DOCX and Word→PDF embed them; HTML→PDF drops them (Flying Saucer's `Blob.toPdf` can't decode data URIs).
+- **Hosted Salesforce file URLs** (`/sfc/servlet.shepherd/...`) — pass through to all targets.
 
 A few caveats:
 
@@ -1486,7 +1497,7 @@ A few caveats:
 - Inline-image rotation isn't preserved. Rotate the source before pasting.
 - **Pre-size images before pasting.** Lightning's rich text editor doesn't write `width=`/`height=`/`style=` to the HTML it stores — even when you drag-resize the image in the editor, the displayed size never makes it into the saved markup. (In Chrome, drag-resize is disabled outright; Firefox lets you drag but the resize still doesn't persist.) DocGen falls back to a 4-inch default for DOCX output and to natural pixel dimensions for PDF output, so a phone photo pasted at 4000×3000 will render correctly in DOCX but bleed off the page in PDF. The reliable fix is to **resize the image to your intended dimensions in an editor BEFORE pasting** — once it's in the rich text field, the size is locked to whatever the source pixels were. For pixel-precise sizing across both formats, prefer `{%Image:N}` with `:WxH` (§7.7).
 
-Plain multiline (long text, textarea) fields work too — newlines in the field value render as proper line breaks in the output. No manual `<br>` needed.
+Plain multiline (long text, textarea) fields work too — newlines in the field value render as proper line breaks in the output across all three targets. No manual `<br>` needed.
 
 ### 7.11 Watermarks / page backgrounds (PDF output)
 

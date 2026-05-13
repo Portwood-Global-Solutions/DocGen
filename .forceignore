@@ -15,3 +15,7 @@ package.xml
 .vscode/
 .idea/
 scripts/
+
+# Public-API reference example — ships in docs, not in the package
+force-app/main/default/classes/DocGenDataProviderExample.cls
+force-app/main/default/classes/DocGenDataProviderExample.cls-meta.xml
