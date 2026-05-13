@@ -64,7 +64,7 @@ For LWR guest downloads, `/sfc/servlet.shepherd/...` URLs MUST be prefixed with 
 ## Package info
 
 - Package: Portwood DocGen, Unlocked 2GP, namespace `portwoodglobal`
-- Current shipped version: **v1.90.0** (`04tVx000000R8cbIAC`)
+- Current shipped version: **v1.91.0** (`04tVx000000RsAnIAK`)
 - DevHub: `Portwood Global - Production` (dave@portwoodglobalsolutions.com)
 - Staging org for release validation: `portwood-staging` — must be created with `--no-namespace` so source-deploy lands in the default namespace and the e2e scripts' bare class/field references compile. Assign `DocGen_Admin` permset to the running user immediately after deploy or field-level security blocks the e2e scripts.
 - Dev scratch: `docgen-designer`

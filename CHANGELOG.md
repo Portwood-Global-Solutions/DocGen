@@ -2,7 +2,7 @@
 
 ## v1.91.0 — {#ChartBucket} chart aggregation tag + rich-text images in HTML templates
 
-Promoted package: _pending build_
+Promoted package: `04tVx000000RsAnIAK` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RsAnIAK)
 
 Two independent additions in one release. The headline is `{#ChartBucket}` — a new section tag that renders bar charts, pivot tables, and survey-style cross-tabs inline in your generated documents, with server-side aggregation that scales to 30K+ child rows at constant SOQL cost. Plus a fix that makes rich-text fields with inline images actually render in HTML templates (they previously emitted DOCX XML inline into the HTML body, breaking the PDF).
 
