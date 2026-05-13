@@ -4,7 +4,7 @@ Build polished Word and PDF documents from any Salesforce record. Author your te
 
 PowerPoint and Excel templates are also supported as **alpha-stage** formats — see [§2](#2-what-docgen-does) for what to expect.
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RsAnIAK) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RsAnIAK) · [Support](https://portwood.dev/support)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RvbhIAC) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RvbhIAC) · [Support](https://portwood.dev/support)
 
 ---
 
@@ -140,7 +140,7 @@ A native Salesforce document generation engine that turns merge-tag templates in
 ### Install the package
 
 ```bash
-sf package install --package 04tVx000000RsAnIAK --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000RvbhIAC --wait 10 --target-org <your-org>
 ```
 
 Or use the install links at the top of this guide. The install bundles the merge engine, all Lightning components, custom objects, permission sets, and the e-signature Visualforce pages.
