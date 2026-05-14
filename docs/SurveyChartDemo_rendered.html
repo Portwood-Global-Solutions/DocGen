@@ -1,0 +1,632 @@
+<html><head><meta charset="utf-8"/><style> body { font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; } img { max-width: 100%; } table { border-collapse: collapse; }</style><style>
+            @page {
+                size: Letter;
+                margin: 18mm;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                color: #1f2937;
+                margin: 0;
+                padding: 0;
+                font-size: 11pt;
+                line-height: 1.5;
+            }
+            table.header-bar {
+                width: 100%;
+                background-color: #1e3a8a;
+                border-collapse: collapse;
+                margin-bottom: 18px;
+            }
+            td.header-title {
+                padding: 18px 24px;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 18pt;
+                letter-spacing: 0.5px;
+            }
+            td.header-meta {
+                padding: 18px 24px;
+                color: #fbbf24;
+                font-size: 10pt;
+                text-align: right;
+                vertical-align: middle;
+            }
+            td.accent-stripe {
+                background-color: #fbbf24;
+                height: 4px;
+                font-size: 1px;
+                line-height: 1px;
+            }
+            div.summary-block {
+                margin: 0 0 22px 0;
+                padding: 14px 18px;
+                background-color: #f3f4f6;
+                border-left: 4px solid #1e3a8a;
+            }
+            div.summary-block strong {
+                color: #1e3a8a;
+            }
+            div.question-block {
+                margin: 0 0 26px 0;
+                page-break-inside: avoid;
+            }
+            div.question-prompt {
+                font-size: 12pt;
+                font-weight: bold;
+                color: #1e3a8a;
+                margin: 0 0 10px 0;
+                padding: 0 0 6px 0;
+                border-bottom: 1px solid #e5e7eb;
+            }
+            table.chart-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            table.chart-table td {
+                padding: 5px 8px;
+                border: 0;
+                vertical-align: middle;
+            }
+            td.bucket-label {
+                width: 28%;
+                font-weight: 500;
+                color: #374151;
+            }
+            td.bucket-bar {
+                width: 52%;
+            }
+            td.bucket-bar div.bar-track {
+                background-color: #f3f4f6;
+                height: 16px;
+                position: relative;
+            }
+            td.bucket-bar div.bar-fill {
+                height: 16px;
+            }
+            td.bucket-figures {
+                width: 20%;
+                text-align: right;
+                color: #4b5563;
+                font-variant-numeric: tabular-nums;
+            }
+            div.empty-state {
+                padding: 12px 16px;
+                color: #6b7280;
+                font-style: italic;
+                background-color: #f9fafb;
+            }
+            h2.section-heading {
+                font-size: 13pt;
+                color: #1e3a8a;
+                margin: 28px 0 12px 0;
+                padding: 0 0 6px 0;
+                border-bottom: 2px solid #fbbf24;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            table.reference-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 0 0 18px 0;
+            }
+            table.reference-table th,
+            table.reference-table td {
+                padding: 6px 10px;
+                border: 1px solid #d1d5db;
+                text-align: left;
+            }
+            table.reference-table th {
+                background-color: #1e3a8a;
+                color: #ffffff;
+                font-weight: bold;
+            }
+            table.reference-table td.num {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+            div.footer-meta {
+                margin-top: 32px;
+                padding-top: 10px;
+                border-top: 1px solid #e5e7eb;
+                font-size: 9pt;
+                color: #6b7280;
+                text-align: center;
+            }
+        
+</style></head><body>
+        <table class="header-bar">
+            <tr>
+                <td class="header-title">DocGen Chart Demo</td>
+                <td class="header-meta">
+                    Generated 2026-05-12<br />
+                    Total responses: 0
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" class="accent-stripe">&nbsp;</td>
+            </tr>
+        </table>
+
+        <div class="summary-block">
+            This report aggregates responses across <strong>5</strong> question(s) and
+            <strong>0</strong> total response(s). Each question's chart below shows the
+            distribution of answers as a percentage of that question's responses.
+        </div>
+
+        <!-- ============================================================
+             PER-QUESTION CHARTS (PATTERN 1: proportional bar width = %)
+             ============================================================ -->
+        
+        <div class="question-block">
+            <div class="question-prompt">1. How satisfied are you overall?</div>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Good</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 50.0%; background-color: #3b82f6;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">25 (50.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Excellent</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 28.0%; background-color: #10b981;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">14 (28.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Fair</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 16.0%; background-color: #f59e0b;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">8 (16.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Poor</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 6.0%; background-color: #ef4444;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">3 (6.0%)</td>
+                </tr>
+            </table>
+            
+        </div>
+        
+        <div class="question-block">
+            <div class="question-prompt">2. Would you recommend us to a colleague?</div>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Yes</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 70.0%; background-color: #3b82f6;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">35 (70.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Maybe</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 20.0%; background-color: #10b981;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">10 (20.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">No</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 10.0%; background-color: #f59e0b;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">5 (10.0%)</td>
+                </tr>
+            </table>
+            
+        </div>
+        
+        <div class="question-block">
+            <div class="question-prompt">3. How often do you use our product?</div>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Daily</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 44.0%; background-color: #3b82f6;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">22 (44.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Rarely</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 28.0%; background-color: #10b981;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">14 (28.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Weekly</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 16.0%; background-color: #f59e0b;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">8 (16.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Monthly</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 12.0%; background-color: #ef4444;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">6 (12.0%)</td>
+                </tr>
+            </table>
+            
+        </div>
+        
+        <div class="question-block">
+            <div class="question-prompt">4. Which factor matters most to you?</div>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Quality</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 36.0%; background-color: #3b82f6;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">18 (36.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Price</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 24.0%; background-color: #10b981;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">12 (24.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Service</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 22.0%; background-color: #f59e0b;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">11 (22.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Speed</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 18.0%; background-color: #ef4444;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">9 (18.0%)</td>
+                </tr>
+            </table>
+            
+        </div>
+        
+        <div class="question-block">
+            <div class="question-prompt">5. Any concerns? (free text — many leave blank)</div>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Not Specified</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 70.0%; background-color: #3b82f6;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">35 (70.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Pricing tier confusion</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 10.0%; background-color: #10b981;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">5 (10.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Mobile app slow</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 8.0%; background-color: #f59e0b;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">4 (8.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">Documentation gaps</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 6.0%; background-color: #ef4444;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">3 (6.0%)</td>
+                </tr>
+            </table>
+            
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">No concerns</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: 6.0%; background-color: #8b5cf6;">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">3 (6.0%)</td>
+                </tr>
+            </table>
+            
+        </div>
+        
+
+        <!-- ============================================================
+             CHART STYLE REFERENCE — same data, three rendering options.
+             Authors: copy whichever pattern fits, paste into the per-question
+             block above, then delete this reference section.
+             ============================================================ -->
+        <h2 class="section-heading">Chart Style Reference</h2>
+
+        <div class="summary-block">
+            <strong>Pattern 2</strong> — normalized: the largest bucket fills the row, smaller bars scale relative to
+            it. Use when relative magnitude matters more than share of total. Replace <code></code> with
+            <code></code> in Pattern 1.
+        </div>
+
+        <div class="summary-block">
+            <strong>Pattern 3</strong> — plain count table, no bars. Use when the document is meant to be read aloud,
+            archived as printer-friendly black-and-white, or scanned for exact values rather than visual share.
+        </div>
+
+        <!-- Pattern 3 inline demo, against the first question's responses.
+             In production, copy this <table> into the per-question loop above
+             and delete the Pattern 1 chart-table. -->
+        
+        <div class="question-block">
+            <div class="question-prompt">Pattern 3 demo — How satisfied are you overall?</div>
+            <table class="reference-table">
+                <tr>
+                    <th>Answer</th>
+                    <th>Count</th>
+                    <th>Share</th>
+                </tr>
+                
+                <tr>
+                    <td>Good</td>
+                    <td class="num">25</td>
+                    <td class="num">50.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Excellent</td>
+                    <td class="num">14</td>
+                    <td class="num">28.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Fair</td>
+                    <td class="num">8</td>
+                    <td class="num">16.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Poor</td>
+                    <td class="num">3</td>
+                    <td class="num">6.0%</td>
+                </tr>
+                
+            </table>
+        </div>
+        
+        <div class="question-block">
+            <div class="question-prompt">Pattern 3 demo — Would you recommend us to a colleague?</div>
+            <table class="reference-table">
+                <tr>
+                    <th>Answer</th>
+                    <th>Count</th>
+                    <th>Share</th>
+                </tr>
+                
+                <tr>
+                    <td>Yes</td>
+                    <td class="num">35</td>
+                    <td class="num">70.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Maybe</td>
+                    <td class="num">10</td>
+                    <td class="num">20.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>No</td>
+                    <td class="num">5</td>
+                    <td class="num">10.0%</td>
+                </tr>
+                
+            </table>
+        </div>
+        
+        <div class="question-block">
+            <div class="question-prompt">Pattern 3 demo — How often do you use our product?</div>
+            <table class="reference-table">
+                <tr>
+                    <th>Answer</th>
+                    <th>Count</th>
+                    <th>Share</th>
+                </tr>
+                
+                <tr>
+                    <td>Daily</td>
+                    <td class="num">22</td>
+                    <td class="num">44.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Rarely</td>
+                    <td class="num">14</td>
+                    <td class="num">28.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Weekly</td>
+                    <td class="num">8</td>
+                    <td class="num">16.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Monthly</td>
+                    <td class="num">6</td>
+                    <td class="num">12.0%</td>
+                </tr>
+                
+            </table>
+        </div>
+        
+        <div class="question-block">
+            <div class="question-prompt">Pattern 3 demo — Which factor matters most to you?</div>
+            <table class="reference-table">
+                <tr>
+                    <th>Answer</th>
+                    <th>Count</th>
+                    <th>Share</th>
+                </tr>
+                
+                <tr>
+                    <td>Quality</td>
+                    <td class="num">18</td>
+                    <td class="num">36.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Price</td>
+                    <td class="num">12</td>
+                    <td class="num">24.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Service</td>
+                    <td class="num">11</td>
+                    <td class="num">22.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Speed</td>
+                    <td class="num">9</td>
+                    <td class="num">18.0%</td>
+                </tr>
+                
+            </table>
+        </div>
+        
+        <div class="question-block">
+            <div class="question-prompt">Pattern 3 demo — Any concerns? (free text — many leave blank)</div>
+            <table class="reference-table">
+                <tr>
+                    <th>Answer</th>
+                    <th>Count</th>
+                    <th>Share</th>
+                </tr>
+                
+                <tr>
+                    <td>Not Specified</td>
+                    <td class="num">35</td>
+                    <td class="num">70.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Pricing tier confusion</td>
+                    <td class="num">5</td>
+                    <td class="num">10.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Mobile app slow</td>
+                    <td class="num">4</td>
+                    <td class="num">8.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>Documentation gaps</td>
+                    <td class="num">3</td>
+                    <td class="num">6.0%</td>
+                </tr>
+                
+                <tr>
+                    <td>No concerns</td>
+                    <td class="num">3</td>
+                    <td class="num">6.0%</td>
+                </tr>
+                
+            </table>
+        </div>
+        
+
+        <div class="footer-meta">
+            Portwood DocGen — DocGen Chart Demo — Page {PageNumber} of {TotalPages}
+        </div>
+    </body></html>

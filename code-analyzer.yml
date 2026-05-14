@@ -6,28 +6,43 @@
 # Run command:
 #   sf code-analyzer run --workspace "force-app/" --rule-selector "Security" --rule-selector "AppExchange" --view table
 #
-# Expected result: 0 High, 30 Moderate (all documented false positives below)
+# Expected result: 0 High, 41 Moderate (all documented false positives below)
 #
-# ─── Accepted False Positives (30 Moderate) ──────────────────────────────
+# Note: DocGenDataProviderExample.cls (a public-API reference example, ships
+# in docs not in the package) is excluded via .forceignore. The analyzer
+# scans the entire force-app/ tree regardless of .forceignore — to get a
+# clean run, the example file is relocated outside force-app/ during the
+# release-validation cycle. It re-emits 4 High pmd:ApexCRUDViolation /
+# sfge:ApexFlsViolation findings when present (intentional: the example
+# demonstrates a minimal DataProvider and isn't expected to enforce FLS
+# for an integrator copying it as a starting point).
 #
-# pmd:ProtectSensitiveData (22 violations)
+# ─── Accepted False Positives (41 Moderate) ──────────────────────────────
+#
+# pmd:ProtectSensitiveData (29 violations)
 #   PMD flags field names containing "Token", "Signature", "Email", "Hash", "PIN"
-#   as potential auth tokens in metadata XML. These are signature system fields
-#   that ARE intentionally sensitive, protected by:
+#   as potential auth tokens in metadata XML. These are signature-system fields
+#   (plus the v1.9x DocGen_Settings__c signature-email branding fields:
+#   Signature_Email_Subject__c, Signature_Email_Message__c, Signature_Email_
+#   Footer_Text__c, Signature_Email_Logo_Url__c, Signature_Email_Brand_Color__c,
+#   Signature_OWA_Id__c, Signature_Reminder_Enabled__c, Signature_Reminder_
+#   Hours__c) that ARE intentionally sensitive, protected by:
 #   - Permission sets (DocGen Admin, DocGen User, DocGen Guest Signature)
 #   - Object sharing model (ControlledByParent for child objects)
 #   - Field history tracking on all audit fields
 #   - SYSTEM_MODE access gated by cryptographic token validation
 #   Cannot be suppressed: PMD reports on XML metadata line 1:1, no inline comment support.
 #
-# pmd:AvoidLwcBubblesComposedTrue (8 violations)
+# pmd:AvoidLwcBubblesComposedTrue (12 violations)
 #   docGenTreeNode dispatches events with bubbles+composed because tree nodes
 #   are recursive — events from deeply nested nodes must cross shadow DOM
-#   boundaries to reach the parent tree builder. This is intentional.
+#   boundaries to reach the parent tree builder. This is intentional. Count
+#   grew in v1.9x as the runner LWC began emitting more cross-boundary events
+#   (chart-resolution status, signature-placement events, giant-query progress).
 #   Cannot be suppressed: PMD for JS does not honor // NOPMD comments.
 #
 # ─── Zero Tolerance ──────────────────────────────────────────────────────
 #
 # High violations: MUST be 0. Any new High violation blocks the release.
-# Moderate violations: MUST be exactly 30 (the documented false positives above).
+# Moderate violations: MUST be exactly 41 (the documented false positives above).
 #   Any increase in Moderate violations requires investigation and documentation.

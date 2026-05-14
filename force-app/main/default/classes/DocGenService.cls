@@ -216,6 +216,22 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * Overload that flips currentTemplateType for the duration of the call.
+     * Used by HTML-template tests that need to exercise the rich-text and
+     * multi-line branches without spinning up a full template + ContentVersion.
+     */
+    @TestVisible
+    private static String processXmlForTest(String xml, Map<String, Object> data, String templateType) {
+        String saved = currentTemplateType;
+        currentTemplateType = templateType;
+        try {
+            return processXml(xml, data);
+        } finally {
+            currentTemplateType = saved;
+        }
+    }
+
+    /**
      * Resolve {RunningUser.X} subfield against the cached running-user context.
      * Lazy-loads on first access per transaction by querying the executing user's
      * row for the allowlist fields. Returns null for unknown subfields.
@@ -2589,6 +2605,15 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     private static String processXml(String xml, Map<String, Object> data) {
+        // ChartBucket preprocessing: rewrites {#ChartBucket:rel:field}...{/ChartBucket}
+        // into synthetic {#_cb_N}...{/_cb_N} loops with bucket data injected into
+        // `data`. Runs at every recursion level so charts inside loop bodies resolve
+        // against the iteration item, not the outer parent. Cheap `contains` guard
+        // keeps the no-chart hot path at zero overhead.
+        if (xml != null && xml.contains('{#ChartBucket:')) {
+            xml = DocGenChartBucketResolver.preprocessInline(xml, data);
+        }
+
         String output = '';
         Integer len = xml.length();
         Integer cursor = 0;
@@ -3073,12 +3098,24 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         if (currentTemplateType == 'PowerPoint') {
                             // Strip HTML tags for plain text in PPTX
                             output += strVal.replaceAll('<[^>]+>', ' ').replaceAll('\\s+', ' ').trim().escapeXml();
+                        } else if (currentTemplateType == 'HTML') {
+                            // HTML templates: rich-text is already HTML — pass through and
+                            // rewrite rtaImage URLs so Blob.toPdf can fetch the images.
+                            output += convertRichTextToHtml(strVal);
                         } else {
                             output += convertRichTextToDocxXml(strVal);
                         }
                     } else {
                         if (currentTemplateType == 'PowerPoint') {
                             output += strVal.escapeXml();
+                        } else if (currentTemplateType == 'HTML') {
+                            // HTML templates: escape XML, convert newlines to <br/> so
+                            // textarea/long-text fields preserve line breaks in the PDF.
+                            output += strVal
+                                .replace('\r\n', '\n')
+                                .replace('\r', '\n')
+                                .escapeXml()
+                                .replace('\n', '<br/>');
                         } else {
                             // Carry forward run properties (font, size, bold, etc.) so formatting
                             // is preserved across line breaks in textarea fields (#32)
@@ -4188,7 +4225,18 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // COUNT doesn't require a field
         if (fn == 'COUNT' && fieldName == null) {
             List<Object> records = getChildRecords(data, listName);
-            String countResult = records != null ? String.valueOf(records.size()) : '0';
+            Integer countNum;
+            if (records != null) {
+                countNum = records.size();
+            } else {
+                // Relationship not pre-loaded — try SOQL COUNT() fallback (mirrors
+                // ChartBucket's aggregation pattern so {COUNT:Rel} works when the
+                // template intentionally omits Rel from Query_Config__c to let a
+                // chart aggregate it server-side without heap pressure).
+                Integer fallbackCount = DocGenChartBucketResolver.tryCountFallback(data, listName);
+                countNum = fallbackCount >= 0 ? fallbackCount : 0;
+            }
+            String countResult = String.valueOf(countNum);
             if (numberFormat != null && isNumericFormat(numberFormat)) {
                 return formatNumber(Decimal.valueOf(countResult), numberFormat);
             }
@@ -4840,6 +4888,146 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             '</a:graphic>' +
             '</wp:inline>' +
             '</w:drawing></w:r>';
+    }
+
+    /**
+     * Rich-text → HTML pass-through for HTML templates (Type__c = 'HTML').
+     * The DOCX path (convertRichTextToDocxXml) emits DrawingML which Flying
+     * Saucer can't parse, so HTML templates referencing a rich-text field
+     * previously lost both text formatting and images entirely. Here the
+     * rich-text HTML is already valid HTML — pass it through verbatim,
+     * rewriting only `<img src="...rtaImage?...&refid=<id>">` URLs to the
+     * relative `/sfc/servlet.shepherd/version/download/<cvId>` form that
+     * Blob.toPdf can fetch. Data-URI images are dropped (Blob.toPdf rejects
+     * them).
+     */
+    @TestVisible
+    private static String convertRichTextToHtml(String html) {
+        if (String.isBlank(html)) {
+            return '';
+        }
+        String result = '';
+        Integer cursor = 0;
+        String lower = html.toLowerCase();
+        while (cursor < html.length()) {
+            Integer imgStart = lower.indexOf('<img', cursor);
+            if (imgStart == -1) {
+                result += html.substring(cursor);
+                break;
+            }
+            Integer imgEnd = html.indexOf('>', imgStart);
+            if (imgEnd == -1) {
+                result += html.substring(cursor);
+                break;
+            }
+            result += html.substring(cursor, imgStart);
+            String imgTag = html.substring(imgStart, imgEnd + 1);
+            String rewritten = rewriteRichTextImgForHtml(imgTag);
+            if (rewritten != null) {
+                result += rewritten;
+            }
+            cursor = imgEnd + 1;
+        }
+        return result;
+    }
+
+    /**
+     * Returns the <img> tag with src rewritten for HTML-template output, or
+     * empty string when the image can't be rendered (data URI, unresolvable).
+     * Already-relative /sfc/ URLs and arbitrary http(s) URLs pass through
+     * unchanged.
+     */
+    private static String rewriteRichTextImgForHtml(String imgTag) {
+        Integer srcIdx = imgTag.indexOfIgnoreCase('src=');
+        if (srcIdx == -1) {
+            return imgTag;
+        }
+        Integer valStart = srcIdx + 4;
+        while (valStart < imgTag.length() && imgTag.substring(valStart, valStart + 1) == ' ') {
+            valStart++;
+        }
+        if (valStart >= imgTag.length()) {
+            return imgTag;
+        }
+        String quote = imgTag.substring(valStart, valStart + 1);
+        if (quote != '"' && quote != '\'') {
+            return imgTag;
+        }
+        valStart++;
+        Integer valEnd = imgTag.indexOf(quote, valStart);
+        if (valEnd == -1) {
+            return imgTag;
+        }
+        String src = imgTag.substring(valStart, valEnd).replace('&amp;', '&');
+
+        if (src.startsWith('data:')) {
+            return '';
+        }
+        if (src.toLowerCase().startsWith('/sfc/')) {
+            return imgTag;
+        }
+        if (src.containsIgnoreCase('rtaImage') && src.containsIgnoreCase('refid=')) {
+            Integer refStart = src.toLowerCase().indexOf('refid=') + 6;
+            Integer refEnd = src.indexOf('&', refStart);
+            if (refEnd == -1) {
+                refEnd = src.length();
+            }
+            String refid = src.substring(refStart, refEnd);
+            if (String.isNotBlank(refid) && refid.length() >= 15) {
+                String resolvedUrl = resolveRtaRefidToShepherdUrl(refid);
+                if (resolvedUrl != null) {
+                    return imgTag.substring(0, valStart) + resolvedUrl + imgTag.substring(valEnd);
+                }
+            }
+            // Refid couldn't be resolved (e.g. 0EM ContentReference for Lightning
+            // inline images — not queryable as ContentVersion/ContentDocument).
+            // Leave the absolute rtaImage URL; Blob.toPdf can fetch *.force.com
+            // hosts from authenticated/Automated-Process context.
+        }
+        return imgTag;
+    }
+
+    /**
+     * Resolves a Lightning rich-text rtaImage refid to a relative
+     * `/sfc/servlet.shepherd/version/download/<cvId>` URL. Mirrors the
+     * lookup in processRichTextImage (068 CV / 069 ContentDocument / 0EM
+     * inline fallback) but returns only the URL — no blob, no relId
+     * registration. Returns null when nothing resolves.
+     */
+    private static String resolveRtaRefidToShepherdUrl(String refid) {
+        Id resolvedId = null;
+        try {
+            resolvedId = (Id) refid;
+        } catch (Exception parseE) {
+            String noop = parseE.getMessage(); // NOPMD UnusedLocalVariable
+        }
+        if (resolvedId == null) {
+            return null;
+        }
+        String idPrefix = ((String) resolvedId).substring(0, 3);
+        List<ContentVersion> rtaCvs = new List<ContentVersion>();
+        try {
+            if (idPrefix == '068') {
+                rtaCvs = [SELECT Id FROM ContentVersion WHERE Id = :resolvedId WITH USER_MODE LIMIT 1];
+            } else {
+                rtaCvs = [
+                    SELECT Id
+                    FROM ContentVersion
+                    WHERE ContentDocumentId = :resolvedId AND IsLatest = TRUE
+                    WITH USER_MODE
+                    LIMIT 1
+                ];
+                if (rtaCvs.isEmpty()) {
+                    rtaCvs = [SELECT Id FROM ContentVersion WHERE Id = :resolvedId WITH USER_MODE LIMIT 1];
+                }
+            }
+        } catch (Exception qE) {
+            String noop = qE.getMessage(); // NOPMD UnusedLocalVariable
+        }
+        if (rtaCvs.isEmpty()) {
+            return null;
+        }
+        return '/sfc/servlet.shepherd/version/download/' + rtaCvs[0].Id;
     }
 
     /**

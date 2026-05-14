@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.91.0 — {#ChartBucket} chart aggregation tag + rich-text images in HTML templates
+
+Promoted package: `04tVx000000RvbhIAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RvbhIAC)
+
+Two independent additions in one release. The headline is `{#ChartBucket}` — a new section tag that renders bar charts, pivot tables, and survey-style cross-tabs inline in your generated documents, with server-side aggregation that scales to 30K+ child rows at constant SOQL cost. Plus a fix that makes rich-text fields with inline images actually render in HTML templates (they previously emitted DOCX XML inline into the HTML body, breaking the PDF).
+
+### Charts — `{#ChartBucket:relationship:field[:modifiers]}` (refs #67)
+
+A single tag that groups a child relationship by a field and exposes one row per distinct value to its body — write the bar HTML once and DocGen repeats it per bucket. Verified end-to-end against a 30K-row commute survey and the 25-question Employee Engagement demo (~4,200 responses cross-tabbed by Department).
+
+- **Five composable modifiers** (3rd-colon `key=value&key=value` segment): `colors=` (palette override), `where=` (sanitized SOQL fragment), `split=;` (multi-select delimiter), `groupBy=` (cross-tab pivot exposing a `{#cols}` sub-list), `colSort=` (author-controlled column ordering). All five pass through the SOQL fallback and the SOQL identifier-allowlist sanitizer that protect the rest of the giant-query pipeline.
+- **Four resolution paths kept consistent** — in-memory, SOQL fallback, parent-level pass-through, and giant-query parent. The chart resolver mirrors the same multi-path design that merge tags already use, so a template can move between sub-2000-row and 30K-row scale without rewriting the chart. Constant-cost server-side aggregation (`GROUP BY`) kicks in automatically when the chart's relationship isn't pre-loaded, or when `where=`/`groupBy=` forces it.
+- **Body fields** for single-dimension charts: `{key}`, `{key_label}` (picklist label), `{count}`, `{percent}` / `{percent_int}`, `{max_percent}`, `{index}`, `{color}` / `{color_hex}` (raw hex for Word `w:shd w:fill`). Buckets sort descending by count, alpha by key for ties; null/blank values collapse into a `"Not Specified"` bucket. Pivot `{#cols}` sub-iteration additionally exposes `{percent_of_row}` / `{percent_of_row_int}` for stacked-segment composition.
+- **`{COUNT:Rel}` aggregate gained the same SOQL fallback** — parent-level summary counts now work when `Rel` is intentionally omitted from `Query_Config__c` to let the chart aggregate it server-side without heap pressure (a common pattern that previously required listing the relationship twice).
+- **50-aggregate-SOQL budget per transaction** caps misconfigured templates that stack pathologically many charts. When exhausted, remaining charts render a single sentinel `"Chart limit reached"` bucket — never silently empty.
+- **Actionable error** when `Query_Config__c` pre-loads a relationship that's also a chart target at giant-query scale, pointing the author at the specific relationship to remove from the config.
+- **Security**: dynamic identifiers (relationship name, child object, group field, lookup field, `groupBy` column) are validated against `Schema.SObjectType.fields.getMap()` / `ChildRelationship` before interpolation; `where=` fragments are sanitized through the same keyword blocklist as the giant-query pipeline; queries run with `AccessLevel.USER_MODE` so FLS/sharing/object permissions are enforced at the database layer.
+- **Reference templates**: `docs/SurveyChartExample.html` (per-question single-dimension chart, canonical starting point) and `docs/CommuteSurveyExample.html` (full composition — pivot + filter + multi-select + colSort + palette override using the div-based table-row layout pattern). Word-template variant `docs/SurveyChartExample.docx` supports the simple-bar subset; full pivot/stacked/clustered visualizations require the HTML path (Word's row auto-expansion fights `{#cols}` placement inside `<w:tr>`).
+- **UserGuide §7.6** rewritten as a complete chart authoring reference: syntax, body fields, all five modifiers, pivot tables, the `Query_Config__c` rules that determine which resolution path the chart takes, security model, governor budget, CSS 2.1 reminders, and Word-template caveats (§7.6.1).
+
+### HTML templates — rich-text fields now render correctly (silent regression)
+
+- **`DocGenService.processXml` routes rich-text values through a new `convertRichTextToHtml` helper for HTML templates** (was always routed through `convertRichTextToDocxXml`, which emits DrawingML XML — Flying Saucer can't parse `<w:r><w:drawing>` inside an HTML body, so text was stripped and images were lost). The HTML path passes the rich-text HTML through verbatim, rewriting `<img src="...rtaImage?...&refid=<id>">` to the relative `/sfc/servlet.shepherd/version/download/<cvId>` form when the refid is a resolvable `ContentVersion` (068) or `ContentDocument` (069). `0EM` Lightning `ContentReference` refids (inline rich-text images) aren't queryable through standard SOQL — those keep their original absolute `*.file.force.com` URL, which `Blob.toPdf` can fetch from authenticated/Automated-Process context (including the guest-render queueable). Data-URI images are dropped (`Blob.toPdf` rejects them).
+- **Multi-line plain-text fields in HTML templates** now render `\n` as `<br/>` instead of emitting DOCX `<w:br/>` — Textarea / Long Text Area values preserve their line breaks in the PDF.
+- **`DocGenService.processXmlForTest` overload** (test-visible) lets HTML-specific branches be unit-tested without spinning up a full template + ContentVersion fixture. Five new tests in `DocGenHtmlTemplateTest` cover the rtaImage rewriting, 0EM fall-through, data-URI drop, plain HTML pass-through, multi-line line-break conversion, and single-line XML escaping.
+
+### Subsystem notes
+
+- The chart `{COUNT:Rel}` SOQL fallback intentionally piggy-backs on the existing aggregate-tag plumbing rather than duplicating identifier resolution — touching one tightens both.
+- The HTML rich-text branch is the third of three resolution paths for rich-text values (after PowerPoint plain-text-strip and DOCX DrawingML). The branch order matters: PowerPoint check first, HTML second, DOCX as default — same shape as the `{%ImageField}` resolution in `buildImageXml` which the v1.61 release introduced.
+
 ## v1.90.0 — HTML @page engine fix + guest runner reliability + Word authoring docs
 
 Promoted package: `04tVx000000R8cbIAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000R8cbIAC)

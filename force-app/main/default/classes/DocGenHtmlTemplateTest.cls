@@ -601,4 +601,97 @@ private class DocGenHtmlTemplateTest {
         List<ContentDocument> docs = [SELECT FileType FROM ContentDocument WHERE Id = :cdId];
         System.assertEquals(1, docs.size(), 'ContentDocument should exist');
     }
+
+    // Rich-text values containing rtaImage <img> tags previously routed through
+    // convertRichTextToDocxXml, leaving DOCX DrawingML inline in the HTML body
+    // and dropping all images. Verify the HTML path now passes rich-text HTML
+    // through and rewrites rtaImage URLs to /sfc/servlet.shepherd/.
+    @IsTest
+    static void richTextImageRewrittenToShepherdUrlForHtmlTemplates() {
+        ContentVersion cv = new ContentVersion(
+            Title = 'rta-test',
+            PathOnClient = 'rta.png',
+            VersionData = Blob.valueOf('fake-png-bytes')
+        );
+        insert cv;
+        cv = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
+
+        String richText =
+            '<p>Before <img src="https://example.salesforce.com/servlet/rtaImage?eid=001&amp;refid=' +
+            cv.ContentDocumentId +
+            '" alt="x"/> After</p>';
+
+        Test.startTest();
+        String result = DocGenService.convertRichTextToHtml(richText);
+        Test.stopTest();
+
+        System.assert(
+            result.contains('/sfc/servlet.shepherd/version/download/' + cv.Id),
+            'rtaImage src should be rewritten to shepherd URL: ' + result
+        );
+        System.assert(!result.contains('<w:r>'), 'HTML output must not contain DOCX run XML: ' + result);
+        System.assert(!result.contains('<w:drawing'), 'HTML output must not contain DrawingML: ' + result);
+        System.assert(!result.contains('rtaImage'), 'Original rtaImage URL should be replaced: ' + result);
+        System.assert(result.contains('Before') && result.contains('After'), 'Surrounding HTML preserved: ' + result);
+    }
+
+    // Lightning inline rich-text images use ContentReference IDs (0EM prefix),
+    // which aren't queryable as ContentVersion/ContentDocument. We can't rewrite
+    // those to /sfc/, so leave the original absolute rtaImage URL — Blob.toPdf
+    // can fetch *.force.com hosts from authenticated/Automated-Process context.
+    @IsTest
+    static void richTextUnresolvableRefidPreservesAbsoluteRtaUrl() {
+        String richText =
+            '<p><img src="https://example.scratch.file.force.com/servlet/rtaImage' +
+            '?eid=001cb00000lHGv3&amp;feoid=00Ncb00000QMV7R&amp;refid=0EMcb000000qsQv" alt="inline"/></p>';
+        Test.startTest();
+        String result = DocGenService.convertRichTextToHtml(richText);
+        Test.stopTest();
+        System.assert(result.contains('rtaImage'), 'Original rtaImage URL preserved on resolve failure: ' + result);
+        System.assert(result.contains('refid=0EMcb000000qsQv'), 'Refid preserved: ' + result);
+        System.assert(!result.contains('/sfc/'), 'No shepherd URL when refid is unresolvable: ' + result);
+    }
+
+    @IsTest
+    static void richTextDataUriImageDroppedForHtmlTemplates() {
+        String richText = '<p>Inline <img src="data:image/png;base64,AAAA" alt="x"/> only</p>';
+        Test.startTest();
+        String result = DocGenService.convertRichTextToHtml(richText);
+        Test.stopTest();
+        System.assert(!result.contains('data:image'), 'Data URI image should be dropped: ' + result);
+        System.assert(!result.contains('<img'), 'No <img> tag should remain after dropping: ' + result);
+        System.assert(result.contains('Inline') && result.contains('only'), 'Surrounding text preserved');
+    }
+
+    @IsTest
+    static void richTextPlainHtmlPassesThroughForHtmlTemplates() {
+        String richText = '<p><strong>Bold</strong> and <em>italic</em></p>';
+        Test.startTest();
+        String result = DocGenService.convertRichTextToHtml(richText);
+        Test.stopTest();
+        System.assertEquals(richText, result, 'HTML without images should pass through verbatim');
+    }
+
+    // Plain (non-rich-text) multi-line values previously routed through
+    // convertMultilineToXml for HTML templates and emitted DOCX <w:br/> markers
+    // that Flying Saucer couldn't render. Verify newlines now become <br/>.
+    @IsTest
+    static void multilinePlainTextRendersBreaksForHtmlTemplates() {
+        Map<String, Object> data = new Map<String, Object>{ 'Notes' => 'Line one\nLine two\nLine & three' };
+        Test.startTest();
+        String result = DocGenService.processXmlForTest('<div>{Notes}</div>', data, 'HTML');
+        Test.stopTest();
+        System.assert(result.contains('Line one<br/>Line two<br/>Line &amp; three'), 'Newlines → <br/>: ' + result);
+        System.assert(!result.contains('<w:br/>'), 'HTML output must not contain DOCX line breaks: ' + result);
+        System.assert(!result.contains('<w:r>'), 'HTML output must not contain DOCX runs: ' + result);
+    }
+
+    @IsTest
+    static void singleLinePlainTextEscapesXmlForHtmlTemplates() {
+        Map<String, Object> data = new Map<String, Object>{ 'Name' => 'A & B <C>' };
+        Test.startTest();
+        String result = DocGenService.processXmlForTest('<p>{Name}</p>', data, 'HTML');
+        Test.stopTest();
+        System.assertEquals('<p>A &amp; B &lt;C&gt;</p>', result, 'XML-special chars escaped');
+    }
 }

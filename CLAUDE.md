@@ -14,6 +14,39 @@ When picking up work, prefer the highest open priority on the smallest milestone
 
 `DocGenGiantQueryAssembler` does **not** call `processXml()`. A fix to section-tag logic in `processXml` only covers row-level loop bodies. Parent-level tags outside the loop are resolved by `DocGenGiantQueryAssembler.resolveParentMergeTags()`, and grand-total aggregates by `resolveGiantAggregateTags()`. If a parser-level change needs to behave consistently for templates that fall into the giant-query path (>2000 child rows), the logic has to be mirrored in the assembler or routed through `processXmlForTest` the same way format-suffix tags already are. Always check whether your fix needs the same change in the giant-query parent path and add an e2e-07 assertion either way.
 
+## Critical: {#ChartBucket} tag (v1.91+) — 4 resolution paths, 5 modifiers
+
+`{#ChartBucket:relationship:field[:modifier1=value1&modifier2=value2&...]}body{/ChartBucket}` aggregates a child collection by `field`, exposing per-bucket data (`{key}`, `{count}`, `{percent}`, `{max_percent}`, `{color}`, `{index}`, `{key_label}`) inside the body. The bucket list is sorted desc by count, alpha by key for ties.
+
+**Five modifiers** (composable; v1.91 surface):
+
+| Modifier                                | Behavior                                                                                                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `colors=#aaa,#bbb,#ccc`                 | Override default 8-color palette, cycles by row index                                                                                                                 |
+| `where=Field='Value' AND Other != null` | Sanitized SOQL fragment appended to chart's WHERE. Forces SOQL fallback.                                                                                              |
+| `split=;`                               | Multi-select delimiter. Splits combo values per respondent, percentages sum >100% expected.                                                                           |
+| `groupBy=Field__c`                      | Cross-tab pivot. Each row gets `cols` sub-list with `{#cols}{key}{count}{percent}{/cols}` body iteration. Synthetic Total column appended last. Forces SOQL fallback. |
+| `colSort=val1,val2,...`                 | Author-controlled column ordering (for `groupBy=`). Named values appear first in order; remaining values alpha-sorted; Total always last.                             |
+
+**Four resolution paths** (chart resolver mirrors what merge-tags already do — all four must stay consistent):
+
+1. **In-memory** — `DocGenChartBucketResolver.preprocessInline` against pre-loaded relationship records. Used when child count <2000 AND no `where=`/`groupBy=`. Single SOQL-free path, fastest.
+2. **SOQL fallback** — `tryFallbackSoqlAggregateAdvanced` when relationship isn't on the data map OR `where=`/`groupBy=` force it. Schema-auto-discovers child object + FK via `ChildRelationship`. Issues a `GROUP BY` aggregate, constant-cost regardless of row count. **This is how 30K-scale templates work** — Query_Config\_\_c omits the chart-target relationship, retriever doesn't eager-load, chart aggregates server-side.
+3. **Parent-level** — `DocGenGiantQueryAssembler.resolveParentMergeTags()` regex skips `{#…}` prefixes, so charts pass through. Then `processXmlForTest` routes through the inline path.
+4. **Giant-query parent** — `DocGenGiantQueryAssembler.resolveGiantChartBuckets` for charts targeting the giant relationship in giant-query templates. Same modifiers, same shape.
+
+**SOQL budget**: 50 chart aggregates per transaction (static `DocGenChartBucketResolver.chartSoqlBudget`). When exhausted, charts render a sentinel "Chart limit reached" bucket — never silently empty. Tune in resolver if templates pathologically stack >50 charts.
+
+**Layout gotcha for `groupBy=` pivot**: HTML container auto-expansion at `DocGenService.processXml:2708` looks for the nearest open `<tr>` when processing nested `{#…}` loops — placing `{#cols}` directly inside `<tr>` causes each col to duplicate the whole row. Use `<div class="row">` + `display: table-row` instead (CSS 2.1 safe in Flying Saucer). See `docs/CommuteSurveyExample.html` for the canonical pattern.
+
+**Reference templates**:
+
+- `docs/SurveyChartExample.html` — single-dimension chart per question + cross-tab spread (rich pivot + vertical clustered bars + stacked composition) using Department dimension. Canonical chart template.
+- `docs/CommuteSurveyExample.html` — pivot + filter + multi-select + colSort all composed
+- `docs/SurveyChartExample.docx` — Word-authored variant. Supports simple bars only; pivot/stacked/vertical-clustered styles require `<div>` table-cell layout which Word lacks. Steer chart customers to HTML.
+
+**HTML is the recommended chart source format.** Word `.docx` chart templates work but are constrained — Word's row auto-expansion (`{#Lines}` semantics) conflicts with the inner `{#cols}` loop when both want to drive cell placement in the same `<w:tr>`. `<div>` + `display:table-cell` in HTML dodges this entirely; Word has no `<div>` equivalent. The `{color_hex}` chart field exists specifically so Word's `w:shd w:fill` attributes can use cycled palette colors (raw hex, no `#`).
+
 ## Critical: zero-heap PDF image rendering (don't accidentally regress)
 
 For PDF output, `{%ImageField}` tags with ContentVersion IDs skip blob loading. `currentOutputFormat` is set to `'PDF'` before `processXml()` calls; in `buildImageXml()`, when `currentOutputFormat == 'PDF'` and value is `068xxx`, query only `Id, FileExtension` (NOT `VersionData`) and store the relative URL `/sfc/servlet.shepherd/version/download/<cvId>`. Image URLs in HTML for `Blob.toPdf()` MUST be relative — absolute URLs and data URIs render broken.
@@ -31,7 +64,7 @@ For LWR guest downloads, `/sfc/servlet.shepherd/...` URLs MUST be prefixed with 
 ## Package info
 
 - Package: Portwood DocGen, Unlocked 2GP, namespace `portwoodglobal`
-- Current shipped version: **v1.90.0** (`04tVx000000R8cbIAC`)
+- Current shipped version: **v1.91.0** (`04tVx000000RvbhIAC`)
 - DevHub: `Portwood Global - Production` (dave@portwoodglobalsolutions.com)
 - Staging org for release validation: `portwood-staging` — must be created with `--no-namespace` so source-deploy lands in the default namespace and the e2e scripts' bare class/field references compile. Assign `DocGen_Admin` permset to the running user immediately after deploy or field-level security blocks the e2e scripts.
 - Dev scratch: `docgen-designer`
@@ -52,10 +85,11 @@ sf apex run --target-org <org> -f scripts/e2e-06-signatures.apex
 sf apex run --target-org <org> -f scripts/e2e-07-syntax1.apex
 sf apex run --target-org <org> -f scripts/e2e-07-syntax2.apex
 sf apex run --target-org <org> -f scripts/e2e-07-syntax3.apex
+sf apex run --target-org <org> -f scripts/e2e-07-syntax4.apex
 sf apex run --target-org <org> -f scripts/e2e-08-cleanup.apex
 ```
 
-Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03–06 depend on 02, 07-syntax1/2/3 standalone (use `processXmlForTest`), 08 cleans up.
+Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03–06 depend on 02, 07-syntax1/2/3/4 standalone (use `processXmlForTest`), 08 cleans up.
 
 When fixing a parser-level bug, add a regression assertion in `e2e-07-syntax1` or `e2e-07-syntax2` that exercises the offending pattern via `processXmlForTest`. Each script must stay under 18,000 chars (Anonymous Apex limit is 20,000).
 

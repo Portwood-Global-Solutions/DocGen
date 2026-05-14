@@ -1,0 +1,535 @@
+<html><head><meta charset="utf-8"/><style> body { font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; } img { max-width: 100%; } table { border-collapse: collapse; }</style><style>
+            @page {
+                size: Letter;
+                margin: 18mm;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                color: #1f2937;
+                margin: 0;
+                padding: 0;
+                font-size: 10pt;
+                line-height: 1.45;
+            }
+            table.header-bar {
+                width: 100%;
+                background-color: #1e3a8a;
+                border-collapse: collapse;
+                margin-bottom: 18px;
+            }
+            td.header-title {
+                padding: 14px 20px;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 18pt;
+                letter-spacing: 0.5px;
+            }
+            td.header-meta {
+                padding: 14px 20px;
+                color: #fbbf24;
+                font-size: 9pt;
+                text-align: right;
+                vertical-align: middle;
+            }
+            td.accent-stripe {
+                background-color: #fbbf24;
+                height: 4px;
+                font-size: 1px;
+                line-height: 1px;
+            }
+            div.summary-block {
+                margin: 0 0 18px 0;
+                padding: 12px 16px;
+                background-color: #f3f4f6;
+                border-left: 4px solid #1e3a8a;
+                font-size: 10pt;
+            }
+            h2.section-heading {
+                font-size: 12pt;
+                color: #1e3a8a;
+                margin: 22px 0 10px 0;
+                padding: 0 0 5px 0;
+                border-bottom: 2px solid #fbbf24;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            /* Div-based table layout — avoids `<tr>` container auto-pickup */
+            div.chart-grid {
+                display: table;
+                width: 100%;
+                margin-bottom: 14px;
+                border-collapse: collapse;
+            }
+            div.head-row {
+                display: table-row;
+                background-color: #1e3a8a;
+                color: #ffffff;
+                font-weight: bold;
+            }
+            div.head-row div {
+                display: table-cell;
+                padding: 6px 10px;
+                font-size: 9pt;
+                vertical-align: middle;
+            }
+            div.row {
+                display: table-row;
+            }
+            div.row div {
+                display: table-cell;
+                padding: 5px 10px;
+                vertical-align: middle;
+                border-bottom: 1px solid #f3f4f6;
+            }
+            div.cell-label {
+                width: 22%;
+                font-weight: 500;
+                color: #1f2937;
+                font-size: 9pt;
+            }
+            div.cell-bar {
+                width: 26%;
+            }
+            div.cell-bar div.bar-track {
+                background-color: #eef2f7;
+                height: 12px;
+                width: 100%;
+                display: block;
+                border: none;
+                padding: 0;
+            }
+            div.cell-bar div.bar-fill {
+                height: 12px;
+                display: block;
+                border: none;
+                padding: 0;
+            }
+            div.cell-bar div.bar-figures {
+                font-size: 8pt;
+                color: #4b5563;
+                padding: 2px 0 0 0;
+                font-variant-numeric: tabular-nums;
+                display: block;
+                border: none;
+            }
+            /* Per-column palette — index-based via the chart tag's synthesized
+               `index` field on each col entry. Customers swap these for brand
+               colors without touching the chart resolver. */
+            .col-1 .bar-fill {
+                background-color: #3b82f6;
+            }
+            .col-2 .bar-fill {
+                background-color: #f59e0b;
+            }
+            .col-3 .bar-fill {
+                background-color: #10b981;
+            }
+            div.empty-state {
+                padding: 10px 14px;
+                color: #6b7280;
+                font-style: italic;
+                background-color: #f9fafb;
+                font-size: 9pt;
+            }
+            div.footer-meta {
+                margin-top: 28px;
+                padding-top: 8px;
+                border-top: 1px solid #e5e7eb;
+                font-size: 8pt;
+                color: #6b7280;
+                text-align: center;
+            }
+        
+</style></head><body>
+        <table class="header-bar">
+            <tr>
+                <td class="header-title">DocGen Chart Demo 30K Commute</td>
+                <td class="header-meta">
+                    Commute Survey Report<br />
+                    Generated 2026-05-12
+                </td>
+            </tr>
+            <tr>
+                <td colspan="2" class="accent-stripe">&nbsp;</td>
+            </tr>
+        </table>
+
+        <div class="summary-block">
+            This report aggregates commute responses across building locations. Each section uses a different
+            chart-bucket pattern:
+            <strong>Mode Split</strong> is a cross-tab pivot (rows = transportation mode, columns = location);
+            <strong>Reasons for Driving Alone</strong> filters to Drive Alone respondents and splits multi-pick
+            answers — percentages within each column sum &gt;100% because respondents pick multiple reasons.
+        </div>
+
+        <!-- ============================================================
+             SECTION 1 — Mode Split (groupBy= cross-tab pivot)
+             ============================================================ -->
+        <h2 class="section-heading">Mode Split</h2>
+        <div class="chart-grid">
+            <div class="head-row">
+                <div class="cell-label">Mode</div>
+                <div class="cell-bar">8000 Marina</div>
+                <div class="cell-bar">3260 Bayshore</div>
+                <div class="cell-bar">Total</div>
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Drive Alone</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 58.8%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">58.8% (10290)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 68.6%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">68.6% (8575)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 62.9%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">62.9% (18865)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Telework</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 36.4%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">36.4% (6370)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 11.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">11.0% (1375)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 25.8%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">25.8% (7745)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Public Transit</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 2.4%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">2.4% (420)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 11.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">11.0% (1375)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 6.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">6.0% (1795)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Day Off</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 1.2%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">1.2% (210)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 7.7%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">7.7% (965)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 3.9%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">3.9% (1175)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Bike</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 0.8%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">0.8% (140)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 1.7%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">1.7% (210)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 1.2%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">1.2% (350)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Carpool</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 0.4%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">0.4% (70)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 0.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">0.0% (0)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 0.2%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">0.2% (70)</div>
+                </div>
+                
+            </div>
+            
+        </div>
+
+        <!-- ============================================================
+             SECTION 2 — Reasons for Driving Alone
+                (where= filter + groupBy= pivot + split= multi-select)
+             ============================================================ -->
+        <h2 class="section-heading">Reasons for Driving Alone</h2>
+        <div class="chart-grid">
+            <div class="head-row">
+                <div class="cell-label">Reason</div>
+                <div class="cell-bar">8000 Marina</div>
+                <div class="cell-bar">3260 Bayshore</div>
+                <div class="cell-bar">Total</div>
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Driving is faster</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 100.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">100.0% (2310)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 100.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">100.0% (1785)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 100.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">100.0% (4095)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Other</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 72.7%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">72.7% (1680)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 60.2%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">60.2% (1075)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 67.3%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">67.3% (2755)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Transit not available</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 69.7%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">69.7% (1610)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 60.2%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">60.2% (1075)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 65.6%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">65.6% (2685)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Personal/comfort</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 42.4%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">42.4% (980)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 72.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">72.0% (1285)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 55.3%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">55.3% (2265)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Schedule flexibility</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 75.8%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">75.8% (1750)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 28.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">28.0% (500)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 54.9%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">54.9% (2250)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Need car for work</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 36.4%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">36.4% (840)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 36.1%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">36.1% (645)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 36.3%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">36.3% (1485)</div>
+                </div>
+                
+            </div>
+            
+            <div class="row">
+                <div class="cell-label">Cost/free parking</div>
+                
+                <div class="cell-bar col-1">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 21.2%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">21.2% (490)</div>
+                </div>
+                
+                <div class="cell-bar col-2">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 28.0%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">28.0% (500)</div>
+                </div>
+                
+                <div class="cell-bar col-3">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: 24.2%;">&nbsp;</div>
+                    </div>
+                    <div class="bar-figures">24.2% (990)</div>
+                </div>
+                
+            </div>
+            
+        </div>
+
+        <div class="footer-meta">
+            Portwood DocGen v1.91 — Page {PageNumber} of {TotalPages}
+        </div>
+    </body></html>

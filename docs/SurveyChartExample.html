@@ -1,0 +1,773 @@
+<!-- DocGen v1.91 Survey Chart Example: 25-question demo, CSS 2.1-only, one chart per page. -->
+<html>
+    <head>
+        <style>
+            @page {
+                size: Letter;
+                margin: 22mm 18mm 22mm 18mm;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                color: #1f2937;
+                margin: 0;
+                padding: 0;
+                font-size: 11pt;
+                line-height: 1.5;
+            }
+
+            /* ========== COVER PAGE ========== */
+            .cover {
+                page-break-after: always;
+                text-align: center;
+                padding-top: 80px;
+            }
+            .cover-eyebrow {
+                color: #fbbf24;
+                font-size: 11pt;
+                letter-spacing: 2px;
+                font-weight: bold;
+                margin-bottom: 18px;
+            }
+            .cover-title {
+                color: #1e3a8a;
+                font-size: 36pt;
+                font-weight: bold;
+                line-height: 1.15;
+                margin: 0 0 24px 0;
+            }
+            .cover-subtitle {
+                color: #6b7280;
+                font-size: 13pt;
+                margin: 0 0 60px 0;
+            }
+            .cover-stats {
+                width: 70%;
+                margin: 0 auto;
+                border-collapse: collapse;
+                background-color: #f3f4f6;
+                border: 1px solid #d1d5db;
+            }
+            .cover-stats td {
+                padding: 22px 18px;
+                text-align: center;
+                border-right: 1px solid #d1d5db;
+            }
+            .cover-stats td:last-child {
+                border-right: none;
+            }
+            .cover-stats .stat-number {
+                font-size: 26pt;
+                font-weight: bold;
+                color: #1e3a8a;
+                display: block;
+            }
+            .cover-stats .stat-label {
+                font-size: 9pt;
+                color: #6b7280;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+            }
+            .cover-meta {
+                margin-top: 60px;
+                color: #9ca3af;
+                font-size: 10pt;
+            }
+
+            /* ========== TABLE OF CONTENTS ========== */
+            .toc {
+                page-break-after: always;
+            }
+            .toc-title {
+                color: #1e3a8a;
+                font-size: 22pt;
+                border-bottom: 3px solid #fbbf24;
+                padding-bottom: 8px;
+                margin-bottom: 24px;
+            }
+            table.toc-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            table.toc-table td {
+                padding: 8px 6px;
+                border-bottom: 1px dotted #d1d5db;
+                font-size: 11pt;
+                vertical-align: top;
+            }
+            table.toc-table td.toc-num {
+                width: 40px;
+                color: #fbbf24;
+                font-weight: bold;
+                text-align: right;
+                padding-right: 14px;
+            }
+            table.toc-table td.toc-text {
+                color: #1f2937;
+            }
+
+            /* ========== PER-QUESTION SECTION ========== */
+            .question-page {
+                page-break-before: always;
+                page-break-inside: avoid;
+            }
+            .question-page:first-of-type {
+                page-break-before: avoid;
+            }
+            .question-eyebrow {
+                color: #fbbf24;
+                font-size: 9pt;
+                letter-spacing: 2px;
+                font-weight: bold;
+                text-transform: uppercase;
+                margin-bottom: 6px;
+            }
+            .question-prompt {
+                color: #1e3a8a;
+                font-size: 18pt;
+                font-weight: bold;
+                line-height: 1.25;
+                margin: 0 0 28px 0;
+            }
+            .question-divider {
+                background-color: #fbbf24;
+                height: 3px;
+                width: 60px;
+                font-size: 1px;
+                margin-bottom: 24px;
+            }
+
+            /* ========== CHART (BAR-WIDTH BY PERCENT) ========== */
+            table.chart-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 22px;
+            }
+            table.chart-table td {
+                padding: 7px 6px;
+                vertical-align: middle;
+                border-bottom: 1px solid #e5e7eb;
+            }
+            td.bucket-label {
+                width: 28%;
+                font-weight: bold;
+                color: #1f2937;
+                padding-right: 14px;
+            }
+            td.bucket-bar {
+                width: 55%;
+            }
+            div.bar-track {
+                width: 100%;
+                background-color: #f3f4f6;
+                height: 18px;
+                border: 1px solid #e5e7eb;
+            }
+            div.bar-fill {
+                height: 18px;
+                line-height: 18px;
+                font-size: 1px;
+            }
+            td.bucket-figures {
+                width: 17%;
+                text-align: right;
+                color: #6b7280;
+                font-size: 10pt;
+                padding-left: 14px;
+                white-space: nowrap;
+            }
+
+            /* ========== STAT CARDS ========== */
+            table.stat-row {
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 12px 0;
+                margin: 18px 0 26px 0;
+            }
+            table.stat-row td {
+                width: 33%;
+                background-color: #eff6ff;
+                border: 1px solid #c7d2fe;
+                padding: 14px 16px;
+                vertical-align: top;
+                text-align: center;
+            }
+            table.stat-row .card-number {
+                font-size: 22pt;
+                font-weight: bold;
+                color: #1e3a8a;
+                line-height: 1;
+                display: block;
+                margin-bottom: 4px;
+            }
+            table.stat-row .card-label {
+                font-size: 9pt;
+                color: #6b7280;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+            }
+
+            /* ========== EMPTY / EDGE STATE ========== */
+            .empty-state {
+                padding: 18px;
+                background-color: #fef3c7;
+                border-left: 4px solid #fbbf24;
+                color: #92400e;
+                font-style: italic;
+            }
+
+            /* ========== CROSS-TAB / COMPARISON PAGES ========== */
+            .compare-page {
+                page-break-before: always;
+            }
+            .compare-eyebrow {
+                color: #fbbf24;
+                font-size: 9pt;
+                letter-spacing: 2px;
+                font-weight: bold;
+                text-transform: uppercase;
+                margin-bottom: 6px;
+            }
+            .compare-title {
+                color: #1e3a8a;
+                font-size: 18pt;
+                font-weight: bold;
+                line-height: 1.25;
+                margin: 0 0 6px 0;
+            }
+            .compare-sub {
+                color: #6b7280;
+                font-size: 10pt;
+                margin: 0 0 20px 0;
+            }
+
+            /* Side-by-side count grid: div+display:table layout avoids row auto-expansion when looping columns. */
+            div.cross-table {
+                display: table;
+                width: 100%;
+                border-collapse: collapse;
+                margin: 0 0 20px 0;
+            }
+            div.cross-row {
+                display: table-row;
+            }
+            div.cross-cell {
+                display: table-cell;
+                padding: 9px 10px;
+                border-bottom: 1px solid #e5e7eb;
+                vertical-align: middle;
+                font-size: 10pt;
+            }
+            div.cross-row.header div.cross-cell {
+                background-color: #1e3a8a;
+                color: #ffffff;
+                font-size: 9pt;
+                font-weight: bold;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+                border-bottom: 2px solid #fbbf24;
+            }
+            div.cross-cell.label-cell {
+                font-weight: bold;
+                color: #1e3a8a;
+                width: 30%;
+            }
+            div.cross-cell.num-cell {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+            div.cross-cell.total-cell {
+                background-color: #f3f4f6;
+                font-weight: bold;
+            }
+
+            /* Rich %+Count pivot table — mirrors the dual-column Excel layout where
+               each location/department contributes a `% | Count` pair, with a Total
+               pair on the right. Built on div+display:table for the same reason as
+               .cross-table (avoids row auto-expansion bug with {#cols} nesting).
+               CSS 2.1 doesn't support colspan on display:table cells, so we use a
+               single header row with paired-column labels. */
+            div.rich-table {
+                display: table;
+                width: 100%;
+                border-collapse: collapse;
+                margin: 0 0 16px 0;
+            }
+            div.rich-row {
+                display: table-row;
+            }
+            div.rich-cell {
+                display: table-cell;
+                padding: 6px 5px;
+                font-size: 9pt;
+                border-bottom: 1px solid #e5e7eb;
+                vertical-align: middle;
+            }
+            div.rich-row.header div.rich-cell {
+                background-color: #1e3a8a;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 8pt;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+                text-align: center;
+                padding: 8px 4px;
+                border-bottom: 2px solid #fbbf24;
+            }
+            div.rich-row.header div.rich-cell.dept-pct {
+                border-right: none;
+                padding-right: 2px;
+            }
+            div.rich-row.header div.rich-cell.dept-cnt {
+                border-right: 1px solid #fbbf24;
+                padding-left: 2px;
+            }
+            div.rich-row.header div.rich-cell.total-pct,
+            div.rich-row.header div.rich-cell.total-cnt {
+                background-color: #fbbf24;
+                color: #1f2937;
+            }
+            div.rich-row.header div.rich-cell.answer-header {
+                text-align: left;
+                padding-left: 10px;
+            }
+            div.rich-cell.answer-cell {
+                font-weight: bold;
+                color: #1e3a8a;
+                text-align: left;
+                padding-left: 10px;
+            }
+            div.rich-cell.num-cell {
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+            div.rich-cell.pct {
+                color: #6b7280;
+                padding-right: 6px;
+            }
+            div.rich-cell.cnt {
+                color: #1f2937;
+                font-weight: bold;
+                padding-left: 4px;
+                border-right: 1px solid #f3f4f6;
+            }
+            div.rich-cell.total.pct,
+            div.rich-cell.total.cnt {
+                background-color: #fffbeb;
+                color: #92400e;
+                font-weight: bold;
+            }
+
+            /* Vertical clustered bar chart — one column per answer (mode), with
+               a side-by-side stack of department bars inside each column. Mirrors
+               the "Mode Split" Excel chart pattern. Bars use pixel-equivalent
+               heights so the visual stays proportional in CSS 2.1 (Flying Saucer
+               doesn't reliably resolve `height: X%` against a `display:table` parent
+               via vertical-align:bottom). Max bar height = 100px (1px = 1%). */
+            div.vbar-chart {
+                display: table;
+                width: 100%;
+                margin: 20px 0 12px 0;
+            }
+            div.vbar-group {
+                display: table-cell;
+                vertical-align: bottom;
+                text-align: center;
+                padding: 0 4px;
+                border-bottom: 2px solid #1e3a8a;
+            }
+            div.vbar-stack {
+                display: table;
+                margin: 0 auto;
+                border-collapse: separate;
+                border-spacing: 1px 0;
+            }
+            div.vbar-col {
+                display: table-cell;
+                vertical-align: bottom;
+                width: 22px;
+                padding: 0;
+            }
+            div.vbar-pct {
+                font-size: 7pt;
+                color: #6b7280;
+                text-align: center;
+                line-height: 1.1;
+                margin-bottom: 1px;
+                white-space: nowrap;
+            }
+            div.vbar-rect {
+                width: 22px;
+                min-height: 1px;
+            }
+            div.vbar-mode-label {
+                padding-top: 8px;
+                font-size: 9pt;
+                font-weight: bold;
+                color: #1e3a8a;
+                line-height: 1.2;
+            }
+            /* Legend below the chart, color swatch + label */
+            table.vbar-legend {
+                margin: 6px auto 18px auto;
+                border-collapse: collapse;
+            }
+            table.vbar-legend td {
+                padding: 4px 14px 4px 0;
+                vertical-align: middle;
+                font-size: 9pt;
+                color: #374151;
+            }
+            table.vbar-legend span.swatch {
+                display: inline-block;
+                width: 14px;
+                height: 10px;
+                margin-right: 6px;
+                vertical-align: middle;
+                border: 1px solid #d1d5db;
+            }
+
+            /* Stacked horizontal bar (one bar per row, segments = columns). Uses div+display:table layout. */
+            div.stacked-table {
+                display: table;
+                width: 100%;
+                border-collapse: collapse;
+                margin: 0 0 16px 0;
+            }
+            div.stacked-row {
+                display: table-row;
+            }
+            div.stacked-row div.stacked-cell {
+                display: table-cell;
+                padding: 9px 8px;
+                vertical-align: middle;
+                border-bottom: 1px solid #e5e7eb;
+            }
+            div.stacked-label {
+                width: 30%;
+                font-weight: bold;
+                color: #1f2937;
+            }
+            div.stacked-bar-cell {
+                width: 55%;
+            }
+            div.stacked-total {
+                width: 15%;
+                text-align: right;
+                color: #6b7280;
+                font-size: 10pt;
+                white-space: nowrap;
+            }
+            div.stacked-segments {
+                display: table;
+                width: 100%;
+                height: 18px;
+                border: 1px solid #d1d5db;
+            }
+            div.stacked-segment {
+                display: table-cell;
+                font-size: 1px;
+                line-height: 1px;
+                vertical-align: middle;
+            }
+
+            /* Department legend — small color squares + labels in one row. */
+            table.legend {
+                margin: 0 0 18px 0;
+                border-collapse: collapse;
+            }
+            table.legend td {
+                padding: 4px 14px 4px 0;
+                vertical-align: middle;
+                font-size: 9pt;
+                color: #374151;
+            }
+            span.swatch {
+                display: inline-block;
+                width: 14px;
+                height: 10px;
+                margin-right: 6px;
+                vertical-align: middle;
+                border: 1px solid #d1d5db;
+            }
+
+            /* ========== EXECUTIVE SUMMARY ========== */
+            .summary-page {
+                page-break-before: always;
+            }
+            .summary-title {
+                color: #1e3a8a;
+                font-size: 22pt;
+                border-bottom: 3px solid #fbbf24;
+                padding-bottom: 8px;
+                margin-bottom: 24px;
+            }
+            .summary-block {
+                margin: 0 0 18px 0;
+                padding: 16px 20px;
+                background-color: #f3f4f6;
+                border-left: 4px solid #1e3a8a;
+            }
+            .summary-block strong {
+                color: #1e3a8a;
+            }
+            .footnote {
+                margin-top: 40px;
+                padding: 14px 18px;
+                background-color: #f9fafb;
+                border: 1px solid #e5e7eb;
+                color: #6b7280;
+                font-size: 9pt;
+                line-height: 1.5;
+            }
+        </style>
+    </head>
+    <body>
+        <!-- ============================================================
+             COVER PAGE
+             ============================================================ -->
+        <div class="cover">
+            <div class="cover-eyebrow">SURVEY RESPONSE REPORT</div>
+            <h1 class="cover-title">{Name}</h1>
+            <div class="cover-subtitle">Aggregated response analysis</div>
+
+            <table class="cover-stats">
+                <tr>
+                    <td>
+                        <span class="stat-number">{COUNT:Survey_Questions__r}</span>
+                        <span class="stat-label">Questions</span>
+                    </td>
+                    <td>
+                        <span class="stat-number">{COUNT:Survey_Responses__r}</span>
+                        <span class="stat-label">Total Responses</span>
+                    </td>
+                    <td>
+                        <span class="stat-number">{today:MMM d}</span>
+                        <span class="stat-label">Generated</span>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="cover-meta">
+                Prepared by {RunningUser.Name}<br />
+                {today:MMMM d, yyyy}
+            </div>
+        </div>
+
+        <!-- ============================================================
+             TABLE OF CONTENTS
+             ============================================================ -->
+        <div class="toc">
+            <h2 class="toc-title">Contents</h2>
+            <table class="toc-table">
+                {#Survey_Questions__r}
+                <tr>
+                    <td class="toc-num">{Display_Order__c}.</td>
+                    <td class="toc-text">{Question_Text__c}</td>
+                </tr>
+                {/Survey_Questions__r}
+            </table>
+        </div>
+
+        <!-- ============================================================
+             PER-QUESTION PAGES — one chart per page
+             ============================================================ -->
+        {#Survey_Questions__r}
+        <div class="question-page">
+            <div class="question-eyebrow">Question {Display_Order__c}</div>
+            <h2 class="question-prompt">{Question_Text__c}</h2>
+            <div class="question-divider">&nbsp;</div>
+
+            {#ChartBucket:Survey_Responses__r:Selected_Answer__c}
+            <table class="chart-table">
+                <tr>
+                    <td class="bucket-label">{key_label}</td>
+                    <td class="bucket-bar">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: {percent}%; background-color: {color};">&nbsp;</div>
+                        </div>
+                    </td>
+                    <td class="bucket-figures">{count} ({percent}%)</td>
+                </tr>
+            </table>
+            {:else}
+            <div class="empty-state">No responses recorded for this question yet.</div>
+            {/ChartBucket}
+        </div>
+        {/Survey_Questions__r}
+
+        <!-- ============================================================
+             CROSS-TAB HIGHLIGHTS — comparison styles using groupBy=
+             ============================================================ -->
+
+        <!-- Page A: Side-by-side count table — burnout × department -->
+        <div class="compare-page">
+            <div class="compare-eyebrow">Cross-Tab Highlight A</div>
+            <h2 class="compare-title">Burnout frequency by department</h2>
+            <div class="compare-sub">
+                Side-by-side count comparison &mdash; uses a <code>groupBy=Department__c</code> modifier to pivot one
+                question's answers across the Department dimension. Each row sums to that answer's grand total.
+            </div>
+
+            <div class="rich-table">
+                <div class="rich-row header">
+                    <div class="rich-cell answer-header">Answer</div>
+                    <div class="rich-cell dept-pct">Eng %</div>
+                    <div class="rich-cell dept-cnt">Eng #</div>
+                    <div class="rich-cell dept-pct">Sales %</div>
+                    <div class="rich-cell dept-cnt">Sales #</div>
+                    <div class="rich-cell dept-pct">Mkt %</div>
+                    <div class="rich-cell dept-cnt">Mkt #</div>
+                    <div class="rich-cell dept-pct">Sup %</div>
+                    <div class="rich-cell dept-cnt">Sup #</div>
+                    <div class="rich-cell dept-pct">Ops %</div>
+                    <div class="rich-cell dept-cnt">Ops #</div>
+                    <div class="rich-cell total-pct">Total %</div>
+                    <div class="rich-cell total-cnt">Total #</div>
+                </div>
+                {#ChartBucket:Survey_Responses__r:Selected_Answer__c:where=Survey_Question__r.Display_Order__c=9&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}
+                <div class="rich-row">
+                    <div class="rich-cell answer-cell">{key_label}</div>
+                    {#cols}
+                    <div class="rich-cell num-cell pct">{percent}%</div>
+                    <div class="rich-cell num-cell cnt">{count}</div>
+                    {/cols}
+                </div>
+                {:else}
+                <div class="empty-state">No responses for the burnout question.</div>
+                {/ChartBucket}
+            </div>
+
+            <div class="compare-sub" style="margin-top: 24px">
+                Engineering and Sales report &ldquo;Often&rdquo; / &ldquo;Always&rdquo; burnout at the highest rates;
+                Support and Operations skew lower. The cross-tab makes the gap visible in a single glance — a flat bar
+                chart would average the populations together and hide it.
+            </div>
+        </div>
+
+        <!-- Page B: Vertical clustered bar chart — eNPS × department (Mode-Split style) -->
+        <div class="compare-page">
+            <div class="compare-eyebrow">Cross-Tab Highlight B</div>
+            <h2 class="compare-title">Recommend us as an employer &mdash; by department</h2>
+            <div class="compare-sub">
+                Vertical clustered bar chart &mdash; each answer is a column, with one bar per department inside.
+                Heights use <code>{percent}</code> (column percentage: cell &divide; column total). A 60% bar under
+                Sales means &ldquo;60% of Sales respondents chose this answer.&rdquo;
+            </div>
+
+            <table class="vbar-legend">
+                <tr>
+                    <td><span class="swatch" style="background-color: #3b82f6;">&nbsp;</span>Engineering</td>
+                    <td><span class="swatch" style="background-color: #10b981;">&nbsp;</span>Sales</td>
+                    <td><span class="swatch" style="background-color: #f59e0b;">&nbsp;</span>Marketing</td>
+                    <td><span class="swatch" style="background-color: #ef4444;">&nbsp;</span>Support</td>
+                    <td><span class="swatch" style="background-color: #8b5cf6;">&nbsp;</span>Operations</td>
+                    <td><span class="swatch" style="background-color: #06b6d4;">&nbsp;</span>Total</td>
+                </tr>
+            </table>
+
+            <div class="vbar-chart">
+                {#ChartBucket:Survey_Responses__r:Selected_Answer__c:where=Survey_Question__r.Display_Order__c=4&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}
+                <div class="vbar-group">
+                    <div class="vbar-stack">
+                        {#cols}
+                        <div class="vbar-col">
+                            <div class="vbar-pct">{percent_int}%</div>
+                            <div class="vbar-rect" style="height: {percent_int}px; background-color: {color};">&nbsp;</div>
+                        </div>
+                        {/cols}
+                    </div>
+                    <div class="vbar-mode-label">{key_label}</div>
+                </div>
+                {:else}
+                <div class="empty-state">No responses recorded.</div>
+                {/ChartBucket}
+            </div>
+
+            <div class="compare-sub" style="margin-top: 24px;">
+                The taller a department's bar within an answer column, the larger that department's share of the people
+                who chose it. Same data as the side-by-side count table on the previous page &mdash; different
+                visualization for the same cross-tab.
+            </div>
+        </div>
+
+        <!-- Page C: Stacked horizontal bar — compensation × department -->
+        <div class="compare-page">
+            <div class="compare-eyebrow">Cross-Tab Highlight C</div>
+            <h2 class="compare-title">Compensation fairness &mdash; departmental composition</h2>
+            <div class="compare-sub">
+                Stacked bar &mdash; each row is one answer; segments show what fraction of that answer came from each
+                department (uses <code>{percent_of_row}</code>). Reading left to right tells you the
+                <em>departmental mix</em> of each response category.
+            </div>
+
+            <!-- Legend -->
+            <table class="legend">
+                <tr>
+                    <td><span class="swatch" style="background-color: #3b82f6">&nbsp;</span>Engineering</td>
+                    <td><span class="swatch" style="background-color: #10b981">&nbsp;</span>Sales</td>
+                    <td><span class="swatch" style="background-color: #f59e0b">&nbsp;</span>Marketing</td>
+                    <td><span class="swatch" style="background-color: #ef4444">&nbsp;</span>Support</td>
+                    <td><span class="swatch" style="background-color: #8b5cf6">&nbsp;</span>Operations</td>
+                </tr>
+            </table>
+
+            <div class="stacked-table">
+                {#ChartBucket:Survey_Responses__r:Selected_Answer__c:where=Survey_Question__r.Display_Order__c=22&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}
+                <div class="stacked-row">
+                    <div class="stacked-cell stacked-label">{key_label}</div>
+                    <div class="stacked-cell stacked-bar-cell">
+                        <div class="stacked-segments">
+                            {#cols}
+                            <div class="stacked-segment" style="background-color: {color}; width: {percent_of_row}%;">
+                                &nbsp;
+                            </div>
+                            {/cols}
+                        </div>
+                    </div>
+                    <div class="stacked-cell stacked-total">{count} total</div>
+                </div>
+                {:else}
+                <div class="empty-state">No compensation responses recorded.</div>
+                {/ChartBucket}
+            </div>
+
+            <div class="compare-sub" style="margin-top: 24px">
+                Note the &ldquo;Disagree&rdquo; row leans heavily on Sales segments &mdash; consistent with the burnout
+                cross-tab on the prior page. Stacked composition surfaces departmental concentration that a flat
+                percentage chart obscures.
+            </div>
+        </div>
+
+        <!-- ============================================================
+             EXECUTIVE SUMMARY (last page)
+             ============================================================ -->
+        <div class="summary-page">
+            <h2 class="summary-title">Methodology</h2>
+
+            <div class="summary-block">
+                <strong>Aggregation.</strong> Every chart in this report aggregates the underlying Survey Response
+                records via DocGen's bucket-aggregation tag. The aggregation is performed server-side via SOQL
+                <code>GROUP BY</code>, so the report renders at the same speed against 100 responses as it does against
+                100,000.
+            </div>
+
+            <div class="summary-block">
+                <strong>Sort &amp; null handling.</strong> Buckets are sorted descending by count, with alphabetical
+                ordering for ties. Null or blank answers collapse into a single &ldquo;Not Specified&rdquo; bucket so
+                non-response rates are visible at a glance.
+            </div>
+
+            <div class="summary-block">
+                <strong>Field-level security.</strong> All queries run in <code>USER_MODE</code>, so the values you see
+                here reflect what the running user is authorized to read. A user without access to a particular response
+                field would see that question's chart fall back to an empty state, never a leaked aggregate.
+            </div>
+
+            <div class="footnote">
+                Report generated by DocGen v1.91 on {today:MMMM d, yyyy} at {now:h:mm a}. Source: Survey&nbsp;{Name}
+                containing {COUNT:Survey_Questions__r} survey questions and {COUNT:Survey_Responses__r} aggregated
+                responses.
+            </div>
+        </div>
+    </body>
+</html>
