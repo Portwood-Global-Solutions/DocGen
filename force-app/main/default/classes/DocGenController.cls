@@ -2373,6 +2373,86 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * Issue #83 — Deletes a non-active template version and its associated files.
+     * Removes the version record, its body ContentVersion, and all pre-decomposed
+     * XML ContentVersions (titles starting with `docgen_tmpl_xml_<versionId>_`).
+     * Refuses to delete the active version — caller must activate another version
+     * first.
+     *
+     * Each saved version typically references 5-7 CVs (body docx + pre-decomp
+     * parts), so deleting one version frees that many files. Users with 50+
+     * versions accumulated over heavy iteration save substantial storage.
+     */
+    @AuraEnabled
+    public static void deleteTemplateVersion(Id versionId) {
+        try {
+            if (!Schema.sObjectType.DocGen_Template_Version__c.isDeletable()) {
+                throw DocGenService.ahe('Insufficient access.');
+            }
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template_Version__c> versions = [
+                SELECT Id, Name, Is_Active__c, Content_Version_Id__c
+                FROM DocGen_Template_Version__c
+                WHERE Id = :versionId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (versions.isEmpty()) {
+                throw DocGenService.ahe('Version not found.');
+            }
+            DocGen_Template_Version__c v = versions[0];
+            if (v.Is_Active__c == true) {
+                throw DocGenService.ahe(
+                    'Cannot delete the active version. Activate a different version first, then delete this one.'
+                );
+            }
+
+            // Collect ContentDocuments to delete:
+            //  - pre-decomposed XML CVs by Title prefix docgen_tmpl_xml_<versionId>_*
+            //  - the version's body CV (Content_Version_Id__c)
+            Set<Id> cdsToDelete = new Set<Id>();
+            String predecompPrefix = 'docgen_tmpl_xml_' + String.valueOf(versionId) + '_';
+            String likePattern = predecompPrefix + '%';
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (ContentVersion cv : [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Title LIKE :likePattern
+                WITH SYSTEM_MODE
+            ]) {
+                if (cv.ContentDocumentId != null) {
+                    cdsToDelete.add(cv.ContentDocumentId);
+                }
+            }
+            if (String.isNotBlank(v.Content_Version_Id__c)) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                List<ContentVersion> bodyCvs = [
+                    SELECT ContentDocumentId
+                    FROM ContentVersion
+                    WHERE Id = :v.Content_Version_Id__c
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (!bodyCvs.isEmpty() && bodyCvs[0].ContentDocumentId != null) {
+                    cdsToDelete.add(bodyCvs[0].ContentDocumentId);
+                }
+            }
+
+            if (!cdsToDelete.isEmpty()) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                delete [SELECT Id FROM ContentDocument WHERE Id IN :cdsToDelete WITH SYSTEM_MODE]; // NOPMD ApexCRUDViolation - cascade-cleanup of package-internal version files
+            }
+
+            /* code-analyzer-suppress ApexFlsViolation */
+            delete v; // NOPMD ApexCRUDViolation - isDeletable() checked above
+        } catch (DmlException dmlE) {
+            throw DocGenService.ahe(dmlE, 'Error deleting version. ' + dmlE.getDmlMessage(0));
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error deleting version.');
+        }
+    }
+
+    /**
      * Activates a specific template version and deactivates all others for the same template.
      * @param versionId The DocGen_Template_Version__c record ID to activate
      */

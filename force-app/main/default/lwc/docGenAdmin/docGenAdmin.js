@@ -10,6 +10,7 @@ import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
 import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
 import saveTemplate from '@salesforce/apex/DocGenController.saveTemplate';
 import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
+import deleteTemplateVersion from '@salesforce/apex/DocGenController.deleteTemplateVersion';
 import processAndReturnDocument from '@salesforce/apex/DocGenController.processAndReturnDocument';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
@@ -180,6 +181,21 @@ const VERSION_COLUMNS = [
             name: 'restore',
             title: 'Restore and Activate this version',
             variant: 'brand',
+            disabled: { fieldName: 'Is_Active__c' }
+        }
+    },
+    {
+        // Issue #83 — Delete a non-active version + its body and pre-decomp CVs.
+        // Disabled on the active version; the row.disableDelete flag is set in
+        // loadVersions() to mirror Is_Active__c.
+        type: 'button',
+        initialWidth: 110,
+        typeAttributes: {
+            label: 'Delete',
+            name: 'deleteVersion',
+            title: 'Delete this version and its files',
+            variant: 'destructive-text',
+            iconName: 'utility:delete',
             disabled: { fieldName: 'Is_Active__c' }
         }
     }
@@ -2262,6 +2278,34 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
         } else if (action === 'preview') {
             this.handlePreviewVersion(row);
+        } else if (action === 'deleteVersion') {
+            await this.handleDeleteVersion(row);
+        }
+    }
+
+    // Issue #83 — Confirm with the user, then delete a non-active version and
+    // its associated CVs. The Apex endpoint refuses to delete the active version
+    // as a safety guard; the UI also disables the button on the active row.
+    async handleDeleteVersion(row) {
+        const verName = row.Name || 'this version';
+        const ok = window.confirm(
+            'Delete ' +
+                verName +
+                '?\n\n' +
+                'This removes the version record AND its template body file plus pre-decomposed parts. ' +
+                'Cannot be undone. Activate a different version first if this one is currently active.'
+        );
+        if (!ok) return;
+        try {
+            this.isLoadingVersions = true;
+            await deleteTemplateVersion({ versionId: row.Id });
+            this.showToast('Success', verName + ' deleted.', 'success');
+            this.loadVersions(this.editTemplateId);
+            refreshApex(this.wiredTemplatesResult);
+        } catch (error) {
+            this.showToast('Error deleting version', error.body ? error.body.message : error.message, 'error');
+        } finally {
+            this.isLoadingVersions = false;
         }
     }
 
