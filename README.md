@@ -415,8 +415,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v1.94.0 | **Latest (Beta)**                       | `04tVx000000SExhIAG` |
-| v1.93.0 | Previous (Released)                     | `04tVx000000SDOvIAO` |
+| v1.94.0 | **Latest (Released)**                   | `04tVx000000SExhIAG` |
+| v1.93.0 | Previous                                | `04tVx000000SDOvIAO` |
 | v1.92.0 | Previous                                | `04tVx000000S9I5IAK` |
 | v1.91.0 | Previous                                | `04tVx000000RvbhIAC` |
 | v1.90.0 | Previous                                | `04tVx000000R8cbIAC` |
