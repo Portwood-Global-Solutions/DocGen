@@ -326,12 +326,24 @@ public with sharing class DocGenChartTagExpander {
         if (!isHtml) {
             throw new DocGenException('Chart tag error in non-HTML template: ' + reason + ' (' + snippet + ')');
         }
+        // escapeForDisplay turns the original tag's curly braces into HTML
+        // entities so the rendered error block can't be re-parsed as a tag on
+        // a subsequent processXml pass — which would otherwise produce a
+        // confusing chain of nested error blocks or, worse, fail with the
+        // wrong templateType on the second pass.
         return '<div style="margin:12px 0; padding:12px 16px; background-color:#fef2f2; border-left:4px solid #ef4444; color:#991b1b; font-family:monospace; font-size:10pt;">' +
             '<strong>Chart error:</strong> ' +
-            escape(reason) +
+            escapeForDisplay(reason) +
             '<br/><span style="color:#7f1d1d; font-size:9pt;">at ' +
-            escape(snippet) +
+            escapeForDisplay(snippet) +
             '</span></div>';
+    }
+
+    private static String escapeForDisplay(String s) {
+        if (s == null) {
+            return '';
+        }
+        return s.escapeXml().replace('{', '&#123;').replace('}', '&#125;');
     }
 
     /**
