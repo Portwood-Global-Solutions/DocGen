@@ -655,7 +655,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                     // so the render runs as Automated Process (which can fetch shepherd
                     // image URLs that guests can't authenticate to). LWC polls the
                     // tracking job, then downloads the resulting CV from the site domain.
-                    await this._generateGuestPdf();
+                    await this._generateGuestRender();
                 } else {
                     this.showToast('Info', 'Generating PDF...', 'info');
                     const result = await generatePdf({
@@ -671,10 +671,22 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                     }
                 }
             } else if (!isPPT) {
-                // Word DOCX / Excel XLSX — client-side assembly
-                const ext = isExcel ? 'xlsx' : 'docx';
-                this.showToast('Info', 'Generating document...', 'info');
-                await this._generateOfficeClientSide(saveToRecord, ext, 'application/octet-stream');
+                // Word DOCX / Excel XLSX
+                if (this._isGuest) {
+                    // Experience Cloud guest path: rich-text-pasted images on the record's
+                    // RTF field are stored as ContentVersions with CDL.Visibility=InternalUsers
+                    // by default. Guest USER_MODE can't load VersionData for those CVs, so
+                    // inline client-side assembly silently omits the images (issue #72). Route
+                    // through DocGen_Guest_Render__e so DocGenService.generateDocument runs
+                    // server-side as Automated Process, where InternalUsers-visibility CVs
+                    // load natively. assembleZip handles DOCX server-side already; the same
+                    // queueable + polling pattern works for any output format.
+                    await this._generateGuestRender();
+                } else {
+                    const ext = isExcel ? 'xlsx' : 'docx';
+                    this.showToast('Info', 'Generating document...', 'info');
+                    await this._generateOfficeClientSide(saveToRecord, ext, 'application/octet-stream');
+                }
             } else {
                 // PowerPoint — server-side
                 const result = await processAndReturnDocument({
@@ -707,14 +719,24 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     }
 
     /**
-     * Guest-context PDF render path. Publishes a DocGen_Guest_Render__e platform
-     * event via DocGenController.queueGuestRender, polls the tracking job, then
-     * downloads the resulting ContentVersion via the site-domain shepherd URL
-     * (which the guest's browser session can fetch — unlike the lightning subdomain
-     * the inline Blob.toPdf path tries to resolve relative URLs against).
+     * Guest-context render path — format-neutral. Publishes a DocGen_Guest_Render__e
+     * platform event via DocGenController.queueGuestRender, polls the tracking job,
+     * then downloads the resulting ContentVersion via the site-domain shepherd URL.
+     *
+     * Two reasons guests need this routing:
+     *   - PDF (Blob.toPdf): inline guest render can't authenticate against the
+     *     lightning subdomain to fetch shepherd image URLs, so images get dropped.
+     *   - DOCX (#72): guest USER_MODE can't load VersionData for rich-text-pasted
+     *     images whose CDL.Visibility=InternalUsers (Salesforce default for newly
+     *     pasted RTF content), so inline assembly silently omits those images.
+     *
+     * Routing through Automated Process via the platform event resolves both —
+     * Automated Process authenticates against lightning AND has InternalUsers
+     * file-sharing access. The result CDL is flipped to AllUsers in the queueable
+     * so the guest's site-domain session can fetch the result.
      */
-    async _generateGuestPdf() {
-        this.showToast('Info', 'Generating PDF — running in the background...', 'info');
+    async _generateGuestRender() {
+        this.showToast('Info', 'Generating document — running in the background...', 'info');
         const jobId = await queueGuestRender({
             templateId: this.selectedTemplateId,
             recordId: this.recordId
