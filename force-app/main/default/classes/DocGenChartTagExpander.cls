@@ -90,8 +90,13 @@ public with sharing class DocGenChartTagExpander {
      */
     private static String buildSnippet(String tagBody, Boolean isHtml) {
         if (!isHtml) {
+            // Phrasing avoids curly-brace literals so the message survives
+            // Salesforce's error-banner rendering, which strips {/} chars
+            // (you'd otherwise see empty quotes where the tag name should be).
             throw new ChartTagException(
-                '{Chart:...} tags are HTML-only. Convert your template to HTML or use {#ChartBucket:...} directly.'
+                'This template uses Chart merge tags, which require an HTML template (Type = HTML). ' +
+                    'To fix: in Google Docs use File > Download > Web Page (.html, zipped), unzip, and upload the .html as the template body with Type = HTML. ' +
+                    'Or remove the Chart tags and use ChartBucket loop tags directly in your Word template.'
             );
         }
 
