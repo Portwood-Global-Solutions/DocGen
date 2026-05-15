@@ -1246,13 +1246,66 @@ All five functions support any format suffix (`currency`, `number`, `percent`, c
 
 **Aggregate fields don't need to be rendered columns** — you can aggregate `UnitPrice` even if your loop table only shows `Product2.Name` and `Quantity`. The resolver validates field names against the child object's schema.
 
-### 7.6 Charts (`{#ChartBucket}`)
+### 7.6 Charts
 
 Render bar charts, pivot tables, and survey-style cross-tabs inline in your generated documents. Charts are pure HTML/CSS — no JavaScript, no `<svg>`, no external libraries — so they render reliably through the Flying Saucer PDF engine.
 
-**Recommended source format: HTML.** CSS gives you direct control over bar widths, percent-based layouts, table-cell pivots, and accent styling. Word templates can technically use chart tags too, but Word's layout primitives (rows and cells only — no `<div>` equivalent) constrain side-by-side and stacked-segment patterns. See [§7.6.1 Authoring charts in Word](#761-authoring-charts-in-word--caveats) for the supported subset.
+**Two ways to insert a chart:**
 
-A chart is a section tag that **groups a child relationship by a field** and exposes one row per distinct value to its body. You write the bar HTML once and DocGen repeats it for each bucket.
+1. **`{Chart:relationship:field:style}`** — one-line tag. The expander generates the full styled HTML block for you. Recommended for 90% of cases. Works in HTML templates only (including Google Docs / Word → exported as Web Page).
+2. **`{#ChartBucket:relationship:field}...{/ChartBucket}`** — hand-authored loop. You write the chart's HTML body yourself. Full control over layout when you need pixel-perfect customization. Works in both HTML and Word templates.
+
+If you just want "a chart of answer distribution," use the first form. If you want a non-standard layout the expander doesn't ship, use the second.
+
+#### 7.6.0 One-line `{Chart:...}` blocks (v1.94+)
+
+A one-line tag that expands into a fully styled chart block at render time. You don't write any HTML — the expander emits the table, bar markup, colors, and embedded `{#ChartBucket:...}` loop.
+
+```
+{Chart:Survey_Responses__r:Selected_Answer__c}                              ← bar (default)
+{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=How satisfied?}
+{Chart:Survey_Responses__r:Selected_Answer__c:pivot:groupBy=Department__c&colSort=Eng,Sales,Mkt}
+{Chart:Survey_Responses__r:Selected_Answer__c:clustered:groupBy=Department__c&colSort=Eng,Sales,Mkt}
+{Chart:Survey_Responses__r:Selected_Answer__c:stacked:groupBy=Department__c&colSort=Eng,Sales,Mkt}
+```
+
+**Four styles ship today:**
+
+| Style       | Layout                                                                                              | Use when                                                |
+| ----------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `bar`       | Horizontal bar per bucket — label, colored fill sized by `{percent}%`, count + percent at the right | Default. One question, one dimension.                   |
+| `pivot`     | Cross-tab table — rows = answers, columns = `groupBy` values + Total, cells show `{percent}%`       | "How does each department answer this question?"        |
+| `clustered` | Vertical clustered bars — one column per answer, inner bars per `groupBy` value                     | Same data as pivot, visualized as comparative heights.  |
+| `stacked`   | Stacked horizontal bars — one row per answer, segments per `groupBy` value sized by share-of-row    | Composition by category ("what makes up each answer?"). |
+
+**Options** (any order, joined with `&`, after the style):
+
+| Option     | Required for            | Example                                                       |
+| ---------- | ----------------------- | ------------------------------------------------------------- |
+| `title=`   | optional                | `title=How satisfied are you with your role?`                 |
+| `where=`   | optional                | `where=Survey_Question__r.Display_Order__c=1` (SOQL fragment) |
+| `groupBy=` | pivot/clustered/stacked | `groupBy=Department__c`                                       |
+| `colSort=` | pivot/clustered/stacked | `colSort=Engineering,Sales,Marketing,Support,Operations`      |
+| `colors=`  | optional                | `colors=#1e40af,#b91c1c,#16a34a` (cycles by row index)        |
+
+Inside a `{#Survey_Questions__r}` loop, the `Survey_Responses__r` relationship resolves against the **iterating question** (Survey_Question**c has its own `Survey_Responses**r`child relationship), not the outer Survey — so one chart per question requires no`where=` filter:
+
+```
+{#Survey_Questions__r}
+  <h2>Question {Display_Order__c}: {Question_Text__c}</h2>
+  {Chart:Survey_Responses__r:Selected_Answer__c:bar}
+{/Survey_Questions__r}
+```
+
+**Error handling:** Malformed tags (unknown style, missing `groupBy`/`colSort` for cross-tabs, bad relationship name) render an obvious red error block inline in the PDF — you see the problem at first preview rather than chasing a silent miss. Non-HTML templates throw at generation time with the recovery steps.
+
+**Authoring in Google Docs:** Type the tag as plain text anywhere in your document. When you `File → Download → Web Page (.html, zipped)`, the tag survives in the exported HTML. Upload the unzipped `.html` as the template body with **Type = HTML**. A starter file lives at `docs/SurveyChartTemplate-Starter.docx` — drop it into Google Drive, open with Docs, edit, export.
+
+For full control over the chart's HTML body (custom row markup, your own CSS classes, multi-chart layouts), drop down to `{#ChartBucket:...}` — documented in the rest of §7.6 below.
+
+#### 7.6.1 Hand-authored `{#ChartBucket:...}` blocks
+
+A chart is a section tag that **groups a child relationship by a field** and exposes one row per distinct value to its body. You write the bar HTML once and DocGen repeats it for each bucket. Use this when the `{Chart:...}` expander's emitted layout doesn't fit (or for Word templates, which the expander doesn't support).
 
 #### Basic syntax
 

@@ -2654,6 +2654,15 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     private static String processXml(String xml, Map<String, Object> data) {
+        // Chart tag expansion: rewrites {Chart:rel:field:style:opts} into the
+        // corresponding HTML snippet (with embedded {#ChartBucket:...} loops).
+        // Runs before ChartBucket preprocessing so the expanded snippets feed
+        // through the existing bucket resolver. Cheap contains() guard keeps
+        // the no-chart hot path at zero overhead.
+        if (xml != null && xml.contains('{Chart:')) {
+            xml = DocGenChartTagExpander.expand(xml, currentTemplateType);
+        }
+
         // ChartBucket preprocessing: rewrites {#ChartBucket:rel:field}...{/ChartBucket}
         // into synthetic {#_cb_N}...{/_cb_N} loops with bucket data injected into
         // `data`. Runs at every recursion level so charts inside loop bodies resolve

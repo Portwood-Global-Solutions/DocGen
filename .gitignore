@@ -54,6 +54,8 @@ code-analyzer*.json
 *.pdf
 # Exception: the v1.91 chart-tag Word reference template lives in docs/
 !docs/SurveyChartExample.docx
+# Exception: Google Docs starter template (drop into Google Drive, open with Docs)
+!docs/SurveyChartTemplate-Starter.docx
 
 # Python scripts
 *.py
