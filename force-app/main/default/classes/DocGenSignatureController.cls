@@ -614,9 +614,12 @@ public without sharing class DocGenSignatureController {
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT
+                Decline_Reason__c,
+                LastModifiedDate,
                 Signature_Request__r.Source_Document_Id__c,
                 Signature_Request__r.Related_Record_Id__c,
-                Signature_Request__r.Template__c
+                Signature_Request__r.Template__c,
+                Signature_Request__r.Status__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -627,18 +630,24 @@ public without sharing class DocGenSignatureController {
         Id templateId;
         Id requestId;
         String recordId;
+        String requestStatus;
+        String declineReason;
+        Datetime declinedAt;
         if (!signers.isEmpty()) {
             sourceDocId = signers[0].Signature_Request__r.Source_Document_Id__c;
             templateId = signers[0].Signature_Request__r.Template__c;
             requestId = signers[0].Signature_Request__r.Id;
             recordId = signers[0].Signature_Request__r.Related_Record_Id__c;
+            requestStatus = signers[0].Signature_Request__r.Status__c;
+            declineReason = signers[0].Decline_Reason__c;
+            declinedAt = signers[0].LastModifiedDate;
             res.recordId = recordId;
         } else {
             // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
             // Legacy fallback
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Request__c> requests = [
-                SELECT Id, Source_Document_Id__c, Related_Record_Id__c, Template__c
+                SELECT Id, Source_Document_Id__c, Related_Record_Id__c, Template__c, Status__c, LastModifiedDate
                 FROM DocGen_Signature_Request__c
                 WHERE Secure_Token__c = :token
                 WITH SYSTEM_MODE
@@ -649,8 +658,19 @@ public without sharing class DocGenSignatureController {
                 templateId = requests[0].Template__c;
                 requestId = requests[0].Id;
                 recordId = requests[0].Related_Record_Id__c;
+                requestStatus = requests[0].Status__c;
+                declinedAt = requests[0].LastModifiedDate;
                 res.recordId = recordId;
             }
+        }
+
+        // Issue #91: when the request is declined, short-circuit with a confirmation card
+        // instead of trying to render a preview. The cached preview HTML was already cleared
+        // in declineSignature, so any fallback to the live render would still show a doc that
+        // reads as unsigned — but we'd rather make the declined state explicit than implicit.
+        if (requestStatus == 'Declined') {
+            res.templateBase64 = buildDeclinedStateHtml(declinedAt, declineReason);
+            return res;
         }
 
         // Template-based: load preview HTML from Signature_Data__c cache on the request,
@@ -745,6 +765,35 @@ public without sharing class DocGenSignatureController {
             );
         }
         return '<html><body><p>Document preview unavailable.</p></body></html>';
+    }
+
+    /**
+     * Issue #91: Renders the confirmation card shown when the signing link is opened after
+     * the request has been declined. Replaces the document preview so the page can't read
+     * as signed regardless of cache state.
+     */
+    private static String buildDeclinedStateHtml(Datetime declinedAt, String reason) {
+        String dateStr = declinedAt != null ? declinedAt.format('MMMM d, yyyy \'at\' h:mm a z') : '';
+        String reasonBlock = '';
+        if (String.isNotBlank(reason)) {
+            reasonBlock =
+                '<p style="margin:12px 0 0 0;color:#3e3e3c;"><strong>Reason:</strong> ' +
+                reason.escapeHtml4() +
+                '</p>';
+        }
+        return '<html><head><style>' +
+            'body{font-family:Arial,Helvetica,sans-serif;background:#f3f3f3;margin:0;padding:48px 16px;}' +
+            '.card{max-width:560px;margin:0 auto;background:#fff;border:1px solid #dddbda;border-radius:6px;' +
+            'padding:32px;text-align:center;}' +
+            '.title{color:#c23934;font-size:20pt;font-weight:600;margin:0 0 8px 0;}' +
+            '.subtitle{color:#3e3e3c;font-size:11pt;margin:0;}' +
+            '</style></head><body><div class="card">' +
+            '<p class="title">Signature Request Declined</p>' +
+            '<p class="subtitle">This signature request was declined' +
+            (String.isNotBlank(dateStr) ? ' on ' + dateStr.escapeHtml4() : '') +
+            '. No further action is required; the document sender has been notified.</p>' +
+            reasonBlock +
+            '</div></body></html>';
     }
 
     /**
@@ -1352,12 +1401,18 @@ public without sharing class DocGenSignatureController {
         // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         signer.Status__c = 'Declined';
         signer.Decline_Reason__c = String.isNotBlank(reason) ? reason.left(1000) : null;
+        // Issue #91: clear the typed-name cache so a refresh of the signing link doesn't
+        // re-stamp the preview with what the signer typed before declining.
+        signer.Signature_Data__c = null;
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(signer, false, AccessLevel.SYSTEM_MODE);
 
-        // Mark parent request as declined
+        // Mark parent request as declined. Null out the cached preview HTML — the JSON blob
+        // in Signature_Data__c carries the live preview with names already stamped, and
+        // fetchDocumentData would otherwise re-serve it (issue #91).
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
         parentReq.Status__c = 'Declined';
+        parentReq.Signature_Data__c = null;
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 

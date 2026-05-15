@@ -238,6 +238,70 @@ try {
     System.debug('TEMPLATE RESET TO PDF: FAIL — ' + e.getMessage());
 }
 
+// ===== Issue #90: Flow action must honor Save to Record toggle =====
+// Runs against the PDF-mode template (after reset) so we exercise the same path
+// real customers use. saveToRecord=false must NOT attach the file to the source
+// record even though recordId is supplied as the merge-data source.
+try {
+    DocGenFlowAction.Request reqOff = new DocGenFlowAction.Request();
+    reqOff.templateId = tmplId;
+    reqOff.recordId = acctId;
+    reqOff.saveToRecord = false;
+    List<DocGenFlowAction.Response> resOff = DocGenFlowAction.generateDocument(
+        new List<DocGenFlowAction.Request>{ reqOff }
+    );
+    if (resOff[0].success == true && resOff[0].contentDocumentId != null) {
+        Integer linkCount = [
+            SELECT COUNT()
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acctId AND ContentDocumentId = :resOff[0].contentDocumentId
+        ];
+        if (linkCount == 0) {
+            pass++;
+            System.debug('FLOW ACTION saveToRecord=false: PASS — no CDL to source record');
+        } else {
+            fail++;
+            System.debug('FLOW ACTION saveToRecord=false: FAIL — file attached anyway (' + linkCount + ' CDL)');
+        }
+    } else {
+        fail++;
+        System.debug('FLOW ACTION saveToRecord=false: FAIL — generation failed: ' + resOff[0].errorMessage);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('FLOW ACTION saveToRecord=false: FAIL — ' + e.getMessage());
+}
+
+try {
+    DocGenFlowAction.Request reqOn = new DocGenFlowAction.Request();
+    reqOn.templateId = tmplId;
+    reqOn.recordId = acctId;
+    reqOn.saveToRecord = true;
+    List<DocGenFlowAction.Response> resOn = DocGenFlowAction.generateDocument(
+        new List<DocGenFlowAction.Request>{ reqOn }
+    );
+    if (resOn[0].success == true && resOn[0].contentDocumentId != null) {
+        Integer linkCount = [
+            SELECT COUNT()
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acctId AND ContentDocumentId = :resOn[0].contentDocumentId
+        ];
+        if (linkCount > 0) {
+            pass++;
+            System.debug('FLOW ACTION saveToRecord=true: PASS — CDL exists');
+        } else {
+            fail++;
+            System.debug('FLOW ACTION saveToRecord=true: FAIL — no CDL created');
+        }
+    } else {
+        fail++;
+        System.debug('FLOW ACTION saveToRecord=true: FAIL — generation failed: ' + resOn[0].errorMessage);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('FLOW ACTION saveToRecord=true: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-04 GENERATE DOCX — PASS: ' +

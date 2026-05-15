@@ -272,7 +272,7 @@ private class DocGenMiscTests {
     }
 
     @IsTest
-    static void testFlowAction_jsonData_withRecordId_attaches_to_record() {
+    static void testFlowAction_jsonData_withRecordId_saveToRecord_true_attaches() {
         TestDataFactory.attachRealDocxToTestTemplate();
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         Account acc = TestDataFactory.getTestAccount();
@@ -280,6 +280,7 @@ private class DocGenMiscTests {
         DocGenFlowAction.Request req = new DocGenFlowAction.Request();
         req.templateId = tpl.Id;
         req.recordId = acc.Id;
+        req.saveToRecord = true;
         req.jsonData = '{"Name":"Hybrid","Amount":1}';
 
         Test.startTest();
@@ -296,6 +297,70 @@ private class DocGenMiscTests {
             WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :responses[0].contentDocumentId
         ];
         System.assert(linkCount > 0, 'Document should be linked to the supplied recordId');
+    }
+
+    // Regression: GitHub #90 — Save to Record = false (or omitted) must NOT attach to the
+    // supplied recordId, even when JSON Data + recordId are both provided. recordId stays
+    // as the title/context anchor; the file lands as a standalone ContentVersion.
+    @IsTest
+    static void testFlowAction_jsonData_withRecordId_saveToRecord_false_doesNotAttach() {
+        TestDataFactory.attachRealDocxToTestTemplate();
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        Account acc = TestDataFactory.getTestAccount();
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateId = tpl.Id;
+        req.recordId = acc.Id;
+        req.saveToRecord = false;
+        req.jsonData = '{"Name":"Hybrid","Amount":1}';
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+            new List<DocGenFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, responses[0].success, 'Should succeed: ' + responses[0].errorMessage);
+        System.assertNotEquals(null, responses[0].contentDocumentId, 'CD id still returned for download');
+        Integer linkCount = [
+            SELECT COUNT()
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :responses[0].contentDocumentId
+        ];
+        System.assertEquals(0, linkCount, 'Document must NOT be linked when saveToRecord=false');
+    }
+
+    // Regression: GitHub #90 — standard recordId path (no JSON Data) must honor saveToRecord=false.
+    @IsTest
+    static void testFlowAction_recordId_saveToRecord_false_doesNotAttach() {
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:p><w:r><w:t>{Name}</w:t></w:r></w:p></w:body></w:document>';
+        createValidDocxFile(docXml);
+
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        Account acc = TestDataFactory.getTestAccount();
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateId = tpl.Id;
+        req.recordId = acc.Id;
+        req.saveToRecord = false;
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+            new List<DocGenFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, responses[0].success, 'Should succeed: ' + responses[0].errorMessage);
+        System.assertNotEquals(null, responses[0].contentDocumentId, 'CD id still returned for download');
+        Integer linkCount = [
+            SELECT COUNT()
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :responses[0].contentDocumentId
+        ];
+        System.assertEquals(0, linkCount, 'Document must NOT be linked when saveToRecord=false');
     }
 
     @IsTest
@@ -6128,7 +6193,7 @@ private class DocGenMiscTests {
             DocGenFlowAction.Request req = new DocGenFlowAction.Request();
             req.templateId = tpl.Id;
             req.recordId = acc.Id;
-            req.saveToRecord = false; // Service already links via FirstPublishLocationId
+            req.saveToRecord = true;
 
             Test.startTest();
             List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
@@ -6146,7 +6211,7 @@ private class DocGenMiscTests {
             System.assertNotEquals(null, responses[0].contentVersionId, 'ContentVersionId should be set on success');
             System.assertEquals(null, responses[0].errorMessage, 'ErrorMessage should be null on success');
 
-            // Verify the file is linked to the source record (auto-linked by service)
+            // saveToRecord=true: file must be linked to the source record (FirstPublishLocationId path).
             List<ContentDocumentLink> links = [
                 SELECT Id
                 FROM ContentDocumentLink

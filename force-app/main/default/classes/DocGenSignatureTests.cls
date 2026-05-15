@@ -615,6 +615,35 @@ private class DocGenSignatureTests {
         System.assertNotEquals(null, res);
     }
 
+    // Issue #91: when the request is declined, fetchDocumentData must return the
+    // declined-state confirmation card instead of rendering a document preview —
+    // even if a stale cached preview were still present, the response should not
+    // contain "electronically signed" text or document body.
+    @isTest
+    static void testFetchDocumentData_returnsDeclinedCardAfterDecline() {
+        DocGen_Signer__c signer = getTestSigner();
+        String signerToken = [SELECT Secure_Token__c FROM DocGen_Signer__c WHERE Id = :signer.Id].Secure_Token__c;
+
+        // Decline the signer first.
+        DocGenSignatureController.declineSignature(signerToken, 'Wrong document', null, null);
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.fetchDocumentData(signerToken);
+        Test.stopTest();
+
+        System.assertNotEquals(null, res);
+        System.assertNotEquals(null, res.templateBase64, 'Declined card HTML should be returned');
+        System.assert(
+            res.templateBase64.contains('Signature Request Declined'),
+            'Expected declined-state card, got: ' + res.templateBase64.left(200)
+        );
+        System.assert(res.templateBase64.contains('Wrong document'), 'Decline reason should be surfaced in the card');
+        System.assert(
+            !res.templateBase64.containsIgnoreCase('electronically signed'),
+            'Declined response must not contain signed-state text'
+        );
+    }
+
     // =========================================================================
     // Stamp and return source
     // =========================================================================
@@ -4094,6 +4123,17 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         String signerToken = [SELECT Secure_Token__c FROM DocGen_Signer__c WHERE Id = :signer.Id].Secure_Token__c;
 
+        // Issue #91: seed Signature_Data__c on both signer and request so we can confirm
+        // the decline handler clears them — otherwise the cached preview leaks the typed
+        // name back to anyone refreshing the signing link after decline.
+        signer.Signature_Data__c = 'Pre-decline typed name';
+        update signer;
+        DocGen_Signature_Request__c parentReqSeed = new DocGen_Signature_Request__c(
+            Id = signer.Signature_Request__c,
+            Signature_Data__c = '{"previewHtml":"<html>Electronically signed by ...</html>"}'
+        );
+        update parentReqSeed;
+
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.declineSignature(
             signerToken,
@@ -4104,9 +4144,29 @@ private class DocGenSignatureTests {
         Test.stopTest();
 
         System.assertEquals(true, result.get('success'));
-        DocGen_Signer__c updated = [SELECT Status__c, Decline_Reason__c FROM DocGen_Signer__c WHERE Id = :signer.Id];
+        DocGen_Signer__c updated = [
+            SELECT Status__c, Decline_Reason__c, Signature_Data__c
+            FROM DocGen_Signer__c
+            WHERE Id = :signer.Id
+        ];
         System.assertEquals('Declined', updated.Status__c);
         System.assertEquals('Not agreed with terms', updated.Decline_Reason__c);
+        System.assertEquals(
+            null,
+            updated.Signature_Data__c,
+            'Issue #91: signer typed-name cache must be cleared on decline'
+        );
+
+        DocGen_Signature_Request__c declinedReq = [
+            SELECT Signature_Data__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :signer.Signature_Request__c
+        ];
+        System.assertEquals(
+            null,
+            declinedReq.Signature_Data__c,
+            'Issue #91: cached preview HTML on request must be cleared on decline'
+        );
 
         // Verify the supplied IP + UA actually landed on the audit row.
         // resolveClientIp() should have accepted '203.0.113.7' as valid IPv4.

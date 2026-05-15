@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.92.0 — {#Approvals} tag, active/inactive templates, delete versions",
-      "versionNumber": "1.92.0.NEXT",
-      "ancestorId": "04tVx000000RvbhIAC",
+      "versionName": "1.93.0 — Flow Save-to-Record fix (#90), signature decline-leak fix (#91), template status column polish (#92)",
+      "versionNumber": "1.93.0.NEXT",
+      "ancestorId": "04tVx000000S9I5IAK",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
