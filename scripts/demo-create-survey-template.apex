@@ -2,55 +2,78 @@
 // new {Chart:...} tag. After this runs, the template appears in the DocGen
 // runner and can be generated from any Survey__c record.
 //
+// Structure (the right one — answers belong to a specific question):
+//   - Cover page (survey name, question count)
+//   - TOC of all questions
+//   - For each question: a bar chart of THAT question's answer distribution
+//   - One cross-tab showcase pinned to Q1 (bar/pivot/clustered/stacked styles)
+//
+// Charts use the per-question child relationship Survey_Question__c
+// → Survey_Responses__r, so each chart only aggregates that question's
+// responses. Inside the {#Survey_Questions__r} loop, "Survey_Responses__r"
+// resolves against the iterating Survey_Question__c, not the outer Survey.
+//
 // Run: sf apex run --target-org portwood-staging -f scripts/demo-create-survey-template.apex
 
 // ─── 1. template HTML body ────────────────────────────────────────────
-// Charts run against Survey_Responses__r (omitted from Query_Config so
-// they aggregate server-side via SOQL fallback — works for any survey size).
 String body =
     '<html><head><style>' +
     '@page { size: Letter; margin: 22mm 18mm; }' +
     'body { font-family: Helvetica, Arial, sans-serif; color: #1f2937; font-size: 11pt; line-height: 1.5; }' +
     'h1 { color: #1e3a8a; font-size: 28pt; margin: 0 0 8px 0; line-height: 1.15; }' +
     'h2 { color: #1e3a8a; font-size: 18pt; font-weight: bold; margin: 18px 0 10px 0; line-height: 1.25; }' +
+    'h3 { color: #1e3a8a; font-size: 14pt; font-weight: bold; margin: 14px 0 6px 0; }' +
     '.eyebrow { color: #b45309; font-size: 9pt; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; margin: 0 0 6px 0; }' +
     '.subtitle { color: #6b7280; font-size: 12pt; margin: 0 0 32px 0; }' +
     '.meta { color: #6b7280; font-size: 10pt; }' +
     '.page { page-break-before: always; }' +
     '.cover { padding-top: 60px; text-align: center; }' +
+    'table.toc { width: 100%; border-collapse: collapse; margin: 12px 0 0 0; }' +
+    'table.toc td { padding: 6px 4px; border-bottom: 1px dotted #d1d5db; font-size: 11pt; vertical-align: top; }' +
+    'table.toc td.num { width: 36px; color: #b45309; font-weight: bold; text-align: right; padding-right: 10px; }' +
     '</style></head><body>' +
     // ─── cover ─────────────────────────────────────────────────────────
     '<div class="cover">' +
     '<p class="eyebrow">SURVEY RESPONSE REPORT</p>' +
     '<h1>{Name}</h1>' +
-    '<p class="subtitle">Aggregated response analysis &mdash; all chart styles</p>' +
-    '<p class="meta">Prepared by {RunningUser.Name}<br/>{today:MMMM d, yyyy}</p>' +
+    '<p class="subtitle">Question-by-question answer analysis</p>' +
+    '<p class="meta"><strong>{COUNT:Survey_Questions__r}</strong> questions &mdash; aggregated server-side<br/>' +
+    'Prepared by {RunningUser.Name}<br/>{today:MMMM d, yyyy}</p>' +
     '</div>' +
-    // ─── style 1: simple bar ───────────────────────────────────────────
+    // ─── TOC ───────────────────────────────────────────────────────────
     '<div class="page">' +
-    '<p class="eyebrow">Style 1 — Simple Bar</p>' +
-    '{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=Overall answer distribution}' +
-    '<p class="meta">Bars are colored by palette, sized by percentage of total responses. ' +
-    'Aggregated server-side via SOQL GROUP BY — works at any survey size.</p>' +
+    '<h2>Contents</h2>' +
+    '<table class="toc">' +
+    '{#Survey_Questions__r}' +
+    '<tr><td class="num">{Display_Order__c}.</td><td>{Question_Text__c}</td></tr>' +
+    '{/Survey_Questions__r}' +
+    '</table>' +
     '</div>' +
-    // ─── style 2: pivot cross-tab ──────────────────────────────────────
+    // ─── per-question pages ────────────────────────────────────────────
+    '{#Survey_Questions__r}' +
     '<div class="page">' +
-    '<p class="eyebrow">Style 2 — Pivot Cross-Tab</p>' +
-    '{Chart:Survey_Responses__r:Selected_Answer__c:pivot:title=Answers by department&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}' +
-    '<p class="meta">Each cell shows that answer&rsquo;s percent within the department column. ' +
-    'colSort controls header order; a synthetic Total column appears at the end.</p>' +
+    '<p class="eyebrow">QUESTION {Display_Order__c}</p>' +
+    '<h2>{Question_Text__c}</h2>' +
+    '{Chart:Survey_Responses__r:Selected_Answer__c:bar}' +
     '</div>' +
-    // ─── style 3: vertical clustered bars ──────────────────────────────
+    '{/Survey_Questions__r}' +
+    // ─── cross-tab showcase (pinned to Q1 — "How satisfied are you with your current role?") ──
     '<div class="page">' +
-    '<p class="eyebrow">Style 3 — Vertical Clustered Bars</p>' +
-    '{Chart:Survey_Responses__r:Selected_Answer__c:clustered:title=Departmental clustering by answer&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}' +
-    '<p class="meta">Each answer is a column; the inner bars compare departments. Heights use percent_int (column percentage).</p>' +
+    '<p class="eyebrow">CROSS-TAB SHOWCASE</p>' +
+    '<h2>How does department affect Q1 answers?</h2>' +
+    '<p class="meta">All three cross-tab styles below visualize the same Q1 data sliced by department.</p>' +
+    '<h3>Pivot &mdash; percent per department column</h3>' +
+    '{Chart:Survey_Responses__r:Selected_Answer__c:pivot:where=Survey_Question__r.Display_Order__c=1&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}' +
     '</div>' +
-    // ─── style 4: stacked horizontal ───────────────────────────────────
+    '<div class="page">' +
+    '<p class="eyebrow">CROSS-TAB SHOWCASE</p>' +
+    '<h3>Vertical clustered &mdash; one column per answer, bars per department</h3>' +
+    '{Chart:Survey_Responses__r:Selected_Answer__c:clustered:where=Survey_Question__r.Display_Order__c=1&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}' +
+    '</div>' +
     '<div>' +
-    '<p class="eyebrow">Style 4 — Stacked Horizontal</p>' +
-    '{Chart:Survey_Responses__r:Selected_Answer__c:stacked:title=Departmental composition per answer&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}' +
-    '<p class="meta">Each row is one answer; segments show the departmental mix. Uses percent_of_row for segment widths.</p>' +
+    '<p class="eyebrow">CROSS-TAB SHOWCASE</p>' +
+    '<h3>Stacked horizontal &mdash; departmental composition per answer</h3>' +
+    '{Chart:Survey_Responses__r:Selected_Answer__c:stacked:where=Survey_Question__r.Display_Order__c=1&groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support,Operations}' +
     '</div>' +
     '</body></html>';
 
@@ -62,7 +85,6 @@ ContentVersion cv = new ContentVersion(
     IsMajorVersion = true
 );
 insert cv;
-ContentVersion reloaded = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
 System.debug('Template body ContentVersion: ' + cv.Id);
 
 // ─── 3. create / update the template parent record ────────────────────
@@ -74,16 +96,18 @@ List<DocGen_Template__c> existing = [
     LIMIT 1
 ];
 DocGen_Template__c tpl;
+String queryConfig = 'Name, (SELECT Id, Question_Text__c, Display_Order__c FROM Survey_Questions__r ORDER BY Display_Order__c ASC)';
+
 if (existing.isEmpty()) {
     tpl = new DocGen_Template__c(
         Name = templateName,
         Type__c = 'HTML',
         Base_Object_API__c = 'Survey__c',
         Is_Active__c = true,
-        Description__c = 'Demo of all four {Chart:...} styles against any Survey record. ' +
-            'Charts aggregate server-side via SOQL fallback.',
+        Description__c = 'Per-question bar chart loop + a cross-tab showcase pinned to Q1. ' +
+            'Demonstrates the {Chart:...} tag against any Survey record.',
         Output_Format__c = 'PDF',
-        Query_Config__c = 'Name',
+        Query_Config__c = queryConfig,
         Page_Size__c = 'Letter',
         Page_Orientation__c = 'Portrait'
     );
@@ -97,11 +121,10 @@ if (existing.isEmpty()) {
         Base_Object_API__c = 'Survey__c',
         Is_Active__c = true,
         Output_Format__c = 'PDF',
-        Query_Config__c = 'Name',
+        Query_Config__c = queryConfig,
         Page_Size__c = 'Letter',
         Page_Orientation__c = 'Portrait'
     );
-    // Deactivate prior versions so the new one is the active body.
     List<DocGen_Template_Version__c> oldVersions = [
         SELECT Id
         FROM DocGen_Template_Version__c
@@ -113,7 +136,7 @@ if (existing.isEmpty()) {
     if (!oldVersions.isEmpty()) {
         update oldVersions;
     }
-    System.debug('Reusing template: ' + tpl.Id);
+    System.debug('Reusing template: ' + tpl.Id + ' (deactivated ' + oldVersions.size() + ' old versions)');
 }
 
 // ─── 4. create an active version pointing at the body ContentVersion ──
@@ -124,26 +147,30 @@ DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
     Content_Version_Id__c = cv.Id,
     Page_Size__c = 'Letter',
     Page_Orientation__c = 'Portrait',
-    Description__c = 'Generated by demo-create-survey-template.apex'
+    Description__c = 'Generated by demo-create-survey-template.apex — per-question loop'
 );
 insert ver;
 
 // ─── 5. report ────────────────────────────────────────────────────────
 String orgUrl = URL.getOrgDomainUrl().toExternalForm();
 System.debug('========================================');
-System.debug('TEMPLATE CREATED — ' + templateName);
+System.debug('TEMPLATE UPDATED — ' + templateName);
 System.debug('========================================');
 System.debug('Template:  ' + orgUrl + '/lightning/r/DocGen_Template__c/' + tpl.Id + '/view');
 System.debug('Version:   ' + ver.Id);
-System.debug('Body CV:   ' + cv.Id + '  (open in Files to inspect raw HTML)');
+System.debug('Body CV:   ' + cv.Id);
 System.debug('');
-System.debug('TO GENERATE A PDF:');
-System.debug('  1. Open any Survey record, e.g.:');
+System.debug('Pages produced per generation:');
+System.debug('  1.    Cover');
+System.debug('  2.    Contents (auto-numbered TOC of all questions)');
+System.debug('  3..N. One page per question, with a bar chart of that question&rsquo;s answers');
+System.debug('  N+1.. Cross-tab showcase (pivot/clustered/stacked, all pinned to Q1 by department)');
+System.debug('');
+System.debug('Per-question chart SOQL cost = 1 GROUP BY per question (under the 50-chart budget).');
+System.debug('');
+System.debug('TO GENERATE — pick a Survey record, click DocGen Generate, choose "' + templateName + '":');
 List<Survey__c> surveys = [SELECT Id, Name FROM Survey__c ORDER BY Name LIMIT 5];
 for (Survey__c s : surveys) {
-    System.debug('       ' + s.Name + ' — ' + orgUrl + '/lightning/r/Survey__c/' + s.Id + '/view');
+    System.debug('  ' + s.Name + ' — ' + orgUrl + '/lightning/r/Survey__c/' + s.Id + '/view');
 }
-System.debug('  2. Click the DocGen Generate action / Lightning page button');
-System.debug('  3. Pick "' + templateName + '" from the runner');
-System.debug('  4. PDF generates with all four chart styles against that survey&rsquo;s responses');
 System.debug('========================================');
