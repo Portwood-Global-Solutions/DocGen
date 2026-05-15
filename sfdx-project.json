@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.93.0 — Flow Save-to-Record fix (#90), signature decline-leak fix (#91), template status column polish (#92)",
-      "versionNumber": "1.93.0.NEXT",
-      "ancestorId": "04tVx000000S9I5IAK",
+      "versionName": "1.94.0 — {Chart:...} one-line chart tag (4 styles: bar, pivot, clustered, stacked) with Google Docs authoring path",
+      "versionNumber": "1.94.0.NEXT",
+      "ancestorId": "04tVx000000SDOvIAO",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
