@@ -69,7 +69,7 @@ public with sharing class DocGenChartTagExpander {
                 );
                 break;
             }
-            String tagBody = xml.substring(next + OPEN_PREFIX.length(), close);
+            String tagBody = decodeEntities(xml.substring(next + OPEN_PREFIX.length(), close));
             String fullTag = xml.substring(next, close + 1);
             try {
                 out.add(buildSnippet(tagBody, isHtml));
@@ -344,6 +344,29 @@ public with sharing class DocGenChartTagExpander {
             return '';
         }
         return s.escapeXml().replace('{', '&#123;').replace('}', '&#125;');
+    }
+
+    /**
+     * Decode the small set of XML entities that survive a docx/HTML round-trip
+     * (Google Docs "Save as Web Page" escapes & → &amp;, ' → &apos;, etc.).
+     * Without this, tags authored in Docs lose their & option separators —
+     * the parser would split on the literal & inside &amp; and mangle every
+     * cross-tab option string. Apply once on the tag body before parsing.
+     * Numeric character refs like &#38; cover ampersands typed by hand or
+     * emitted by some HTML pipelines.
+     */
+    private static String decodeEntities(String s) {
+        if (s == null || s.indexOf('&') == -1) {
+            return s;
+        }
+        return s.replace('&amp;', '&')
+            .replace('&lt;', '<')
+            .replace('&gt;', '>')
+            .replace('&quot;', '"')
+            .replace('&apos;', '\'')
+            .replace('&#39;', '\'')
+            .replace('&#34;', '"')
+            .replace('&#38;', '&');
     }
 
     /**

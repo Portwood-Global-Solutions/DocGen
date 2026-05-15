@@ -165,6 +165,22 @@ private class DocGenChartTagExpanderTest {
         System.assert(!rendered.contains('{percent}'), 'Template placeholders should be replaced.');
     }
 
+    /**
+     * Google Docs / pandoc HTML-escape & to &amp; on export. The expander must
+     * decode common XML entities so cross-tab option strings (which use & as
+     * the option separator) parse correctly when the template came from a
+     * Docs / Word round-trip rather than direct HTML authoring.
+     */
+    @IsTest
+    static void htmlEntitiesInTagAreDecoded() {
+        String input = '{Chart:R__r:F__c:pivot:groupBy=Dept__c&amp;colSort=Eng,Sales&amp;title=Q&apos;s}';
+        String out = DocGenChartTagExpander.expand(input, 'HTML');
+        System.assert(out.contains('groupBy=Dept__c'), 'groupBy option should survive &amp; decode. Got: ' + out);
+        System.assert(out.contains('colSort=Eng,Sales'), 'colSort option should survive &amp; decode. Got: ' + out);
+        System.assert(out.contains('Eng'), 'Pivot headers should appear from colSort.');
+        System.assert(!out.contains('Chart error'), 'Decoded tag should parse cleanly.');
+    }
+
     @IsTest
     static void titleIsEscaped() {
         String input = '{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=<script>alert(1)</script>}';
