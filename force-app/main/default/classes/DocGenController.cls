@@ -54,6 +54,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // Pre-resolve Salesforce rich text image URLs to base64 data URIs
         resolveRichTextImages(recordData);
 
+        // Issue #66 — opt-in Classic Approval history. Template authors put
+        // `Approvals` somewhere in Query_Config__c and use `{#Approvals}…
+        // {/Approvals}` in the body. Costs one extra SOQL per generation,
+        // skipped entirely when the template doesn't ask for it (no name
+        // collision with a custom `Approvals__c` field on the host object).
+        if (DocGenApprovalHistory.queryConfigMentionsApprovals(template.Query_Config__c)) {
+            recordData.put('Approvals', DocGenApprovalHistory.load(recordId));
+        }
+
         return new Map<String, Object>{
             'data' => recordData,
             'templateFile' => fileContent,
@@ -1634,6 +1643,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     private static List<DocGen_Template__c> getTemplatesForObjectInternal(String objectApiName, String recordId) {
         /* code-analyzer-suppress ApexFlsViolation */
+        // Inactive templates are filtered out of the runner picker (issue #85).
+        // Admin views call getAllTemplates() which doesn't filter, so admins can
+        // still see and toggle inactive templates. Uses `!= FALSE` to treat both
+        // TRUE and NULL as Active — a `(= TRUE OR = NULL)` OR clause has a
+        // platform indexing quirk on newly-added Checkbox fields that doubles
+        // some rows into both buckets; `!= FALSE` matches the same semantic set
+        // without the duplication.
         List<DocGen_Template__c> all = [
             SELECT
                 Id,
@@ -1641,6 +1657,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Description__c,
                 Type__c,
                 Output_Format__c,
+                Is_Active__c,
                 Is_Default__c,
                 Query_Config__c,
                 Category__c,
@@ -1651,7 +1668,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Record_Filter__c,
                 Base_Object_API__c
             FROM DocGen_Template__c
-            WHERE Base_Object_API__c = :objectApiName
+            WHERE Base_Object_API__c = :objectApiName AND Is_Active__c != FALSE
             WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Is_Default__c DESC, Name ASC
         ];
@@ -1901,6 +1918,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Test_Record_Id__c,
                 Output_Format__c,
                 Document_Title_Format__c,
+                Is_Active__c,
                 Is_Default__c,
                 Sort_Order__c,
                 Lock_Output_Format__c,
@@ -2001,6 +2019,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             }
             if (fields.containsKey('Custom_Margins__c')) {
                 template.Custom_Margins__c = (String) fields.get('Custom_Margins__c');
+            }
+            // #85 — Active flag. Default true on new records; only update when the
+            // caller explicitly sends the field (so legacy save paths that omit it
+            // don't accidentally toggle an existing template's active state).
+            if (fields.containsKey('Is_Active__c')) {
+                template.Is_Active__c = (Boolean) fields.get('Is_Active__c');
             }
             // Update Default flag if provided — enforce one default per object
             if (fields.containsKey('Is_Default__c')) {
@@ -2355,6 +2379,86 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             WITH SYSTEM_MODE
             ORDER BY CreatedDate DESC
         ];
+    }
+
+    /**
+     * Issue #83 — Deletes a non-active template version and its associated files.
+     * Removes the version record, its body ContentVersion, and all pre-decomposed
+     * XML ContentVersions (titles starting with `docgen_tmpl_xml_<versionId>_`).
+     * Refuses to delete the active version — caller must activate another version
+     * first.
+     *
+     * Each saved version typically references 5-7 CVs (body docx + pre-decomp
+     * parts), so deleting one version frees that many files. Users with 50+
+     * versions accumulated over heavy iteration save substantial storage.
+     */
+    @AuraEnabled
+    public static void deleteTemplateVersion(Id versionId) {
+        try {
+            if (!Schema.sObjectType.DocGen_Template_Version__c.isDeletable()) {
+                throw DocGenService.ahe('Insufficient access.');
+            }
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template_Version__c> versions = [
+                SELECT Id, Name, Is_Active__c, Content_Version_Id__c
+                FROM DocGen_Template_Version__c
+                WHERE Id = :versionId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (versions.isEmpty()) {
+                throw DocGenService.ahe('Version not found.');
+            }
+            DocGen_Template_Version__c v = versions[0];
+            if (v.Is_Active__c == true) {
+                throw DocGenService.ahe(
+                    'Cannot delete the active version. Activate a different version first, then delete this one.'
+                );
+            }
+
+            // Collect ContentDocuments to delete:
+            //  - pre-decomposed XML CVs by Title prefix docgen_tmpl_xml_<versionId>_*
+            //  - the version's body CV (Content_Version_Id__c)
+            Set<Id> cdsToDelete = new Set<Id>();
+            String predecompPrefix = 'docgen_tmpl_xml_' + String.valueOf(versionId) + '_';
+            String likePattern = predecompPrefix + '%';
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (ContentVersion cv : [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Title LIKE :likePattern
+                WITH SYSTEM_MODE
+            ]) {
+                if (cv.ContentDocumentId != null) {
+                    cdsToDelete.add(cv.ContentDocumentId);
+                }
+            }
+            if (String.isNotBlank(v.Content_Version_Id__c)) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                List<ContentVersion> bodyCvs = [
+                    SELECT ContentDocumentId
+                    FROM ContentVersion
+                    WHERE Id = :v.Content_Version_Id__c
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (!bodyCvs.isEmpty() && bodyCvs[0].ContentDocumentId != null) {
+                    cdsToDelete.add(bodyCvs[0].ContentDocumentId);
+                }
+            }
+
+            if (!cdsToDelete.isEmpty()) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                delete [SELECT Id FROM ContentDocument WHERE Id IN :cdsToDelete WITH SYSTEM_MODE]; // NOPMD ApexCRUDViolation - cascade-cleanup of package-internal version files
+            }
+
+            /* code-analyzer-suppress ApexFlsViolation */
+            delete v; // NOPMD ApexCRUDViolation - isDeletable() checked above
+        } catch (DmlException dmlE) {
+            throw DocGenService.ahe(dmlE, 'Error deleting version. ' + dmlE.getDmlMessage(0));
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error deleting version.');
+        }
     }
 
     /**

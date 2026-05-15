@@ -242,6 +242,8 @@ Each save creates a new `DocGen_Template_Version__c` record. Only the version ma
 - When you save a new version, DocGen pre-extracts images from the DOCX/PPTX ZIP and caches them as ContentVersions for fast PDF rendering at generation time.
 - The XML parts are also pre-cached so PDF generation can skip ZIP decompression at runtime.
 
+**Deleting old versions (v1.92+).** Heavy iteration accumulates versions fast — each save creates the version record plus 5–7 ContentVersions (the body file + pre-decomposed XML parts). DocGen Admin → click into the template → **Versions** tab now exposes a **Delete** button next to each non-active version. Confirm the dialog, and the version record _plus_ its body and pre-decomposed files are cascade-deleted in one transaction. The currently active version can't be deleted — activate a different version first if you need to remove the current one.
+
 ### 5.3 Test record
 
 Set `Test_Record_Id__c` on the template to pin a specific record for preview/validation. Useful during template development — you can always preview against a known-good record without picking it each time.
@@ -254,7 +256,9 @@ Use this for compliance-sensitive documents where only one format is allowed (e.
 
 ### 5.5 Template visibility (audience control)
 
-Restrict which users see a template in their picker:
+**Active / Inactive (v1.92+).** The simplest visibility control: each template has an **Active** checkbox (defaults to checked on new templates). When unchecked, the template is hidden from the document picker on every record page _while remaining fully editable_ in DocGen Admin. Use this to keep time-locked, seasonal, or work-in-progress templates from cluttering the daily picker without deleting them — the template list view in Admin shows an **Inactive** badge in the Status column so admins can find and re-activate them easily.
+
+Restrict more narrowly which users see a template in their picker:
 
 - **`Required_Permission_Sets__c`** (comma-separated permission-set names): only users with _all_ of these permission sets see the template.
 - **`Specific_Record_Ids__c`** (comma-separated record IDs): only show the template for these specific records.
@@ -1656,7 +1660,50 @@ Or in tabular form for surveys / inspection forms:
 - **Emoji** (😀 🎉 etc.) — out of Arial Unicode MS coverage, render as tofu in PDF. Use the Unicode symbols above instead.
 - **Custom decorative fonts** (script, brand, etc.) — generate as DOCX and open in Word. See [§14.2](#142-pdf-font-limitations).
 
-### 7.15 Not implemented
+### 7.15 Classic Approvals related list — `{#Approvals}` (v1.92+)
+
+Render the host record's Salesforce **Classic Approvals** process history (submission, every approval/rejection step) directly in a generated document. Common use cases: Purchase Orders showing every approver up the chain in the final PDF, NDAs stamped with each signatory's role + timestamp, change-management forms with the approval audit trail rendered alongside the form data.
+
+**Opt-in via Query_Config\_\_c.** Add the standalone word `Approvals` somewhere in the template's Query_Config**c (case-insensitive, word-boundary — `MyApprovalsList**c`doesn't activate it). When DocGen sees the token, it queries`ProcessInstance`+`ProcessInstanceStep`for the host record and exposes the flattened step list as a child collection at the`Approvals` key.
+
+Example Query_Config\_\_c entry:
+
+```
+Name, Status__c, Amount__c, Approvals
+```
+
+Example template body:
+
+```
+{#Approvals}
+{ActorName} ({ActorTitle}) — {StepStatus} — {CreatedDate:MM/dd/yyyy h:mm a}
+Comments: {Comments}
+
+{/Approvals}
+```
+
+**Fields available inside the loop:**
+
+| Field               | Source                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `ActorName`         | `Step.Actor.Name` — who actually took the action                                                       |
+| `ActorTitle`        | `Step.Actor.Title` — title on the User who acted                                                       |
+| `ActorEmail`        | `Step.Actor.Email`                                                                                     |
+| `OriginalActorName` | `Step.OriginalActor.Name` — useful when an approval was reassigned (delegated to)                      |
+| `StepStatus`        | `Started`, `Approved`, `Rejected`, `Removed`, `NoResponse` — see Salesforce docs for the full list     |
+| `Comments`          | Approver's comments (empty string when omitted)                                                        |
+| `CreatedDate`       | When the step occurred — works with the standard `{CreatedDate:MM/dd/yyyy}` format specifiers (§7.2)   |
+| `ProcessStatus`     | The parent `ProcessInstance.Status` — the overall outcome of the approval process this step belongs to |
+| `SubmittedByName`   | Who originally submitted for approval (constant within one ProcessInstance)                            |
+| `SubmittedByTitle`  | Submitter's User.Title                                                                                 |
+
+**Sorting.** Steps are sorted earliest-first within each ProcessInstance, and ProcessInstances are sorted earliest-first. So a record that was submitted, rejected, then resubmitted and approved produces the steps in chronological order across both submissions.
+
+**What's not included (yet).** Only steps that have been _acted on_ appear — pending approval items (`ProcessInstanceWorkitem`) are not in the list. If you need "still awaiting approver X", that's a separate query. Flow-based approval orchestration is a different object model and out of scope; this tag covers the Classic Approvals process only.
+
+**Cost.** One extra SOQL query per generation when the token is present. Templates that don't reference `Approvals` in Query_Config\_\_c skip the query entirely — no overhead.
+
+### 7.16 Not implemented
 
 - **Custom fonts in PDF** — the Salesforce PDF engine only supports Helvetica, Times, Courier, and Arial Unicode MS. `@font-face` is not supported. See [§14.2](#142-pdf-font-limitations). For custom fonts, generate as DOCX and open in Word — DOCX preserves template fonts.
 
@@ -1774,11 +1821,29 @@ If something breaks, work through the diagnostic checklist:
 - **Template generates but PDF download is a 90-byte JSON file with `errorduringprocessing.jsp` inside** → you're on v1.86 or earlier. Upgrade to v1.87+; the URL-prefix fix is in there.
 - **PDF downloads but images are missing** → if the images come from rich text fields on records, see [§8.6.1](#861-known-limitation-rich-text-images-on-records-with-internalusers-cdl) below for the current workaround.
 
-#### 8.6.1 Known limitation — rich text images on records with InternalUsers CDL
+#### 8.6.1 Known limitation — rich text images on records with InternalUsers CDL (documented, not fixed)
 
-When an admin pastes an image into a rich text field on a record (e.g. `Account.RichText__c`), Salesforce defaults the resulting `ContentDocumentLink.Visibility` to `InternalUsers` — invisible to guests. PDF guest renders are unaffected (the platform event path runs as Automated Process, which is internal and reads InternalUsers files natively), but **DOCX guest renders run synchronously as the guest user** and silently skip the image during zip assembly. Tracked as issue #72.
+When an admin pastes an image into a rich text field on a record (e.g. `Account.RichText__c`), Salesforce defaults the resulting `ContentDocumentLink.Visibility` to `InternalUsers` — invisible to guests. **PDF guest renders are unaffected** because `Blob.toPdf` fetches each `<img src=...>` over HTTP from the Automated Process queueable, which has a real lightning-subdomain session that can resolve those URLs. **DOCX guest renders silently skip the image** because DOCX assembly loads image bytes via SOQL on `ContentVersion.VersionData` — and `InternalUsers` CDLs are unreadable through SOQL from _any_ guest-context path (including platform-event-triggered queueables; verified empirically against `WITH USER_MODE` and `WITH SYSTEM_MODE` both).
 
-Workaround: after pasting a rich text image you want guest-visible, manually flip the CDL Visibility to `AllUsers` via the Files setup or a one-shot Apex helper. Or render to PDF instead of DOCX — the platform event path handles it automatically.
+Originally tracked as issue #72; closed `wontfix` in v1.92 after the architectural fix path the issue body proposed (route DOCX through `DocGen_Guest_Render__e` so Automated Process can read the files) was empirically disproven. Automated Process is not a typical internal user — it lacks ContentVersion file-load access via SOQL regardless of CDL visibility, so re-routing the request doesn't help.
+
+**Workaround.** After pasting a rich text image into a guest-visible record, flip the file's CDL `Visibility` to `AllUsers`. Two ways:
+
+1. **From the Files setup UI.** On the record, click into the file → **Share** dropdown → switch from "Shared with internal users" to "Allow file access for all users with record visibility".
+2. **One-shot Apex** to bulk-flip every rich-text image on a record:
+
+    ```apex
+    Id recordId = '001xxx...';  // the record whose rich-text images should be guest-visible
+    List<ContentDocumentLink> cdls = [
+        SELECT Id, Visibility
+        FROM ContentDocumentLink
+        WHERE LinkedEntityId = :recordId AND Visibility = 'InternalUsers'
+    ];
+    for (ContentDocumentLink cdl : cdls) cdl.Visibility = 'AllUsers';
+    update cdls;
+    ```
+
+Or render to PDF instead of DOCX — the HTTP-fetch path handles `InternalUsers` files transparently with no manual CDL flip needed.
 
 #### Why this works (architecture note)
 

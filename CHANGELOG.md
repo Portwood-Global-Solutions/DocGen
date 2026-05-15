@@ -1,5 +1,76 @@
 # Changelog
 
+## v1.92.0 — Active/Inactive template toggle, prune old versions, Classic Approvals merge tag, guest DOCX images closed wontfix with empirical record
+
+Promoted package: TBD (cut after PR merge) · Install URL: TBD
+
+Four shipped changes plus a P0 investigation parked pending real-world templates. The headlines are three independent admin/template enhancements: a clean Active/Inactive toggle so seasonal templates stay out of the picker, a Delete action on the Versions tab so heavy-iteration teams can free storage, and a `{#Approvals}` merge tag that exposes Salesforce Classic Approval history as a standard child loop. Plus the long-running guest DOCX rich-text image issue (#72) is closed `wontfix` with the full test matrix recorded — the architectural fix path the issue body proposed was empirically disproven during this cycle.
+
+### Active/Inactive templates — `Is_Active__c` (refs #85)
+
+A boolean toggle on `DocGen_Template__c` that hides a template from the runner's document picker without deleting it. Defaults to `true` on new records; existing templates without the field set are treated as Active (the SOQL filter uses `!= FALSE` rather than `= TRUE OR = NULL` to dodge a Salesforce indexing quirk on newly-added Checkbox fields). Use this for time-locked or seasonal templates (a customer reported a sprawl of dated promo templates clogging their daily picker — this is the targeted fix).
+
+- **New field** `Is_Active__c` with help text + permission set entries on `DocGen_Admin` (editable), `DocGen_User` / `DocGen_Guest_Runner` (read-only). Page layout updated so the toggle sits adjacent to the existing **Default Template** toggle.
+- **`DocGenController.getTemplatesForObjectInternal`** — the runner-picker SOQL filters `Is_Active__c != FALSE`, so Inactive templates disappear from every record page. `getAllTemplates` (used by DocGen Admin) is unchanged: admins still see and can edit/re-activate inactive templates.
+- **docGenAdmin LWC** — Active toggle in the template edit form, **Status** column added to the template list view showing an "Inactive" badge so admins can spot dormant templates at a glance.
+- **UserGuide §5.5** extended with the lead-in paragraph explaining when to use Active/Inactive versus the more granular permission-set / record-ID / record-filter controls below it.
+
+### Delete previous template versions (refs #83)
+
+Heavy iteration on a template accumulates `DocGen_Template_Version__c` records fast — each save creates the version row plus 5–7 cached `ContentVersion` files (body docx + pre-decomposed XML parts). A customer reported 70+ versions × ~5 files = ~400 stale files on a single template. New action prunes them cleanly.
+
+- **`DocGenController.deleteTemplateVersion(Id)`** — refuses the currently active version (guard at the Apex layer), cascade-deletes the version's body `ContentVersion` (via `Content_Version_Id__c`) and every pre-decomposed XML CV (titles matching `docgen_tmpl_xml_<versionId>_%`), then deletes the version record itself. Friendly error messages via `DocGenService.ahe` cover the "not found" and "active version" cases.
+- **docGenAdmin LWC** — new **Delete** button column in the Versions tab using `destructive-text` styling. The button is disabled on the active row (mirrors the server-side guard). Confirmation dialog warns the operation isn't undoable; on success, the versions table refreshes immediately.
+- **UserGuide §5.2** updated with the version-deletion workflow.
+
+### Classic Approval history — `{#Approvals}` merge tag (refs #66)
+
+Render a record's Salesforce **Classic Approvals** history (initial submission, each approval/rejection step, comments, timestamps) directly inside a generated document. Originally requested by a customer using DocGen for Purchase Orders that need every approver up the chain stamped into the final PDF.
+
+Activate by adding the standalone word `Approvals` to the template's `Query_Config__c`. The template body then uses standard `{#Approvals}…{/Approvals}` loop syntax. Available fields per step: `ActorName`, `ActorTitle`, `ActorEmail`, `OriginalActorName`, `StepStatus`, `Comments`, `CreatedDate`, `ProcessStatus`, `SubmittedByName`, `SubmittedByTitle`. Steps sort earliest-first across all `ProcessInstance` records on the host record (handles the resubmit-after-reject case naturally).
+
+- **New `DocGenApprovalHistory` class** — queries `ProcessInstance` with a `Steps` subquery (per issue #67 prior art, `ProcessInstanceStep` is not standalone-queryable), flattens across all instances into one chronologically-sorted list, returns the standard `{ records, totalSize }` data-map shape. Best-effort: if the host object doesn't support approvals or the query is restricted, returns empty rather than throwing.
+- **Opt-in via Query_Config\_\_c** — case-insensitive word-boundary match on `Approvals`. Won't false-positive on a custom `Approvals__c` field on the host object (the merge engine sees that as a regular field, not the synthetic relationship). Templates that don't reference `Approvals` skip the extra SOQL entirely.
+- **Scope** — Classic Approvals only. Flow-based approval orchestration uses a different object model and is out of scope for v1. Pending approval items (`ProcessInstanceWorkitem`) are not included — only acted-upon steps. Both could be added in a future release if demand emerges.
+- **UserGuide §7.15** is new and documents the syntax, all fields, sorting semantics, and cost.
+
+### HTML/CSS rendering (closed verified — refs #60)
+
+Closed `verified` after running the original issue's reproduction case at v1.91 — `extractHtmlStyleBlocks` (v1.89) plus `wrapHtmlForPdf`'s `@page` suppression (v1.90) closed the bug. Verification script `scripts/verify-60-html-css.apex` passes 5/5 assertions on `portwood-staging`: CSS extracted from `<style>` (including `@page` rules), body content isolated from `<head>`/`<style>`, wrapped output preserves both engine + author styles, no raw CSS leaks outside `<style>` tags, `<h1>` preserved in the rendered body.
+
+### Guest DOCX rich-text images — closed wontfix (refs #72)
+
+Closed `wontfix` with full empirical record in the issue thread. The architectural fix path the issue body proposed (route DOCX through `DocGen_Guest_Render__e` so Automated Process can read `InternalUsers`-visibility files) was empirically disproven during this cycle:
+
+| Test scenario (Automated Process via DocGen_Guest_Render\_\_e trigger) | Result     |
+| ---------------------------------------------------------------------- | ---------- |
+| `SELECT VersionData WITH USER_MODE` on InternalUsers CDL               | **0 rows** |
+| `SELECT VersionData WITH SYSTEM_MODE` on InternalUsers CDL             | **0 rows** |
+| `SELECT VersionData WITH USER_MODE` on AllUsers CDL (after pre-flip)   | **0 rows** |
+
+The Automated Process user lacks ContentVersion file-load access via SOQL regardless of CDL Visibility or access mode. The PDF guest path works only because `Blob.toPdf` uses **HTTP** image fetches (not SOQL); DOCX assembly is SOQL-based and that's a different access boundary entirely. Route-through-queueable produces zero new behavior. The two real fix paths (CDL pre-flip + keep inline guest path, or refactor DocGenService image loader to HTTP-fetch) are larger work than current demand justifies. Tracking artifact: the wrong-direction LWC routing fix and its revert are preserved in git history under `feat/v1.92-sig-packet-and-guest-docx` so the next attempt doesn't repeat the dead-end.
+
+**UserGuide §8.6.1** corrected to drop the "Automated Process reads InternalUsers natively" claim and documents the bulk-flip Apex helper as the supported admin workaround.
+
+### Signature packet wrong-source corruption — investigation parked (refs #87)
+
+The reported P0 silent-corruption bug — guest-style observation that with 3+ templates in a signature packet, the wrong source document gets rendered into the signed PDF — is **thoroughly diagnosed but not yet fixable** without samples from the reporter. Four committed diagnostics on this branch (`scripts/repro-87-*.apex` plus the pandoc-built fixtures in `scripts/repro87-fixtures/`) put **53 content-correctness assertions** against every synthetic template configuration we could construct, including:
+
+- Preview-cache loop iteration in `createPacketSignerRequestWithTitle` (21/21 PASS)
+- `mergeTemplateForSignature` in sequential, reverse, and same-template-repeat patterns (7/7 PASS)
+- Pandoc-built realistic DOCX templates with embedded images and identical `rId9` declarations — the exact rId-collision predicate the most likely hypothesis predicted (16/16 PASS)
+- The full Loop B render path (`renderPacketSignaturePdf` including `stampSignaturesInXml`, `applyWatermarkOverride`, `convertToHtml`) invoked synchronously with three checkpoint debug probes per iteration (9/9 PASS)
+
+Every synthetic-template path is provably content-correct. The live suspect set is narrowed to real async runtime behavior or template-specific state that pandoc-shaped DOCX doesn't expose; further progress needs a sanitized copy of one of the reporter's actual templates. The issue is parked open with the full diagnostic record preserved for the next maintainer to pick up.
+
+### Validation
+
+All three release gates passed against `portwood-staging` before PR open:
+
+- **E2E suite**: 11/11 scripts (`scripts/e2e-01-permissions.apex` through `scripts/e2e-08-cleanup.apex`) — 219 assertions, 0 failures.
+- **Apex test suite**: 1,331 tests, 100% pass rate, **76% org-wide coverage** (above the 75% threshold).
+- **Code Analyzer**: 0 High-severity violations on Security + AppExchange rule sets. 41 Moderate (`pmd:ProtectSensitiveData` false-positives on signature-domain field metadata — the documented ~30 baseline carrying the v1.92 net field additions).
+
 ## v1.91.0 — {#ChartBucket} chart aggregation tag + rich-text images in HTML templates
 
 Promoted package: `04tVx000000RvbhIAC` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RvbhIAC)

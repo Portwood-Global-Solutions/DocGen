@@ -1173,6 +1173,15 @@
                                     ></lightning-input>
                                     <lightning-input
                                         type="toggle"
+                                        label="Active (visible in the document picker)"
+                                        checked={editTemplateIsActive}
+                                        onchange={handleEditActiveChange}
+                                        class="slds-var-m-top_medium"
+                                        message-toggle-active="Active"
+                                        message-toggle-inactive="Inactive (hidden from picker, still editable here)"
+                                    ></lightning-input>
+                                    <lightning-input
+                                        type="toggle"
                                         label="Default Template for this Object"
                                         checked={editTemplateIsDefault}
                                         onchange={handleEditDefaultChange}
