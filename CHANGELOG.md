@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.93.0 — Flow Save-to-Record honored (#90), signature decline cache cleared (#91), Template Status column symmetric labels (#92)
+
+Three bug fixes ride this release — two from real customer field reports, one a follow-up polish to the v1.92.0 active/inactive feature. Highlights: the **Generate Document** Flow action now actually honors `Save to Record = false` (today the file was always attached via `ContentVersion.FirstPublishLocationId` regardless of the toggle); declining an e-signature now clears the cached typed-name preview so the signing page can't keep reading as "Electronically signed by …" after the fact; and the Template Library Status column now labels active templates "Active" (green) symmetrically with "Inactive" (gray) instead of leaving active cells blank.
+
+### Flow `Save to Record = false` now actually keeps the file off the record (refs #90)
+
+`DocGenFlowAction`'s `Save to Record` toggle was effectively a no-op: regardless of its value, the service path inserted the generated `ContentVersion` with `FirstPublishLocationId = recordId`, which auto-creates a `ContentDocumentLink` to the source record on insert. Customers who wanted "generate and download — don't leave an artifact on the record" had no clean Flow-side path.
+
+Root cause: `recordId` was overloaded as both the merge-data source **and** the file attachment target.
+
+- **`DocGenService.generateDocument`** — new 5-arg overload `(templateId, recordId, outputFormatOverride, documentTitle, attachmentRecordId)` that separates the two roles. `attachmentRecordId = null` inserts the `ContentVersion` standalone (no `FirstPublishLocationId`, no `ContentDocumentLink`) while still using `recordId` for merge data. Existing 4-arg overload delegates with back-compat behavior.
+- **`DocGenService.generateAndSaveFromData`** — parallel 6-arg overload for the JSON Data path (Flow action's pre-built data-map mode).
+- **`DocGenFlowAction`** — both branches (standard `recordId` and JSON Data) now pass `attachmentRecordId = (req.saveToRecord == true) ? req.recordId : null`. `@InvocableVariable` description updated to match reality. Phase 3 CDL backfill still runs only when `saveToRecord=true` (idempotent, deduped — no-op for the happy path now that `FirstPublishLocationId` does the work).
+- **`DocGenGiantQueryFlowAction`** sync path — same fix applied; removed the now-dead `linkToRecord` helper (`FirstPublishLocationId` handles attach).
+- **`DocGenBulkFlowAction`** is unaffected (bulk jobs always attach by design).
+- **Tests** — `DocGenMiscTests` gets two new regression tests (`testFlowAction_jsonData_withRecordId_saveToRecord_false_doesNotAttach`, `testFlowAction_recordId_saveToRecord_false_doesNotAttach`); the existing `testFlowActionSaveToRecord` was asserting the old buggy behavior and is now flipped to assert `saveToRecord = true` actually creates a CDL. `e2e-04-generate-docx.apex` gets two new assertions covering both toggle states with cleanup.
+
+### Signature decline now clears the cached typed-name preview (refs #91)
+
+When a v3 e-signature signer typed their name on the preview screen and then hit Decline, the verification page correctly reflected "Declined" but the signing-page document preview kept reading as "Electronically signed by …" — confusing for the signer and for anyone re-opening the link.
+
+Cause: the signing UI caches a fully merged preview HTML (including the typed-name signature stamp) into `DocGen_Signature_Request__c.Signature_Data__c` so signers see an instant live preview after typing. The decline endpoint (`DocGenSignatureController.declineSignature`) marked the signer + request `Declined` and wrote an audit row but never cleared the cache. `fetchDocumentData` then re-served the stale stamped preview. No legal/audit impact (verification cert was always accurate; no signed PDF is ever generated post-decline) — but a real UX bug.
+
+- **`DocGenSignatureController.declineSignature`** — now also nulls `signer.Signature_Data__c` and `parentReq.Signature_Data__c` alongside the status update. Mirrors what the Cancel path already did.
+- **`DocGenSignatureController.fetchDocumentData`** — when the request status is `Declined`, returns a clean confirmation card (decline date + reason if captured) instead of attempting a preview render. Survives page refresh independent of cache state.
+- **New `buildDeclinedStateHtml(...)` helper** produces the confirmation HTML.
+- **Tests** — `DocGenSignatureTests.testDeclineSignature` extended to seed `Signature_Data__c` on both records, decline, and assert both fields are nulled. New `testFetchDocumentData_returnsDeclinedCardAfterDecline` asserts the response contains "Signature Request Declined" + reason text and does **not** contain "electronically signed".
+
+### Template Library Status column shows "Active" instead of blank (refs #92)
+
+Follow-up to v1.92.0 #85. The Status column was rendering `'Inactive'` (gray) for inactive templates but `''` for active ones — under a column header reading "Status", an empty cell read as missing data rather than "Active".
+
+- **`lwc/docGenAdmin/docGenAdmin.js`** — symmetric labels: "Active" (green, bold) and "Inactive" (gray, bold).
+- LWC-only change. No Apex, no field, no permission set deltas.
+
+### Test counts
+
+- Apex local tests: **1334 passing**, 100% pass rate, 76% org-wide coverage.
+- e2e suite (e2e-01 through e2e-08) green on `portwood-staging`.
+- Prettier: clean. Code Analyzer: 0 High, 41 Moderate (signature-field `pmd:ProtectSensitiveData` false positives — unchanged from v1.92.0 baseline).
+
 ## v1.92.0 — Active/Inactive template toggle, prune old versions, Classic Approvals merge tag, guest DOCX images closed wontfix with empirical record
 
 Promoted package: `04tVx000000S9I5IAK` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000S9I5IAK)

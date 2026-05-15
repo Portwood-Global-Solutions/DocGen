@@ -698,8 +698,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     ...t,
                     defaultLabel: t[F.IsDefault] ? '★' : '',
                     defaultClass: t[F.IsDefault] ? 'slds-text-color_success slds-text-title_bold' : '',
-                    activeLabel: isActive ? '' : 'Inactive',
-                    activeClass: isActive ? '' : 'slds-text-color_weak slds-text-title_bold'
+                    activeLabel: isActive ? 'Active' : 'Inactive',
+                    activeClass: isActive
+                        ? 'slds-text-color_success slds-text-title_bold'
+                        : 'slds-text-color_weak slds-text-title_bold'
                 };
             });
             this._samplesChecked = true;

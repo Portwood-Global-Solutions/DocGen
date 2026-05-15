@@ -17,7 +17,7 @@ global with sharing class DocGenFlowAction { // NOPMD AvoidGlobalModifier — gl
 
         @InvocableVariable(
             label='Save to Record'
-            description='If true, attach the generated file to the source record via ContentDocumentLink. Default: false'
+            description='If true, attach the generated file to the source record (Files related list). If false (default), the file is inserted as a standalone ContentVersion and can still be downloaded via the returned Content Document ID / Content Version ID — the source record is not touched.'
         )
         global Boolean saveToRecord;
 
@@ -87,14 +87,17 @@ global with sharing class DocGenFlowAction { // NOPMD AvoidGlobalModifier — gl
                     Map<String, Object> dataMap = (Map<String, Object>) parsed;
 
                     if (req.recordId != null) {
-                        // Caller wants the file attached to the supplied record (FirstPublishLocationId).
-                        // saveToRecord=true adds an extra ContentDocumentLink in Phase 3.
+                        // recordId is the title/context anchor. The actual attachment target is null
+                        // when saveToRecord != true — produces a standalone ContentVersion the Flow
+                        // can hand off via the returned ContentDocumentId (issue #90).
+                        Id fileAttachmentTarget = (req.saveToRecord == true) ? req.recordId : null;
                         docId = DocGenService.generateAndSaveFromData(
                             req.templateId,
                             req.recordId,
                             dataMap,
                             req.outputFormatOverride,
-                            req.documentTitle
+                            req.documentTitle,
+                            fileAttachmentTarget
                         );
                     } else {
                         // No record context — render PDF and insert as a standalone ContentVersion.
@@ -128,11 +131,15 @@ global with sharing class DocGenFlowAction { // NOPMD AvoidGlobalModifier — gl
                         res.contentVersionId = saved.Id;
                     }
                 } else {
+                    // attachmentRecordId is null when saveToRecord != true — keeps the file out of the
+                    // record's Files related list while still using recordId for merge data (issue #90).
+                    Id attachmentRecordId = (req.saveToRecord == true) ? req.recordId : null;
                     docId = DocGenService.generateDocument(
                         req.templateId,
                         req.recordId,
                         req.outputFormatOverride,
-                        req.documentTitle
+                        req.documentTitle,
+                        attachmentRecordId
                     );
                 }
                 res.contentDocumentId = docId;

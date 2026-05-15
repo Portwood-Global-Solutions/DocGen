@@ -2019,6 +2019,24 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * resolved title format / record Name fallback. Used by Flow callers (Document Title input).
      */
     global static Id generateDocument(Id templateId, Id recordId, String outputFormatOverride, String documentTitle) {
+        return generateDocument(templateId, recordId, outputFormatOverride, documentTitle, recordId);
+    }
+
+    /**
+     * Same as the 4-arg overload but separates the merge-data record from the attachment target.
+     * Pass attachmentRecordId = null to insert the ContentVersion as a standalone file (no
+     * FirstPublishLocationId, no ContentDocumentLink) — the caller still gets the returned
+     * ContentDocumentId so it can hand the user a `/sfc/servlet.shepherd/version/download/...`
+     * URL without leaving an artifact on the source record. Used by Flow callers that opt out
+     * of "Save to Record" (issue #90).
+     */
+    global static Id generateDocument(
+        Id templateId,
+        Id recordId,
+        String outputFormatOverride,
+        String documentTitle,
+        Id attachmentRecordId
+    ) {
         validateOutputFormatOverride(templateId, outputFormatOverride);
         MergeResult mr = mergeTemplate(templateId, recordId, null, outputFormatOverride);
         if (String.isNotBlank(documentTitle)) {
@@ -2027,12 +2045,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
         if (mr.outputFormat == 'PDF' && (mr.templateType == 'Word' || mr.templateType == 'HTML')) {
             Blob pdfBlob = renderPdf(mr, templateId, recordId);
-            return savePdfFile(pdfBlob, mr.docTitle, recordId);
+            return savePdfFile(pdfBlob, mr.docTitle, attachmentRecordId);
         }
 
         // Native DOCX/PPTX path
         Blob resultBlob = assembleZip(mr);
-        return saveFile(resultBlob, mr.docTitle, recordId, mr.outputFormat, mr.templateType);
+        return saveFile(resultBlob, mr.docTitle, attachmentRecordId, mr.outputFormat, mr.templateType);
     }
 
     /**
@@ -2110,6 +2128,31 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String outputFormatOverride,
         String documentTitle
     ) {
+        return generateAndSaveFromData(
+            templateId,
+            attachmentRecordId,
+            dataMap,
+            outputFormatOverride,
+            documentTitle,
+            attachmentRecordId
+        );
+    }
+
+    /**
+     * Same as generateAndSaveFromData(templateId, attachmentRecordId, dataMap, outputFormatOverride,
+     * documentTitle) but separates the data-source record from the attachment target. Pass
+     * fileAttachmentTarget = null to insert a standalone ContentVersion (no FirstPublishLocationId,
+     * no ContentDocumentLink). Used by the Flow action when saveToRecord=false and JSON Data is
+     * supplied (issue #90).
+     */
+    global static Id generateAndSaveFromData(
+        Id templateId,
+        Id attachmentRecordId,
+        Map<String, Object> dataMap,
+        String outputFormatOverride,
+        String documentTitle,
+        Id fileAttachmentTarget
+    ) {
         if (dataMap == null) {
             throw new DocGenException('dataMap cannot be null.');
         }
@@ -2119,7 +2162,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             );
         }
         preloadedRecordDataOverride = dataMap;
-        return generateDocument(templateId, attachmentRecordId, outputFormatOverride, documentTitle);
+        return generateDocument(
+            templateId,
+            attachmentRecordId,
+            outputFormatOverride,
+            documentTitle,
+            fileAttachmentTarget
+        );
     }
 
     /**

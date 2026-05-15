@@ -21,7 +21,7 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
 
         @InvocableVariable(
             label='Save to Record'
-            description='If true, attach the generated file to the source record. Default: true for sync, always true for async Giant Query.'
+            description='If true, attach the generated file to the source record (Files related list). If false (default), the sync-path file is inserted as a standalone ContentVersion and can still be downloaded via the returned Content Document ID. The async Giant Query path always attaches because the batch writes the final PDF back to the job/record.'
         )
         global Boolean saveToRecord;
     }
@@ -113,8 +113,16 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
                     res.jobId = launchGiantBatch(req.templateId, req.recordId, giantRelationship, giantNodeConfig);
                     res.success = true;
                 } else {
-                    // Sync path — same as DocGenFlowAction
-                    Id docId = DocGenService.generateDocument(req.templateId, req.recordId);
+                    // Sync path — same as DocGenFlowAction. attachmentRecordId is null when
+                    // saveToRecord != true so the file stays off the record (issue #90).
+                    Id attachmentRecordId = (req.saveToRecord == true) ? req.recordId : null;
+                    Id docId = DocGenService.generateDocument(
+                        req.templateId,
+                        req.recordId,
+                        null,
+                        null,
+                        attachmentRecordId
+                    );
                     res.contentDocumentId = docId;
                     res.success = true;
 
@@ -128,11 +136,6 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
                     ];
                     if (!cvs.isEmpty()) {
                         res.contentVersionId = cvs[0].Id;
-                    }
-
-                    // Link to record
-                    if (req.saveToRecord == true && docId != null) {
-                        linkToRecord(docId, req.recordId);
                     }
                 }
             } catch (Exception e) {
@@ -211,31 +214,5 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
         Database.executeBatch(batch, 1);
 
         return job.Id;
-    }
-
-    /**
-     * Links a ContentDocument to a record, avoiding duplicate links.
-     */
-    private static void linkToRecord(Id docId, Id recordId) {
-        List<ContentDocumentLink> existing = [
-            SELECT Id
-            FROM ContentDocumentLink
-            WHERE ContentDocumentId = :docId AND LinkedEntityId = :recordId
-            WITH USER_MODE
-            LIMIT 1
-        ];
-        if (existing.isEmpty()) {
-            ContentDocumentLink cdl = new ContentDocumentLink(
-                ContentDocumentId = docId,
-                LinkedEntityId = recordId,
-                ShareType = 'V',
-                Visibility = 'AllUsers'
-            );
-            SObjectAccessDecision decision = Security.stripInaccessible(
-                AccessType.CREATABLE,
-                new List<ContentDocumentLink>{ cdl }
-            );
-            insert decision.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced via stripInaccessible
-        }
     }
 }
