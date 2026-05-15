@@ -54,6 +54,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // Pre-resolve Salesforce rich text image URLs to base64 data URIs
         resolveRichTextImages(recordData);
 
+        // Issue #66 — opt-in Classic Approval history. Template authors put
+        // `Approvals` somewhere in Query_Config__c and use `{#Approvals}…
+        // {/Approvals}` in the body. Costs one extra SOQL per generation,
+        // skipped entirely when the template doesn't ask for it (no name
+        // collision with a custom `Approvals__c` field on the host object).
+        if (DocGenApprovalHistory.queryConfigMentionsApprovals(template.Query_Config__c)) {
+            recordData.put('Approvals', DocGenApprovalHistory.load(recordId));
+        }
+
         return new Map<String, Object>{
             'data' => recordData,
             'templateFile' => fileContent,
