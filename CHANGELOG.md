@@ -2,7 +2,7 @@
 
 ## v1.92.0 — Active/Inactive template toggle, prune old versions, Classic Approvals merge tag, guest DOCX images closed wontfix with empirical record
 
-Promoted package: TBD (cut after PR merge) · Install URL: TBD
+Promoted package: `04tVx000000S9I5IAK` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000S9I5IAK)
 
 Four shipped changes plus a P0 investigation parked pending real-world templates. The headlines are three independent admin/template enhancements: a clean Active/Inactive toggle so seasonal templates stay out of the picker, a Delete action on the Versions tab so heavy-iteration teams can free storage, and a `{#Approvals}` merge tag that exposes Salesforce Classic Approval history as a standard child loop. Plus the long-running guest DOCX rich-text image issue (#72) is closed `wontfix` with the full test matrix recorded — the architectural fix path the issue body proposed was empirically disproven during this cycle.
 
