@@ -1634,6 +1634,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     private static List<DocGen_Template__c> getTemplatesForObjectInternal(String objectApiName, String recordId) {
         /* code-analyzer-suppress ApexFlsViolation */
+        // Inactive templates are filtered out of the runner picker (issue #85).
+        // Admin views call getAllTemplates() which doesn't filter, so admins can
+        // still see and toggle inactive templates. Uses `!= FALSE` to treat both
+        // TRUE and NULL as Active — a `(= TRUE OR = NULL)` OR clause has a
+        // platform indexing quirk on newly-added Checkbox fields that doubles
+        // some rows into both buckets; `!= FALSE` matches the same semantic set
+        // without the duplication.
         List<DocGen_Template__c> all = [
             SELECT
                 Id,
@@ -1641,6 +1648,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Description__c,
                 Type__c,
                 Output_Format__c,
+                Is_Active__c,
                 Is_Default__c,
                 Query_Config__c,
                 Category__c,
@@ -1651,7 +1659,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Record_Filter__c,
                 Base_Object_API__c
             FROM DocGen_Template__c
-            WHERE Base_Object_API__c = :objectApiName
+            WHERE Base_Object_API__c = :objectApiName AND Is_Active__c != FALSE
             WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Is_Default__c DESC, Name ASC
         ];
@@ -1901,6 +1909,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Test_Record_Id__c,
                 Output_Format__c,
                 Document_Title_Format__c,
+                Is_Active__c,
                 Is_Default__c,
                 Sort_Order__c,
                 Lock_Output_Format__c,
@@ -2001,6 +2010,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             }
             if (fields.containsKey('Custom_Margins__c')) {
                 template.Custom_Margins__c = (String) fields.get('Custom_Margins__c');
+            }
+            // #85 — Active flag. Default true on new records; only update when the
+            // caller explicitly sends the field (so legacy save paths that omit it
+            // don't accidentally toggle an existing template's active state).
+            if (fields.containsKey('Is_Active__c')) {
+                template.Is_Active__c = (Boolean) fields.get('Is_Active__c');
             }
             // Update Default flag if provided — enforce one default per object
             if (fields.containsKey('Is_Default__c')) {

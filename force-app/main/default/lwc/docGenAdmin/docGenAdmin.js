@@ -37,6 +37,7 @@ import DESC_FIELD from '@salesforce/schema/DocGen_Template__c.Description__c';
 import OUTPUT_FORMAT_FIELD from '@salesforce/schema/DocGen_Template__c.Output_Format__c';
 import TEST_RECORD_FIELD from '@salesforce/schema/DocGen_Template__c.Test_Record_Id__c';
 import DOC_TITLE_FIELD from '@salesforce/schema/DocGen_Template__c.Document_Title_Format__c';
+import IS_ACTIVE_FIELD from '@salesforce/schema/DocGen_Template__c.Is_Active__c';
 import IS_DEFAULT_FIELD from '@salesforce/schema/DocGen_Template__c.Is_Default__c';
 // 1.47 — runner visibility & sort
 import SORT_ORDER_FIELD from '@salesforce/schema/DocGen_Template__c.Sort_Order__c';
@@ -81,6 +82,7 @@ const F = {
     Desc: DESC_FIELD.fieldApiName,
     TestRecordId: TEST_RECORD_FIELD.fieldApiName,
     DocTitleFormat: DOC_TITLE_FIELD.fieldApiName,
+    IsActive: IS_ACTIVE_FIELD.fieldApiName,
     IsDefault: IS_DEFAULT_FIELD.fieldApiName,
     // 1.47 — runner visibility & sort
     SortOrder: SORT_ORDER_FIELD.fieldApiName,
@@ -112,6 +114,12 @@ const COLUMNS = [
     { label: 'Type', fieldName: F.Type, initialWidth: 100 },
     { label: 'Output Format', fieldName: F.OutputFormat, initialWidth: 120 },
     { label: 'Base Object', fieldName: F.BaseObject },
+    {
+        label: 'Status',
+        fieldName: 'activeLabel',
+        initialWidth: 90,
+        cellAttributes: { class: { fieldName: 'activeClass' } }
+    },
     {
         label: 'Default',
         fieldName: 'defaultLabel',
@@ -225,6 +233,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track editTemplateQuery;
     editTemplateTestRecordId;
     editTemplateTitleFormat;
+    editTemplateIsActive = true;
     editTemplateIsDefault = false;
     // 1.47 — runner visibility & sort
     editTemplateSortOrder;
@@ -664,11 +673,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     wiredTemplates(result) {
         this.wiredTemplatesResult = result;
         if (result.data) {
-            this.templates = result.data.map((t) => ({
-                ...t,
-                defaultLabel: t[F.IsDefault] ? '★' : '',
-                defaultClass: t[F.IsDefault] ? 'slds-text-color_success slds-text-title_bold' : ''
-            }));
+            this.templates = result.data.map((t) => {
+                // F.IsActive may be undefined on rows created before the field
+                // shipped — treat null/undefined as Active to match the server
+                // OR-NULL filter in getTemplatesForObjectInternal.
+                const isActive = t[F.IsActive] !== false;
+                return {
+                    ...t,
+                    defaultLabel: t[F.IsDefault] ? '★' : '',
+                    defaultClass: t[F.IsDefault] ? 'slds-text-color_success slds-text-title_bold' : '',
+                    activeLabel: isActive ? '' : 'Inactive',
+                    activeClass: isActive ? '' : 'slds-text-color_weak slds-text-title_bold'
+                };
+            });
             this._samplesChecked = true;
         } else if (result.error) {
             this.showToast('Error', 'Error loading templates', 'error');
@@ -1460,6 +1477,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleEditDescChange(event) {
         this.editTemplateDesc = event.detail.value;
     }
+    handleEditActiveChange(event) {
+        this.editTemplateIsActive = event.target.checked;
+    }
     handleEditDefaultChange(event) {
         this.editTemplateIsDefault = event.target.checked;
     }
@@ -2109,6 +2129,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             this.editTemplateTestRecordId = row[F.TestRecordId];
             this.editTemplateTitleFormat = row[F.DocTitleFormat];
+            // F.IsActive may be undefined on records created before the field shipped;
+            // treat null/undefined as Active to match the server-side OR-NULL filter.
+            this.editTemplateIsActive = row[F.IsActive] !== false;
             this.editTemplateIsDefault = row[F.IsDefault] || false;
             this.editTemplateSortOrder = row[F.SortOrder];
             this.editTemplateLockOutputFormat = row[F.LockOutputFormat] || false;
@@ -2411,6 +2434,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Query_Config__c: this._sanitizeQueryConfig(this.editTemplateQuery),
             Test_Record_Id__c: this.editTemplateTestRecordId,
             Document_Title_Format__c: this.editTemplateTitleFormat,
+            Is_Active__c: this.editTemplateIsActive,
             Is_Default__c: this.editTemplateIsDefault,
             Sort_Order__c: this.editTemplateSortOrder,
             Lock_Output_Format__c: this.editTemplateLockOutputFormat,
@@ -2453,6 +2477,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Query_Config__c: this._sanitizeQueryConfig(this.editTemplateQuery),
             Test_Record_Id__c: this.editTemplateTestRecordId,
             Document_Title_Format__c: this.editTemplateTitleFormat,
+            Is_Active__c: this.editTemplateIsActive,
             Is_Default__c: this.editTemplateIsDefault,
             Sort_Order__c: this.editTemplateSortOrder,
             Lock_Output_Format__c: this.editTemplateLockOutputFormat,
