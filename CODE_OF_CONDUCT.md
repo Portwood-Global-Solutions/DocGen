@@ -28,7 +28,7 @@ This Code of Conduct applies to all project spaces — GitHub Issues, Discussion
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported to **dave@portwood.dev**. All complaints will be reviewed promptly and fairly. Maintainers who do not follow the Code of Conduct may be removed from the project.
+Instances of unacceptable behavior may be reported to **hello@portwood.dev**. All complaints will be reviewed promptly and fairly. Maintainers who do not follow the Code of Conduct may be removed from the project.
 
 ## Attribution
 
