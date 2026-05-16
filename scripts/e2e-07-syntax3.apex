@@ -395,6 +395,43 @@ try {
     System.debug('NESTED IF/ELSE OWNERSHIP (#68): FAIL — ' + e.getMessage());
 }
 
+// ===== Issue #97 — French locale must NOT mirror German =====
+// French uses SPACE-as-thousands and COMMA-as-decimal.
+// Bug was: fr_FR was bucketed with de_DE in the dot-as-thousands branch
+// of getLocaleGroupSep, producing identical output for both locales.
+try {
+    Map<String, Object> ad = new Map<String, Object>{ 'Qty' => 1234567 };
+    String fr = DocGenService.processXmlForTest('<w:t>{Qty:number:fr_FR}</w:t>', ad);
+    String de = DocGenService.processXmlForTest('<w:t>{Qty:number:de_DE}</w:t>', ad);
+    if (fr.contains('1 234 567') && de.contains('1.234.567') && fr != de) {
+        pass++;
+        System.debug('NUMBER fr_FR vs de_DE (#97): PASS');
+    } else {
+        fail++;
+        System.debug('NUMBER fr_FR vs de_DE (#97): FAIL — fr=' + fr + ' de=' + de);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('NUMBER fr_FR vs de_DE (#97): FAIL — ' + e.getMessage());
+}
+
+try {
+    String r97 = DocGenService.processXmlForTest(
+        '<w:t>{Amt:currency:EUR:fr_FR}</w:t>',
+        new Map<String, Object>{ 'Amt' => 500000 }
+    );
+    if (r97.contains('500 000,00') && r97.contains('€')) {
+        pass++;
+        System.debug('CURRENCY EUR fr_FR (#97): PASS');
+    } else {
+        fail++;
+        System.debug('CURRENCY EUR fr_FR (#97): FAIL — ' + r97);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('CURRENCY EUR fr_FR (#97): FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX3 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

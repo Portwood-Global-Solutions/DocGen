@@ -4061,6 +4061,55 @@ private class DocGenMiscTests {
         );
     }
 
+    // ── Issue #97: French locale was incorrectly bucketed with German for
+    // thousands separator (dot) when CLDR specifies space for fr_FR. These
+    // regression assertions lock the distinction in place.
+
+    @IsTest
+    static void testCurrencyEUR_frFR() {
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 500000 };
+        String result = DocGenService.processXmlForTest('{Amount:currency:EUR:fr_FR}', data);
+        System.assert(result.contains('€'), 'EUR fr_FR should contain euro sign, got: ' + result);
+        System.assert(
+            result.contains('500 000,00'),
+            'French currency should use space-as-thousands and comma-as-decimal, got: ' + result
+        );
+    }
+
+    @IsTest
+    static void testNumberLocale_frFR() {
+        Map<String, Object> data = new Map<String, Object>{ 'Qty' => 1234567 };
+        String result = DocGenService.processXmlForTest('{Qty:number:fr_FR}', data);
+        System.assert(result.contains('1 234 567'), 'French number should use space-as-thousands, got: ' + result);
+    }
+
+    @IsTest
+    static void testFrFR_isNot_deDE() {
+        // The reported bug: fr_FR output looked identical to de_DE. This test
+        // would have caught it: same input + different locales must produce
+        // visibly different output.
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 1234567 };
+        String fr = DocGenService.processXmlForTest('{Amount:number:fr_FR}', data);
+        String de = DocGenService.processXmlForTest('{Amount:number:de_DE}', data);
+        System.assertNotEquals(fr, de, 'fr_FR and de_DE must produce different output');
+        System.assert(fr.contains(' '), 'fr_FR must contain space-as-thousands, got: ' + fr);
+        System.assert(de.contains('.'), 'de_DE must contain dot-as-thousands, got: ' + de);
+    }
+
+    @IsTest
+    static void testCurrencyEUR_frCH_unchanged() {
+        // Regression guard: Swiss French stays apostrophe-as-thousands. The
+        // apostrophe gets XML-escaped to &apos; on its way through the merge
+        // pipeline (formatNumberLocale → processXml → escapeXml), so we accept
+        // either form.
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 1234.56 };
+        String result = DocGenService.processXmlForTest('{Amount:currency:EUR:fr_CH}', data);
+        System.assert(
+            result.contains('1\'234.56') || result.contains('1&apos;234.56'),
+            'Swiss French should use apostrophe-as-thousands and dot-as-decimal, got: ' + result
+        );
+    }
+
     @IsTest
     static void testBackwardCompatCurrency() {
         // Regression guard: bare :currency must still produce $ with US formatting
