@@ -160,6 +160,34 @@ private class DocGenGiantQueryTest {
     }
 
     @IsTest
+    static void testExtractColumnCssEmitsClassSelectors() {
+        // Regression: per-column styles must use td.gqcN class selectors, not
+        // td:nth-child(N) — Flying Saucer (Blob.toPdf) silently drops :nth-child,
+        // making the entire giant-query column-CSS scheme dead. Customer-visible
+        // symptom: right-aligned cells render left-aligned in the PDF.
+        String loopRowXml =
+            '<w:tr>' +
+            '<w:tc><w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t>A</w:t></w:r></w:p></w:tc>' +
+            '<w:tc><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>B</w:t></w:r></w:p></w:tc>' +
+            '<w:tc><w:p><w:r><w:t>C</w:t></w:r></w:p></w:tc>' +
+            '</w:tr>';
+
+        Test.startTest();
+        String css = DocGenGiantQueryBatch.extractColumnCss(loopRowXml);
+        Test.stopTest();
+
+        System.assert(css.contains('td.gqc1{'), 'Col 1 must use class selector. Got: ' + css);
+        System.assert(css.contains('td.gqc2{'), 'Col 2 must use class selector. Got: ' + css);
+        System.assert(css.contains('text-align:right'), 'Col 1 right-align must be emitted. Got: ' + css);
+        System.assert(css.contains('text-align:center'), 'Col 2 center-align must be emitted. Got: ' + css);
+        System.assert(css.contains('font-weight:bold'), 'Col 2 bold must be emitted. Got: ' + css);
+        System.assert(
+            !css.contains(':nth-child('),
+            ':nth-child must NEVER be emitted — Flying Saucer ignores it. Got: ' + css
+        );
+    }
+
+    @IsTest
     static void testRenderLoopBodyForRecords() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
