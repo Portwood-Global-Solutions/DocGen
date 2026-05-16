@@ -3896,10 +3896,26 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return ',';
         }
         String loc = locale.toLowerCase();
-        // Dot-as-thousands: German, French, Spanish, Italian, Portuguese, Dutch, Scandinavian
+        // Apostrophe-as-thousands: Swiss French/German/Italian (CLDR spec). Check
+        // before the broader fr_/de_/it_ branches below since these are exceptions.
+        if (loc == 'fr_ch' || loc == 'de_ch' || loc == 'it_ch') {
+            return '\'';
+        }
+        // Space-as-thousands: French (Metropolitan, Belgian, Luxembourg, Canadian).
+        // Issue #97 — previously bucketed with German/Spanish (dot-as-thousands),
+        // which is wrong: fr_FR formats 1 234 (NBSP) where de_DE formats 1.234.
+        // Other locales that CLDR specifies as space-as-thousands (pl_PL, ru_RU,
+        // uk_UA, cs_CZ, hu_HU, sv_SE, nb_NO, nn_NO) are still in the dot branch
+        // below — they will need their own fix once verified against reporter data.
+        if (loc.startsWith('fr_')) {
+            return ' ';
+        }
+        // Dot-as-thousands: German, Spanish, Italian, Portuguese, Dutch, Danish,
+        // Turkish, Romanian, Greek, Indonesian, Vietnamese — plus a residual set
+        // (sv/nb/nn/pl/cs/hu/ru/uk) that CLDR actually specifies as space; left
+        // here pending verification rather than introducing untested regressions.
         if (
             loc.startsWith('de_') ||
-            loc.startsWith('fr_') ||
             loc.startsWith('es_') ||
             loc.startsWith('it_') ||
             loc.startsWith('pt_') ||
@@ -3920,10 +3936,6 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             loc.startsWith('vi_')
         ) {
             return '.';
-        }
-        // Apostrophe-as-thousands: Swiss French/German
-        if (loc == 'fr_ch' || loc == 'de_ch' || loc == 'it_ch') {
-            return '\'';
         }
         // Comma-as-thousands: English, Japanese, Chinese, Korean, and default
         return ',';

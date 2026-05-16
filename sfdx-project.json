@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.94.0 — {Chart:...} one-line chart tag (4 styles: bar, pivot, clustered, stacked) with Google Docs authoring path",
-      "versionNumber": "1.94.0.NEXT",
-      "ancestorId": "04tVx000000SDOvIAO",
+      "versionName": "1.95.0 — French locale formatting fix (#97 community report)",
+      "versionNumber": "1.95.0.NEXT",
+      "ancestorId": "04tVx000000SExhIAG",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
