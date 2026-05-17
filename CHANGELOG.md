@@ -8,13 +8,15 @@ Root cause: `DocGenHtmlRenderer.processTable()` did not emit any column-width de
 
 ### Fix
 
-- **`DocGenHtmlRenderer.processTable`** — when the source `<w:tbl>` declares explicit `<w:gridCol w:w="...">` widths, emit `<colgroup><col style="width:Xpt"/>` per column and add `table-layout: fixed` to the table style. Column widths now come from the authored grid declaration regardless of which rows are populated.
+- **`DocGenHtmlRenderer.processTable`** — when the source `<w:tbl>` declares explicit `<w:gridCol w:w="...">` widths, emit `<colgroup><col style="width:X%"/>` per column (relative to the grid total) and add `table-layout: fixed` to the table style. Column widths now come from the authored grid declaration regardless of which rows are populated.
+- **Widths are emitted as percentages, not absolute pt.** Absolute pt in `<col>` elements overrides the table's `width:100%` constraint in Flying Saucer — a grid total wider than the printable page area then overflows the right margin, clipping the last columns. Percentages preserve the authored column proportions and always fit within the table's width regardless of whether the source grid sum is narrower, equal to, or wider than the printable area.
 - **Backward compatible** — tables without `<w:tblGrid>` (or where all `w:w` values are missing/zero) keep their prior behavior. No global stylesheet changes.
 
 ### Tests
 
-- `DocGenHtmlRendererTest.testTableColgroupFromTblGrid` — asserts `<colgroup>` + `<col style="width:100.00pt"/>` + `table-layout:fixed` for a 3-column 100pt grid with mixed empty/filled cells.
+- `DocGenHtmlRendererTest.testTableColgroupFromTblGrid` — asserts `<colgroup>` + `<col style="width:33.33%"/>` + `table-layout:fixed` for a 3-equal-column grid with mixed empty/filled cells.
 - `DocGenHtmlRendererTest.testTableNoColgroupWithoutTblGrid` — regression: tables without `<w:tblGrid>` don't emit colgroup or force fixed layout.
+- `scripts/repro-pr104-table-colgroup.apex` — full reporter scenario (5-column grid summing to 100%) plus backward-compat and zero-width edge cases.
 
 ### Test counts
 

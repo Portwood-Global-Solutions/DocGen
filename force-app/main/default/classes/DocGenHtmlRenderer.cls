@@ -2051,10 +2051,19 @@ public with sharing class DocGenHtmlRenderer {
         // to filled neighbors, typically the description column). Pinning widths
         // from the grid declaration + forcing fixed layout makes column widths
         // depend on the authored grid rather than the iteration data.
+        //
+        // Widths are emitted as PERCENTAGES of the grid total, not absolute pt.
+        // Absolute pt widths in <col> elements override the table's width:100%
+        // constraint in Flying Saucer — a grid total wider than the printable
+        // page area then overflows the right margin (clipping the last columns).
+        // Percentages preserve the authored column proportions and always fit
+        // within the table's width, regardless of whether the source grid sum
+        // is narrower, equal to, or wider than the printable area.
         String colGroupHtml = '';
         String tblGrid = extractElement(tblXml, 'w:tblGrid');
         if (String.isNotBlank(tblGrid)) {
-            List<String> cols = new List<String>();
+            List<Integer> rawWidths = new List<Integer>();
+            Integer totalTwips = 0;
             Boolean anyExplicit = false;
             Integer gcCursor = 0;
             while (gcCursor < tblGrid.length()) {
@@ -2072,15 +2081,25 @@ public with sharing class DocGenHtmlRenderer {
                 String gcElem = tblGrid.substring(gcStart, gcEnd + 2);
                 String wAttr = extractAttr(gcElem, 'w:gridCol', 'w:w');
                 if (wAttr != null && wAttr.isNumeric() && Integer.valueOf(wAttr) > 0) {
-                    Decimal pt = twipsToPt(Integer.valueOf(wAttr)).setScale(2);
-                    cols.add('<col style="width:' + pt + 'pt"/>');
+                    Integer twips = Integer.valueOf(wAttr);
+                    rawWidths.add(twips);
+                    totalTwips += twips;
                     anyExplicit = true;
                 } else {
-                    cols.add('<col/>');
+                    rawWidths.add(0);
                 }
                 gcCursor = gcEnd + 2;
             }
-            if (anyExplicit && !cols.isEmpty()) {
+            if (anyExplicit && totalTwips > 0 && !rawWidths.isEmpty()) {
+                List<String> cols = new List<String>();
+                for (Integer w : rawWidths) {
+                    if (w > 0) {
+                        Decimal pct = (Decimal.valueOf(w) / Decimal.valueOf(totalTwips) * 100).setScale(2);
+                        cols.add('<col style="width:' + pct + '%"/>');
+                    } else {
+                        cols.add('<col/>');
+                    }
+                }
                 colGroupHtml = '<colgroup>' + String.join(cols, '') + '</colgroup>';
                 tableStyle += ';table-layout:fixed';
             }

@@ -88,30 +88,34 @@ if (fixedLayoutCount == 3) {
     failures.add('Expected 3 table-layout:fixed declarations, got ' + fixedLayoutCount);
 }
 
-if (html.contains('<col style="width:50.00pt"/>')) {
+// Grid total per table: 1000+3000+2000+2000+2000 = 10000 twips
+// Col 1: 1000/10000 = 10.00%
+// Col 2: 3000/10000 = 30.00%
+// Cols 3,4,5: 2000/10000 = 20.00%
+if (html.contains('<col style="width:10.00%"/>')) {
     pass++;
-    System.debug('PASS: Column 1 (50pt) width emitted');
+    System.debug('PASS: Column 1 (10%) width emitted');
 } else {
     fail++;
-    failures.add('Missing column 1 width 50pt');
+    failures.add('Missing column 1 width 10.00%');
 }
 
-if (html.contains('<col style="width:150.00pt"/>')) {
+if (html.contains('<col style="width:30.00%"/>')) {
     pass++;
-    System.debug('PASS: Column 2 (150pt) width emitted');
+    System.debug('PASS: Column 2 (30%) width emitted');
 } else {
     fail++;
-    failures.add('Missing column 2 width 150pt');
+    failures.add('Missing column 2 width 30.00%');
 }
 
-Integer hundredCount = html.split('width:100.00pt').size() - 1;
-// 3 tables × 3 columns @ 100pt each = 9 occurrences
-if (hundredCount >= 9) {
+Integer twentyCount = html.split('width:20.00%').size() - 1;
+// 3 tables × 3 columns @ 20% each = 9 occurrences
+if (twentyCount >= 9) {
     pass++;
-    System.debug('PASS: 100pt column widths repeated ' + hundredCount + ' times');
+    System.debug('PASS: 20% column widths repeated ' + twentyCount + ' times');
 } else {
     fail++;
-    failures.add('Expected >=9 occurrences of width:100.00pt, got ' + hundredCount);
+    failures.add('Expected >=9 occurrences of width:20.00%, got ' + twentyCount);
 }
 
 // -------------------------------------------------------------------------
@@ -169,12 +173,10 @@ if (!zeroHtml.contains('table-layout:fixed')) {
 // across all three tables, regardless of cell content in columns 4 and 5.
 // -------------------------------------------------------------------------
 
-Integer firstDescIdx = html.indexOf('width:150.00pt');
-Integer lastDescIdx = html.lastIndexOf('width:150.00pt');
-Integer descOccurrences = html.split('width:150.00pt').size() - 1;
+Integer descOccurrences = html.split('width:30.00%').size() - 1;
 if (descOccurrences == 3) {
     pass++;
-    System.debug('PASS: Description column 150pt width appears in all 3 tables');
+    System.debug('PASS: Description column 30% width appears in all 3 tables');
 } else {
     fail++;
     failures.add('Description column width missing or duplicated: ' + descOccurrences + ' occurrences (expected 3)');
