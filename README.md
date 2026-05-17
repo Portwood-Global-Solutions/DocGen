@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/changelog)
 
-[![Version](https://img.shields.io/badge/version-1.95.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-1.96.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -18,10 +18,10 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 ## Install
 
 ```bash
-sf package install --package 04tVx000000SFDpIAO --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000SFH3IAO --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000SFDpIAO) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000SFDpIAO)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000SFH3IAO) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000SFH3IAO)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -415,7 +415,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v1.95.0 | **Latest (Released)**                   | `04tVx000000SFDpIAO` |
+| v1.96.0 | **Latest (Released)**                   | `04tVx000000SFH3IAO` |
+| v1.95.0 | Previous                                | `04tVx000000SFDpIAO` |
 | v1.94.0 | Previous                                | `04tVx000000SExhIAG` |
 | v1.93.0 | Previous                                | `04tVx000000SDOvIAO` |
 | v1.92.0 | Previous                                | `04tVx000000S9I5IAK` |
