@@ -375,13 +375,13 @@ We run the [Salesforce Code Analyzer](https://developer.salesforce.com/docs/plat
 | ------------ | ----- | ------------------------------ |
 | **Critical** | 0     | Clean                          |
 | **High**     | 0     | Clean                          |
-| **Moderate** | 30    | All documented false positives |
+| **Moderate** | 41    | All documented false positives |
 | **Low**      | 0     | Not flagged                    |
 
-The 30 moderate findings are all PMD false positives that cannot be suppressed inline:
+The 41 moderate findings are all PMD false positives that cannot be suppressed inline:
 
-- **22** `ProtectSensitiveData` — PMD flags field names containing "Token", "Email", "Hash", "PIN" in XML metadata. These are signature system fields, intentionally sensitive, protected by permission sets, sharing model, and field history tracking.
-- **8** `AvoidLwcBubblesComposedTrue` — Required for recursive tree node event propagation in the visual query builder. Events must cross shadow DOM boundaries in nested components.
+- **29** `ProtectSensitiveData` — PMD flags field names containing "Token", "Signature", "Email", "Hash", "PIN" in XML metadata. These are signature system fields plus the v1.9x signature-email branding settings (Signature_Email_Subject/Message/Footer/Logo/Brand_Color, Signature_OWA_Id, reminder fields). All intentionally sensitive, protected by permission sets, sharing model, and field history tracking.
+- **12** `AvoidLwcBubblesComposedTrue` — Required for recursive tree node event propagation in the visual query builder, plus the v1.9x runner LWC's cross-boundary events (chart-resolution status, signature-placement events, giant-query progress). Events must cross shadow DOM boundaries in nested components.
 
 See [`code-analyzer.yml`](code-analyzer.yml) for full documentation of each accepted finding.
 
