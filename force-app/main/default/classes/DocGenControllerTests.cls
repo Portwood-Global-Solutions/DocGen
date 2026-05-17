@@ -4043,6 +4043,121 @@ private class DocGenControllerTests {
         }
     }
 
+    @IsTest
+    static void testExportImportRoundTripPreservesAllScalarFields() {
+        // Regression: export → import must preserve every settable scalar field on
+        // the template + page-setup snapshot on the version. Previously the export
+        // SELECT lagged behind saveTemplate and silently dropped page-setup, sort
+        // order, lock-output, specific records, required permsets, record filter,
+        // is_active, and test record id. Customer-visible symptom: A4 templates
+        // import as Letter.
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c src = new DocGen_Template__c(
+                Name = 'RoundTrip Source',
+                Base_Object_API__c = 'Account',
+                Type__c = 'Word',
+                Output_Format__c = 'PDF',
+                Category__c = 'Test',
+                Description__c = 'Round-trip src',
+                Query_Config__c = 'Name',
+                Document_Title_Format__c = '{Name}',
+                Is_Default__c = false,
+                Is_Active__c = true,
+                Page_Size__c = 'A4',
+                Page_Orientation__c = 'Landscape',
+                Page_Margins__c = 'Custom',
+                Custom_Margins__c = '0.5,0.75,1.0,1.25',
+                Test_Record_Id__c = '001000000000001',
+                Sort_Order__c = 42,
+                Lock_Output_Format__c = true,
+                Specific_Record_Ids__c = '001000000000001,001000000000002',
+                Required_Permission_Sets__c = 'DocGen_Admin',
+                Record_Filter__c = 'Industry = \'Tech\''
+            );
+            insert src;
+            insert new DocGen_Template_Version__c(
+                Template__c = src.Id,
+                Is_Active__c = true,
+                Query_Config__c = 'Name',
+                Type__c = 'Word',
+                Base_Object_API__c = 'Account',
+                Page_Size__c = 'A4',
+                Page_Orientation__c = 'Landscape',
+                Page_Margins__c = 'Custom',
+                Custom_Margins__c = '0.5,0.75,1.0,1.25'
+            );
+
+            Test.startTest();
+            String json = DocGenController.exportTemplate(src.Id);
+            Map<String, Object> bundle = (Map<String, Object>) System.JSON.deserializeUntyped(json);
+            // Rename so the import doesn't collide
+            ((Map<String, Object>) bundle.get('template')).put('Name', 'RoundTrip Imported');
+            Id importedId = DocGenController.importTemplate(System.JSON.serialize(bundle));
+            Test.stopTest();
+
+            DocGen_Template__c imp = [
+                SELECT
+                    Page_Size__c,
+                    Page_Orientation__c,
+                    Page_Margins__c,
+                    Custom_Margins__c,
+                    Test_Record_Id__c,
+                    Sort_Order__c,
+                    Lock_Output_Format__c,
+                    Specific_Record_Ids__c,
+                    Required_Permission_Sets__c,
+                    Record_Filter__c,
+                    Is_Active__c
+                FROM DocGen_Template__c
+                WHERE Id = :importedId
+                LIMIT 1
+            ];
+            System.assertEquals(
+                'A4',
+                imp.Page_Size__c,
+                'Page_Size__c must survive round-trip (A4 → Letter is the reported bug)'
+            );
+            System.assertEquals('Landscape', imp.Page_Orientation__c, 'Page_Orientation__c must survive');
+            System.assertEquals('Custom', imp.Page_Margins__c, 'Page_Margins__c must survive');
+            System.assertEquals('0.5,0.75,1.0,1.25', imp.Custom_Margins__c, 'Custom_Margins__c must survive');
+            System.assertEquals('001000000000001', imp.Test_Record_Id__c, 'Test_Record_Id__c must survive');
+            System.assertEquals(42, imp.Sort_Order__c, 'Sort_Order__c must survive');
+            System.assertEquals(true, imp.Lock_Output_Format__c, 'Lock_Output_Format__c must survive');
+            System.assertEquals(
+                '001000000000001,001000000000002',
+                imp.Specific_Record_Ids__c,
+                'Specific_Record_Ids__c must survive'
+            );
+            System.assertEquals(
+                'DocGen_Admin',
+                imp.Required_Permission_Sets__c,
+                'Required_Permission_Sets__c must survive'
+            );
+            System.assertEquals('Industry = \'Tech\'', imp.Record_Filter__c, 'Record_Filter__c must survive');
+            System.assertEquals(true, imp.Is_Active__c, 'Is_Active__c must survive');
+
+            DocGen_Template_Version__c impVer = [
+                SELECT Page_Size__c, Page_Orientation__c, Page_Margins__c, Custom_Margins__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :importedId AND Is_Active__c = TRUE
+                LIMIT 1
+            ];
+            System.assertEquals(
+                'A4',
+                impVer.Page_Size__c,
+                'Version Page_Size__c snapshot must survive (renderer reads from version)'
+            );
+            System.assertEquals('Landscape', impVer.Page_Orientation__c, 'Version Page_Orientation__c must survive');
+            System.assertEquals('Custom', impVer.Page_Margins__c, 'Version Page_Margins__c must survive');
+            System.assertEquals(
+                '0.5,0.75,1.0,1.25',
+                impVer.Custom_Margins__c,
+                'Version Custom_Margins__c must survive'
+            );
+        }
+    }
+
     // =======================================================================
     // NEW COVERAGE TESTS — importTemplate
     // =======================================================================

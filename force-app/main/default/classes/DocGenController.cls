@@ -5370,8 +5370,19 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     Query_Config__c,
                     Document_Title_Format__c,
                     Is_Default__c,
+                    Is_Active__c,
                     Header_Html__c,
                     Footer_Html__c,
+                    Test_Record_Id__c,
+                    Sort_Order__c,
+                    Lock_Output_Format__c,
+                    Specific_Record_Ids__c,
+                    Required_Permission_Sets__c,
+                    Record_Filter__c,
+                    Page_Orientation__c,
+                    Page_Size__c,
+                    Page_Margins__c,
+                    Custom_Margins__c,
                     (
                         SELECT
                             Id,
@@ -5381,7 +5392,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                             Category__c,
                             Description__c,
                             Type__c,
-                            Base_Object_API__c
+                            Base_Object_API__c,
+                            Page_Orientation__c,
+                            Page_Size__c,
+                            Page_Margins__c,
+                            Custom_Margins__c
                         FROM Versions__r
                         WHERE Is_Active__c = TRUE
                         LIMIT 1
@@ -5412,8 +5427,19 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             tmplData.put('Query_Config__c', tmpl.Query_Config__c);
             tmplData.put('Document_Title_Format__c', tmpl.Document_Title_Format__c);
             tmplData.put('Is_Default__c', tmpl.Is_Default__c);
+            tmplData.put('Is_Active__c', tmpl.Is_Active__c);
             tmplData.put('Header_Html__c', tmpl.Header_Html__c);
             tmplData.put('Footer_Html__c', tmpl.Footer_Html__c);
+            tmplData.put('Test_Record_Id__c', tmpl.Test_Record_Id__c);
+            tmplData.put('Sort_Order__c', tmpl.Sort_Order__c);
+            tmplData.put('Lock_Output_Format__c', tmpl.Lock_Output_Format__c);
+            tmplData.put('Specific_Record_Ids__c', tmpl.Specific_Record_Ids__c);
+            tmplData.put('Required_Permission_Sets__c', tmpl.Required_Permission_Sets__c);
+            tmplData.put('Record_Filter__c', tmpl.Record_Filter__c);
+            tmplData.put('Page_Orientation__c', tmpl.Page_Orientation__c);
+            tmplData.put('Page_Size__c', tmpl.Page_Size__c);
+            tmplData.put('Page_Margins__c', tmpl.Page_Margins__c);
+            tmplData.put('Custom_Margins__c', tmpl.Custom_Margins__c);
             bundle.put('template', tmplData);
 
             // Active version's template file
@@ -5491,8 +5517,25 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             tmpl.Query_Config__c = (String) tmplData.get('Query_Config__c');
             tmpl.Document_Title_Format__c = (String) tmplData.get('Document_Title_Format__c');
             tmpl.Is_Default__c = tmplData.get('Is_Default__c') == true;
+            // Default to true if the export bundle predates the Is_Active__c field (older
+            // exports won't include the key, and silently flipping the new template inactive
+            // would surprise the importing user).
+            tmpl.Is_Active__c = tmplData.containsKey('Is_Active__c') ? tmplData.get('Is_Active__c') == true : true;
             tmpl.Header_Html__c = (String) tmplData.get('Header_Html__c');
             tmpl.Footer_Html__c = (String) tmplData.get('Footer_Html__c');
+            tmpl.Test_Record_Id__c = (String) tmplData.get('Test_Record_Id__c');
+            Object sortOrderObj = tmplData.get('Sort_Order__c');
+            if (sortOrderObj != null) {
+                tmpl.Sort_Order__c = Decimal.valueOf(String.valueOf(sortOrderObj));
+            }
+            tmpl.Lock_Output_Format__c = tmplData.get('Lock_Output_Format__c') == true;
+            tmpl.Specific_Record_Ids__c = (String) tmplData.get('Specific_Record_Ids__c');
+            tmpl.Required_Permission_Sets__c = (String) tmplData.get('Required_Permission_Sets__c');
+            tmpl.Record_Filter__c = (String) tmplData.get('Record_Filter__c');
+            tmpl.Page_Orientation__c = (String) tmplData.get('Page_Orientation__c');
+            tmpl.Page_Size__c = (String) tmplData.get('Page_Size__c');
+            tmpl.Page_Margins__c = (String) tmplData.get('Page_Margins__c');
+            tmpl.Custom_Margins__c = (String) tmplData.get('Custom_Margins__c');
             /* code-analyzer-suppress ApexFlsViolation */
             insert tmpl; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
@@ -5533,6 +5576,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ver.Description__c = (String) tmplData.get('Description__c');
             ver.Type__c = (String) tmplData.get('Type__c');
             ver.Base_Object_API__c = (String) tmplData.get('Base_Object_API__c');
+            // Snapshot page-setup onto the version so the renderer reads the imported
+            // settings instead of the org-default field values (the A4 → Letter bug).
+            ver.Page_Orientation__c = (String) tmplData.get('Page_Orientation__c');
+            ver.Page_Size__c = (String) tmplData.get('Page_Size__c');
+            ver.Page_Margins__c = (String) tmplData.get('Page_Margins__c');
+            ver.Custom_Margins__c = (String) tmplData.get('Custom_Margins__c');
             /* code-analyzer-suppress ApexFlsViolation */
             insert ver; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
