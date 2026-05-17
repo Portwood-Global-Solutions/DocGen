@@ -317,7 +317,9 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
 
     /**
      * Lightweight DOCX XML → HTML row converter. Extracts text from <w:t> tags.
-     * No inline formatting — column styles applied via nth-child CSS in the assembler.
+     * No inline formatting — column styles applied via td.gqcN class CSS in the
+     * assembler. (Flying Saucer's Blob.toPdf silently ignores :nth-child(), so
+     * class selectors are required to land per-column styling on the PDF path.)
      * Barcode markers stripped to plain text values.
      */
     private static String xmlRowsToHtmlRows(String xml) {
@@ -378,7 +380,7 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
                     }
                 }
 
-                row += '<td>' + txt + '</td>';
+                row += '<td class="gqc' + colNum + '">' + txt + '</td>';
             }
             result += row + '</tr>';
         }
@@ -406,8 +408,9 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
     /**
      * Extracts per-column CSS from the template's loop row XML. Reads bold, italic,
      * font-size from <w:rPr> and alignment from <w:pPr> for each cell, returns
-     * nth-child CSS rules. Called once during config extraction, injected into
-     * the assembler's HTML <style> block.
+     * td.gqcN class CSS rules. Called once during config extraction, injected into
+     * the assembler's HTML <style> block. Class selectors (not :nth-child) because
+     * Flying Saucer's Blob.toPdf silently drops :nth-child().
      */
     public static String extractColumnCss(String loopRowXml) {
         String css = '';
@@ -469,7 +472,7 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
             }
 
             if (!styles.isEmpty()) {
-                css += 'td:nth-child(' + colNum + '){' + String.join(styles, ';') + '} ';
+                css += 'td.gqc' + colNum + '{' + String.join(styles, ';') + '} ';
             }
         }
         return css;
