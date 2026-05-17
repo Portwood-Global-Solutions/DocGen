@@ -1775,8 +1775,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             Id versionId = activeVersions[0].Id;
             String prefix = 'docgen_tmpl_img_' + versionId + '_';
             // Two-step lookup: a plain `Title LIKE …` query against ContentVersion silently
-            // returns zero rows when run as the Automated Process user (the runner used by
-            // the DocGen_Guest_Render__e platform event trigger), which breaks guest PDFs by
+            // returns zero rows when run as the Automated Process user (e.g. platform-event
+            // triggers like the signature PDF render), which would break image lookups by
             // emptying the image map. Direct Id-based and ContentDocumentId-IN queries
             // succeed under that user, so scope through the version's CDLs first to get the
             // file IDs the user can see, then apply the title-prefix filter.

@@ -78,14 +78,14 @@
                 type="Boolean"
                 label="Show Download Option"
                 default="true"
-                description="Guest users typically download. Leave on."
+                description="Community users typically download. Leave on."
             />
             <property
                 name="showSaveToRecordOption"
                 type="Boolean"
                 label="Show Save to Record Option"
                 default="false"
-                description="Guest users can't save back to records. Leave off."
+                description="Save back to records is internal-context only. Leave off for community placements."
             />
             <property
                 name="showDocumentPacketOption"

@@ -53,14 +53,6 @@ For PDF output, `{%ImageField}` tags with ContentVersion IDs skip blob loading. 
 
 If your fix touches `processXml`, do not add `VersionData` to the PDF-path SOQL and do not prepend `URL.getOrgDomainUrl()` anywhere in the image pipeline.
 
-## Critical: Experience Cloud guest path (PR #70, v1.86+)
-
-Guest PDF rendering routes through `DocGen_Guest_Render__e` platform event → `DocGenGuestRenderQueueable` so the actual render runs as Automated Process (not the guest user). This is required because `Blob.toPdf` fetches `<img src=...>` over HTTP, and guest users can't reach the lightning subdomain. Don't unwind this routing.
-
-DOCX assembly for guests still runs inline as the guest user — the same architectural fix has not been mirrored to DOCX yet (issue #72). Until that's done, guest DOCX with rich-text-pasted images will silently omit images whose `ContentDocumentLink.Visibility = InternalUsers`.
-
-For LWR guest downloads, `/sfc/servlet.shepherd/...` URLs MUST be prefixed with `@salesforce/community/basePath` — bare-org-host paths return a 90-byte JSON redirect (v1.87.0 fix).
-
 ## Package info
 
 - Package: Portwood DocGen, Unlocked 2GP, namespace `portwoodglobal`
@@ -126,7 +118,7 @@ Covers `force-app/**/*.{cls,trigger,page,component,cmp,html,js,xml}`, `scripts/*
 Several subsystems are tightly coupled and easy to break with surgical fixes — reach for `git log -- CLAUDE.md` and `git show 6a2deff^:CLAUDE.md` to recover the deeper historical notes if you're touching:
 
 - **Signatures (especially v3 packets / multi-template)** — three hand-rolled loops, no content-correctness tests, two divergent creation paths. Read the `project_signature_v3_fragility.md` memory before changing anything here.
-- **Client-side DOCX assembly** (`docGenZipWriter.js`) — splits work between server (XML merge) and browser (ZIP repack). The boundary is load-bearing; don't move work across it without checking guest/Experience Cloud paths.
+- **Client-side DOCX assembly** (`docGenZipWriter.js`) — splits work between server (XML merge) and browser (ZIP repack). The boundary is load-bearing; don't move work across it lightly.
 - **HTML templates and `Blob.toPdf` rendering** — Flying Saucer is essentially **CSS 2.1** plus a small CSS 3 subset. `display: flex`/`grid`, `gap`, `linear-gradient(...)`, `calc(...)`, CSS variables, and most CSS 3 layout features are silently ignored — the page renders but layout collapses to default block flow. When troubleshooting "the PDF looks wrong," first check whether the source HTML uses any of these and rewrite to `<table>`-based layout + solid colors. Also: when both the engine `<style>` (built from `Page_Size__c`/`Page_Orientation__c`/`Custom_Margins__c` template fields) and the source HTML's own `<style>` declare `@page`, you get a conflict — recommend authors clear the template page fields when their source CSS already specifies `@page`. Issues #60 and #71 both live here.
 - **Query Config formats** (V1 flat string, V3 node tree) — V3's `processChildNodes` and V1's `stitchGrandchildren` reproduce similar patterns; bug fixes often need to land in both (see #67).
 - **Watermarks, font handling, command hub** — light traffic, but the test coverage is sparse, so verify visually after edits.
