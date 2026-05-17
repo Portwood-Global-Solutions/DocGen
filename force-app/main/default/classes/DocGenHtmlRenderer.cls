@@ -2044,6 +2044,48 @@ public with sharing class DocGenHtmlRenderer {
         // RTL table: reverse cell order manually
         Boolean isBidiVisual = String.isNotBlank(tblPr) && isOoxmlOnOffElementTrue(tblPr, 'w:bidiVisual');
 
+        // <colgroup> emission from <w:tblGrid>. Without this, Flying Saucer's
+        // default table-layout:auto sizes columns from cell content — so visually
+        // identical tables render with different column widths when some have
+        // empty cells (the empty columns collapse and their width is redistributed
+        // to filled neighbors, typically the description column). Pinning widths
+        // from the grid declaration + forcing fixed layout makes column widths
+        // depend on the authored grid rather than the iteration data.
+        String colGroupHtml = '';
+        String tblGrid = extractElement(tblXml, 'w:tblGrid');
+        if (String.isNotBlank(tblGrid)) {
+            List<String> cols = new List<String>();
+            Boolean anyExplicit = false;
+            Integer gcCursor = 0;
+            while (gcCursor < tblGrid.length()) {
+                Integer gcStart = tblGrid.indexOf('<w:gridCol', gcCursor);
+                if (gcStart == -1) {
+                    break;
+                }
+                Integer gcEnd = tblGrid.indexOf('/>', gcStart);
+                if (gcEnd == -1) {
+                    gcEnd = tblGrid.indexOf('>', gcStart);
+                }
+                if (gcEnd == -1) {
+                    break;
+                }
+                String gcElem = tblGrid.substring(gcStart, gcEnd + 2);
+                String wAttr = extractAttr(gcElem, 'w:gridCol', 'w:w');
+                if (wAttr != null && wAttr.isNumeric() && Integer.valueOf(wAttr) > 0) {
+                    Decimal pt = twipsToPt(Integer.valueOf(wAttr)).setScale(2);
+                    cols.add('<col style="width:' + pt + 'pt"/>');
+                    anyExplicit = true;
+                } else {
+                    cols.add('<col/>');
+                }
+                gcCursor = gcEnd + 2;
+            }
+            if (anyExplicit && !cols.isEmpty()) {
+                colGroupHtml = '<colgroup>' + String.join(cols, '') + '</colgroup>';
+                tableStyle += ';table-layout:fixed';
+            }
+        }
+
         // Process rows
         String rows = '';
         Integer cursor = 0;
@@ -2062,7 +2104,7 @@ public with sharing class DocGenHtmlRenderer {
             cursor = trEnd;
         }
 
-        return '<table style="' + tableStyle + '">' + rows + '</table>';
+        return '<table style="' + tableStyle + '">' + colGroupHtml + rows + '</table>';
     }
 
     /**

@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.97.0 — Table column alignment from `<w:tblGrid>` + fixed layout
+
+Single bug fix release. Customer reported visible column misalignment between visually identical tables: when one table has filled cells and another (identical in source) has empty cells, the PDF output shows the empty columns collapsed and their width redistributed to filled neighbors — typically the description column expanding to swallow the empty space.
+
+Root cause: `DocGenHtmlRenderer.processTable()` did not emit any column-width declarations from the source `<w:tblGrid>`. Flying Saucer's default `table-layout: auto` then sized columns from cell content alone, causing the redistribution behavior. Tables that happened to have content in every column rendered as the author intended; tables with empty cells did not.
+
+### Fix
+
+- **`DocGenHtmlRenderer.processTable`** — when the source `<w:tbl>` declares explicit `<w:gridCol w:w="...">` widths, emit `<colgroup><col style="width:Xpt"/>` per column and add `table-layout: fixed` to the table style. Column widths now come from the authored grid declaration regardless of which rows are populated.
+- **Backward compatible** — tables without `<w:tblGrid>` (or where all `w:w` values are missing/zero) keep their prior behavior. No global stylesheet changes.
+
+### Tests
+
+- `DocGenHtmlRendererTest.testTableColgroupFromTblGrid` — asserts `<colgroup>` + `<col style="width:100.00pt"/>` + `table-layout:fixed` for a 3-column 100pt grid with mixed empty/filled cells.
+- `DocGenHtmlRendererTest.testTableNoColgroupWithoutTblGrid` — regression: tables without `<w:tblGrid>` don't emit colgroup or force fixed layout.
+
+### Test counts
+
+- Apex local tests: TBD on release validation.
+- Code Analyzer: 0 High, ~41 Moderate (unchanged from v1.96.0 baseline).
+
 ## v1.93.0 — Flow Save-to-Record honored (#90), signature decline cache cleared (#91), Template Status column symmetric labels (#92)
 
 Three bug fixes ride this release — two from real customer field reports, one a follow-up polish to the v1.92.0 active/inactive feature. Highlights: the **Generate Document** Flow action now actually honors `Save to Record = false` (today the file was always attached via `ContentVersion.FirstPublishLocationId` regardless of the toggle); declining an e-signature now clears the cached typed-name preview so the signing page can't keep reading as "Electronically signed by …" after the fact; and the Template Library Status column now labels active templates "Active" (green) symmetrically with "Inactive" (gray) instead of leaving active cells blank.
