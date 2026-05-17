@@ -2,7 +2,7 @@
 <CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
     <deploymentStatus>Deployed</deploymentStatus>
     <description
-    >Platform event to trigger guest-context document rendering as Automated Process user. Published by the docGenRunner LWC when running in Experience Cloud guest context, consumed by DocGenGuestRenderTrigger which enqueues a queueable. Required because Blob.toPdf() resolves image URLs against the lightning subdomain that guests have no session against — running render under Automated Process restores image fetching.</description>
+    >Deprecated. Was used to route guest-context PDF rendering through Automated Process; the guest render path has been removed from DocGen. No publishers or subscribers remain. Retained for upgrade compatibility.</description>
     <eventType>HighVolume</eventType>
     <label>DocGen Guest Render</label>
     <pluralLabel>DocGen Guest Renders</pluralLabel>

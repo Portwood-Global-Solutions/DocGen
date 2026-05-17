@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.97.0 — Experience Cloud guest render path removed
+
+Single-focus release that removes the unauthenticated guest-context document rendering path (introduced v1.86.0, PR #70). The original "public-facing downloads" requirement was reread with customers as "generate server-side and host on a public website," not "guest user triggers the render themselves." After the architecture was in place no customer asked for the latter, while the supporting code (platform-event reroute, LWR shepherd basePath logic, Automated Process CV-access quirks, the DOCX-via-Automated-Process dead-end documented in v1.92.0 #72) carried meaningful complexity tax. With the path gone, the merge engine and runner LWC drop their guest branches, freeing the planned DOCX→HTML parser refactor from dual-path validation.
+
+**E-signature guest signing is unaffected.** That uses a different code path (`DocGenSignaturePdfTrigger`, `DocGen_Guest_Signature` permset, token-gated record access) and stays exactly as-is.
+
+### Removed (full deletion)
+
+- `DocGenGuestRenderQueueable.cls` and its test class
+- `DocGenGuestRenderTrigger.trigger` (platform-event consumer)
+- `DocGenController.isCurrentUserGuest()`, `getSiteUrlPathPrefix()`, `queueGuestRender()`, `getGuestRenderStatus()`, and the `GuestRenderHelper` inner class
+- `docGenRunner.js` guest imports, `_isGuest` field, `wiredIsGuest` callback, `_generateGuestPdf()` method, and the guest branch in the generate flow
+- `docGenRunner` guest-context exemption in `allowedOutputModes` mobile restriction
+- UserGuide §8.6 ("From an Experience Cloud public page (guest users)") and §8.6.1 (the InternalUsers CDL workaround)
+- `DocGen_Guest_Runner` row in the UserGuide permset table
+
+### Stubbed (preserved as empty shells for subscriber upgrade compatibility)
+
+- `DocGen_Guest_Render__e` platform event — metadata retained; description marked deprecated. 2GP packages can't cleanly delete published events; the shell is benign (no publishers or subscribers remain in code).
+- `DocGen_Guest_Runner.permissionset` — all class/object/field access stripped; description marked deprecated; label renamed "(deprecated)". Safe to leave assigned or unassign from site guest users.
+
+### Updated
+
+- `DocGenService.cls` and `DocGenTemplateManager.cls` — comments referencing the removed platform event reworded; the `SYSTEM_MODE` template-body lookup and the two-step CV title lookup are otherwise unchanged (both still serve non-guest contexts).
+- `CLAUDE.md` — removed "Critical: Experience Cloud guest path" section; updated the client-side DOCX assembly note.
+
+### Test counts
+
+- Apex local tests: TBD on release validation.
+- e2e suite (e2e-01 through e2e-08): expected green on `portwood-staging` (no guest-specific assertions exist; removal should be invisible).
+- Prettier: clean. Code Analyzer: 0 High, ~41 Moderate (unchanged from v1.96.0 baseline).
+
 ## v1.93.0 — Flow Save-to-Record honored (#90), signature decline cache cleared (#91), Template Status column symmetric labels (#92)
 
 Three bug fixes ride this release — two from real customer field reports, one a follow-up polish to the v1.92.0 active/inactive feature. Highlights: the **Generate Document** Flow action now actually honors `Save to Record = false` (today the file was always attached via `ContentVersion.FirstPublishLocationId` regardless of the toggle); declining an e-signature now clears the cached typed-name preview so the signing page can't keep reading as "Electronically signed by …" after the fact; and the Template Library Status column now labels active templates "Active" (green) symmetrically with "Inactive" (gray) instead of leaving active cells blank.
