@@ -1,27 +1,52 @@
 # Changelog
 
-## v1.97.0 — Table column alignment from `<w:tblGrid>` + fixed layout
+## v1.97.0 — Version-pinned render config, multi-hop parents, authored widths, sibling-section paragraphs
 
-Single bug fix release. Customer reported visible column misalignment between visually identical tables: when one table has filled cells and another (identical in source) has empty cells, the PDF output shows the empty columns collapsed and their width redistributed to filled neighbors — typically the description column expanding to swallow the empty space.
+Six things ride this release: render-time **version snapshots** so editing a template no longer rewrites how prior versions render; **multi-hop parent traversal** in the visual builder (`Account.Parent.Parent.Owner.Name`); **authored table and image widths** respected in PDF output (no more silent 100% override); **deduped headers/footers** when a docx has multiple sections referencing the same default part; the **table column-grid alignment** fix (#104, formerly the sole v1.97 scope); and a **sibling-section paragraph bug** that dropped everything after the first `{/Field}` when multiple section tags shared one bulleted line (Ben's checkbox template).
 
-Root cause: `DocGenHtmlRenderer.processTable()` did not emit any column-width declarations from the source `<w:tblGrid>`. Flying Saucer's default `table-layout: auto` then sized columns from cell content alone, causing the redistribution behavior. Tables that happened to have content in every column rendered as the author intended; tables with empty cells did not.
+### Version snapshots — old versions render the way they were authored
 
-### Fix
+Editing a template's Output Format / Header HTML / Footer HTML / Document Title Format / page setup fields silently rewrote the rendering of every previously-saved version, because the render path always read live template values. Now those eight render-affecting fields are snapshotted onto `DocGen_Template_Version__c` at save time, and `DocGenController.generateDocumentData` overlays a non-null snapshot onto the template values. Versions saved before this release have no snapshot — those still fall back to the live template, so existing installs see no change unless they edit and re-save.
 
-- **`DocGenHtmlRenderer.processTable`** — when the source `<w:tbl>` declares explicit `<w:gridCol w:w="...">` widths, emit `<colgroup><col style="width:X%"/>` per column (relative to the grid total) and add `table-layout: fixed` to the table style. Column widths now come from the authored grid declaration regardless of which rows are populated.
-- **Widths are emitted as percentages, not absolute pt.** Absolute pt in `<col>` elements overrides the table's `width:100%` constraint in Flying Saucer — a grid total wider than the printable page area then overflows the right margin, clipping the last columns. Percentages preserve the authored column proportions and always fit within the table's width regardless of whether the source grid sum is narrower, equal to, or wider than the printable area.
-- **Backward compatible** — tables without `<w:tblGrid>` (or where all `w:w` values are missing/zero) keep their prior behavior. No global stylesheet changes.
+- **New fields on `DocGen_Template_Version__c`**: `Output_Format__c`, `Header_Html__c`, `Footer_Html__c`, `Document_Title_Format__c`, `Page_Orientation__c`, `Page_Size__c`, `Page_Margins__c`, `Custom_Margins__c`. All nullable, no picklist defaults (this matters — see below).
+- **`DocGenController.loadActiveVersionSnapshot`** — reads the active version's snapshot in `SYSTEM_MODE`. `generateDocumentData` and `generateDocumentDataFromCache` overlay: `snap.Output_Format__c != null ? snap : template.Output_Format__c`.
+- **`DocGenController.saveTemplate`** — when creating a new version, copies the template's current values into the snapshot fields.
+- **Picklist defaults intentionally absent** — `Page_Size`, `Page_Orientation`, `Page_Margins`, `Output_Format` snapshots stay null until `saveTemplate` writes a real value. If any of them had a value-level default (e.g. `Letter`, `Portrait`, `Default for size`), the overlay would clobber the template's actual setting on every newly-created version. Three picklist value-level defaults were cleared during validation when this regression surfaced.
+
+### Multi-hop parent traversal in the visual builder
+
+`docGenParentRel` (new recursive LWC) — the visual builder now supports chained parent lookups (`Account.Parent.Parent.Owner`), capped at 5 hops, with lazy schema loading per hop. The component recurses into itself with a `chainPath` event payload so child placements walk up the lookup tree without manual SOQL.
+
+### Authored table + image widths respected
+
+- **`DocGenHtmlRenderer.processTable`** — table style no longer defaults to `width:100%`. Respects `<w:tblW w:type="dxa|pct|auto">` when set, derives width from `<w:tblGrid>` totals when `<w:tblW>` is absent, and clamps the derived value at 468pt (content area on a Letter page) before falling through to the global `table { width:100% }` safety net. Narrow tables now render at authored width.
+- **`DocGenHtmlRenderer.processDrawing`** — URL-fetched images are wrapped in `<span style="display:inline-block;width:Xpx;height:Ypx;line-height:0;"><img width:100% height:100%/></span>` so the authored size from `wp:extent` pins the rendered box rather than being silently expanded to the column width.
+- The global `table { border-collapse: collapse; width: 100% }` stylesheet rule is **kept** as a safety net; per-table inline width wins via CSS specificity.
+
+### Header / footer dedup
+
+`DocGenService.combineXmlWithHeadersFooters` — when a docx contains multiple sections that each reference the same default header (or Word emits duplicate header parts for sections with identical content), the engine used to concatenate all of them, producing stacked duplicate headers in Flying Saucer's `@top-center` running element. Now: first part per (header/footer, type) slot wins, dropping subsequent duplicates. Matches Word's "one header per page run" model.
+
+### Table column-grid alignment from `<w:tblGrid>` (#104)
+
+When one table had filled cells and another (identical in source) had empty cells, the PDF showed the empty columns collapsed and their width redistributed to filled neighbors — typically the description column swallowing the empty space.
+
+- `DocGenHtmlRenderer.processTable` — when the source `<w:tbl>` declares explicit `<w:gridCol w:w="...">` widths, emits `<colgroup><col style="width:X%"/>` per column (relative to the grid total) and adds `table-layout: fixed` to the table style. Column widths now come from the authored grid declaration regardless of which rows are populated. Percentages, not absolute pt — absolute pt in `<col>` would override `width:100%` in Flying Saucer and let wide grids overflow the right margin.
+- Backward compatible: tables without `<w:tblGrid>` (or with missing/zero `w:w` values) keep prior behavior.
+
+### Sibling-section paragraphs (Ben's checkbox template)
+
+When a `<w:numPr>` (numbered/bulleted) paragraph contained multiple sibling section tags — `{#A}☒{:else}☐{/A} Patient name {#B}☒{:else}☐{/B} Patient age …` — the parser's paragraph-container auto-expansion grabbed the entire paragraph for the first section. The truthy branch then rendered only `<w:p>...☒` (truncated at `{:else}`), and everything after `{/A}` was dropped from the output.
+
+- **`DocGenService.processXml`** — paragraph and row container expansion now skip when the container has _sibling_ section tags (`{#`, `{^`, `{/`) outside the current section's span. Expansion only fires when this section is the sole tagged region in the paragraph/row. Iteration cases (`{#Items}{Name}{/Items}` wrapping a complete row or list-item) still expand correctly; nested-but-inside cases (`{#Items}…{^Hidden}X{/Hidden}…{/Items}`) also still expand correctly.
+- `scripts/e2e-07-syntax3.apex` adds regression `SIBLING SECTIONS IN numPr PARAGRAPH (#112)` exercising the truthy / mixed / all-null variants.
 
 ### Tests
 
-- `DocGenHtmlRendererTest.testTableColgroupFromTblGrid` — asserts `<colgroup>` + `<col style="width:33.33%"/>` + `table-layout:fixed` for a 3-equal-column grid with mixed empty/filled cells.
-- `DocGenHtmlRendererTest.testTableNoColgroupWithoutTblGrid` — regression: tables without `<w:tblGrid>` don't emit colgroup or force fixed layout.
-- `scripts/repro-pr104-table-colgroup.apex` — full reporter scenario (5-column grid summing to 100%) plus backward-compat and zero-width edge cases.
-
-### Test counts
-
-- Apex local tests: TBD on release validation.
-- Code Analyzer: 0 High, ~41 Moderate (unchanged from v1.96.0 baseline).
+- E2E suite: 11 scripts, all PASS (e2e-07-syntax1 35/35, syntax2 31/31, syntax3 17/17 including the new sibling assertion, syntax4 9/9).
+- Apex local tests: 1360 methods, 100% pass after isolating from parallel e2e (transient `UNABLE_TO_LOCK_ROW` on shared `CronTrigger` when both ran concurrently — not a regression).
+- Code Analyzer: 0 High, 38 Moderate (within the documented ~30–41 baseline of `pmd:ProtectSensitiveData` false-positives on signature-domain field metadata).
+- Org-wide coverage: 75% (at threshold).
 
 ## v1.93.0 — Flow Save-to-Record honored (#90), signature decline cache cleared (#91), Template Status column symmetric labels (#92)
 

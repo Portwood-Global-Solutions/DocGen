@@ -14,7 +14,7 @@ public with sharing class DocGenHtmlRenderer {
         'h5 { font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0; }' +
         'h6 { font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0; }' +
         'h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }' +
-        'table { border-collapse: collapse; page-break-inside: auto; }' +
+        'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }' +
         'tr { page-break-inside: avoid; page-break-after: auto; }' +
         // Tight defaults: Word always emits explicit <w:spacing>/<w:tcMar> when authors
         // want padding, so a non-zero default ends up "flabby" (extra space the author
@@ -477,7 +477,7 @@ public with sharing class DocGenHtmlRenderer {
             // than the page content area (e.g. 14696tw / 10.21" on a 10" landscape area
             // with 0.5" margins). Word silently shrink-to-fits; without this clamp the
             // overflow gets clipped by Flying Saucer at the page edge.
-            'table { border-collapse: collapse; page-break-inside: auto; }' +
+            'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }' +
             'tr { page-break-inside: avoid; page-break-after: auto; }' +
             // box-sizing: border-box matches Word's <w:tcW> semantics — the declared cell
             // width is the OUTER width (including tcMar padding). Without this the default
@@ -812,7 +812,7 @@ public with sharing class DocGenHtmlRenderer {
         css += 'h5 { font-size: 11pt; font-weight: bold; margin: 0 0 4pt 0; }';
         css += 'h6 { font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0; }';
         css += 'h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }';
-        css += 'table { border-collapse: collapse; page-break-inside: auto; }';
+        css += 'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }';
         css += 'tr { page-break-inside: avoid; page-break-after: auto; }';
         css += 'td, th { padding: 4pt; vertical-align: top; }';
         css += 'p { margin: 0 0 8pt 0; orphans: 2; widows: 2; page-break-inside: avoid; }';
@@ -2381,10 +2381,18 @@ public with sharing class DocGenHtmlRenderer {
                 // v1.97 — when no explicit <w:tblW> was set, take the sum of the
                 // grid as the authored intent. Without this, the global stylesheet
                 // `table { width: 100% }` stretches narrow tables to fill the page.
+                // If the auto-derived width exceeds the page content area, fall
+                // through to the global 100% rule so the table fits the printable
+                // area (matches Word's behavior — Word silently shrinks tables that
+                // would overflow). Cap reference is the default Letter content area
+                // (6.5in = 468pt at 1in margins); narrower margins are still safe
+                // because explicit dxa/pct widths bypass this branch entirely.
                 if (!tableWidthSet) {
                     Decimal pt = twipsToPt(totalTwips).setScale(2);
-                    tableStyle += ';width:' + pt + 'pt';
-                    tableWidthSet = true;
+                    if (pt <= 468) {
+                        tableStyle += ';width:' + pt + 'pt';
+                        tableWidthSet = true;
+                    }
                 }
             }
         }

@@ -12,6 +12,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (templateId == null) {
             return null;
         }
+        // Snapshot fields are package-internal render config — version-pinning
+        // the way a doc renders. SYSTEM_MODE lets the render path read them
+        // without requiring every runner profile to grant FLS on each new
+        // snapshot field.
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vers = [
             SELECT
                 Output_Format__c,

@@ -12,7 +12,7 @@
             <sorted>false</sorted>
             <value>
                 <fullName>Letter</fullName>
-                <default>true</default>
+                <default>false</default>
                 <label>Letter (8.5 x 11 in)</label>
             </value>
             <value>

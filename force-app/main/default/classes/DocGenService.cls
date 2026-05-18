@@ -2562,6 +2562,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * across multiple <w:r><w:t> elements by Word's formatting engine.
      * After merging, processXml can find complete tags like {#QuoteLineItems}.
      */
+    @TestVisible
+    public static String mergeRunsInTagsForTest(String xml) {
+        return mergeRunsInTags(xml);
+    }
+
     private static String mergeRunsInTags(String xml) {
         // 1. Find all <w:t...>text</w:t> and <a:t>text</a:t> elements (Word + PowerPoint)
         Pattern wtPattern = Pattern.compile('<[wa]:t(?:\\s[^>]*)?>([^<]*)</[wa]:t>');
@@ -2757,18 +2762,41 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     Integer chosenContainerEnd = -1;
                     Boolean isIfConditional = key.startsWith('IF ') || key.startsWith('if ');
 
-                    // Candidate: row container (skipped for {#IF ...} conditionals — issue #53)
+                    // Candidate: row container (skipped for {#IF ...} conditionals — issue #53).
+                    // Sibling guard: if the row already contains another section opener/closer
+                    // *outside* this section's span, the current section is not the row's
+                    // iteration driver — skip expansion. Without this, multiple sibling
+                    // `{#A}…{/A} … {#B}…{/B}` sections inside one row would each grab the
+                    // whole row, dropping the siblings' content (truthy path renders only
+                    // the first section's trueBranch and advances past `</w:tr>`).
                     Integer rowContainerStart = isIfConditional ? -1 : lastIndexOfTagStart(xml, 'w:tr', cursor);
                     if (rowContainerStart != -1) {
                         Integer rowContainerEnd = xml.indexOf('</w:tr>', rowContainerStart);
                         Boolean rowClosedBeforeCursor = xml.substring(rowContainerStart, cursor).contains('</w:tr>');
                         if (!rowClosedBeforeCursor && rowContainerEnd != -1 && rowContainerEnd > closeTagEnd) {
-                            chosenContainerStart = rowContainerStart;
-                            chosenContainerEnd = rowContainerEnd + 7; // </w:tr>
+                            Integer rowFullEnd = rowContainerEnd + 7; // </w:tr>
+                            String rowBefore = xml.substring(rowContainerStart, cursor);
+                            String rowAfter = xml.substring(closeTagEnd + 1, rowFullEnd);
+                            Boolean rowHasSibling =
+                                rowBefore.contains('{#') ||
+                                rowBefore.contains('{^') ||
+                                rowBefore.contains('{/') ||
+                                rowAfter.contains('{#') ||
+                                rowAfter.contains('{^') ||
+                                rowAfter.contains('{/');
+                            if (!rowHasSibling) {
+                                chosenContainerStart = rowContainerStart;
+                                chosenContainerEnd = rowFullEnd;
+                            }
                         }
                     }
 
-                    // Candidate: list paragraph container (w:p with w:numPr) — skipped for IF
+                    // Candidate: list paragraph container (w:p with w:numPr) — skipped for IF.
+                    // Same sibling guard as rows: only expand when this section is the sole
+                    // tagged region in the paragraph. Otherwise sibling sections sharing the
+                    // paragraph (e.g. Ben's checkbox doc: `{#A}☒{:else}☐{/A} label {#B}…`)
+                    // would each grab the whole paragraph and drop everything after their
+                    // own `{/}` closing tag.
                     Integer numPropsStart = isIfConditional ? -1 : xml.lastIndexOf('<w:numPr', cursor);
                     if (numPropsStart != -1) {
                         Integer paragraphStart = lastIndexOfTagStart(xml, 'w:p', cursor);
@@ -2783,10 +2811,21 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                 numPropsStart < paragraphEndStart
                             ) {
                                 Integer paragraphContainerEnd = paragraphEndStart + 6; // </w:p>
-                                // Prefer the closest valid parent.
-                                if (chosenContainerStart == -1 || paragraphStart > chosenContainerStart) {
-                                    chosenContainerStart = paragraphStart;
-                                    chosenContainerEnd = paragraphContainerEnd;
+                                String paraBefore = xml.substring(paragraphStart, cursor);
+                                String paraAfter = xml.substring(closeTagEnd + 1, paragraphContainerEnd);
+                                Boolean paraHasSibling =
+                                    paraBefore.contains('{#') ||
+                                    paraBefore.contains('{^') ||
+                                    paraBefore.contains('{/') ||
+                                    paraAfter.contains('{#') ||
+                                    paraAfter.contains('{^') ||
+                                    paraAfter.contains('{/');
+                                if (!paraHasSibling) {
+                                    // Prefer the closest valid parent.
+                                    if (chosenContainerStart == -1 || paragraphStart > chosenContainerStart) {
+                                        chosenContainerStart = paragraphStart;
+                                        chosenContainerEnd = paragraphContainerEnd;
+                                    }
                                 }
                             }
                         }

@@ -432,6 +432,64 @@ try {
     System.debug('CURRENCY EUR fr_FR (#97): FAIL — ' + e.getMessage());
 }
 
+// ===== Issue #112 — sibling sections in one numbered/bulleted paragraph =====
+// Bug was: list-paragraph container expansion grabbed the whole <w:p w:numPr>,
+// so the first section's trueBranch consumed everything in the paragraph,
+// dropping every sibling section + label that followed `{/}`. Ben's checkbox
+// templates (`{#A}☒{:else}☐{/A} Label {#B}☒{:else}☐{/B} Label …` inside one
+// bulleted line) rendered only the first checkbox. Fix adds a sibling guard
+// so paragraph expansion only fires when this section is the sole tagged
+// region in the paragraph.
+try {
+    String numPrXml =
+        '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>' +
+        '<w:r><w:t>{#A}YA{:else}NA{/A} la {#B}YB{:else}NB{/B} lb {#C}YC{:else}NC{/C} lc</w:t></w:r>' +
+        '</w:p>';
+    String all3 = DocGenService.processXmlForTest(
+        numPrXml,
+        new Map<String, Object>{ 'A' => 'x', 'B' => 'y', 'C' => 'z' }
+    );
+    String mix = DocGenService.processXmlForTest(
+        numPrXml,
+        new Map<String, Object>{ 'A' => 'x', 'B' => null, 'C' => 'z' }
+    );
+    String none = DocGenService.processXmlForTest(
+        numPrXml,
+        new Map<String, Object>{ 'A' => null, 'B' => null, 'C' => null }
+    );
+    Boolean ok =
+        all3.contains('YA') &&
+        all3.contains('la') &&
+        all3.contains('YB') &&
+        all3.contains('lb') &&
+        all3.contains('YC') &&
+        all3.contains('lc') &&
+        mix.contains('YA') &&
+        mix.contains('NB') &&
+        mix.contains('YC') &&
+        mix.contains('la') &&
+        mix.contains('lb') &&
+        mix.contains('lc') &&
+        none.contains('NA') &&
+        none.contains('NB') &&
+        none.contains('NC') &&
+        none.contains('la') &&
+        none.contains('lb') &&
+        none.contains('lc');
+    if (ok) {
+        pass++;
+        System.debug('SIBLING SECTIONS IN numPr PARAGRAPH (#112): PASS');
+    } else {
+        fail++;
+        System.debug(
+            'SIBLING SECTIONS IN numPr PARAGRAPH (#112): FAIL — all=' + all3 + ' mix=' + mix + ' none=' + none
+        );
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('SIBLING SECTIONS IN numPr PARAGRAPH (#112): FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX3 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

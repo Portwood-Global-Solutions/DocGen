@@ -12,7 +12,7 @@
             <sorted>false</sorted>
             <value>
                 <fullName>Portrait</fullName>
-                <default>true</default>
+                <default>false</default>
                 <label>Portrait</label>
             </value>
             <value>
