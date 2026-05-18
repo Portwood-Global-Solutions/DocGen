@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
-    <fullName>Page_Orientation__c</fullName>
+    <fullName>Output_Format__c</fullName>
     <description
-    >PDF page orientation snapshot for this version. Landscape routes through the Visualforce PDF page; Portrait uses Blob.toPdf directly.</description>
-    <label>Page Orientation</label>
+    >Snapshot of the template's Output Format at the time this version was created. Render path reads this to ensure each version renders with its authored format regardless of subsequent template changes.</description>
+    <label>Output Format</label>
     <required>false</required>
     <type>Picklist</type>
     <valueSet>
@@ -11,14 +11,14 @@
         <valueSetDefinition>
             <sorted>false</sorted>
             <value>
-                <fullName>Portrait</fullName>
+                <fullName>Native</fullName>
                 <default>false</default>
-                <label>Portrait</label>
+                <label>Native (.docx / .pptx)</label>
             </value>
             <value>
-                <fullName>Landscape</fullName>
+                <fullName>PDF</fullName>
                 <default>false</default>
-                <label>Landscape</label>
+                <label>PDF</label>
             </value>
         </valueSetDefinition>
     </valueSet>

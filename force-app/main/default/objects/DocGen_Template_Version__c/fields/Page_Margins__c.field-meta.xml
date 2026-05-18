@@ -11,7 +11,7 @@
             <sorted>false</sorted>
             <value>
                 <fullName>Default</fullName>
-                <default>true</default>
+                <default>false</default>
                 <label>Default for size</label>
             </value>
             <value>

@@ -2,6 +2,39 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     private static Id cachedTemplateId;
     private static Map<String, Object> cachedTemplateEnvelope;
 
+    // v1.97 — Render-time snapshot lookup. The active version snapshots the
+    // render-affecting fields at save time (Output_Format, Header_Html,
+    // Footer_Html, Document_Title_Format, Page_*). The render path must prefer
+    // those over the template's current values, otherwise editing the template
+    // silently rewrites how every prior version renders. Returns null if no
+    // active version exists or its snapshot fields are all blank.
+    private static DocGen_Template_Version__c loadActiveVersionSnapshot(Id templateId) {
+        if (templateId == null) {
+            return null;
+        }
+        // Snapshot fields are package-internal render config — version-pinning
+        // the way a doc renders. SYSTEM_MODE lets the render path read them
+        // without requiring every runner profile to grant FLS on each new
+        // snapshot field.
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> vers = [
+            SELECT
+                Output_Format__c,
+                Header_Html__c,
+                Footer_Html__c,
+                Document_Title_Format__c,
+                Page_Orientation__c,
+                Page_Size__c,
+                Page_Margins__c,
+                Custom_Margins__c
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        return vers.isEmpty() ? null : vers[0];
+    }
+
     /**
      * Retrieves template metadata, file content, and merged record data for client-side processing.
      * @param templateId The DocGen template record ID
@@ -63,18 +96,40 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             recordData.put('Approvals', DocGenApprovalHistory.load(recordId));
         }
 
+        DocGen_Template_Version__c snap = loadActiveVersionSnapshot(templateId);
         return new Map<String, Object>{
             'data' => recordData,
             'templateFile' => fileContent,
             'templateType' => template.Type__c,
-            'outputFormat' => template.Output_Format__c,
-            'titleFormat' => template.Document_Title_Format__c,
-            'headerHtml' => template.Header_Html__c,
-            'footerHtml' => template.Footer_Html__c,
-            'pageOrientation' => template.Page_Orientation__c,
-            'pageSize' => template.Page_Size__c,
-            'pageMargins' => template.Page_Margins__c,
-            'customMargins' => template.Custom_Margins__c
+            'outputFormat' => (snap != null &&
+                snap.Output_Format__c != null)
+                ? snap.Output_Format__c
+                : template.Output_Format__c,
+            'titleFormat' => (snap != null &&
+                snap.Document_Title_Format__c != null)
+                ? snap.Document_Title_Format__c
+                : template.Document_Title_Format__c,
+            'headerHtml' => (snap != null &&
+                snap.Header_Html__c != null)
+                ? snap.Header_Html__c
+                : template.Header_Html__c,
+            'footerHtml' => (snap != null &&
+                snap.Footer_Html__c != null)
+                ? snap.Footer_Html__c
+                : template.Footer_Html__c,
+            'pageOrientation' => (snap != null &&
+                snap.Page_Orientation__c != null)
+                ? snap.Page_Orientation__c
+                : template.Page_Orientation__c,
+            'pageSize' => (snap != null && snap.Page_Size__c != null) ? snap.Page_Size__c : template.Page_Size__c,
+            'pageMargins' => (snap != null &&
+                snap.Page_Margins__c != null)
+                ? snap.Page_Margins__c
+                : template.Page_Margins__c,
+            'customMargins' => (snap != null &&
+                snap.Custom_Margins__c != null)
+                ? snap.Custom_Margins__c
+                : template.Custom_Margins__c
         };
     }
 
@@ -129,17 +184,39 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
             String fileContent = DocGenTemplateManager.getTemplateFileContent(templateId);
 
+            DocGen_Template_Version__c snap = loadActiveVersionSnapshot(templateId);
             cachedTemplateEnvelope = new Map<String, Object>{
                 'templateFile' => fileContent,
                 'templateType' => template.Type__c,
-                'outputFormat' => template.Output_Format__c,
-                'titleFormat' => template.Document_Title_Format__c,
-                'headerHtml' => template.Header_Html__c,
-                'footerHtml' => template.Footer_Html__c,
-                'pageOrientation' => template.Page_Orientation__c,
-                'pageSize' => template.Page_Size__c,
-                'pageMargins' => template.Page_Margins__c,
-                'customMargins' => template.Custom_Margins__c
+                'outputFormat' => (snap != null &&
+                    snap.Output_Format__c != null)
+                    ? snap.Output_Format__c
+                    : template.Output_Format__c,
+                'titleFormat' => (snap != null &&
+                    snap.Document_Title_Format__c != null)
+                    ? snap.Document_Title_Format__c
+                    : template.Document_Title_Format__c,
+                'headerHtml' => (snap != null &&
+                    snap.Header_Html__c != null)
+                    ? snap.Header_Html__c
+                    : template.Header_Html__c,
+                'footerHtml' => (snap != null &&
+                    snap.Footer_Html__c != null)
+                    ? snap.Footer_Html__c
+                    : template.Footer_Html__c,
+                'pageOrientation' => (snap != null &&
+                    snap.Page_Orientation__c != null)
+                    ? snap.Page_Orientation__c
+                    : template.Page_Orientation__c,
+                'pageSize' => (snap != null && snap.Page_Size__c != null) ? snap.Page_Size__c : template.Page_Size__c,
+                'pageMargins' => (snap != null &&
+                    snap.Page_Margins__c != null)
+                    ? snap.Page_Margins__c
+                    : template.Page_Margins__c,
+                'customMargins' => (snap != null &&
+                    snap.Custom_Margins__c != null)
+                    ? snap.Custom_Margins__c
+                    : template.Custom_Margins__c
             };
             cachedTemplateId = templateId;
         }
@@ -2118,6 +2195,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 version.Page_Size__c = (String) fields.get('Page_Size__c');
                 version.Page_Margins__c = (String) fields.get('Page_Margins__c');
                 version.Custom_Margins__c = (String) fields.get('Custom_Margins__c');
+                // 1.97 — snapshot output format, header/footer HTML, and title format
+                // so a version is a true render snapshot. Without these, restoring an
+                // older version still rendered with the *template*'s current values,
+                // which silently changed output when admins edited the template.
+                version.Output_Format__c = (String) fields.get('Output_Format__c');
+                version.Header_Html__c = (String) fields.get('Header_Html__c');
+                version.Footer_Html__c = (String) fields.get('Footer_Html__c');
+                version.Document_Title_Format__c = (String) fields.get('Document_Title_Format__c');
 
                 // Carry forward the watermark from the previous active version so a
                 // template re-save (or any new version) doesn't silently lose the

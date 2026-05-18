@@ -102,6 +102,81 @@ private class DocGenHtmlRendererTest {
     }
 
     @IsTest
+    static void testTableColgroupFromTblGrid() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Three identical-width columns declared in <w:tblGrid>, but only the
+            // first cell has content. Without colgroup emission + table-layout:fixed,
+            // Flying Saucer's auto-layout would collapse the empty columns to ~0
+            // width and redistribute their space to the populated column — producing
+            // visible column misalignment when the same template is used across
+            // multiple iterations where some rows have empty cells.
+            //
+            // Widths are emitted as percentages of the grid total (not absolute pt)
+            // so the column proportions are preserved while the table itself remains
+            // sized to its container — avoids right-side overflow when the grid sum
+            // exceeds printable page width.
+            String xml =
+                '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl>' +
+                '<w:tblPr></w:tblPr>' +
+                '<w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>' +
+                '<w:tr>' +
+                '<w:tc><w:p><w:r><w:t>Filled</w:t></w:r></w:p></w:tc>' +
+                '<w:tc><w:p></w:p></w:tc>' +
+                '<w:tc><w:p></w:p></w:tc>' +
+                '</w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<colgroup>'), 'Should emit <colgroup> from <w:tblGrid>. HTML: ' + html);
+            // 2000 twips out of 6000 total = 33.33%
+            System.assert(
+                html.contains('<col style="width:33.33%"/>'),
+                'Should emit per-column width as % of grid total (2000/6000 = 33.33%). HTML: ' + html
+            );
+            System.assert(
+                html.contains('table-layout:fixed'),
+                'Should force table-layout:fixed when explicit grid widths exist. HTML: ' + html
+            );
+        }
+    }
+
+    @IsTest
+    static void testTableNoColgroupWithoutTblGrid() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Table without <w:tblGrid> — verify the fix is gated on grid presence
+            // and doesn't change rendering of tables that don't declare explicit
+            // column widths (preserves backward compatibility).
+            String xml =
+                '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body>' +
+                '<w:tbl>' +
+                '<w:tblPr></w:tblPr>' +
+                '<w:tr>' +
+                '<w:tc><w:p><w:r><w:t>Cell</w:t></w:r></w:p></w:tc>' +
+                '</w:tr>' +
+                '</w:tbl>' +
+                '</w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<table'), 'Should still emit table');
+            System.assert(!html.contains('<colgroup>'), 'Should not emit colgroup without <w:tblGrid>');
+            System.assert(
+                !html.contains('table-layout:fixed'),
+                'Should not force fixed layout without explicit grid widths'
+            );
+        }
+    }
+
+    @IsTest
     static void testTableCellShading() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {

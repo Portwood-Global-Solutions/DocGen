@@ -276,6 +276,26 @@
         <field>DocGen_Template_Version__c.Type__c</field>
         <readable>true</readable>
     </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Template_Version__c.Output_Format__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Template_Version__c.Header_Html__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Template_Version__c.Footer_Html__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Template_Version__c.Document_Title_Format__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
     <!-- DocGen_Template__c: Base_Object_API__c, Output_Format__c, Type__c are required; FLS auto-granted -->
     <fieldPermissions>
         <editable>false</editable>

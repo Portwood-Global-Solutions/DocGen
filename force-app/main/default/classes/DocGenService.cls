@@ -2218,21 +2218,28 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // Default to "default" when unmapped (older templates without sectPr refs).
             String partType = partTypeByFile.containsKey(partPrefix) ? partTypeByFile.get(partPrefix) : 'default';
             Boolean isHeader = key.startsWith('word/header');
+            // v1.97 — keep only the FIRST file per (header/footer, type) slot. When a
+            // docx contains multiple sections that each reference the same default
+            // header (or Word emits duplicate header files for sections with the same
+            // content), concatenating them all produces stacked duplicate headers in
+            // Flying Saucer's @top-center running element. Flying Saucer can only
+            // surface one running element per page run anyway, so the first
+            // declaration wins — matches Word's own "one header per page run" model.
             if (isHeader) {
-                if (partType == 'first') {
-                    headersFirst += partXml;
-                } else if (partType == 'even') {
-                    headersEven += partXml;
-                } else {
-                    headersDefault += partXml;
+                if (partType == 'first' && String.isBlank(headersFirst)) {
+                    headersFirst = partXml;
+                } else if (partType == 'even' && String.isBlank(headersEven)) {
+                    headersEven = partXml;
+                } else if (partType != 'first' && partType != 'even' && String.isBlank(headersDefault)) {
+                    headersDefault = partXml;
                 }
             } else {
-                if (partType == 'first') {
-                    footersFirst += partXml;
-                } else if (partType == 'even') {
-                    footersEven += partXml;
-                } else {
-                    footersDefault += partXml;
+                if (partType == 'first' && String.isBlank(footersFirst)) {
+                    footersFirst = partXml;
+                } else if (partType == 'even' && String.isBlank(footersEven)) {
+                    footersEven = partXml;
+                } else if (partType != 'first' && partType != 'even' && String.isBlank(footersDefault)) {
+                    footersDefault = partXml;
                 }
             }
         }
@@ -2555,6 +2562,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * across multiple <w:r><w:t> elements by Word's formatting engine.
      * After merging, processXml can find complete tags like {#QuoteLineItems}.
      */
+    @TestVisible
+    public static String mergeRunsInTagsForTest(String xml) {
+        return mergeRunsInTags(xml);
+    }
+
     private static String mergeRunsInTags(String xml) {
         // 1. Find all <w:t...>text</w:t> and <a:t>text</a:t> elements (Word + PowerPoint)
         Pattern wtPattern = Pattern.compile('<[wa]:t(?:\\s[^>]*)?>([^<]*)</[wa]:t>');
@@ -2750,18 +2762,41 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     Integer chosenContainerEnd = -1;
                     Boolean isIfConditional = key.startsWith('IF ') || key.startsWith('if ');
 
-                    // Candidate: row container (skipped for {#IF ...} conditionals — issue #53)
+                    // Candidate: row container (skipped for {#IF ...} conditionals — issue #53).
+                    // Sibling guard: if the row already contains another section opener/closer
+                    // *outside* this section's span, the current section is not the row's
+                    // iteration driver — skip expansion. Without this, multiple sibling
+                    // `{#A}…{/A} … {#B}…{/B}` sections inside one row would each grab the
+                    // whole row, dropping the siblings' content (truthy path renders only
+                    // the first section's trueBranch and advances past `</w:tr>`).
                     Integer rowContainerStart = isIfConditional ? -1 : lastIndexOfTagStart(xml, 'w:tr', cursor);
                     if (rowContainerStart != -1) {
                         Integer rowContainerEnd = xml.indexOf('</w:tr>', rowContainerStart);
                         Boolean rowClosedBeforeCursor = xml.substring(rowContainerStart, cursor).contains('</w:tr>');
                         if (!rowClosedBeforeCursor && rowContainerEnd != -1 && rowContainerEnd > closeTagEnd) {
-                            chosenContainerStart = rowContainerStart;
-                            chosenContainerEnd = rowContainerEnd + 7; // </w:tr>
+                            Integer rowFullEnd = rowContainerEnd + 7; // </w:tr>
+                            String rowBefore = xml.substring(rowContainerStart, cursor);
+                            String rowAfter = xml.substring(closeTagEnd + 1, rowFullEnd);
+                            Boolean rowHasSibling =
+                                rowBefore.contains('{#') ||
+                                rowBefore.contains('{^') ||
+                                rowBefore.contains('{/') ||
+                                rowAfter.contains('{#') ||
+                                rowAfter.contains('{^') ||
+                                rowAfter.contains('{/');
+                            if (!rowHasSibling) {
+                                chosenContainerStart = rowContainerStart;
+                                chosenContainerEnd = rowFullEnd;
+                            }
                         }
                     }
 
-                    // Candidate: list paragraph container (w:p with w:numPr) — skipped for IF
+                    // Candidate: list paragraph container (w:p with w:numPr) — skipped for IF.
+                    // Same sibling guard as rows: only expand when this section is the sole
+                    // tagged region in the paragraph. Otherwise sibling sections sharing the
+                    // paragraph (e.g. Ben's checkbox doc: `{#A}☒{:else}☐{/A} label {#B}…`)
+                    // would each grab the whole paragraph and drop everything after their
+                    // own `{/}` closing tag.
                     Integer numPropsStart = isIfConditional ? -1 : xml.lastIndexOf('<w:numPr', cursor);
                     if (numPropsStart != -1) {
                         Integer paragraphStart = lastIndexOfTagStart(xml, 'w:p', cursor);
@@ -2776,10 +2811,21 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                 numPropsStart < paragraphEndStart
                             ) {
                                 Integer paragraphContainerEnd = paragraphEndStart + 6; // </w:p>
-                                // Prefer the closest valid parent.
-                                if (chosenContainerStart == -1 || paragraphStart > chosenContainerStart) {
-                                    chosenContainerStart = paragraphStart;
-                                    chosenContainerEnd = paragraphContainerEnd;
+                                String paraBefore = xml.substring(paragraphStart, cursor);
+                                String paraAfter = xml.substring(closeTagEnd + 1, paragraphContainerEnd);
+                                Boolean paraHasSibling =
+                                    paraBefore.contains('{#') ||
+                                    paraBefore.contains('{^') ||
+                                    paraBefore.contains('{/') ||
+                                    paraAfter.contains('{#') ||
+                                    paraAfter.contains('{^') ||
+                                    paraAfter.contains('{/');
+                                if (!paraHasSibling) {
+                                    // Prefer the closest valid parent.
+                                    if (chosenContainerStart == -1 || paragraphStart > chosenContainerStart) {
+                                        chosenContainerStart = paragraphStart;
+                                        chosenContainerEnd = paragraphContainerEnd;
+                                    }
                                 }
                             }
                         }
@@ -6150,10 +6196,25 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 WITH SYSTEM_MODE
                 LIMIT 1
             ];
-            if (tpls.isEmpty() || String.isBlank(tpls[0].Document_Title_Format__c)) {
+            if (tpls.isEmpty()) {
                 return null;
             }
+            // v1.97 — prefer the active version's snapshot of Document_Title_Format__c
+            // so restoring an older version restores its filename pattern too.
             String fmt = tpls[0].Document_Title_Format__c;
+            List<DocGen_Template_Version__c> snap = [
+                SELECT Document_Title_Format__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :templateId AND Is_Active__c = TRUE
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (!snap.isEmpty() && snap[0].Document_Title_Format__c != null) {
+                fmt = snap[0].Document_Title_Format__c;
+            }
+            if (String.isBlank(fmt)) {
+                return null;
+            }
             Map<String, Object> data = loadRecordDataForTitle(recordId, fmt);
             return generateDocTitle(fmt, data);
         } catch (Exception e) {
@@ -7045,7 +7106,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             css += ' .docgen-running-footer { position: running(dgfooter); }';
         }
         css += ' body { font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; }';
-        css += ' img { max-width: 100%; }';
+        // v1.97 — no global max-width on images; inline width/height takes precedence.
         css += ' table { border-collapse: collapse; }';
 
         String html = '<html><head><meta charset="utf-8"/>';

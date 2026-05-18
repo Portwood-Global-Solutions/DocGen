@@ -210,7 +210,26 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             LIMIT 1
         ];
         if (!tpls.isEmpty() && tpls[0].Type__c == 'HTML') {
-            return buildHtmlTemplateForHtmlType(tpls[0].Header_Html__c, tpls[0].Footer_Html__c);
+            // v1.97 — prefer the active version's snapshotted header/footer so
+            // editing the template doesn't retroactively rewrite earlier versions.
+            String headerHtml = tpls[0].Header_Html__c;
+            String footerHtml = tpls[0].Footer_Html__c;
+            List<DocGen_Template_Version__c> snap = [
+                SELECT Header_Html__c, Footer_Html__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :templateId AND Is_Active__c = TRUE
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (!snap.isEmpty()) {
+                if (snap[0].Header_Html__c != null) {
+                    headerHtml = snap[0].Header_Html__c;
+                }
+                if (snap[0].Footer_Html__c != null) {
+                    footerHtml = snap[0].Footer_Html__c;
+                }
+            }
+            return buildHtmlTemplateForHtmlType(headerHtml, footerHtml);
         }
 
         List<DocGen_Template_Version__c> vers = [

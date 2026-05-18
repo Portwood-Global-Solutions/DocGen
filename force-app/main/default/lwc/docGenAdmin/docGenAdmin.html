@@ -2212,19 +2212,11 @@
                         <div class="slds-col">
                             <lightning-button
                                 variant="neutral"
-                                label="Cancel"
+                                label="Close"
                                 onclick={closeEditModal}
                             ></lightning-button>
-                            <template if:true={hasVersions}>
-                                <lightning-button
-                                    variant="brand"
-                                    label="Save Details"
-                                    onclick={handleSaveOnly}
-                                    class="slds-var-m-left_small"
-                                ></lightning-button>
-                            </template>
                             <lightning-button
-                                variant="brand-outline"
+                                variant="brand"
                                 label="Save as New Version"
                                 onclick={handleSaveAndClose}
                                 class="slds-var-m-left_small"

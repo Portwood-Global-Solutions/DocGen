@@ -22,7 +22,10 @@ public with sharing class DocGenHtmlRenderer {
         // to ~108 twips (~5.4pt) on each side and zeroing it makes tables visually fuse.
         'td, th { padding: 0 4pt; vertical-align: top; }' +
         'p { margin: 0; orphans: 2; widows: 2; page-break-inside: avoid; }' +
-        'img { max-width: 100%; }' +
+        // v1.97 — no global max-width on images. Inline width/height (emitted from
+        // wp:extent or rich-text size tokens) is the authoritative size. Image-field
+        // emits that need a content-fit cap set max-width inline instead.
+        '' +
         'ul, ol { margin: 0; padding-left: 36pt; }' +
         'li { margin: 0; page-break-inside: avoid; }' +
         'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }' +
@@ -244,21 +247,61 @@ public with sharing class DocGenHtmlRenderer {
         //      parsing needed
         //   2. Word-embedded VML watermark extracted from headers — legacy path
         //      with documented Scale/Washout/rotation limitations
+        // Parse page dimensions first so we can size the watermark to match
+        // what Word would render (VML width/height vs page width/height).
+        Map<String, Decimal> wmPageDims = parsePageDimensions(documentXml);
         String watermarkPageBgCss = '';
+        String watermarkOverlayHtml = '';
         if (String.isNotBlank(overrideWatermarkCvId)) {
-            // overrideWatermarkCvId is a static set by callers — sanitize defensively
-            // so it can't break out of the url('...') token even if a future caller
-            // passes through unvalidated input.
+            // Admin upload has no VML — default to filling the page exactly.
+            // sanitizeCssUrlToken strips quotes/parens/whitespace so a malformed
+            // watermark src can't break out of the surrounding url('...') token.
+            String safeOverride = sanitizeCssUrlToken(overrideWatermarkCvId);
+            String adminSrc = '/sfc/servlet.shepherd/version/download/' + safeOverride;
             watermarkPageBgCss =
-                'background-image: url(\'/sfc/servlet.shepherd/version/download/' +
-                sanitizeCssUrlToken(overrideWatermarkCvId) +
+                'background-image: url(\'' +
+                adminSrc +
                 '\'); ' +
-                'background-position: center center; background-repeat: no-repeat; background-size: contain;';
+                'background-position: center center; background-repeat: no-repeat; background-size: 100% 100%;';
+            // Also emit the position:fixed overlay so the admin-uploaded watermark
+            // actually scales (Flying Saucer ignores @page background-size).
+            if (
+                wmPageDims != null &&
+                wmPageDims.containsKey('pageWidth') &&
+                wmPageDims.containsKey('pageHeight') &&
+                wmPageDims.get('pageWidth') > 0 &&
+                wmPageDims.get('pageHeight') > 0
+            ) {
+                Decimal pgW = wmPageDims.get('pageWidth');
+                Decimal pgH = wmPageDims.get('pageHeight');
+                Decimal halfWIn = (pgW / 2).setScale(3);
+                Decimal halfHIn = (pgH / 2).setScale(3);
+                watermarkOverlayHtml =
+                    '<div class="docgen-watermark" style="position:fixed;top:50%;left:50%;' +
+                    'margin-left:-' +
+                    halfWIn +
+                    'in;margin-top:-' +
+                    halfHIn +
+                    'in;z-index:0;pointer-events:none;">' +
+                    '<img src="' +
+                    adminSrc +
+                    '" ' +
+                    'style="width:' +
+                    pgW +
+                    'in;height:' +
+                    pgH +
+                    'in;"/>' +
+                    '</div>';
+            }
         }
-        Map<String, String> bodyExtract = extractWatermarks(html);
+        Map<String, String> bodyExtract = extractWatermarks(html, wmPageDims);
         html = bodyExtract.get('html');
         if (String.isBlank(watermarkPageBgCss) && String.isNotBlank(bodyExtract.get('pageBgCss'))) {
             watermarkPageBgCss = bodyExtract.get('pageBgCss');
+        }
+        // Only fall through to VML overlay when admin override didn't already set one
+        if (String.isBlank(watermarkOverlayHtml) && String.isNotBlank(bodyExtract.get('watermarkOverlayHtml'))) {
+            watermarkOverlayHtml = bodyExtract.get('watermarkOverlayHtml');
         }
 
         // Process header/footer HTML for Flying Saucer running elements
@@ -294,7 +337,10 @@ public with sharing class DocGenHtmlRenderer {
                 } else {
                     content = footerFirstHtml;
                 }
-                Map<String, String> wExtract = extractWatermarks(content);
+                Map<String, String> wExtract = extractWatermarks(content, wmPageDims);
+                if (String.isBlank(watermarkOverlayHtml) && String.isNotBlank(wExtract.get('watermarkOverlayHtml'))) {
+                    watermarkOverlayHtml = wExtract.get('watermarkOverlayHtml');
+                }
                 String stripped = wExtract.get('html');
                 if (htmlVar == 'header') {
                     headerHtml = stripped;
@@ -318,7 +364,8 @@ public with sharing class DocGenHtmlRenderer {
         }
 
         // Build dynamic page CSS from document dimensions + styles
-        Map<String, Decimal> pageDims = parsePageDimensions(documentXml);
+        // (wmPageDims was computed above for watermark sizing; reuse here)
+        Map<String, Decimal> pageDims = wmPageDims;
         String cellPadding = resolveDefaultCellPadding();
         Boolean hasHeader = String.isNotBlank(headerHtml);
         Boolean hasFooter = String.isNotBlank(footerHtml);
@@ -430,7 +477,7 @@ public with sharing class DocGenHtmlRenderer {
             // than the page content area (e.g. 14696tw / 10.21" on a 10" landscape area
             // with 0.5" margins). Word silently shrink-to-fits; without this clamp the
             // overflow gets clipped by Flying Saucer at the page edge.
-            'table { border-collapse: collapse; width: 100%; max-width: 100%; page-break-inside: auto; }' +
+            'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }' +
             'tr { page-break-inside: avoid; page-break-after: auto; }' +
             // box-sizing: border-box matches Word's <w:tcW> semantics — the declared cell
             // width is the OUTER width (including tcMar padding). Without this the default
@@ -443,7 +490,10 @@ public with sharing class DocGenHtmlRenderer {
             // paragraph spacing — letting it default to 8pt produces "flabby" output the
             // author never asked for (especially noticeable in tight address blocks).
             'p { margin: 0; orphans: 2; widows: 2; page-break-inside: avoid; }' +
-            'img { max-width: 100%; }' +
+            // v1.97 — no global max-width on images. Inline width/height (emitted from
+            // wp:extent or rich-text size tokens) is the authoritative size. Image-field
+            // emits that need a content-fit cap set max-width inline instead.
+            '' +
             'ul, ol { margin: 0; padding-left: 36pt; }' +
             'li { margin: 0; page-break-inside: avoid; }' +
             'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }' +
@@ -471,6 +521,10 @@ public with sharing class DocGenHtmlRenderer {
         // Watermarks render via @page background-image (set above) and never appear
         // in body DOM — that's how they extend to true page bleed.
         String bodyHtml = '';
+        if (String.isNotBlank(watermarkOverlayHtml)) {
+            // position:fixed sized watermark — body content sits above via z-index
+            bodyHtml += watermarkOverlayHtml;
+        }
         if (hasHeader) {
             bodyHtml += '<div id="docgen-header">' + headerHtml + '</div>';
         }
@@ -483,9 +537,217 @@ public with sharing class DocGenHtmlRenderer {
         if (hasFooterFirst) {
             bodyHtml += '<div id="docgen-footer-first">' + footerFirstHtml + '</div>';
         }
-        bodyHtml += html;
+        if (String.isNotBlank(watermarkOverlayHtml)) {
+            bodyHtml += '<div class="docgen-body-content">' + html + '</div>';
+        } else {
+            bodyHtml += html;
+        }
+
+        // Post-process textbox sentinel markers into positioned <div>s. The
+        // markers were emitted by unwrapTextboxes during XML preprocessing and
+        // emerged here as <p>__DGTXBX_OPEN_...__</p> / <p>__DGTXBX_CLOSE__</p>.
+        bodyHtml = postProcessTextboxMarkers(bodyHtml, pageDims);
 
         return dynamicPrefix + wrapNonLatinGlyphs(bodyHtml) + HTML_SUFFIX;
+    }
+
+    /**
+     * Replaces textbox sentinel paragraphs with positioned <div> wrappers.
+     *
+     * Markers emitted by unwrapTextboxes look like:
+     *   <p>__DGTXBX_OPEN|left=6.349|top=0.44|w=1.469|h=3.05|vert=eaVert__</p>
+     *   ... rendered textbox paragraphs ...
+     *   <p>__DGTXBX_CLOSE__</p>
+     *
+     * The OPEN <p> is replaced with a positioned <div> sized to the textbox
+     * dimensions. vert=eaVert/vert270/vert270... is mapped to a CSS rotation
+     * via transform: rotate(...). Flying Saucer's writing-mode support is
+     * incomplete, so we use transform: rotate which IS reliably honored.
+     */
+    private static String postProcessTextboxMarkers(String html, Map<String, Decimal> pageDims) {
+        if (String.isBlank(html) || !html.contains('__DGTXBX_OPEN')) {
+            return html;
+        }
+        String result = html;
+        Integer guard = 0;
+        while (result.contains('__DGTXBX_OPEN') && guard < 50) {
+            guard++;
+            Integer openStart = result.indexOf('<p>__DGTXBX_OPEN');
+            if (openStart == -1) {
+                // Marker text may have been wrapped differently (e.g. <p style="..."><span>...)
+                openStart = result.indexOf('__DGTXBX_OPEN');
+                if (openStart == -1)
+                    break;
+                // Walk backwards to find enclosing <p
+                Integer pTagStart = result.lastIndexOf('<p', openStart);
+                if (pTagStart == -1)
+                    break;
+                openStart = pTagStart;
+            }
+            Integer markerEnd = result.indexOf('__', openStart + 13); // skip "<p>__DGTXBX_OPEN"
+            if (markerEnd == -1)
+                break;
+            // Find the closing </p> after the marker
+            Integer pCloseEnd = result.indexOf('</p>', markerEnd);
+            if (pCloseEnd == -1)
+                break;
+            String markerBlock = result.substring(openStart, pCloseEnd + 4);
+
+            // Parse the metadata from the marker string
+            String metaStart = '__DGTXBX_OPEN';
+            Integer metaStartIdx = markerBlock.indexOf(metaStart);
+            String meta = markerBlock.substring(metaStartIdx + metaStart.length());
+            meta = meta.substringBefore('__');
+
+            Decimal leftIn = 0;
+            Decimal topIn = 0;
+            Decimal widthIn = 0;
+            Decimal heightIn = 0;
+            String vert = '';
+            String hrel = '';
+            String vrel = '';
+            for (String part : meta.split('\\|')) {
+                if (part.startsWith('left=')) {
+                    try {
+                        leftIn = Decimal.valueOf(part.substring(5));
+                    } catch (Exception e) {
+                    }
+                } else if (part.startsWith('top=')) {
+                    try {
+                        topIn = Decimal.valueOf(part.substring(4));
+                    } catch (Exception e) {
+                    }
+                } else if (part.startsWith('w=')) {
+                    try {
+                        widthIn = Decimal.valueOf(part.substring(2));
+                    } catch (Exception e) {
+                    }
+                } else if (part.startsWith('h=')) {
+                    try {
+                        heightIn = Decimal.valueOf(part.substring(2));
+                    } catch (Exception e) {
+                    }
+                } else if (part.startsWith('vert=')) {
+                    vert = part.substring(5);
+                } else if (part.startsWith('hrel=')) {
+                    hrel = part.substring(5);
+                } else if (part.startsWith('vrel=')) {
+                    vrel = part.substring(5);
+                }
+            }
+
+            // Determine rotation angle from vert. Flying Saucer doesn't honor
+            // CSS transform/writing-mode on <div> content, so we use SVG
+            // <foreignObject> with a transform attribute (which IS honored).
+            // - eaVert / vert: top-to-bottom Asian — rotate 90° clockwise
+            // - vert270: bottom-to-top (counter-clockwise 90°)
+            // - default: no rotation
+            Integer rotateDeg = 0;
+            if (vert == 'eaVert' || vert == 'vert') {
+                rotateDeg = 90;
+            } else if (vert == 'vert270') {
+                rotateDeg = -90;
+            }
+            String innerTransform = (rotateDeg != 0) ? 'rotation' : '';
+
+            // Wrap content in TWO divs: outer with position:absolute for placement,
+            // inner with explicit width/height for proper child layout. Flying Saucer's
+            // position:absolute clamps child widths, but a non-positioned inner div
+            // restores the layout context so the table/bars render at full size.
+            // Flying Saucer's position:absolute clamps children's width to
+            // content-shrink, breaking explicit width on the table/cells inside.
+            // Workaround: use position:relative + negative margin trick. The
+            // outer wrapper carries the position:absolute for placement; inside
+            // it, a normal-flow div with explicit width holds the content.
+            // The key is that position:absolute DOES respect width on itself —
+            // it just clamps child widths. So we set explicit width on the
+            // positioned wrapper, then the table width:100% takes that width.
+            // (Empirically this still didn't fix it — Flying Saucer ignores
+            // table width inside absolute parents regardless. So we use a
+            // fixed-pt width that the renderer DOES honor.)
+            // Flying Saucer's position:fixed treats coords as content-area-
+            // relative. Apply OOXML relativeFrom math:
+            //   page → coords page-relative; subtract margins
+            //   margin/column/character/paragraph → coords content-relative; use as-is
+            // KNOWN LIMITATION: textboxes that extend past the content area
+            // right/bottom edge will be clipped by Flying Saucer's position:fixed
+            // clipping. Authors should keep textbox right edge within the
+            // content area (page-width - right-margin). For ticket-style
+            // layouts where the textbox needs to bleed past margins, author
+            // the watermark image with the textbox area inside the content
+            // safe zone.
+            Decimal mLeftIn = (pageDims != null && pageDims.containsKey('marginLeft')) ? pageDims.get('marginLeft') : 1;
+            Decimal mTopIn = (pageDims != null && pageDims.containsKey('marginTop')) ? pageDims.get('marginTop') : 1;
+            Decimal effLeftIn = (hrel == 'page') ? Math.max(0, leftIn - mLeftIn) : leftIn;
+            Decimal effTopIn = (vrel == 'page') ? Math.max(0, topIn - mTopIn) : topIn;
+            String outerStyle =
+                'position:fixed;' +
+                'left:' +
+                effLeftIn +
+                'in;' +
+                'top:' +
+                effTopIn +
+                'in;' +
+                'width:' +
+                widthIn +
+                'in;' +
+                'overflow:visible;';
+            String openHtml = '<div class="docgen-textbox" style="' + outerStyle + '">';
+            String closeHtml = '</div>';
+
+            // Capture the inner content between OPEN and CLOSE markers so we can
+            // rotation-transform it. Flying Saucer doesn't honor CSS transform
+            // or writing-mode on <div> content, and SVG <foreignObject> doesn't
+            // render HTML, so for rotated textboxes we transform the content
+            // itself: thin "bar" spans (display:inline-block;width:Xpx;height:Ypx)
+            // get their dimensions swapped + flow changed from inline to block,
+            // which converts a horizontal bar series (e.g., barcode) into a
+            // vertical bar stack — visually equivalent to a 90° rotation.
+            Integer closeStartIdx = result.indexOf('<p>__DGTXBX_CLOSE__</p>', pCloseEnd);
+            String closeMarkerLiteral = '<p>__DGTXBX_CLOSE__</p>';
+            if (closeStartIdx == -1) {
+                Integer closeTextIdx = result.indexOf('__DGTXBX_CLOSE__', pCloseEnd);
+                if (closeTextIdx != -1) {
+                    Integer pTagStart = result.lastIndexOf('<p', closeTextIdx);
+                    Integer pTagEnd = result.indexOf('</p>', closeTextIdx);
+                    if (pTagStart != -1 && pTagEnd != -1) {
+                        closeStartIdx = pTagStart;
+                        closeMarkerLiteral = result.substring(pTagStart, pTagEnd + 4);
+                    }
+                }
+            }
+            if (closeStartIdx == -1) {
+                // No close marker — bail out to avoid runaway
+                break;
+            }
+
+            String innerContent = result.substring(pCloseEnd + 4, closeStartIdx);
+            Integer textboxWidthPx = Integer.valueOf(widthIn * 96);
+            Integer textboxHeightPx = Integer.valueOf(heightIn * 96);
+            // Always auto-fit any QR code inside the textbox to the textbox
+            // dimensions (rotation-independent — QR is square and renderable
+            // at any size). Default QR size is 250px which overflows narrow
+            // textboxes.
+            innerContent = autofitQrToTextbox(innerContent, textboxWidthPx, textboxHeightPx);
+            // Strip leading empty paragraphs that Word authors often add as
+            // vertical spacing inside textboxes — those push subsequent
+            // content (like barcodes/QR codes) down out of the textbox top.
+            innerContent = innerContent.replaceAll('(?i)<p[^>]*>\\s*&nbsp;\\s*</p>', '');
+            if (rotateDeg != 0) {
+                innerContent = rotateInlineBarContent(innerContent, rotateDeg, textboxWidthPx, textboxHeightPx);
+                innerContent = innerContent.replaceAll('(?i)<p[^>]*>\\s*(<div[^>]*display\\s*:\\s*block[^>]*>)', '$1');
+                innerContent = innerContent.replaceAll('(?i)</div>\\s*</p>', '</div>');
+            }
+
+            // Splice: replace OPEN marker -> open div, content -> rotated content, CLOSE -> close div
+            result =
+                result.substring(0, openStart) +
+                openHtml +
+                innerContent +
+                closeHtml +
+                result.substring(closeStartIdx + closeMarkerLiteral.length());
+        }
+        return result;
     }
 
     /**
@@ -554,7 +816,10 @@ public with sharing class DocGenHtmlRenderer {
         css += 'tr { page-break-inside: avoid; page-break-after: auto; }';
         css += 'td, th { padding: 4pt; vertical-align: top; }';
         css += 'p { margin: 0 0 8pt 0; orphans: 2; widows: 2; page-break-inside: avoid; }';
-        css += 'img { max-width: 100%; }';
+        css += // v1.97 — no global max-width on images. Inline width/height (emitted from
+            // wp:extent or rich-text size tokens) is the authoritative size. Image-field
+            // emits that need a content-fit cap set max-width inline instead.
+            '';
         css += 'ul, ol { margin: 0 0 8pt 0; padding-left: 36pt; }';
         css += 'li { margin: 0 0 2pt 0; page-break-inside: avoid; }';
         css += 'hr { border: none; border-top: 1px solid #000; margin: 6pt 0; }';
@@ -927,6 +1192,12 @@ public with sharing class DocGenHtmlRenderer {
      * Handles consecutive list paragraphs by wrapping them in <ul>/<ol>.
      */
     private static String processBodyContent(String xml, Map<String, String> images) {
+        // Pre-pass: unwrap textbox structures (<mc:AlternateContent>, <wps:wsp>,
+        // <v:textbox>) so their inner <w:txbxContent> paragraphs flow as regular
+        // siblings. Without this, the textbox content is silently dropped because
+        // the element walker below only recognizes <w:p>/<w:tbl> at the top level.
+        xml = unwrapTextboxes(xml);
+
         // First pass: collect all paragraphs and tables in order
         List<String> elements = new List<String>();
         List<String> elementTypes = new List<String>(); // 'p' or 'tbl'
@@ -1948,7 +2219,14 @@ public with sharing class DocGenHtmlRenderer {
      * Processes a <w:tbl> element into an HTML <table>.
      */
     private static String processTable(String tblXml, Map<String, String> images) {
-        String tableStyle = 'border-collapse:collapse;width:100%';
+        // v1.97 — Default to authored construction, not forced full width. Tables
+        // get their width from (in priority): explicit <w:tblW>, then the sum of
+        // <w:tblGrid> columns, then the global CSS fallback. This stops the
+        // renderer from silently stretching a narrow authored table to fill the
+        // page. Inline style overrides the global `table { width: 100% }` rule
+        // via CSS specificity.
+        String tableStyle = 'border-collapse:collapse';
+        Boolean tableWidthSet = false;
         Boolean hasBorders = false;
 
         // Parse table properties
@@ -1958,22 +2236,20 @@ public with sharing class DocGenHtmlRenderer {
             String tblW = extractAttr(tblPr, 'w:tblW', 'w:w');
             String tblWType = extractAttr(tblPr, 'w:tblW', 'w:type');
             if (tblWType == 'auto') {
-                // Word's "auto" = shrink-wrap to sum of cell widths. Without explicitly
-                // overriding, the global `table { width: 100% }` default makes auto tables
-                // (typically right-aligned totals/summary tables) stretch full-width.
+                // Word's "auto" = shrink-wrap to sum of cell widths.
                 tableStyle = 'border-collapse:collapse;width:auto';
-            } else if (tblW != null && tblW.isNumeric()) {
+                tableWidthSet = true;
+            } else if (tblW != null && tblW.isNumeric() && Integer.valueOf(tblW) > 0) {
                 if (tblWType == 'pct') {
                     // OOXML pct is in 50ths of a percent. setScale avoids Decimal's
                     // scientific-notation toString (e.g. 50.0 → "5E+1") in CSS output.
                     Decimal pct = (Integer.valueOf(tblW) / 50.0).setScale(2);
                     tableStyle = 'border-collapse:collapse;width:' + pct + '%';
+                    tableWidthSet = true;
                 } else if (tblWType == 'dxa' || tblWType == null) {
-                    // dxa = twips. Without this branch the global `table { width: 100% }`
-                    // default kicks in, which over-stretches authored tables on landscape
-                    // pages (cells widen, paragraphs reflow, rows appear taller).
                     Decimal pt = twipsToPt(Integer.valueOf(tblW)).setScale(2);
                     tableStyle = 'border-collapse:collapse;width:' + pt + 'pt';
+                    tableWidthSet = true;
                 }
             }
 
@@ -2044,6 +2320,83 @@ public with sharing class DocGenHtmlRenderer {
         // RTL table: reverse cell order manually
         Boolean isBidiVisual = String.isNotBlank(tblPr) && isOoxmlOnOffElementTrue(tblPr, 'w:bidiVisual');
 
+        // <colgroup> emission from <w:tblGrid>. Without this, Flying Saucer's
+        // default table-layout:auto sizes columns from cell content — so visually
+        // identical tables render with different column widths when some have
+        // empty cells (the empty columns collapse and their width is redistributed
+        // to filled neighbors, typically the description column). Pinning widths
+        // from the grid declaration + forcing fixed layout makes column widths
+        // depend on the authored grid rather than the iteration data.
+        //
+        // Widths are emitted as PERCENTAGES of the grid total, not absolute pt.
+        // Absolute pt widths in <col> elements override the table's width:100%
+        // constraint in Flying Saucer — a grid total wider than the printable
+        // page area then overflows the right margin (clipping the last columns).
+        // Percentages preserve the authored column proportions and always fit
+        // within the table's width, regardless of whether the source grid sum
+        // is narrower, equal to, or wider than the printable area.
+        String colGroupHtml = '';
+        String tblGrid = extractElement(tblXml, 'w:tblGrid');
+        if (String.isNotBlank(tblGrid)) {
+            List<Integer> rawWidths = new List<Integer>();
+            Integer totalTwips = 0;
+            Boolean anyExplicit = false;
+            Integer gcCursor = 0;
+            while (gcCursor < tblGrid.length()) {
+                Integer gcStart = tblGrid.indexOf('<w:gridCol', gcCursor);
+                if (gcStart == -1) {
+                    break;
+                }
+                Integer gcEnd = tblGrid.indexOf('/>', gcStart);
+                if (gcEnd == -1) {
+                    gcEnd = tblGrid.indexOf('>', gcStart);
+                }
+                if (gcEnd == -1) {
+                    break;
+                }
+                String gcElem = tblGrid.substring(gcStart, gcEnd + 2);
+                String wAttr = extractAttr(gcElem, 'w:gridCol', 'w:w');
+                if (wAttr != null && wAttr.isNumeric() && Integer.valueOf(wAttr) > 0) {
+                    Integer twips = Integer.valueOf(wAttr);
+                    rawWidths.add(twips);
+                    totalTwips += twips;
+                    anyExplicit = true;
+                } else {
+                    rawWidths.add(0);
+                }
+                gcCursor = gcEnd + 2;
+            }
+            if (anyExplicit && totalTwips > 0 && !rawWidths.isEmpty()) {
+                List<String> cols = new List<String>();
+                for (Integer w : rawWidths) {
+                    if (w > 0) {
+                        Decimal pct = (Decimal.valueOf(w) / Decimal.valueOf(totalTwips) * 100).setScale(2);
+                        cols.add('<col style="width:' + pct + '%"/>');
+                    } else {
+                        cols.add('<col/>');
+                    }
+                }
+                colGroupHtml = '<colgroup>' + String.join(cols, '') + '</colgroup>';
+                tableStyle += ';table-layout:fixed';
+                // v1.97 — when no explicit <w:tblW> was set, take the sum of the
+                // grid as the authored intent. Without this, the global stylesheet
+                // `table { width: 100% }` stretches narrow tables to fill the page.
+                // If the auto-derived width exceeds the page content area, fall
+                // through to the global 100% rule so the table fits the printable
+                // area (matches Word's behavior — Word silently shrinks tables that
+                // would overflow). Cap reference is the default Letter content area
+                // (6.5in = 468pt at 1in margins); narrower margins are still safe
+                // because explicit dxa/pct widths bypass this branch entirely.
+                if (!tableWidthSet) {
+                    Decimal pt = twipsToPt(totalTwips).setScale(2);
+                    if (pt <= 468) {
+                        tableStyle += ';width:' + pt + 'pt';
+                        tableWidthSet = true;
+                    }
+                }
+            }
+        }
+
         // Process rows
         String rows = '';
         Integer cursor = 0;
@@ -2062,7 +2415,7 @@ public with sharing class DocGenHtmlRenderer {
             cursor = trEnd;
         }
 
-        return '<table style="' + tableStyle + '">' + rows + '</table>';
+        return '<table style="' + tableStyle + '">' + colGroupHtml + rows + '</table>';
     }
 
     /**
@@ -3149,13 +3502,32 @@ public with sharing class DocGenHtmlRenderer {
             imageValue.startsWith('/apex/') ||
             imageValue.startsWithIgnoreCase('http')
         ) {
-            return '<img src="' +
+            // v1.97 — wrap in a width-constrained inline-block. Flying Saucer's
+            // image loader for URL-fetched images uses the source's natural pixel
+            // dimensions and the inline width/height attributes on <img> alone
+            // don't always pin the rendered size. Wrapping in a div with explicit
+            // width AND letting the img inherit 100% of the wrapper produces the
+            // authored size reliably.
+            if (autoSize) {
+                return '<img src="' +
+                    imageValue +
+                    '"' +
+                    sizeAttrs +
+                    ' style="' +
+                    sizeStyle +
+                    'image-orientation:from-image;" />';
+            }
+            return '<span style="display:inline-block;width:' +
+                widthPx +
+                'px;height:' +
+                heightPx +
+                'px;line-height:0;"><img src="' +
                 imageValue +
-                '"' +
-                sizeAttrs +
-                ' style="' +
-                sizeStyle +
-                'image-orientation:from-image;" />';
+                '" width="' +
+                widthPx +
+                '" height="' +
+                heightPx +
+                '" style="width:100%;height:100%;image-orientation:from-image;" /></span>';
         }
 
         String mimeType = 'image/png';
@@ -3373,7 +3745,7 @@ public with sharing class DocGenHtmlRenderer {
      *   body { background-color: rgba(255,255,255, WASH); }
      * Returns map: 'html' (cleaned input), 'htmlBg' (CSS for html selector), 'bodyBg' (CSS for body selector).
      */
-    private static Map<String, String> extractWatermarks(String html) {
+    private static Map<String, String> extractWatermarks(String html, Map<String, Decimal> pageDims) {
         Map<String, String> result = new Map<String, String>{ 'html' => '', 'watermarks' => '', 'pageBgCss' => '' };
         if (String.isBlank(html)) {
             result.put('html', html != null ? html : '');
@@ -3436,13 +3808,37 @@ public with sharing class DocGenHtmlRenderer {
             cursor = endMark + 3;
         }
         if (firstSrc != null) {
-            // @page background-image is the only Flying Saucer mechanism that
-            // bleeds past page margins. background-size with explicit pt/% is
-            // ignored — but 'contain' IS honored (scales image to fit page,
-            // preserving aspect). Since Word's VML watermark dimensions and
-            // the page dimensions usually share the same aspect ratio (Word
-            // sizes watermarks proportional to page), 'contain' produces the
-            // user's intended scale automatically.
+            // Flying Saucer truly ignores background-size on @page boxes (issue
+            // #109 — verified with 'contain'/'100% 100%'/'10% 10%'/'4in 6in';
+            // all produce identical output). The image is always placed at its
+            // intrinsic 96-DPI pixel size and clipped. To actually size the
+            // watermark to the author-declared dimensions, fall back to the
+            // pre-v1.65 position:fixed <img> mechanism. Trade-off: it clips at
+            // content area rather than bleeding to page edge — but a properly-
+            // sized watermark fills the content area anyway, and a centered
+            // image with explicit dimensions is what 99% of authors want.
+            String sizeCss = 'background-size: 100% 100%;';
+            Decimal wmWidthIn = -1;
+            Decimal wmHeightIn = -1;
+            if (
+                firstWidthPx > 0 &&
+                firstHeightPx > 0 &&
+                pageDims != null &&
+                pageDims.containsKey('pageWidth') &&
+                pageDims.containsKey('pageHeight') &&
+                pageDims.get('pageWidth') > 0 &&
+                pageDims.get('pageHeight') > 0
+            ) {
+                wmWidthIn = Decimal.valueOf(firstWidthPx) / 96.0;
+                wmHeightIn = Decimal.valueOf(firstHeightPx) / 96.0;
+                Decimal pageWidthIn = pageDims.get('pageWidth');
+                Decimal pageHeightIn = pageDims.get('pageHeight');
+                Decimal widthPct = (wmWidthIn / pageWidthIn * 100).setScale(2);
+                Decimal heightPct = (wmHeightIn / pageHeightIn * 100).setScale(2);
+                // Emit the intent even though Flying Saucer ignores it — round-trips
+                // when the engine adds @page background-size support.
+                sizeCss = 'background-size: ' + widthPct + '% ' + heightPct + '%;';
+            }
             // sanitizeCssUrlToken strips quotes/parens/whitespace so a malformed
             // watermark src can't break out of the surrounding url('...') token.
             String pageBgCss =
@@ -3450,8 +3846,45 @@ public with sharing class DocGenHtmlRenderer {
                 sanitizeCssUrlToken(firstSrc) +
                 '\'); ' +
                 'background-position: center center; background-repeat: no-repeat; ' +
-                'background-size: contain;';
+                sizeCss;
             result.put('pageBgCss', pageBgCss);
+
+            // Pre-v1.65 mechanism (restored): position:fixed wrapper centered via
+            // top:50%/left:50% with negative-margin offsets. <img> width/height ARE
+            // honored by Flying Saucer (unlike @page background-size), so this
+            // actually scales the image. Use page dimensions directly so the
+            // watermark always fills the full page — Word's "Auto" scale and
+            // user-resized scales both end up rendering to fit, which is what
+            // 99% of authors actually want.
+            if (
+                pageDims != null &&
+                pageDims.containsKey('pageWidth') &&
+                pageDims.containsKey('pageHeight') &&
+                pageDims.get('pageWidth') > 0 &&
+                pageDims.get('pageHeight') > 0
+            ) {
+                Decimal pgW = pageDims.get('pageWidth');
+                Decimal pgH = pageDims.get('pageHeight');
+                Decimal halfWIn = (pgW / 2).setScale(3);
+                Decimal halfHIn = (pgH / 2).setScale(3);
+                String overlayHtml =
+                    '<div class="docgen-watermark" style="position:fixed;top:50%;left:50%;' +
+                    'margin-left:-' +
+                    halfWIn +
+                    'in;margin-top:-' +
+                    halfHIn +
+                    'in;z-index:0;pointer-events:none;">' +
+                    '<img src="' +
+                    sanitizeCssUrlToken(firstSrc) +
+                    '" ' +
+                    'style="width:' +
+                    pgW +
+                    'in;height:' +
+                    pgH +
+                    'in;"/>' +
+                    '</div>';
+                result.put('watermarkOverlayHtml', overlayHtml);
+            }
         }
         result.put('html', cleaned);
         return result;
@@ -3868,10 +4301,23 @@ public with sharing class DocGenHtmlRenderer {
         List<String> rows = pattern.split('\n');
         Integer modules = rows.size();
 
-        // Parse size: single number = total px, default 250 (square)
+        // Parse size. QR is always square, but accept both forms:
+        //   "200"      → 200px square
+        //   "100x300"  → min(100,300) = 100px square (Code-128-style WxH)
+        // Default 250px when omitted.
         Integer totalPx = 250;
-        if (String.isNotBlank(sizeSpec) && sizeSpec.trim().isNumeric()) {
-            totalPx = Integer.valueOf(sizeSpec.trim());
+        if (String.isNotBlank(sizeSpec)) {
+            String s = sizeSpec.trim();
+            if (s.isNumeric()) {
+                totalPx = Integer.valueOf(s);
+            } else if (s.contains('x') || s.contains('X')) {
+                List<String> dims = s.toLowerCase().split('x');
+                if (dims.size() == 2 && dims[0].trim().isNumeric() && dims[1].trim().isNumeric()) {
+                    Integer w = Integer.valueOf(dims[0].trim());
+                    Integer h = Integer.valueOf(dims[1].trim());
+                    totalPx = Math.min(w, h);
+                }
+            }
         }
 
         // QR spec requires 4-module quiet zone on each side
@@ -3921,5 +4367,491 @@ public with sharing class DocGenHtmlRenderer {
 
         html += '</div>';
         return html;
+    }
+
+    /**
+     * Scales a QR code's HTML (the position:relative + absolute-spans pattern
+     * emitted by renderQrHtml) to fit within the given textbox dimensions —
+     * UNLESS the QR already has an explicit non-default size from its merge tag.
+     *
+     * QR is square; we use min(textbox W, H) as the target size.
+     *
+     * Walks every `Xpx` value inside the QR's outer div and multiplies by the
+     * scale factor — this correctly resizes the outer container, every cell's
+     * position (left/top), and every cell's width/height.
+     *
+     * The "explicit size" check looks at the QR's outer container width: the
+     * default rendering produces 250+ (scaled by quiet-zone math). Any QR
+     * smaller than that suggests the author specified a size via {*F:qr:N}.
+     */
+    private static String autofitQrToTextbox(String html, Integer textboxWidthPx, Integer textboxHeightPx) {
+        if (String.isBlank(html)) {
+            return html;
+        }
+        // Detect QR by its distinctive outer container pattern
+        Pattern qrPat = Pattern.compile(
+            '(?i)<div\\s+style="position\\s*:\\s*relative\\s*;\\s*display\\s*:\\s*inline-block\\s*;\\s*width\\s*:\\s*([0-9]+)px\\s*;\\s*height\\s*:\\s*([0-9]+)px\\s*;\\s*background\\s*:\\s*#fff\\s*;\\s*"[^>]*>'
+        );
+        Matcher m = qrPat.matcher(html);
+        if (!m.find()) {
+            return html;
+        }
+        Integer currentSize = Integer.valueOf(m.group(1));
+        if (currentSize <= 0 || textboxWidthPx <= 0 || textboxHeightPx <= 0) {
+            return html;
+        }
+        // If the QR is smaller than the textbox already (author specified a
+        // size via {*F:qr:N}), DON'T scale it up — respect the explicit size.
+        Integer targetSize = Math.min(textboxWidthPx, textboxHeightPx);
+        if (currentSize < targetSize) {
+            return html;
+        }
+        if (currentSize == targetSize) {
+            return html;
+        }
+        // Find the QR block bounds so we only rescale within it
+        Integer qrStart = m.start();
+        Integer qrEnd = html.indexOf('</div>', m.end());
+        if (qrEnd == -1) {
+            return html;
+        }
+        // Walk all <div> close tags after qrStart to find the QR's closing </div>.
+        // The QR outer div contains many absolutely-positioned spans (self-closing
+        // or paired), so we need to find its matching close. Easier: find the
+        // sequence of spans + close. The outer div closes after the last span.
+        Integer depth = 1;
+        Integer scanCur = m.end();
+        while (depth > 0 && scanCur < html.length()) {
+            Integer nextOpen = html.indexOf('<div', scanCur);
+            Integer nextClose = html.indexOf('</div>', scanCur);
+            if (nextClose == -1)
+                break;
+            if (nextOpen != -1 && nextOpen < nextClose) {
+                depth++;
+                scanCur = nextOpen + 4;
+            } else {
+                depth--;
+                if (depth == 0) {
+                    qrEnd = nextClose + 6;
+                    break;
+                }
+                scanCur = nextClose + 6;
+            }
+        }
+        String qrBlock = html.substring(qrStart, qrEnd);
+
+        // Scale every "Npx" value inside the QR block by targetSize/currentSize.
+        Decimal scale = Decimal.valueOf(targetSize) / Decimal.valueOf(currentSize);
+        Pattern pxPat = Pattern.compile('([0-9]+)px');
+        Matcher pxM = pxPat.matcher(qrBlock);
+        String scaled = '';
+        Integer last = 0;
+        while (pxM.find()) {
+            scaled += qrBlock.substring(last, pxM.start());
+            Integer origVal = Integer.valueOf(pxM.group(1));
+            Integer newVal = Math.max(1, Integer.valueOf((Decimal.valueOf(origVal) * scale).round()));
+            scaled += newVal + 'px';
+            last = pxM.end();
+        }
+        scaled += qrBlock.substring(last);
+
+        return html.substring(0, qrStart) + scaled + html.substring(qrEnd);
+    }
+
+    /**
+     * Converts horizontally-flowing thin-bar content (e.g., HTML barcode) into
+     * vertically-stacked equivalent — used when a textbox is rotated 90° or 270°
+     * and Flying Saucer's CSS transform/writing-mode are unreliable.
+     *
+     * Pattern matched: <span style="...display:inline-block;width:Xpx;height:Ypx..."/>
+     * Replacement:    <span style="...display:block;width:Ypx;height:Xpx..."/>
+     *
+     * For rotateDeg = -90 (going up), the bar order is reversed too so the
+     * leftmost bar of the horizontal source becomes the bottommost bar of the
+     * vertical output (i.e., text/barcode reads bottom-to-top).
+     *
+     * Container <div> wrappers with white-space:nowrap also get block-flow so
+     * the bars stack rather than flow inline.
+     */
+    private static String rotateInlineBarContent(
+        String html,
+        Integer rotateDeg,
+        Integer textboxWidthPx,
+        Integer textboxHeightPx
+    ) {
+        if (String.isBlank(html)) {
+            return html;
+        }
+        // Extract each bar's color from the original spans (we'll re-emit as table rows).
+        Pattern colorPat = Pattern.compile(
+            '(?i)<span\\s+style="[^"]*display\\s*:\\s*inline-block[^"]*background\\s*:\\s*(#[0-9a-fA-F]+)[^"]*"[^>]*>\\s*</span>'
+        );
+        Matcher colorM = colorPat.matcher(html);
+        List<String> barColors = new List<String>();
+        Integer firstBarStart = -1;
+        Integer lastBarEnd = -1;
+        while (colorM.find()) {
+            if (firstBarStart == -1)
+                firstBarStart = colorM.start();
+            lastBarEnd = colorM.end();
+            barColors.add(colorM.group(1));
+        }
+
+        Integer barCount = barColors.size();
+
+        if (barCount == 0 || firstBarStart == -1) {
+            // No barcode bars to rotate
+            return html;
+        }
+
+        // Find the wrapping container start/end so we can replace the whole barcode HTML
+        // The barcode renderer wraps bars in <div style="display:inline-block;white-space:nowrap;line-height:0;">
+        Integer containerStart = html.lastIndexOf('<div', firstBarStart);
+        Integer containerEnd = html.indexOf('</div>', lastBarEnd);
+        if (containerStart == -1 || containerEnd == -1) {
+            return html;
+        }
+
+        // Reverse order for vert270 (bottom-to-top reading)
+        if (rotateDeg == -90) {
+            List<String> reversed = new List<String>();
+            for (Integer i = barColors.size() - 1; i >= 0; i--) {
+                reversed.add(barColors[i]);
+            }
+            barColors = reversed;
+        }
+
+        // Auto-fit dimensions to fill the textbox.
+        Integer totalWidthPx = (textboxWidthPx > 0) ? textboxWidthPx : 50;
+        Integer totalHeightPx = (textboxHeightPx > 0) ? textboxHeightPx : barCount;
+        // Compute each bar's height — must be at least 1 px integer.
+        // If barCount > totalHeightPx, bars would round down to 0; force min 1px and accept overflow.
+        Integer barHeightPx = Math.max(1, totalHeightPx / barCount);
+        // Render as SVG embedded in an <img> via data URI — Flying Saucer
+        // honors <img> width/height attributes inside positioned parents
+        // (proven by the watermark img path), whereas raw HTML tables and
+        // inline SVG don't survive the absolute-parent width clamp.
+        Integer totalHeightActual = barHeightPx * barCount;
+        String svgSource =
+            '<svg xmlns="http://www.w3.org/2000/svg" ' +
+            'width="' +
+            totalWidthPx +
+            '" height="' +
+            totalHeightActual +
+            '" ' +
+            'viewBox="0 0 ' +
+            totalWidthPx +
+            ' ' +
+            totalHeightActual +
+            '" ' +
+            'preserveAspectRatio="none">';
+        Integer yPos = 0;
+        for (String color : barColors) {
+            if (color != '#fff' && color != '#FFF' && color != '#ffffff' && color != '#FFFFFF') {
+                svgSource +=
+                    '<rect x="0" y="' +
+                    yPos +
+                    '" width="' +
+                    totalWidthPx +
+                    '" height="' +
+                    barHeightPx +
+                    '" fill="' +
+                    color +
+                    '"/>';
+            }
+            yPos += barHeightPx;
+        }
+        svgSource += '</svg>';
+        String svgB64 = EncodingUtil.base64Encode(Blob.valueOf(svgSource));
+        String tableHtml =
+            '<img src="data:image/svg+xml;base64,' +
+            svgB64 +
+            '" ' +
+            'width="' +
+            totalWidthPx +
+            '" height="' +
+            totalHeightActual +
+            '" ' +
+            'style="display:block;width:' +
+            totalWidthPx +
+            'px;height:' +
+            totalHeightActual +
+            'px;" alt=""/>';
+
+        // Splice: keep the original HTML before/after the container, swap container content
+        String result =
+            html.substring(0, containerStart) +
+            tableHtml +
+            html.substring(containerEnd + '</div>'.length());
+
+        // Remove any <p>...</p> wrapping that just contains our table now
+        result = result.replaceAll('(?i)<p[^>]*>\\s*(<table[^>]*>.*?</table>)\\s*</p>', '$1');
+
+        return result;
+    }
+
+    /**
+     * Unwraps OOXML textbox structures (modern <mc:AlternateContent><wps:wsp>...
+     * <w:txbxContent>... and legacy <w:pict><v:textbox>...<w:txbxContent>...)
+     * so their inner <w:p> paragraphs surface as regular body-flow siblings.
+     *
+     * Without this, processBodyContent's <w:p>/<w:tbl> walker skips over the
+     * textbox content entirely and the rendered output is missing both the
+     * textbox box AND its text. Merge tags inside the textbox (e.g. {*Name})
+     * also never get a chance to resolve.
+     *
+     * Each textbox emits an HTML-comment marker carrying its positioning +
+     * orientation metadata; a later pass (renderTextboxWrappers) reads the
+     * marker and converts to a positioned <div> with writing-mode CSS.
+     *
+     * For mc:AlternateContent, prefer <mc:Choice Requires="wps"> (modern
+     * DrawingML wps:wsp shape) over <mc:Fallback> (legacy VML v:textbox).
+     * Both branches duplicate the same <w:txbxContent>, so only one is used.
+     */
+    private static String unwrapTextboxes(String xml) {
+        if (
+            String.isBlank(xml) ||
+            (!xml.contains('<mc:AlternateContent') &&
+            !xml.contains('<w:txbxContent') &&
+            !xml.contains('<v:textbox'))
+        ) {
+            return xml;
+        }
+
+        String out = '';
+        Integer cursor = 0;
+        while (cursor < xml.length()) {
+            Integer altStart = xml.indexOf('<mc:AlternateContent', cursor);
+            Integer pictStart = xml.indexOf('<w:pict', cursor);
+
+            Integer nextStart = -1;
+            Boolean isAlt = false;
+            if (altStart != -1 && (pictStart == -1 || altStart < pictStart)) {
+                nextStart = altStart;
+                isAlt = true;
+            } else if (pictStart != -1) {
+                // Only treat <w:pict> as a textbox if it contains <v:textbox>
+                Integer pictTagEnd = xml.indexOf('>', pictStart);
+                Integer pictClose = xml.indexOf('</w:pict>', pictStart);
+                if (pictClose != -1 && pictTagEnd != -1) {
+                    String pictBody = xml.substring(pictTagEnd, pictClose);
+                    if (pictBody.contains('<v:textbox')) {
+                        nextStart = pictStart;
+                    }
+                }
+            }
+
+            if (nextStart == -1) {
+                out += xml.substring(cursor);
+                break;
+            }
+
+            // Walk backwards from nextStart to find the enclosing <w:p>...</w:p>.
+            // The textbox structure lives inside <w:p><w:r>...</w:r></w:p>; we need
+            // to replace the WHOLE outer paragraph so the unwrapped textbox content
+            // becomes a body-level sibling rather than nested inside a single <p>.
+            Integer outerPStart = xml.lastIndexOf('<w:p', nextStart);
+            Integer outerPEnd = -1;
+            if (outerPStart != -1) {
+                outerPEnd = findClosingTag(xml, outerPStart, 'w:p');
+            }
+
+            String endTag = isAlt ? '</mc:AlternateContent>' : '</w:pict>';
+            Integer endIdx = xml.indexOf(endTag, nextStart);
+            if (endIdx == -1) {
+                out += xml.substring(cursor);
+                break;
+            }
+            Integer blockEnd = endIdx + endTag.length();
+
+            // Use the enclosing <w:p> bounds if it cleanly wraps this textbox;
+            // otherwise fall back to just the block to avoid eating sibling content.
+            Boolean useOuter = (outerPStart != -1 &&
+            outerPEnd != -1 &&
+            outerPStart <= nextStart &&
+            outerPEnd >= blockEnd);
+            Integer replaceFrom = useOuter ? outerPStart : nextStart;
+            Integer replaceTo = useOuter ? outerPEnd : blockEnd;
+
+            out += xml.substring(cursor, replaceFrom);
+            String block = xml.substring(nextStart, blockEnd);
+
+            // Prefer modern Choice branch for AlternateContent. Either way, pull
+            // the first <w:txbxContent> we can find.
+            String tbInner = '';
+            if (isAlt) {
+                Integer choiceStart = block.indexOf('<mc:Choice');
+                if (choiceStart != -1) {
+                    Integer choiceTagEnd = block.indexOf('>', choiceStart);
+                    Integer choiceEnd = block.indexOf('</mc:Choice>', choiceTagEnd);
+                    if (choiceTagEnd != -1 && choiceEnd != -1) {
+                        tbInner = block.substring(choiceTagEnd + 1, choiceEnd);
+                    }
+                }
+                if (String.isBlank(tbInner)) {
+                    Integer fbStart = block.indexOf('<mc:Fallback');
+                    if (fbStart != -1) {
+                        Integer fbTagEnd = block.indexOf('>', fbStart);
+                        Integer fbEnd = block.indexOf('</mc:Fallback>', fbTagEnd);
+                        if (fbTagEnd != -1 && fbEnd != -1) {
+                            tbInner = block.substring(fbTagEnd + 1, fbEnd);
+                        }
+                    }
+                }
+            } else {
+                tbInner = block; // <w:pict>...</w:pict>
+            }
+
+            // Pull positioning + orientation hints. EMU values convert at
+            // 914400 EMU/in. Text orientation comes from <wps:bodyPr vert="...">
+            // (modern wps:wsp) or <v:textbox style="layout-flow:..."> (VML).
+            Decimal widthIn = 0;
+            Decimal heightIn = 0;
+            Decimal leftIn = 0;
+            Decimal topIn = 0;
+            String cxAttr = extractAttrFromTag(tbInner, 'cx');
+            String cyAttr = extractAttrFromTag(tbInner, 'cy');
+            if (cxAttr != null && cxAttr.isNumeric()) {
+                widthIn = (Decimal.valueOf(cxAttr) / 914400.0).setScale(3);
+            }
+            if (cyAttr != null && cyAttr.isNumeric()) {
+                heightIn = (Decimal.valueOf(cyAttr) / 914400.0).setScale(3);
+            }
+            // <wp:positionH relativeFrom="page"|"margin"|"column"|"character"|...>
+            // — coord interpretation depends on relativeFrom:
+            //   page = from page top-left edge
+            //   margin/column = from content area top-left (post-margin)
+            // We capture relativeFrom so postProcessTextboxMarkers knows whether
+            // to subtract margins when emitting position:fixed coordinates.
+            String posHRel = '';
+            String posVRel = '';
+            Integer phStart = tbInner.indexOf('<wp:positionH');
+            if (phStart != -1) {
+                Integer phTagEnd = tbInner.indexOf('>', phStart);
+                if (phTagEnd != -1) {
+                    String phTag = tbInner.substring(phStart, phTagEnd);
+                    Integer rfIdx = phTag.indexOf('relativeFrom="');
+                    if (rfIdx != -1) {
+                        Integer rfStart = rfIdx + 14;
+                        Integer rfEnd = phTag.indexOf('"', rfStart);
+                        if (rfEnd != -1) {
+                            posHRel = phTag.substring(rfStart, rfEnd);
+                        }
+                    }
+                }
+                Integer offStart = tbInner.indexOf('<wp:posOffset>', phStart);
+                Integer offEnd = tbInner.indexOf('</wp:posOffset>', offStart);
+                if (offStart != -1 && offEnd != -1) {
+                    String offStr = tbInner.substring(offStart + 14, offEnd).trim();
+                    if (offStr.isNumeric()) {
+                        leftIn = (Decimal.valueOf(offStr) / 914400.0).setScale(3);
+                    }
+                }
+            }
+            Integer pvStart = tbInner.indexOf('<wp:positionV');
+            if (pvStart != -1) {
+                Integer pvTagEnd = tbInner.indexOf('>', pvStart);
+                if (pvTagEnd != -1) {
+                    String pvTag = tbInner.substring(pvStart, pvTagEnd);
+                    Integer rfIdx = pvTag.indexOf('relativeFrom="');
+                    if (rfIdx != -1) {
+                        Integer rfStart = rfIdx + 14;
+                        Integer rfEnd = pvTag.indexOf('"', rfStart);
+                        if (rfEnd != -1) {
+                            posVRel = pvTag.substring(rfStart, rfEnd);
+                        }
+                    }
+                }
+                Integer offStart = tbInner.indexOf('<wp:posOffset>', pvStart);
+                Integer offEnd = tbInner.indexOf('</wp:posOffset>', offStart);
+                if (offStart != -1 && offEnd != -1) {
+                    String offStr = tbInner.substring(offStart + 14, offEnd).trim();
+                    if (offStr.isNumeric()) {
+                        topIn = (Decimal.valueOf(offStr) / 914400.0).setScale(3);
+                    }
+                }
+            }
+            // Determine rotation in degrees (clockwise positive). Two OOXML
+            // sources combine:
+            //   1. <wps:bodyPr vert="..."> — discrete text orientation values
+            //      (eaVert/vert -> 90, vert270/wordArtVertRtl -> -90, etc.)
+            //   2. <a:xfrm rot="..."> — arbitrary shape rotation in 60000ths
+            //      of a degree (rot="5400000" = 90°). Can be any angle.
+            // Both are additive — Word lets authors pick a vert orientation
+            // AND apply an additional shape rotation.
+            String vert = '';
+            Integer bodyPrStart = tbInner.indexOf('<wps:bodyPr');
+            if (bodyPrStart != -1) {
+                Integer bodyPrEnd = tbInner.indexOf('>', bodyPrStart);
+                if (bodyPrEnd != -1) {
+                    String bodyPrTag = tbInner.substring(bodyPrStart, bodyPrEnd);
+                    Integer vIdx = bodyPrTag.indexOf('vert="');
+                    if (vIdx != -1) {
+                        Integer vStart = vIdx + 6;
+                        Integer vEnd = bodyPrTag.indexOf('"', vStart);
+                        if (vEnd != -1) {
+                            vert = bodyPrTag.substring(vStart, vEnd);
+                        }
+                    }
+                }
+            }
+            Integer xfrmRotation = 0;
+            Integer xfrmStart = tbInner.indexOf('<a:xfrm');
+            if (xfrmStart != -1) {
+                Integer xfrmTagEnd = tbInner.indexOf('>', xfrmStart);
+                if (xfrmTagEnd != -1) {
+                    String xfrmTag = tbInner.substring(xfrmStart, xfrmTagEnd);
+                    Integer rotIdx = xfrmTag.indexOf('rot="');
+                    if (rotIdx != -1) {
+                        Integer rotStart = rotIdx + 5;
+                        Integer rotEnd = xfrmTag.indexOf('"', rotStart);
+                        if (rotEnd != -1) {
+                            String rotStr = xfrmTag.substring(rotStart, rotEnd);
+                            if (rotStr.isNumeric()) {
+                                // OOXML stores rotation in 60000ths of a degree
+                                xfrmRotation = Integer.valueOf(rotStr) / 60000;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Pull the <w:txbxContent> body
+            Integer txbxStart = tbInner.indexOf('<w:txbxContent');
+            if (txbxStart != -1) {
+                Integer txbxTagEnd = tbInner.indexOf('>', txbxStart);
+                Integer txbxEnd = tbInner.indexOf('</w:txbxContent>', txbxTagEnd);
+                if (txbxTagEnd != -1 && txbxEnd != -1) {
+                    String txbxInner = tbInner.substring(txbxTagEnd + 1, txbxEnd);
+                    // Wrap inner paragraphs with sentinel text inside <w:t> runs.
+                    // These survive processBodyContent's <w:p>/<w:t> walk and emerge
+                    // as <p>__DGTXBX_OPEN_...__</p> in the rendered HTML; a later
+                    // pass (postProcessTextboxMarkers) replaces them with positioned
+                    // <div>s + transform/writing-mode CSS for vertical orientation.
+                    String openMarker =
+                        '__DGTXBX_OPEN|left=' +
+                        leftIn +
+                        '|top=' +
+                        topIn +
+                        '|w=' +
+                        widthIn +
+                        '|h=' +
+                        heightIn +
+                        '|vert=' +
+                        vert +
+                        '|hrel=' +
+                        posHRel +
+                        '|vrel=' +
+                        posVRel +
+                        '__';
+                    out += '<w:p><w:r><w:t>' + openMarker + '</w:t></w:r></w:p>';
+                    out += txbxInner;
+                    out += '<w:p><w:r><w:t>__DGTXBX_CLOSE__</w:t></w:r></w:p>';
+                }
+            }
+
+            cursor = replaceTo;
+        }
+        return out;
     }
 }

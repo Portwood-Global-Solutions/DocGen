@@ -2546,8 +2546,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 createVersion: true,
                 contentVersionId: this.uploadedContentVersionId
             });
-            this.showToast('Success', 'Template and Version saved.', 'success');
-            this.closeEditModal();
+            this.showToast('Success', 'New version saved. You can now Generate to test it.', 'success');
+            // Don't close the modal — authors want to immediately test/preview
+            // the new version. Clear the just-uploaded CV reference so a follow-up
+            // save doesn't double-attach the same file, refresh the version list,
+            // and switch to the Document & History tab so the new version is in view.
+            this.uploadedContentVersionId = null;
+            if (this.editTemplateId) {
+                this.loadVersions(this.editTemplateId);
+            }
+            this.activeEditTab = 'document';
             return refreshApex(this.wiredTemplatesResult);
         } catch (error) {
             this.showToast('Error saving template', error.body ? error.body.message : error.message, 'error');

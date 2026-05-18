@@ -70,39 +70,16 @@ export default class DocGenTreeNode extends LightningElement {
         );
     }
 
-    // ── Parent lookup expand ────────────────────────────────────
+    // ── Parent lookup expand (from the + parent lookup picker) ───
+    // Dispatched as chainPath = relName so docGenTreeBuilder's
+    // handleNodeExpandParent uniformly walks the parent chain.
     handleExpandParent(event) {
         const relName = event.currentTarget.dataset.rel;
         this.dispatchEvent(
             new CustomEvent('expandparent', {
                 bubbles: true,
                 composed: true, // NOPMD — composed required for recursive tree node events
-                detail: { path: this.nodeData.path, relName }
-            })
-        );
-    }
-
-    handleParentFieldToggle(event) {
-        // Bubbles up from nested picker
-        const apiName = event.currentTarget.dataset.api;
-        const relName = event.currentTarget.dataset.rel;
-        this.dispatchEvent(
-            new CustomEvent('parentfieldtoggle', {
-                bubbles: true,
-                composed: true, // NOPMD — composed required for recursive tree node events
-                detail: { path: this.nodeData.path, relName, fieldName: apiName }
-            })
-        );
-    }
-
-    handleRemoveParentField(event) {
-        const apiName = event.currentTarget.dataset.api;
-        const relName = event.currentTarget.dataset.rel;
-        this.dispatchEvent(
-            new CustomEvent('parentfieldtoggle', {
-                bubbles: true,
-                composed: true, // NOPMD — composed required for recursive tree node events
-                detail: { path: this.nodeData.path, relName, fieldName: apiName }
+                detail: { path: this.nodeData.path, chainPath: relName }
             })
         );
     }
@@ -114,19 +91,6 @@ export default class DocGenTreeNode extends LightningElement {
         const relName = event.currentTarget.dataset.rel;
         this.dispatchEvent(
             new CustomEvent('removechild', {
-                bubbles: true,
-                composed: true, // NOPMD — composed required for recursive tree node events
-                detail: { path: this.nodeData.path, relName }
-            })
-        );
-    }
-
-    handleRemoveParent(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        const relName = event.currentTarget.dataset.rel;
-        this.dispatchEvent(
-            new CustomEvent('removeparent', {
                 bubbles: true,
                 composed: true, // NOPMD — composed required for recursive tree node events
                 detail: { path: this.nodeData.path, relName }
@@ -267,60 +231,41 @@ export default class DocGenTreeNode extends LightningElement {
         return this.nodeData ? this.nodeData.limitAmount || '' : '';
     }
 
-    // Per-parent-rel field-picker search. Keyed by pr.value so multiple
-    // expanded parents keep independent filters. Reassigned (not mutated)
-    // so LWC reactivity picks up the change.
-    @track _parentFieldSearches = {};
-
-    handleParentFieldSearch(event) {
-        const rel = event.currentTarget.dataset.rel;
-        if (!rel) return;
-        const v = (event.target.value || '').toLowerCase();
-        this._parentFieldSearches = { ...this._parentFieldSearches, [rel]: v };
+    // Host path passed down to <c-doc-gen-parent-rel>. The recursive parent
+    // component identifies leaves by `chainPath` relative to this nodePath.
+    get nodePathForChildren() {
+        return this.nodeData ? this.nodeData.path : '';
     }
 
-    // Parent rel data for template — filtered by global search
+    // Surface parent rels for the template. Multi-hop rendering happens
+    // inside <c-doc-gen-parent-rel> — this just filters by global search and
+    // by selection state. Recursion-aware: a parent with no own selections
+    // but selections deeper down still renders.
     get parentRelsList() {
         if (!this.nodeData || !this.nodeData.parentRels) return [];
         const gs = this.globalSearch;
-        return this.nodeData.parentRels
-            .filter(
-                (pr) =>
-                    !gs || pr.expanded || this._matchesSearch(pr, gs) || (pr.fields && pr.fields.some((f) => f.checked))
-            )
-            .map((pr) => {
-                const prLabel = pr.displayLabel || pr.value;
-                const selFields = pr.fields
-                    ? pr.fields
-                          .filter((f) => f.checked)
-                          .map((f) => ({
-                              ...f,
-                              removeLabel: 'Remove ' + prLabel + ' ' + (f.displayLabel || f.apiName)
-                          }))
-                    : [];
-                const fieldSearch = (this._parentFieldSearches[pr.value] || gs || '').toLowerCase();
-                const allFields = pr.fields || [];
-                const filteredFields = fieldSearch
-                    ? allFields.filter(
-                          (f) =>
-                              (f.displayLabel && f.displayLabel.toLowerCase().includes(fieldSearch)) ||
-                              (f.apiName && f.apiName.toLowerCase().includes(fieldSearch))
-                      )
-                    : allFields;
-                return {
-                    ...pr,
-                    selectedFields: selFields,
-                    hasSelectedFields: selFields.length > 0,
-                    selectedFieldCount: selFields.length,
-                    // Same rule as the base field picker: when actively
-                    // searching, show every match; cap only the unfiltered case.
-                    pickerFields: fieldSearch ? filteredFields : filteredFields.slice(0, 200),
-                    fieldSearchValue: this._parentFieldSearches[pr.value] || '',
-                    fieldSearchAriaLabel: 'Search fields on ' + prLabel,
-                    removeLabel: 'Remove parent lookup ' + prLabel
-                };
-            });
+        return this.nodeData.parentRels.filter(
+            (pr) => !gs || pr.expanded || this._matchesSearch(pr, gs) || this._hasAnyCheckedDeep(pr)
+        );
     }
+
+    _hasAnyCheckedDeep(pr) {
+        if (!pr) return false;
+        if (pr.fields && pr.fields.some((f) => f.checked)) return true;
+        if (pr.parentRels) {
+            for (const np of pr.parentRels) {
+                if (this._hasAnyCheckedDeep(np)) return true;
+            }
+        }
+        return false;
+    }
+
+    // Bubble passthroughs — events from <c-doc-gen-parent-rel> are
+    // composed: true and already reach docGenTreeBuilder. Handlers exist so
+    // the LWC compiler doesn't warn about unbound listeners.
+    handleParentRelExpandBubble() {}
+    handleParentRelFieldToggleBubble() {}
+    handleParentRelRemoveBubble() {}
 
     // ── Relationship pickers ───────────────────────────────────
     @track _relPickerOpen = false;
@@ -394,9 +339,9 @@ export default class DocGenTreeNode extends LightningElement {
         this.handleExpandParent(event);
     }
 
-    // Active rels (expanded ones only — shown above the pickers)
+    // Active rels (expanded or with any selection deeper down)
     get activeParentRels() {
-        return this.parentRelsList.filter((pr) => pr.expanded || pr.hasSelectedFields);
+        return this.parentRelsList.filter((pr) => pr.expanded || this._hasAnyCheckedDeep(pr));
     }
 
     get activeChildRels() {
@@ -446,11 +391,23 @@ export default class DocGenTreeNode extends LightningElement {
         }
         if (nd.parentRels) {
             for (const pr of nd.parentRels) {
-                if (pr.fields) {
-                    for (const f of pr.fields) {
-                        if (f.checked) c++;
-                    }
-                }
+                c += this._countParentRelFields(pr);
+            }
+        }
+        return c;
+    }
+
+    _countParentRelFields(pr) {
+        let c = 0;
+        if (!pr) return 0;
+        if (pr.fields) {
+            for (const f of pr.fields) {
+                if (f.checked) c++;
+            }
+        }
+        if (pr.parentRels) {
+            for (const np of pr.parentRels) {
+                c += this._countParentRelFields(np);
             }
         }
         return c;
