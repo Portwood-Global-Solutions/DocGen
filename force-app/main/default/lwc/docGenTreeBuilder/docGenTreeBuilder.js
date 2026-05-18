@@ -89,15 +89,7 @@ export default class DocGenTreeBuilder extends LightningElement {
                 label: f.label,
                 checked: false
             })),
-            parentRels: schema.parents.map((p) => ({
-                value: p.value,
-                displayLabel: this._extractLabel(p.label),
-                label: p.label,
-                targetObject: p.targetObject,
-                icon: 'utility:chevronright',
-                expanded: false,
-                fields: null // lazy
-            })),
+            parentRels: schema.parents.map((p) => this._buildNestedPr(p, p.value)),
             childRels: schema.children.map((c) => ({
                 value: c.value,
                 displayLabel: this._extractRelLabel(c.label),
@@ -114,6 +106,41 @@ export default class DocGenTreeBuilder extends LightningElement {
             orderBy: '',
             limitAmount: ''
         };
+    }
+
+    // Seed a parent-rel entry from a schema parent descriptor. `chainPath`
+    // is the dotted chain from the host tree node to this pr (e.g.
+    // "Owner" at depth 1, "Owner.Manager" at depth 2). Fields and nested
+    // parentRels both lazy-load when the pr is expanded.
+    _buildNestedPr(p, chainPath) {
+        return {
+            value: p.value,
+            chainPath,
+            displayLabel: this._extractLabel(p.label),
+            label: p.label,
+            targetObject: p.targetObject,
+            icon: 'utility:chevronright',
+            expanded: false,
+            fields: null, // lazy
+            parentRels: null // lazy
+        };
+    }
+
+    // Walk a node's parentRels by chainPath (dotted, e.g. "Owner.Manager")
+    // and return the leaf pr — or null if a segment isn't present yet
+    // (caller must lazy-load schema before walking deeper).
+    _walkParentChain(node, chainPath) {
+        if (!node || !chainPath) return null;
+        const segments = chainPath.split('.');
+        let collection = node.parentRels;
+        let pr = null;
+        for (const seg of segments) {
+            if (!collection) return null;
+            pr = collection.find((p) => p.value === seg);
+            if (!pr) return null;
+            collection = pr.parentRels;
+        }
+        return pr;
     }
 
     // ── Schema cache ────────────────────────────────────────────
@@ -145,10 +172,10 @@ export default class DocGenTreeBuilder extends LightningElement {
 
     handleNodeParentFieldToggle(event) {
         event.stopPropagation();
-        const { path, relName, fieldName } = event.detail;
+        const { path, chainPath, fieldName } = event.detail;
         const node = this._resolveNode(path);
         if (!node) return;
-        const pr = node.parentRels.find((p) => p.value === relName);
+        const pr = this._walkParentChain(node, chainPath);
         if (!pr || !pr.fields) return;
         const field = pr.fields.find((f) => f.apiName === fieldName);
         if (field) {
@@ -224,30 +251,58 @@ export default class DocGenTreeBuilder extends LightningElement {
 
     async handleNodeExpandParent(event) {
         event.stopPropagation();
-        const { path, relName } = event.detail;
+        const { path, chainPath } = event.detail;
         const node = this._resolveNode(path);
-        if (!node) return;
-        const pr = node.parentRels.find((p) => p.value === relName);
-        if (!pr) return;
+        if (!node || !chainPath) return;
+
+        // Cap chain at 5 hops (SOQL native max).
+        const hops = chainPath.split('.').length;
+        if (hops > 5) return;
+
+        // The leaf may not exist yet if the user is expanding through the
+        // "+ chain through another lookup" picker — in that case the
+        // immediate-parent pr already exists, but the deepest segment hasn't
+        // been seeded yet. Walk one short and seed the leaf if needed.
+        let pr = this._walkParentChain(node, chainPath);
+        if (!pr) {
+            const segs = chainPath.split('.');
+            const parentChain = segs.slice(0, -1).join('.');
+            const leafSeg = segs[segs.length - 1];
+            const parentPr = parentChain ? this._walkParentChain(node, parentChain) : null;
+            if (!parentPr || !parentPr.parentRels) return;
+            const descriptor = parentPr.parentRels.find((np) => np.value === leafSeg);
+            if (!descriptor) return;
+            pr = descriptor;
+        }
 
         if (pr.expanded) {
             pr.expanded = false;
             pr.icon = 'utility:chevronright';
         } else {
-            if (!pr.fields) {
-                const schema = await this._loadSchema(pr.targetObject);
-                pr.fields = schema.fields.map((f) => ({
-                    apiName: f.value,
-                    displayLabel: this._extractLabel(f.label),
-                    label: f.label,
-                    type: f.type,
-                    checked: false
-                }));
-            }
+            await this._lazyLoadPrSchema(pr);
             pr.expanded = true;
             pr.icon = 'utility:chevrondown';
         }
         this._refresh();
+    }
+
+    // Loads schema.fields AND schema.parents into a pr lazily. Idempotent.
+    async _lazyLoadPrSchema(pr) {
+        if (pr.fields && pr.parentRels) return;
+        const schema = await this._loadSchema(pr.targetObject);
+        if (!pr.fields) {
+            pr.fields = schema.fields.map((f) => ({
+                apiName: f.value,
+                displayLabel: this._extractLabel(f.label),
+                label: f.label,
+                type: f.type,
+                checked: false
+            }));
+        }
+        if (!pr.parentRels) {
+            const chainPath = pr.chainPath || pr.value;
+            pr.parentRels = schema.parents.map((p) => this._buildNestedPr(p, chainPath + '.' + p.value));
+        }
     }
 
     handleNodeRemoveChild(event) {
@@ -277,12 +332,23 @@ export default class DocGenTreeBuilder extends LightningElement {
 
     handleNodeRemoveParent(event) {
         event.stopPropagation();
-        const { path, relName } = event.detail;
+        const { path, chainPath } = event.detail;
         const node = this._resolveNode(path);
         if (!node) return;
-        const pr = node.parentRels.find((p) => p.value === relName);
+        const pr = this._walkParentChain(node, chainPath);
         if (!pr) return;
-        // Collapse and uncheck all fields
+        // Collapse leaf and recursively uncheck all fields under it
+        // (including any nested chained parent rels the user expanded).
+        this._collapsePrRecursive(pr);
+        this._refresh();
+        this._notifyChange();
+    }
+
+    // Recursively collapse a pr and clear every checked field beneath it.
+    // Does not destroy the schema-derived shape (fields/parentRels stay
+    // populated) so re-expanding is instant.
+    _collapsePrRecursive(pr) {
+        if (!pr) return;
         pr.expanded = false;
         pr.icon = 'utility:chevronright';
         if (pr.fields) {
@@ -290,8 +356,11 @@ export default class DocGenTreeBuilder extends LightningElement {
                 f.checked = false;
             }
         }
-        this._refresh();
-        this._notifyChange();
+        if (pr.parentRels) {
+            for (const np of pr.parentRels) {
+                this._collapsePrRecursive(np);
+            }
+        }
     }
 
     handleNodeClauseChange(event) {
@@ -374,10 +443,7 @@ export default class DocGenTreeBuilder extends LightningElement {
             const fields = node.fields.filter((f) => f.checked).map((f) => f.apiName);
             const parentFields = [];
             for (const pr of node.parentRels) {
-                if (!pr.fields) continue;
-                for (const f of pr.fields) {
-                    if (f.checked) parentFields.push(pr.value + '.' + f.apiName);
-                }
+                this._collectParentFields(pr, parentFields);
             }
             const n = {
                 id: myId,
@@ -432,18 +498,34 @@ export default class DocGenTreeBuilder extends LightningElement {
         for (const f of node.fields) {
             if (f.checked) parts.push(f.apiName);
         }
-        // Parent fields
+        // Parent fields — walk the (possibly multi-hop) parent chain and
+        // emit each checked field as a full dot-prefixed path.
         for (const pr of node.parentRels) {
-            if (!pr.fields) continue;
-            for (const f of pr.fields) {
-                if (f.checked) parts.push(pr.value + '.' + f.apiName);
-            }
+            this._collectParentFields(pr, parts);
         }
         // Child subqueries
         for (const cr of node.childRels) {
             if (!cr.nodeData) continue;
             const sub = this._buildSubquery(cr.nodeData);
             if (sub) parts.push(sub);
+        }
+    }
+
+    // Walk a pr (and its nested parentRels) collecting every checked field
+    // as a full chain-prefixed path. chainPath on the pr is the canonical
+    // dotted prefix (e.g. "Owner.Manager") so the emit is "Owner.Manager.Email".
+    _collectParentFields(pr, parts) {
+        if (!pr) return;
+        const chain = pr.chainPath || pr.value;
+        if (pr.fields) {
+            for (const f of pr.fields) {
+                if (f.checked) parts.push(chain + '.' + f.apiName);
+            }
+        }
+        if (pr.parentRels) {
+            for (const np of pr.parentRels) {
+                this._collectParentFields(np, parts);
+            }
         }
     }
 
@@ -623,11 +705,7 @@ export default class DocGenTreeBuilder extends LightningElement {
             f.checked = false;
         }
         for (const pr of node.parentRels) {
-            if (pr.fields) {
-                for (const f of pr.fields) {
-                    f.checked = false;
-                }
-            }
+            this._uncheckParentRel(pr);
         }
         for (const cr of node.childRels) {
             if (cr.nodeData) {
@@ -636,20 +714,47 @@ export default class DocGenTreeBuilder extends LightningElement {
         }
     }
 
-    async _expandAndCheckParentField(parentRel, fieldName) {
-        if (!parentRel.fields) {
-            const schema = await this._loadSchema(parentRel.targetObject);
-            parentRel.fields = schema.fields.map((f) => ({
-                apiName: f.value,
-                displayLabel: this._extractLabel(f.label),
-                label: f.label,
-                type: f.type,
-                checked: false
-            }));
+    _uncheckParentRel(pr) {
+        if (!pr) return;
+        if (pr.fields) {
+            for (const f of pr.fields) {
+                f.checked = false;
+            }
         }
-        parentRel.expanded = true;
-        parentRel.icon = 'utility:chevrondown';
-        const field = parentRel.fields.find((f) => f.apiName === fieldName);
+        if (pr.parentRels) {
+            for (const np of pr.parentRels) {
+                this._uncheckParentRel(np);
+            }
+        }
+    }
+
+    // Expand a (possibly multi-hop) parent chain rooted at `topPr` and check
+    // the leaf field. `chainTail` is the dotted path from topPr down to the
+    // leaf scalar — e.g. for "Owner.Manager.Name" called with topPr=Owner,
+    // chainTail = "Manager.Name".
+    //
+    // Walks step-by-step: at each hop, lazy-load schema (fields + nested
+    // parent rels), set expanded=true, then descend into the next segment.
+    async _expandAndCheckParentField(topPr, chainTail) {
+        if (!topPr || !chainTail) return;
+        const segs = chainTail.split('.');
+        const leafFieldName = segs.pop();
+        let pr = topPr;
+        // Pre-load topPr so its parentRels are available before walking deeper.
+        await this._lazyLoadPrSchema(pr);
+        pr.expanded = true;
+        pr.icon = 'utility:chevrondown';
+        for (const seg of segs) {
+            if (!pr.parentRels) return; // schema didn't expose nested parents
+            const next = pr.parentRels.find((np) => np.value === seg);
+            if (!next) return; // saved config references a relationship that's gone
+            await this._lazyLoadPrSchema(next);
+            next.expanded = true;
+            next.icon = 'utility:chevrondown';
+            pr = next;
+        }
+        if (!pr.fields) return;
+        const field = pr.fields.find((f) => f.apiName === leafFieldName);
         if (field) field.checked = true;
     }
 
@@ -752,14 +857,26 @@ export default class DocGenTreeBuilder extends LightningElement {
             if (f.checked) c++;
         }
         for (const pr of node.parentRels) {
-            if (pr.fields) {
-                for (const f of pr.fields) {
-                    if (f.checked) c++;
-                }
-            }
+            c += this._countParentRel(pr);
         }
         for (const cr of node.childRels) {
             if (cr.nodeData) c += this._countAll(cr.nodeData);
+        }
+        return c;
+    }
+
+    _countParentRel(pr) {
+        let c = 0;
+        if (!pr) return 0;
+        if (pr.fields) {
+            for (const f of pr.fields) {
+                if (f.checked) c++;
+            }
+        }
+        if (pr.parentRels) {
+            for (const np of pr.parentRels) {
+                c += this._countParentRel(np);
+            }
         }
         return c;
     }

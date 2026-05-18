@@ -36,47 +36,6 @@
                     </span>
                 </template>
 
-                <!-- Selected parent field pills -->
-                <template for:each={parentRelsList} for:item="pr">
-                    <template if:true={pr.hasSelectedFields}>
-                        <template for:each={pr.selectedFields} for:item="pf">
-                            <span
-                                key={pf.path}
-                                style="
-                                    display: inline-flex;
-                                    align-items: center;
-                                    gap: 3px;
-                                    background: #f3e8ff;
-                                    border: 1px solid #d8c4f0;
-                                    padding: 2px 8px;
-                                    border-radius: 12px;
-                                    font-size: 0.75rem;
-                                    white-space: nowrap;
-                                "
-                            >
-                                <span style="color: #7c3aed">{pr.displayLabel}</span>
-                                <span style="color: #7c3aed">&#8250;</span>
-                                <span style="color: #7c3aed">{pf.displayLabel}</span>
-                                <span style="color: #aaa; font-family: monospace; font-size: 0.65rem"
-                                    >{pr.value}.{pf.apiName}</span
-                                >
-                                <button
-                                    type="button"
-                                    class="bare-button"
-                                    data-api={pf.apiName}
-                                    data-rel={pr.value}
-                                    onclick={handleRemoveParentField}
-                                    aria-label={pf.removeLabel}
-                                    title={pf.removeLabel}
-                                    style="color: #999; margin-left: 2px; font-size: 0.7rem"
-                                >
-                                    &times;
-                                </button>
-                            </span>
-                        </template>
-                    </template>
-                </template>
-
                 <!-- Add fields button -->
                 <button
                     type="button"
@@ -179,113 +138,18 @@
                 </div>
             </template>
 
-            <!-- ═══ Active parent lookups (only those with selected fields) ═══ -->
+            <!-- ═══ Active parent lookups (recursive multi-hop renderer) ═══ -->
             <template for:each={activeParentRels} for:item="pr">
-                <div
+                <c-doc-gen-parent-rel
                     key={pr.value}
-                    style="margin-top: 6px; margin-left: 12px; border-left: 2px solid #e9d5ff; padding-left: 10px"
+                    parent-rel={pr}
+                    node-path={nodePathForChildren}
+                    global-search={globalSearch}
+                    onexpandparent={handleParentRelExpandBubble}
+                    onparentfieldtoggle={handleParentRelFieldToggleBubble}
+                    onremoveparent={handleParentRelRemoveBubble}
                 >
-                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px">
-                        <button
-                            type="button"
-                            class="bare-button"
-                            data-rel={pr.value}
-                            onclick={handleExpandParent}
-                            aria-expanded={pr.expanded}
-                            style="
-                                font-weight: 600;
-                                font-size: 0.78rem;
-                                color: #7c3aed;
-                                display: flex;
-                                align-items: center;
-                                gap: 4px;
-                            "
-                        >
-                            <lightning-icon
-                                icon-name={pr.icon}
-                                size="xx-small"
-                                style="--sds-c-icon-color-foreground-default: #7c3aed"
-                            ></lightning-icon>
-                            {pr.displayLabel}
-                        </button>
-                        <button
-                            type="button"
-                            class="bare-button"
-                            data-rel={pr.value}
-                            onclick={handleRemoveParent}
-                            aria-label={pr.removeLabel}
-                            style="color: #ccc; font-size: 0.8rem; margin-left: auto"
-                            title={pr.removeLabel}
-                        >
-                            &times;
-                        </button>
-                    </div>
-                    <template if:true={pr.expanded}>
-                        <input
-                            type="text"
-                            placeholder="Search fields..."
-                            aria-label={pr.fieldSearchAriaLabel}
-                            value={pr.fieldSearchValue}
-                            data-rel={pr.value}
-                            oninput={handleParentFieldSearch}
-                            style="
-                                width: 100%;
-                                padding: 5px 9px;
-                                border: 1px solid #d8dde6;
-                                border-radius: 6px;
-                                font-size: 0.75rem;
-                                margin-bottom: 4px;
-                            "
-                        />
-                        <div
-                            style="
-                                max-height: 160px;
-                                overflow-y: auto;
-                                display: grid;
-                                grid-template-columns: repeat(2, 1fr);
-                                gap: 0;
-                            "
-                        >
-                            <template for:each={pr.pickerFields} for:item="ppf">
-                                <label
-                                    key={ppf.apiName}
-                                    style="
-                                        display: flex;
-                                        align-items: center;
-                                        gap: 6px;
-                                        padding: 4px 6px;
-                                        font-size: 0.78rem;
-                                        cursor: pointer;
-                                        border-radius: 4px;
-                                    "
-                                    onmouseover={_hoverIn}
-                                    onmouseout={_hoverOut}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={ppf.checked}
-                                        data-api={ppf.apiName}
-                                        data-rel={pr.value}
-                                        onchange={handleParentFieldToggle}
-                                        style="margin: 0; flex-shrink: 0"
-                                    />
-                                    <span style="overflow: hidden">
-                                        <span style="font-weight: 500; color: #181818">{ppf.displayLabel}</span>
-                                        <span
-                                            style="
-                                                color: #bbb;
-                                                font-size: 0.65rem;
-                                                font-family: monospace;
-                                                margin-left: 4px;
-                                            "
-                                            >{ppf.apiName}</span
-                                        >
-                                    </span>
-                                </label>
-                            </template>
-                        </div>
-                    </template>
-                </div>
+                </c-doc-gen-parent-rel>
             </template>
 
             <!-- ═══ Active child relationships (only expanded ones) ═══ -->

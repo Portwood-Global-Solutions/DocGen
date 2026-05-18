@@ -2218,21 +2218,28 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // Default to "default" when unmapped (older templates without sectPr refs).
             String partType = partTypeByFile.containsKey(partPrefix) ? partTypeByFile.get(partPrefix) : 'default';
             Boolean isHeader = key.startsWith('word/header');
+            // v1.97 — keep only the FIRST file per (header/footer, type) slot. When a
+            // docx contains multiple sections that each reference the same default
+            // header (or Word emits duplicate header files for sections with the same
+            // content), concatenating them all produces stacked duplicate headers in
+            // Flying Saucer's @top-center running element. Flying Saucer can only
+            // surface one running element per page run anyway, so the first
+            // declaration wins — matches Word's own "one header per page run" model.
             if (isHeader) {
-                if (partType == 'first') {
-                    headersFirst += partXml;
-                } else if (partType == 'even') {
-                    headersEven += partXml;
-                } else {
-                    headersDefault += partXml;
+                if (partType == 'first' && String.isBlank(headersFirst)) {
+                    headersFirst = partXml;
+                } else if (partType == 'even' && String.isBlank(headersEven)) {
+                    headersEven = partXml;
+                } else if (partType != 'first' && partType != 'even' && String.isBlank(headersDefault)) {
+                    headersDefault = partXml;
                 }
             } else {
-                if (partType == 'first') {
-                    footersFirst += partXml;
-                } else if (partType == 'even') {
-                    footersEven += partXml;
-                } else {
-                    footersDefault += partXml;
+                if (partType == 'first' && String.isBlank(footersFirst)) {
+                    footersFirst = partXml;
+                } else if (partType == 'even' && String.isBlank(footersEven)) {
+                    footersEven = partXml;
+                } else if (partType != 'first' && partType != 'even' && String.isBlank(footersDefault)) {
+                    footersDefault = partXml;
                 }
             }
         }
@@ -6150,10 +6157,25 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 WITH SYSTEM_MODE
                 LIMIT 1
             ];
-            if (tpls.isEmpty() || String.isBlank(tpls[0].Document_Title_Format__c)) {
+            if (tpls.isEmpty()) {
                 return null;
             }
+            // v1.97 — prefer the active version's snapshot of Document_Title_Format__c
+            // so restoring an older version restores its filename pattern too.
             String fmt = tpls[0].Document_Title_Format__c;
+            List<DocGen_Template_Version__c> snap = [
+                SELECT Document_Title_Format__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :templateId AND Is_Active__c = TRUE
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (!snap.isEmpty() && snap[0].Document_Title_Format__c != null) {
+                fmt = snap[0].Document_Title_Format__c;
+            }
+            if (String.isBlank(fmt)) {
+                return null;
+            }
             Map<String, Object> data = loadRecordDataForTitle(recordId, fmt);
             return generateDocTitle(fmt, data);
         } catch (Exception e) {
@@ -7045,7 +7067,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             css += ' .docgen-running-footer { position: running(dgfooter); }';
         }
         css += ' body { font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; }';
-        css += ' img { max-width: 100%; }';
+        // v1.97 — no global max-width on images; inline width/height takes precedence.
         css += ' table { border-collapse: collapse; }';
 
         String html = '<html><head><meta charset="utf-8"/>';

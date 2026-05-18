@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.96.0 — giant-query column alignment fix + export/import scalar-field sweep",
-      "versionNumber": "1.96.0.NEXT",
-      "ancestorId": "04tVx000000SFDpIAO",
+      "versionName": "1.97.0 — version snapshot fields + multi-hop parent in visual builder + authored widths + header/footer dedup",
+      "versionNumber": "1.97.0.NEXT",
+      "ancestorId": "04tVx000000SFH3IAO",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
