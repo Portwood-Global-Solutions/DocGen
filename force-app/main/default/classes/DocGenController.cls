@@ -5440,6 +5440,45 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * template file (DOCX/XLSX/PPTX) as base64. Pre-decomposed XML parts
      * and images are NOT included — they are regenerated on import.
      */
+    private static final Pattern SHEPHERD_CV_URL_PATTERN = Pattern.compile(
+        '/sfc/servlet\\.shepherd/version/download/(068[A-Za-z0-9]{12,15})'
+    );
+
+    @TestVisible
+    private static Set<Id> extractShepherdCvIds(String text) {
+        Set<Id> ids = new Set<Id>();
+        if (String.isBlank(text))
+            return ids;
+        Matcher m = SHEPHERD_CV_URL_PATTERN.matcher(text);
+        while (m.find()) {
+            try {
+                ids.add(Id.valueOf(m.group(1)));
+            } catch (Exception ignored) {
+                // Malformed match — skip.
+            }
+        }
+        return ids;
+    }
+
+    @TestVisible
+    private static String rewriteShepherdCvIds(String text, Map<String, String> oldToNew) {
+        if (String.isBlank(text) || oldToNew == null || oldToNew.isEmpty())
+            return text;
+        String result = text;
+        for (String oldId : oldToNew.keySet()) {
+            String newId = oldToNew.get(oldId);
+            if (String.isBlank(newId))
+                continue;
+            // Match the 15-char or 18-char ID form; replace just the ID, not
+            // the surrounding URL prefix, so we don't disturb authored markup.
+            result = result.replace(
+                '/sfc/servlet.shepherd/version/download/' + oldId,
+                '/sfc/servlet.shepherd/version/download/' + newId
+            );
+        }
+        return result;
+    }
+
     @AuraEnabled
     public static String exportTemplate(Id templateId) {
         try {
@@ -5481,7 +5520,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                             Page_Orientation__c,
                             Page_Size__c,
                             Page_Margins__c,
-                            Custom_Margins__c
+                            Custom_Margins__c,
+                            Watermark_Image_CV_Id__c
                         FROM Versions__r
                         WHERE Is_Active__c = TRUE
                         LIMIT 1
@@ -5528,8 +5568,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             bundle.put('template', tmplData);
 
             // Active version's template file
+            String htmlBodyText = null;
+            DocGen_Template_Version__c ver = null;
             if (!tmpl.Versions__r.isEmpty()) {
-                DocGen_Template_Version__c ver = tmpl.Versions__r[0];
+                ver = tmpl.Versions__r[0];
                 if (String.isNotBlank(ver.Content_Version_Id__c)) {
                     List<ContentVersion> cvs = [
                         SELECT VersionData, FileExtension, Title
@@ -5544,8 +5586,56 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         fileData.put('fileExtension', cvs[0].FileExtension);
                         fileData.put('base64', EncodingUtil.base64Encode(cvs[0].VersionData));
                         bundle.put('templateFile', fileData);
+                        // For HTML templates, the body bytes are HTML text containing
+                        // shepherd URLs that reference inline-image CVs — capture the
+                        // text so we can scan it for asset IDs below.
+                        if (tmpl.Type__c == 'HTML') {
+                            htmlBodyText = cvs[0].VersionData.toString();
+                        }
                     }
                 }
+            }
+
+            // Collect every ContentVersion ID referenced by:
+            //   - <img src="/sfc/servlet.shepherd/version/download/{cvId}"> in
+            //     Header_Html__c, Footer_Html__c, or the HTML body
+            //   - The active version's Watermark_Image_CV_Id__c
+            // Then bundle each as an `asset` with its base64 bytes so the import
+            // side can re-upload them and rewrite URLs to the new CV IDs.
+            Set<Id> assetCvIds = new Set<Id>();
+            assetCvIds.addAll(extractShepherdCvIds(tmpl.Header_Html__c));
+            assetCvIds.addAll(extractShepherdCvIds(tmpl.Footer_Html__c));
+            assetCvIds.addAll(extractShepherdCvIds(htmlBodyText));
+            Id watermarkCvId = null;
+            if (ver != null && String.isNotBlank(ver.Watermark_Image_CV_Id__c)) {
+                try {
+                    watermarkCvId = Id.valueOf(ver.Watermark_Image_CV_Id__c);
+                    assetCvIds.add(watermarkCvId);
+                } catch (Exception ignored) {
+                    // Malformed CV ID — skip, don't fail the whole export.
+                }
+            }
+            if (!assetCvIds.isEmpty()) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                List<ContentVersion> assetCvs = [
+                    SELECT Id, Title, FileExtension, VersionData
+                    FROM ContentVersion
+                    WHERE Id IN :assetCvIds
+                    WITH USER_MODE
+                ]; // NOPMD ApexCRUDViolation — referenced by template content; gated by template access
+                List<Map<String, Object>> assets = new List<Map<String, Object>>();
+                for (ContentVersion cv : assetCvs) {
+                    Map<String, Object> asset = new Map<String, Object>();
+                    asset.put('originalCvId', String.valueOf(cv.Id));
+                    asset.put('fileName', cv.Title);
+                    asset.put('fileExtension', cv.FileExtension);
+                    asset.put('base64', EncodingUtil.base64Encode(cv.VersionData));
+                    assets.add(asset);
+                }
+                bundle.put('assets', assets);
+            }
+            if (watermarkCvId != null) {
+                bundle.put('watermarkOriginalCvId', String.valueOf(watermarkCvId));
             }
 
             // Saved queries
@@ -5624,6 +5714,56 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             /* code-analyzer-suppress ApexFlsViolation */
             insert tmpl; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
+            // 1.5. Re-upload inline-image / watermark assets and build the
+            // source-org → target-org CV ID map. Done BEFORE the template body
+            // is uploaded so we can rewrite any shepherd URLs the body
+            // contains (ContentVersion.VersionData is immutable post-insert —
+            // rewriting after upload would need a v2 ContentVersion).
+            Map<String, String> cvIdMap = new Map<String, String>();
+            List<Object> assets = (List<Object>) bundle.get('assets');
+            if (assets != null && !assets.isEmpty()) {
+                List<ContentVersion> assetCvs = new List<ContentVersion>();
+                List<String> originalIds = new List<String>();
+                for (Object aObj : assets) {
+                    Map<String, Object> asset = (Map<String, Object>) aObj;
+                    String b64 = (String) asset.get('base64');
+                    if (String.isBlank(b64))
+                        continue;
+                    String origId = (String) asset.get('originalCvId');
+                    String fileName = (String) asset.get('fileName');
+                    String ext = (String) asset.get('fileExtension');
+                    ContentVersion acv = new ContentVersion();
+                    acv.Title = String.isNotBlank(fileName) ? fileName : ('asset_' + origId);
+                    acv.PathOnClient = acv.Title + (String.isNotBlank(ext) ? ('.' + ext) : '');
+                    acv.VersionData = EncodingUtil.base64Decode(b64);
+                    acv.FirstPublishLocationId = tmpl.Id;
+                    assetCvs.add(acv);
+                    originalIds.add(origId);
+                }
+                if (!assetCvs.isEmpty()) {
+                    SObjectAccessDecision assetDec = Security.stripInaccessible(AccessType.CREATABLE, assetCvs);
+                    /* code-analyzer-suppress ApexFlsViolation */
+                    insert assetDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
+                    List<ContentVersion> inserted = (List<ContentVersion>) assetDec.getRecords();
+                    for (Integer i = 0; i < inserted.size(); i++) {
+                        cvIdMap.put(originalIds[i], String.valueOf(inserted[i].Id));
+                    }
+                }
+            }
+
+            // 1.6. If any asset URLs were referenced in Header_Html__c or
+            // Footer_Html__c, rewrite them to point at the newly-inserted CVs.
+            if (!cvIdMap.isEmpty()) {
+                String rewrittenHeader = rewriteShepherdCvIds(tmpl.Header_Html__c, cvIdMap);
+                String rewrittenFooter = rewriteShepherdCvIds(tmpl.Footer_Html__c, cvIdMap);
+                if (rewrittenHeader != tmpl.Header_Html__c || rewrittenFooter != tmpl.Footer_Html__c) {
+                    tmpl.Header_Html__c = rewrittenHeader;
+                    tmpl.Footer_Html__c = rewrittenFooter;
+                    /* code-analyzer-suppress ApexFlsViolation */
+                    update tmpl; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                }
+            }
+
             // 2. Upload template file if present
             Map<String, Object> fileData = (Map<String, Object>) bundle.get('templateFile');
             String cvId = null;
@@ -5632,7 +5772,20 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 cv.Title = tmpl.Name;
                 cv.PathOnClient = tmpl.Name + '.' + (String) fileData.get('fileExtension');
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-                cv.VersionData = EncodingUtil.base64Decode((String) fileData.get('base64'));
+                Blob bodyBytes = EncodingUtil.base64Decode((String) fileData.get('base64'));
+                // For HTML templates, rewrite embedded shepherd URLs in the body
+                // bytes BEFORE upload (ContentVersion.VersionData is immutable
+                // post-insert). Word/Excel/PowerPoint templates carry their
+                // image references inside docx-internal relationships, not
+                // shepherd URLs, so they pass through untouched.
+                if (tmpl.Type__c == 'HTML' && !cvIdMap.isEmpty()) {
+                    String htmlBody = bodyBytes.toString();
+                    String rewrittenBody = rewriteShepherdCvIds(htmlBody, cvIdMap);
+                    if (rewrittenBody != htmlBody) {
+                        bodyBytes = Blob.valueOf(rewrittenBody);
+                    }
+                }
+                cv.VersionData = bodyBytes;
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 cv.FirstPublishLocationId = tmpl.Id;
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
@@ -5667,6 +5820,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ver.Page_Size__c = (String) tmplData.get('Page_Size__c');
             ver.Page_Margins__c = (String) tmplData.get('Page_Margins__c');
             ver.Custom_Margins__c = (String) tmplData.get('Custom_Margins__c');
+            // If the export bundle named a watermark CV and we re-uploaded it as
+            // an asset, wire the version's watermark field to the new CV ID.
+            String watermarkOriginalCvId = (String) bundle.get('watermarkOriginalCvId');
+            if (String.isNotBlank(watermarkOriginalCvId) && cvIdMap.containsKey(watermarkOriginalCvId)) {
+                ver.Watermark_Image_CV_Id__c = cvIdMap.get(watermarkOriginalCvId);
+            }
             /* code-analyzer-suppress ApexFlsViolation */
             insert ver; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
