@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Base_Object_API__c</fullName>
-    <description>API Name of the root object (e.g., Account).</description>
+    <description
+    >API Name of the root SObject (e.g., Account) for SOQL-backed templates, or one of the sentinels: 'ApexProvider' (v4 Apex Data Provider — see Query_Config__c for the provider class), 'FlowJsonData' (data supplied at runtime via DocGenFlowAction.jsonData). Schema-required; never null.</description>
     <externalId>false</externalId>
     <label>Base Object API Name</label>
     <length>100</length>

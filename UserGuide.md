@@ -624,14 +624,14 @@ When an LLM (or a designer) hands you a template using modern CSS, here are the 
 }
 ```
 
-##### `@page` rules — don't double-declare
+##### `@page` rules — engine defers to your source
 
 Two ways to control the page size, margins, and orientation:
 
 1. **Template fields** — `Page_Size__c`, `Page_Orientation__c`, `Page_Margins__c`, `Custom_Margins__c` on the DocGen Template record. DocGen wraps the template's HTML with an engine `<style>` block declaring `@page` from these fields.
 2. **Source CSS** — your HTML's own `<style>` declares `@page { size: ... }`.
 
-Pick one. If both are set, you get **two `<style>` blocks each declaring `@page`**, the cascade is non-deterministic, and dimensions can come out wrong. Recommended: leave the template fields blank when your source HTML already specifies `@page`. If you author in Google Docs (which sometimes injects an `@page` block on export) and then set `Page_Size__c` to "Legal", the conflict will silently produce a Letter document because the source CSS wins.
+As of v1.90, when the source HTML already declares `@page`, the engine **automatically suppresses** its own `@page` size/margin block — your source CSS wins without conflict. Running header/footer margin boxes are still emitted because the source `@page` can't supply them on its own. If you author in Google Docs (which sometimes injects an `@page` block on export) and also set the template's `Page_Size__c` to a different value, your source CSS is what renders — the template fields are quietly ignored for that pair of properties.
 
 #### 5.7.4 Header / Footer fields
 
