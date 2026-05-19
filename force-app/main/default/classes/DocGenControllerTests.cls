@@ -660,6 +660,47 @@ private class DocGenControllerTests {
         }
     }
 
+    // FlowJsonData sentinel templates are Flow-only (invoked via DocGenFlowAction.jsonData)
+    // and MUST NOT surface in the record-page launcher's templates-for-object selector.
+    @IsTest
+    static void testGetTemplatesForObjectExcludesFlowJsonData() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c flowTpl = new DocGen_Template__c(
+                Name = 'JSON Flow Only Template',
+                Base_Object_API__c = 'FlowJsonData',
+                Type__c = 'Word',
+                Query_Config__c = '{"v":4,"source":"flowJsonData"}',
+                Is_Active__c = true
+            );
+            insert flowTpl;
+
+            Test.startTest();
+            List<DocGen_Template__c> accountTpls = DocGenController.getTemplatesForObject('Account');
+            List<DocGen_Template__c> flowTpls = DocGenController.getTemplatesForObject('FlowJsonData');
+            Test.stopTest();
+
+            for (DocGen_Template__c t : accountTpls) {
+                System.assertNotEquals(
+                    'FlowJsonData',
+                    t.Base_Object_API__c,
+                    'FlowJsonData template must not appear in Account launcher results'
+                );
+            }
+            Boolean found = false;
+            for (DocGen_Template__c t : flowTpls) {
+                if (t.Id == flowTpl.Id) {
+                    found = true;
+                    break;
+                }
+            }
+            System.assert(
+                found,
+                'Querying for FlowJsonData directly should still return the template (admin/import paths)'
+            );
+        }
+    }
+
     // -----------------------------------------------------------------------
     // processAndReturnDocument — success path with valid DOCX
     // -----------------------------------------------------------------------

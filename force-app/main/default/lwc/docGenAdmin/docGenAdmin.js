@@ -114,7 +114,7 @@ const COLUMNS = [
     { label: 'Name', fieldName: 'Name' },
     { label: 'Type', fieldName: F.Type, initialWidth: 100 },
     { label: 'Output Format', fieldName: F.OutputFormat, initialWidth: 120 },
-    { label: 'Base Object', fieldName: F.BaseObject },
+    { label: 'Base Object', fieldName: 'displayBaseObject' },
     {
         label: 'Status',
         fieldName: 'activeLabel',
@@ -694,8 +694,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 // shipped — treat null/undefined as Active to match the server
                 // OR-NULL filter in getTemplatesForObjectInternal.
                 const isActive = t[F.IsActive] !== false;
+                const rawBase = t[F.BaseObject];
+                const displayBaseObject =
+                    rawBase === 'FlowJsonData'
+                        ? 'JSON Data (from Flow)'
+                        : rawBase === 'ApexProvider'
+                          ? 'Apex Data Provider'
+                          : rawBase;
                 return {
                     ...t,
+                    displayBaseObject,
                     defaultLabel: t[F.IsDefault] ? '★' : '',
                     defaultClass: t[F.IsDefault] ? 'slds-text-color_success slds-text-title_bold' : '',
                     activeLabel: isActive ? 'Active' : 'Inactive',
@@ -718,6 +726,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 (t.Name && t.Name.toLowerCase().includes(lowerKey)) ||
                 (t[F.Category] && t[F.Category].toLowerCase().includes(lowerKey)) ||
                 (t[F.BaseObject] && t[F.BaseObject].toLowerCase().includes(lowerKey)) ||
+                (t.displayBaseObject && t.displayBaseObject.toLowerCase().includes(lowerKey)) ||
                 (t[F.Type] && t[F.Type].toLowerCase().includes(lowerKey)) ||
                 (t[F.OutputFormat] && t[F.OutputFormat].toLowerCase().includes(lowerKey)) ||
                 (t[F.Desc] && t[F.Desc].toLowerCase().includes(lowerKey)) ||
@@ -828,6 +837,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this.showToast('Error', 'Please fill in the template name and type.', 'error');
                 return;
             }
+            // JSON Data (from Flow) data source: no SOQL, no provider class.
+            // Skip Step 2 entirely — there's nothing to configure between name
+            // and template upload. The FlowJsonData sentinel and v4 marker were
+            // stamped at handleDataSourceModeChange time; just advance to upload.
+            if (this.dataSourceMode === 'flow') {
+                this.useApexProvider = false;
+                this.useVisualBuilder = false;
+                this.currentWizardStep = '3';
+                return;
+            }
             // Apex Data Provider data source bypasses the base-object requirement —
             // the provider class supplies its own data shape. We require a class to
             // be selected and validated before advancing, and stamp the v4 config
@@ -875,8 +894,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     handlePrevStep() {
-        if (this.currentWizardStep === '3') this.currentWizardStep = '2';
-        else if (this.currentWizardStep === '2') this.currentWizardStep = '1';
+        if (this.currentWizardStep === '3') {
+            // JSON-flow templates skip Step 2 going forward; mirror that going back
+            // so the user lands on Step 1 (where they can re-pick the data source).
+            this.currentWizardStep = this.dataSourceMode === 'flow' ? '1' : '2';
+        } else if (this.currentWizardStep === '2') {
+            this.currentWizardStep = '1';
+        }
     }
 
     handleWizardTabActive() {
@@ -1130,12 +1154,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // Pre-flip Apex Provider mode so Step 2 lands on the right pane.
             this.useApexProvider = true;
             this.useVisualBuilder = false;
+        } else if (mode === 'flow') {
+            // JSON-from-Flow: no SOQL, no provider class. Stamp the FlowJsonData
+            // sentinel into Base_Object_API__c so the record-page launcher's
+            // WHERE Base_Object_API__c = :objectApiName filter naturally excludes
+            // these — they're only invokable via DocGenFlowAction.jsonData.
+            this.useApexProvider = false;
+            this._clearApexProviderState();
+            this.newTemplateObject = 'FlowJsonData';
+            this.newTemplateSampleRecordId = '';
+            this.sampleRecordData = null;
+            this.newTemplateQuery = JSON.stringify({ v: 4, source: 'flowJsonData' });
         } else {
             this.useApexProvider = false;
             this._clearApexProviderState();
             // Restore default object so the next "advance to Step 2" doesn't error
-            // out before the user re-picks one.
-            if (!this.newTemplateObject) {
+            // out before the user re-picks one. Don't carry the FlowJsonData
+            // sentinel forward if the user switches back to Record mode.
+            if (!this.newTemplateObject || this.newTemplateObject === 'FlowJsonData') {
                 this.newTemplateObject = 'Account';
             }
         }
@@ -1144,7 +1180,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get dataSourceModeOptions() {
         return [
             { label: 'Salesforce Record (SOQL)', value: 'record' },
-            { label: 'Apex Class (Data Provider)', value: 'apex' }
+            { label: 'Apex Class (Data Provider)', value: 'apex' },
+            { label: 'JSON Data (from Flow)', value: 'flow' }
         ];
     }
 
@@ -1153,6 +1190,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
     get isApexDataSource() {
         return this.dataSourceMode === 'apex';
+    }
+    get isFlowDataSource() {
+        return this.dataSourceMode === 'flow';
+    }
+
+    // Edit-modal companion: the modal doesn't have a separate dataSourceMode
+    // toggle (since data-source choice is set at creation time), so detect
+    // the FlowJsonData sentinel directly off editTemplateObject.
+    get isEditFlowDataSource() {
+        return this.editTemplateObject === 'FlowJsonData';
+    }
+    get editBaseObjectDisplay() {
+        if (this.editTemplateObject === 'FlowJsonData') return 'JSON Data (from Flow)';
+        if (this.editTemplateObject === 'ApexProvider') return 'Apex Data Provider';
+        return this.editTemplateObject;
     }
 
     get readableQueryConfig() {
