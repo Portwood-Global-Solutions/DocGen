@@ -911,19 +911,33 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (mr.relsXml != null) {
             allXmlParts.put(mr.relsPath, mr.relsXml);
         }
-        // Add passthrough XML entries (styles.xml, numbering.xml, theme, etc.)
+        // Build the image map up front so the passthrough split below can
+        // route non-UTF-8 binaries into it as fallback storage.
+        Map<String, String> imageBase64Map = new Map<String, String>();
+
+        // Split passthrough entries into XML (allXmlParts) and binary (imageBase64Map).
+        //
+        // Word can stamp a `docProps/thumbnail.jpeg` (and occasionally fonts /
+        // OLE objects / printerSettings.bin) outside the `word/media/` prefix.
+        // The pre-#117 code assumed "anything not under mediaPath is XML text"
+        // and called .toString() unconditionally — which throws
+        // `BLOB is not a valid UTF-8 string` on those binary entries and aborts
+        // the whole generate. Detect-by-trying so XML stays in allXmlParts and
+        // binary lands in the base64 image map (which the client-side ZIP
+        // writer already handles as a passthrough mediaPath → bytes mapping).
         for (String path : mr.passthroughEntries.keySet()) {
             Blob entryBlob = mr.passthroughEntries.get(path);
-            if (!path.startsWith(mr.mediaPath)) {
-                // Non-media passthrough = XML/text content
+            if (path.startsWith(mr.mediaPath)) {
+                continue; // handled below in the media base64 loop
+            }
+            try {
                 allXmlParts.put(path, entryBlob.toString());
+            } catch (StringException stre) {
+                imageBase64Map.put(path, EncodingUtil.base64Encode(entryBlob));
             }
         }
 
-        // Build image map — return CV IDs for client to fetch one at a time.
-        // Each client-side Apex call gets its own fresh heap, enabling unlimited images.
         // Template-embedded media from passthrough (small, already in heap)
-        Map<String, String> imageBase64Map = new Map<String, String>();
         for (String path : mr.passthroughEntries.keySet()) {
             if (path.startsWith(mr.mediaPath)) {
                 imageBase64Map.put(path, EncodingUtil.base64Encode(mr.passthroughEntries.get(path)));
