@@ -388,8 +388,22 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * @return Map containing base64 document data, title, outputFormat, and templateType
      */
     @AuraEnabled
-    public static Map<String, Object> processAndReturnDocument(Id templateId, Id recordId) {
-        return processAndReturnDocumentWithImages(templateId, recordId, null);
+    public static Map<String, Object> processAndReturnDocument(
+        Id templateId,
+        Id recordId,
+        Map<String, String> chartCvMap
+    ) {
+        // chartCvMap (#117): signature → CV Id map for charts the LWC pre-
+        // rasterized to PNG. Null for non-chart templates and legacy callers.
+        // Set BEFORE invoking the merge so DocGenChartTagExpander.expand can
+        // find each chart's CV; clear on the way out so per-request state
+        // doesn't leak across transactions.
+        DocGenService.beginChartContext(chartCvMap);
+        try {
+            return processAndReturnDocumentWithImages(templateId, recordId, null);
+        } finally {
+            DocGenService.endChartContext();
+        }
     }
 
     /**

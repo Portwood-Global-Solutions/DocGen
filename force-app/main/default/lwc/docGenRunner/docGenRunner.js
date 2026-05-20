@@ -657,11 +657,21 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 this.showToast('Info', 'Generating document...', 'info');
                 await this._generateOfficeClientSide(saveToRecord, ext, 'application/octet-stream');
             } else {
-                // PowerPoint — server-side
-                const result = await processAndReturnDocument({
-                    templateId: this.selectedTemplateId,
-                    recordId: this.recordId
-                });
+                // PowerPoint — server-side. Chart prep runs but PPTX chart
+                // embed is task #10 (deferred); the merge will text-fallback
+                // chart tags until that lands. Wiring it consistently now so
+                // the runner doesn't need re-plumbing later.
+                const chartContext = await this._prepareCharts();
+                let result;
+                try {
+                    result = await processAndReturnDocument({
+                        templateId: this.selectedTemplateId,
+                        recordId: this.recordId,
+                        chartCvMap: chartContext.map
+                    });
+                } finally {
+                    await this._cleanupCharts(chartContext.cvIds);
+                }
                 if (!result || !result.base64) {
                     throw new Error('Document generation returned empty result.');
                 }

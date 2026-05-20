@@ -444,7 +444,7 @@ try {
     }
 
     // Generate PDF document
-    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId);
+    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId, null);
     String base64Pdf = (String) genResult.get('base64');
     String docTitle = (String) genResult.get('title');
 
@@ -469,7 +469,7 @@ try {
     DocGen_Template__c tDocx = [SELECT Id, Output_Format__c FROM DocGen_Template__c WHERE Id = :tmplId];
     tDocx.Output_Format__c = 'Native';
     update tDocx;
-    Map<String, Object> docxResult = DocGenController.processAndReturnDocument(tmplId, acctId);
+    Map<String, Object> docxResult = DocGenController.processAndReturnDocument(tmplId, acctId, null);
     String base64Docx = (String) docxResult.get('base64');
     if (String.isNotBlank(base64Docx)) {
         ContentVersion docxCv = new ContentVersion(

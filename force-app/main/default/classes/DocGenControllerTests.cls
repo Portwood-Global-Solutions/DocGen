@@ -78,7 +78,7 @@ private class DocGenControllerTests {
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.processAndReturnDocument(tpl.Id, acc.Id);
+                DocGenController.processAndReturnDocument(tpl.Id, acc.Id, null);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -750,7 +750,7 @@ private class DocGenControllerTests {
             insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.processAndReturnDocument(tpl.Id, acc.Id);
+            Map<String, Object> result = DocGenController.processAndReturnDocument(tpl.Id, acc.Id, null);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');

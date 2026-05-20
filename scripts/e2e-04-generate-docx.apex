@@ -63,7 +63,7 @@ try {
 // ===== Generate DOCX via processAndReturnDocument =====
 String base64Docx;
 try {
-    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId);
+    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId, null);
 
     if (genResult == null) {
         fail++;

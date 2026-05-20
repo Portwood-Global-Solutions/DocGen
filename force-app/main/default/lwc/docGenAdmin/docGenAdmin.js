@@ -2474,10 +2474,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const isPPT = ['PowerPoint', 'PPT', 'PPTX'].includes(this.previewVersion[F.Type]);
 
             if (isPPT || this.editTemplateOutputFormat === 'Native') {
-                const result = await processAndReturnDocument({
-                    templateId: this.editTemplateId,
-                    recordId: this.editTemplateTestRecordId
-                });
+                const chartContext = await this._prepareChartsForAdmin(
+                    this.editTemplateId,
+                    this.editTemplateTestRecordId
+                );
+                let result;
+                try {
+                    result = await processAndReturnDocument({
+                        templateId: this.editTemplateId,
+                        recordId: this.editTemplateTestRecordId,
+                        chartCvMap: chartContext.map
+                    });
+                } finally {
+                    await this._cleanupChartsForAdmin(chartContext.cvIds);
+                }
                 if (!result || !result.base64) {
                     throw new Error('Document generation returned empty result.');
                 }
@@ -2662,10 +2672,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
             if (isPPT || this.editTemplateOutputFormat === 'Native') {
                 // Native DOCX/PPTX download
-                const result = await processAndReturnDocument({
-                    templateId: this.editTemplateId,
-                    recordId: this.editTemplateTestRecordId
-                });
+                const chartContext = await this._prepareChartsForAdmin(
+                    this.editTemplateId,
+                    this.editTemplateTestRecordId
+                );
+                let result;
+                try {
+                    result = await processAndReturnDocument({
+                        templateId: this.editTemplateId,
+                        recordId: this.editTemplateTestRecordId,
+                        chartCvMap: chartContext.map
+                    });
+                } finally {
+                    await this._cleanupChartsForAdmin(chartContext.cvIds);
+                }
 
                 if (!result || !result.base64) {
                     throw new Error('Document generation returned empty result.');
