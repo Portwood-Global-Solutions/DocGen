@@ -100,8 +100,6 @@ Net **-914 LOC across 17 files**. Removes the unauthenticated guest-context docu
 
 #### Removed (full deletion)
 
-- `DocGenGuestRenderQueueable.cls` and its test class
-- `DocGenGuestRenderTrigger.trigger` (platform-event consumer)
 - `DocGenController.isCurrentUserGuest()`, `getSiteUrlPathPrefix()`, `queueGuestRender()`, `getGuestRenderStatus()`, and the `GuestRenderHelper` inner class
 - `docGenRunner.js` guest imports, `_isGuest` field, `wiredIsGuest` callback, `_generateGuestPdf()` method, and the guest branch in the generate flow
 - `docGenRunner` guest-context exemption in `allowedOutputModes` mobile restriction
@@ -110,8 +108,13 @@ Net **-914 LOC across 17 files**. Removes the unauthenticated guest-context docu
 
 #### Stubbed (preserved as empty shells for subscriber upgrade compatibility)
 
-- `DocGen_Guest_Render__e` platform event — metadata retained; description marked deprecated. 2GP packages can't cleanly delete published events; the shell is benign (no publishers or subscribers remain in code).
+Five components retained as no-op stubs because 2GP managed packages cannot drop Apex classes, triggers, or published platform events without explicit Remove Metadata Components feature access from Salesforce Partner Community. All five are functionally inert — no publishers, no callers — and will be removed in a future release once that feature is granted.
+
+- `DocGen_Guest_Render__e` platform event — metadata retained; description marked deprecated.
 - `DocGen_Guest_Runner.permissionset` — all class/object/field access stripped; description marked deprecated; label renamed "(deprecated)". Safe to leave assigned or unassign from site guest users. `e2e-01-permissions.apex` updated to assert the stub state (0 class grants, 0 object grants) so a future regression that re-adds them fails loudly.
+- `DocGenGuestRenderQueueable.cls` — empty `execute()` method; deprecation comment in the class header.
+- `DocGenGuestRenderQueueableTest.cls` — single test that enqueues the stub to keep its coverage non-zero.
+- `DocGenGuestRenderTrigger.trigger` — empty handler on `DocGen_Guest_Render__e(after insert)`.
 
 #### Updated
 
