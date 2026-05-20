@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.98.0 — next",
-      "versionNumber": "1.98.0.NEXT",
-      "ancestorId": "04tVx000000SFovIAG",
+      "versionName": "1.99.0 — Chart Engine",
+      "versionNumber": "1.99.0.NEXT",
+      "ancestorId": "04tVx000000Si9NIAS",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
@@ -144,6 +144,7 @@
     "Portwood DocGen Managed@1.96.0-1": "04tVx000000SFH3IAO",
     "Portwood DocGen Managed@1.97.0-1": "04tVx000000SFlhIAG",
     "Portwood DocGen Managed@1.97.0-2": "04tVx000000SFovIAG",
-    "Portwood DocGen Managed@1.98.0-1": "04tVx000000Si9NIAS"
+    "Portwood DocGen Managed@1.98.0-1": "04tVx000000Si9NIAS",
+    "Portwood DocGen Managed@1.99.0-2": "04tVx000000ZVFRIA4"
   }
 }

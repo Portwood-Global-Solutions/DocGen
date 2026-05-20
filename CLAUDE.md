@@ -56,7 +56,7 @@ If your fix touches `processXml`, do not add `VersionData` to the PDF-path SOQL 
 ## Package info
 
 - Package: Portwood DocGen, Unlocked 2GP, namespace `portwoodglobal`
-- Current shipped version: **v1.98.0** (`04tVx000000Si9NIAS`)
+- Current shipped version: **v1.99.0** (`04tVx000000ZVFRIA4`) — Chart Engine release: 9 chart styles (bar/column/pie/donut/pivot/stacked/clustered/line/area), pure-Apex PNG rasterization, PNG-via-CV pipeline for HTML/Word/PPTX, comprehensive UserGuide §7.6 with LLM authoring prompt. Permset audit also rolled in (Reminder_Sent_At\_\_c gap fixed, misleading "FLS auto-granted" comments corrected).
 - DevHub: `Portwood Global - Production` (dave@portwoodglobalsolutions.com)
 - Staging org for release validation: `portwood-staging` — must be created with `--no-namespace` so source-deploy lands in the default namespace and the e2e scripts' bare class/field references compile. Assign `DocGen_Admin` permset to the running user immediately after deploy or field-level security blocks the e2e scripts.
 - Dev scratch: `docgen-designer`
