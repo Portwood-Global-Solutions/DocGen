@@ -22,7 +22,7 @@ import launchGiantQueryPdfBatch from '@salesforce/apex/DocGenController.launchGi
 import getSortedChildIds from '@salesforce/apex/DocGenController.getSortedChildIds';
 import getChildRecordsByIds from '@salesforce/apex/DocGenController.getChildRecordsByIds';
 import { NavigationMixin } from 'lightning/navigation';
-import { downloadBase64 as downloadBase64Util, rasterizeSvgToPng } from 'c/docGenUtils';
+import { downloadBase64 as downloadBase64Util } from 'c/docGenUtils';
 import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
 import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
 import deleteChartImages from '@salesforce/apex/DocGenChartImageController.deleteChartImages';
@@ -739,6 +739,45 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
      * server round-trip wasted — `prepareChartImages` returns empty for
      * non-Word templates and templates with no {Chart:...} tags).
      */
+    /**
+     * Rasterizes an SVG string to a base64 PNG via a hidden <canvas>. Inlined
+     * here (rather than imported from c/docGenUtils) because LWC cross-bundle
+     * compilation can serve a stale runner bundle when only the util's exports
+     * change — observed as `TypeError: G.rasterizeSvgToPng is not a function`
+     * even after a clean redeploy. Inlining the function avoids the
+     * cross-bundle resolution path entirely.
+     */
+    _rasterizeSvgToPng(svgString, width, height, scale = 4) {
+        return new Promise((resolve, reject) => {
+            const blob = new Blob([svgString], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width * scale;
+                    canvas.height = height * scale;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    URL.revokeObjectURL(url);
+                    resolve(canvas.toDataURL('image/png').split(',')[1]);
+                } catch (err) {
+                    URL.revokeObjectURL(url);
+                    reject(err);
+                }
+            };
+            img.onerror = (err) => {
+                URL.revokeObjectURL(url);
+                reject(err instanceof Error ? err : new Error('SVG image load failed'));
+            };
+            img.src = url;
+        });
+    }
+
     async _prepareCharts() {
         try {
             const requests = await prepareChartImages({
@@ -753,7 +792,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             for (const req of requests) {
                 try {
                     // eslint-disable-next-line no-await-in-loop
-                    const pngBase64 = await rasterizeSvgToPng(req.svgString, req.width, req.height);
+                    const pngBase64 = await this._rasterizeSvgToPng(req.svgString, req.width, req.height);
                     // eslint-disable-next-line no-await-in-loop
                     const cvId = await uploadChartImage({
                         recordId: this.recordId,
