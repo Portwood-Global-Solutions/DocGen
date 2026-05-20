@@ -48,13 +48,57 @@ When a `<w:numPr>` (numbered/bulleted) paragraph contained multiple sibling sect
 - Code Analyzer: 0 High, 38 Moderate (within the documented ~30–41 baseline of `pmd:ProtectSensitiveData` false-positives on signature-domain field metadata).
 - Org-wide coverage: 75% (at threshold).
 
-## v1.98.0 — Experience Cloud guest render path removed (preliminary — flesh out at release)
+## v1.98.0 — Microsoft-shop polish, community fixes, Flow-driven templates, guest path removed
 
-Single-focus removal that takes out the unauthenticated guest-context document rendering path (introduced v1.86.0, PR #70). The original "public-facing downloads" requirement was reread with customers as "generate server-side and host on a public website," not "guest user triggers the render themselves." After the architecture was in place no customer asked for the latter, while the supporting code (platform-event reroute, LWR shepherd basePath logic, Automated Process CV-access quirks, the DOCX-via-Automated-Process dead-end documented in v1.92.0 #72) carried meaningful complexity tax. With the path gone, the merge engine and runner LWC drop their guest branches, freeing the planned DOCX→HTML parser refactor from dual-path validation.
+Five things ride this release. Two field-reported P0/P1 bugs from non-admin Microsoft-shop users (#109 Print-Ready Packet tables silently rendered without styling, #114 giant-query merge threw "Pre-decomposed template parts not found" for everyone who wasn't the template's CV owner); the **binary-asset carry-over** in cross-org template export/import (#100 — Header/Footer/body inline images and watermark CVs now travel with the bundle); a new **JSON Data (from Flow)** template data source (#110) that bypasses the SOQL builder when the data comes pre-shaped from an invoking Flow; and the long-planned **Experience Cloud guest render path removal** — net -914 LOC across 17 files, freeing the planned DOCX→HTML parser refactor from dual-path validation. Authored together, validated together, shipped together.
+
+### Print-Ready Packet renders table borders correctly again (#109)
+
+Reported by @sergiuBuru (community-contribution) with a precise diagnostic: bulk Print-Ready Packet mode lost table borders / padding / shading, while Individual mode and Combined + Individual mode rendered the same template correctly.
+
+- **Root cause** — `DocGenService.generateHtmlForRecord` (the per-record HTML entry point used only by the `mergeOnly` bulk path) was missing the renderer setup `renderPdf` performs before invoking `convertToHtml`: specifically the `DocGenHtmlRenderer.stylesXml` assignment plus the orientation / size / margin overrides. Without `stylesXml`, `resolveTableStyleBorder` / `resolveStyleTextAttributes` returned empty for `<w:tblStyle>` references — so styling that lived on the named Word table style (Light Grid, Plain Table, etc., rather than inline `<w:tblBorders>`) was silently dropped.
+- **Fix** — mirror `renderPdf`'s setup in `generateHtmlForRecord` and clear the page overrides in a `finally` so per-record state doesn't leak across the bulk loop. `stylesXml` is left set (matches `renderPdf` semantics).
+- **Severity classification** — P0 silent-corruption (output renders, just without the formatting authors intended; no error surface for the user to chase). Per the TRIAGE rubric this jumps the queue regardless of milestone.
+
+### Giant Query merge no longer fails for non-admin users (#114)
+
+Reported by Greg Devine. Affected user had `DocGen_User` permset + full FLS, but the merge threw `Pre-decomposed template parts not found. Please re-save the template.` whenever the template's pre-decomposed CVs were owned by another user (typical: an admin saved/re-saved the template). Admins were unaffected, hiding the breakage in most internal testing.
+
+- **Regression origin** — commit `a0b10ee` (v1.15.0, Checkmarx hardening pass) flipped four `ContentVersion` lookups for the `docgen_tmpl_xml_<versionId>_` pre-decomposed parts from `WITH SYSTEM_MODE` to `WITH USER_MODE`. The CVs hold package-internal serialized DOCX XML — they carry no user data — but USER_MODE enforces FLS/CRUD on ContentVersion fields the `DocGen_User` permset doesn't grant, blocking the read. Has shipped broken for non-admins since v1.15.0; the new picklist values in v1.97 that prompted template re-saves likely triggered the field reports.
+- **Fix** — revert all four sites to `WITH SYSTEM_MODE` and refresh the NOPMD comments to document the package-internal justification explicitly. Restores consistency with the adjacent `DocGen_Template_Version__c` lookups in the same blocks, which were already SYSTEM_MODE.
+- **Sites changed** — `DocGenService.cls:1143`, `DocGenController.cls:880`, `DocGenController.cls:1213`, `DocGenGiantQueryFlowAction.cls:176`. (The Explore agent initially flagged three sites; replace-all caught a fourth identical block during the fix.)
+- **Regression** — `testIssue114NoUserModeOnPreDecompCvLookups` greps each affected class's `ApexClass.Body` for `docgen_tmpl_xml_` references and asserts no surrounding SOQL contains `WITH USER_MODE`. Source-text guard rather than runtime — the cross-user CDL chain (permset + sharing + CDL Visibility) is too brittle to mock cleanly in a unit test, but the source assertion fails loudly on any future revert.
+
+### Cross-org template export/import now carries binary assets (#100)
+
+Sibling to the v1.96 scalar-field-drift fix (#102). The scalar fix preserved settings like `Page_Size__c` / `Lock_Output_Format__c` across orgs; this finishes the job for the two binary cases that were still broken:
+
+- **HTML inline images** — for HTML-type templates, the body bytes contain rewritten `<img src="/sfc/servlet.shepherd/version/download/<sourceCvId>">` URLs pointing at the source org's ContentVersions. On import those URLs 404'd because the referenced CVs don't exist in the target org. Same problem for any `<img>` URLs inside `Header_Html__c` / `Footer_Html__c`.
+- **Watermark** — `DocGen_Template_Version__c.Watermark_Image_CV_Id__c` held a source-org CV ID with no corresponding bundle entry, so on import the field either pointed at a non-existent ID or was silently dropped.
+
+`exportTemplate` now scans body HTML / header / footer for shepherd CV URLs and includes the active version's watermark CV, bundling each referenced `ContentVersion` as `{originalCvId, fileName, base64, fileExtension}` in a new `assets` array on the bundle. `importTemplate` re-uploads each asset linked to the new template (`FirstPublishLocationId`), builds an `oldCvId → newCvId` map, and rewrites:
+
+- `Header_Html__c` / `Footer_Html__c` post-insert (one extra DML because the asset upload requires the parent template Id),
+- the HTML body bytes BEFORE the body CV insert (`ContentVersion.VersionData` is immutable post-insert; rewriting after upload would need a v2 ContentVersion), and
+- `Watermark_Image_CV_Id__c` on the new active version.
+
+Two private helpers (`extractShepherdCvIds`, `rewriteShepherdCvIds`) factor the URL scanning + replacement; both `@TestVisible`. The URL prefix is regex-anchored so a raw `068...` string elsewhere in the body can't false-match.
+
+`docgenExportVersion` is still `'1'` — v1 bundles missing the `assets` key import unchanged (asset refs stay pointed at source-org IDs, same behavior they had before this version).
+
+### JSON Data (from Flow) template data source (#110)
+
+Adds a third Data Source option in the template wizard alongside **Salesforce Record (SOQL)** and **Apex Class (Data Provider)**. When selected, Step 1 skips the Base Object picker, SOQL builder, and Apex Provider class picker entirely and advances straight to template upload (Step 3). Persists `Base_Object_API__c = 'FlowJsonData'` (sentinel, mirrors the existing `'ApexProvider'` precedent) and `Query_Config__c = {"v":4,"source":"flowJsonData"}`. The Template Library lists "JSON Data (from Flow)" in the Base Object column; the template generates from data passed via `DocGenFlowAction.jsonData` at runtime instead of querying Salesforce.
+
+Lifts the longstanding constraint where Flow-driven templates with pre-shaped JSON had to be backed by a stub SObject just to satisfy the wizard's "needs a base object" gate.
+
+### Experience Cloud guest render path removed
+
+Net **-914 LOC across 17 files**. Removes the unauthenticated guest-context document rendering path (introduced v1.86.0, PR #70). The original "public-facing downloads" requirement was reread with customers as "generate server-side and host on a public website," not "guest user triggers the render themselves." After the architecture was in place no customer asked for the latter, while the supporting code (platform-event reroute, LWR shepherd basePath logic, Automated Process CV-access quirks, the DOCX-via-Automated-Process dead-end documented in v1.92.0 #72) carried meaningful complexity tax. With the path gone, the merge engine and runner LWC drop their guest branches, freeing the planned DOCX→HTML parser refactor from dual-path validation.
 
 **E-signature guest signing is unaffected.** That uses a different code path (`DocGenSignaturePdfTrigger`, `DocGen_Guest_Signature` permset, token-gated record access) and stays exactly as-is.
 
-### Removed (full deletion)
+#### Removed (full deletion)
 
 - `DocGenGuestRenderQueueable.cls` and its test class
 - `DocGenGuestRenderTrigger.trigger` (platform-event consumer)
@@ -64,21 +108,22 @@ Single-focus removal that takes out the unauthenticated guest-context document r
 - UserGuide §8.6 ("From an Experience Cloud public page (guest users)") and §8.6.1 (the InternalUsers CDL workaround)
 - `DocGen_Guest_Runner` row in the UserGuide permset table
 
-### Stubbed (preserved as empty shells for subscriber upgrade compatibility)
+#### Stubbed (preserved as empty shells for subscriber upgrade compatibility)
 
 - `DocGen_Guest_Render__e` platform event — metadata retained; description marked deprecated. 2GP packages can't cleanly delete published events; the shell is benign (no publishers or subscribers remain in code).
-- `DocGen_Guest_Runner.permissionset` — all class/object/field access stripped; description marked deprecated; label renamed "(deprecated)". Safe to leave assigned or unassign from site guest users.
+- `DocGen_Guest_Runner.permissionset` — all class/object/field access stripped; description marked deprecated; label renamed "(deprecated)". Safe to leave assigned or unassign from site guest users. `e2e-01-permissions.apex` updated to assert the stub state (0 class grants, 0 object grants) so a future regression that re-adds them fails loudly.
 
-### Updated
+#### Updated
 
-- `DocGenService.cls` and `DocGenTemplateManager.cls` — comments referencing the removed platform event reworded; the `SYSTEM_MODE` template-body lookup and the two-step CV title lookup are otherwise unchanged (both still serve non-guest contexts).
+- `DocGenService.cls` and `DocGenTemplateManager.cls` — comments referencing the removed platform event reworded; the SYSTEM_MODE template-body lookup and the two-step CV title lookup are otherwise unchanged (both still serve non-guest contexts).
 - `CLAUDE.md` — removed "Critical: Experience Cloud guest path" section; updated the client-side DOCX assembly note.
 
-### Test counts
+### Tests
 
-- Apex local tests: TBD on release validation.
-- e2e suite (e2e-01 through e2e-08): expected green on `portwood-staging` (no guest-specific assertions exist; removal should be invisible).
-- Prettier: clean. Code Analyzer: 0 High, ~41 Moderate (unchanged from v1.96.0 baseline).
+- E2E suite: 11 scripts, **223 / 223 PASS** on `portwood-staging` (e2e-01 42, e2e-02 10, e2e-03 16, e2e-04 15, e2e-05 13, e2e-06 23, e2e-07-syntax1 35, syntax2 31, syntax3 17, syntax4 9, e2e-08 12).
+- Apex local tests: 1362 methods, **100% pass**, org-wide coverage **75%** (at threshold). New regressions: `testExportImportRoundTripPreservesBinaryAssets` (#100), `testIssue114NoUserModeOnPreDecompCvLookups` (#114).
+- Prettier: clean. Code Analyzer (Security + AppExchange): **0 High**, 38 Moderate — all `pmd:ProtectSensitiveData` false-positives on signature-domain field metadata (within the documented ~30–41 baseline).
+- Manual: Print-Ready Packet (#109) verified on `portwood-staging` against template `a08cb00000L4HMdAAN`; output matches Individual mode for table borders / padding / shading.
 
 ## v1.93.0 — Flow Save-to-Record honored (#90), signature decline cache cleared (#91), Template Status column symmetric labels (#92)
 
