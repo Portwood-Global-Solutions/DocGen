@@ -475,7 +475,11 @@ try {
     System.debug('GUEST PERMS: FAIL — ' + e.getMessage());
 }
 
-// ===== DocGen_Guest_Runner Permission Set =====
+// ===== DocGen_Guest_Runner Permission Set (deprecated in v1.98) =====
+// The Experience Cloud guest render path was removed; this permset is retained
+// as an empty stub for 2GP upgrade compatibility. Assert it exists AND that all
+// class/object grants have been stripped — any lingering grant would re-expose
+// the removed surface.
 try {
     List<PermissionSet> grps = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_Guest_Runner' LIMIT 1];
     if (grps.isEmpty()) {
@@ -485,47 +489,30 @@ try {
         pass++;
         System.debug('GUEST_RUNNER EXISTS: PASS');
         Id grId = grps[0].Id;
-        Set<String> grc = new Set<String>();
-        for (SetupEntityAccess s : [
-            SELECT SetupEntityId
+        Integer grcCount = [
+            SELECT COUNT()
             FROM SetupEntityAccess
             WHERE ParentId = :grId AND SetupEntityType = 'ApexClass'
-        ]) {
-            grc.add([SELECT Name FROM ApexClass WHERE Id = :s.SetupEntityId LIMIT 1].Name);
-        }
-        for (
-            String cls : new List<String>{
-                'DocGenController',
-                'DocGenService',
-                'DocGenHtmlRenderer',
-                'DocGenDataRetriever',
-                'DocGenGiantQueryAssembler'
-            }
-        ) {
-            if (grc.contains(cls)) {
-                pass++;
-            } else {
-                fail++;
-                System.debug('GUEST_RUNNER CLASS ' + cls + ': FAIL');
-            }
-        }
-        Set<String> grObj = new Set<String>();
-        for (ObjectPermissions op : [
-            SELECT SobjectType
+        ];
+        Integer grObjCount = [
+            SELECT COUNT()
             FROM ObjectPermissions
-            WHERE ParentId = :grId AND PermissionsRead = TRUE
-        ]) {
-            grObj.add(op.SobjectType);
+            WHERE ParentId = :grId AND (PermissionsRead = TRUE OR PermissionsEdit = TRUE OR PermissionsCreate = TRUE)
+        ];
+        if (grcCount == 0) {
+            pass++;
+            System.debug('GUEST_RUNNER DEPRECATED — 0 class grants: PASS');
+        } else {
+            fail++;
+            System.debug('GUEST_RUNNER DEPRECATED — expected 0 class grants, found ' + grcCount + ': FAIL');
         }
-        for (String o : new List<String>{ 'DocGen_Template__c', 'DocGen_Template_Version__c' }) {
-            if (containsNs(grObj, o)) {
-                pass++;
-            } else {
-                fail++;
-                System.debug('GUEST_RUNNER OBJ ' + o + ': FAIL');
-            }
+        if (grObjCount == 0) {
+            pass++;
+            System.debug('GUEST_RUNNER DEPRECATED — 0 object grants: PASS');
+        } else {
+            fail++;
+            System.debug('GUEST_RUNNER DEPRECATED — expected 0 object grants, found ' + grObjCount + ': FAIL');
         }
-        System.debug('GUEST_RUNNER CHECKS: ' + (grc.size() + grObj.size()) + ' verified');
     }
 } catch (Exception e) {
     fail++;
