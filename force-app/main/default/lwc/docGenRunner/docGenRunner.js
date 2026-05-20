@@ -821,7 +821,9 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 } catch (chartErr) {
                     // One bad chart shouldn't abort the whole generate — the
                     // tag will fall back to its text-placeholder branch.
-                    console.warn('DocGen: chart prep failed for signature ' + req.signature, chartErr);
+                    const errMsg =
+                        (chartErr && (chartErr.body ? chartErr.body.message : chartErr.message)) || String(chartErr);
+                    console.warn('DocGen: chart prep failed for signature ' + req.signature + ' — ' + errMsg, chartErr);
                 }
             }
             return { map, cvIds };
