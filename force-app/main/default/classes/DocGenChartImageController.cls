@@ -60,25 +60,22 @@ public with sharing class DocGenChartImageController {
             throw DocGenService.ahe('Template and record IDs are required.');
         }
 
-        // USER_MODE access check — caller must be able to see the template;
-        // the catch converts the QueryException Salesforce throws on FLS
-        // denial into a clean AuraHandledException for the LWC error banner.
-        DocGen_Template__c template;
-        try {
-            List<DocGen_Template__c> templates = [
-                SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
-                FROM DocGen_Template__c
-                WHERE Id = :templateId
-                WITH USER_MODE
-                LIMIT 1
-            ];
-            if (templates.isEmpty()) {
-                throw DocGenService.ahe('Template not found or access denied.');
-            }
-            template = templates[0];
-        } catch (QueryException qe) {
+        // Template-metadata lookup in SYSTEM_MODE matches the rest of
+        // DocGenController (managed-package metadata; the FLS gate on the
+        // chart's TARGET object data lives downstream in
+        // DocGenDataRetriever.getRecordData and the bucket-resolver SOQL).
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> templates = [
+            SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (templates.isEmpty()) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
+        DocGen_Template__c template = templates[0];
 
         if (template.Type__c != 'Word' && template.Type__c != 'HTML') {
             return new List<ChartImageRequest>();
@@ -133,24 +130,22 @@ public with sharing class DocGenChartImageController {
             throw DocGenService.ahe('Template and record IDs are required.');
         }
 
-        // USER_MODE template fetch — mirrors prepareChartImages so the
-        // server-side path enforces the same FLS gate as the LWC path.
-        DocGen_Template__c template;
-        try {
-            List<DocGen_Template__c> templates = [
-                SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
-                FROM DocGen_Template__c
-                WHERE Id = :templateId
-                WITH USER_MODE
-                LIMIT 1
-            ];
-            if (templates.isEmpty()) {
-                throw DocGenService.ahe('Template not found or access denied.');
-            }
-            template = templates[0];
-        } catch (QueryException qe) {
+        // SYSTEM_MODE template-metadata lookup — matches prepareChartImages
+        // and the rest of DocGenController. The actual FLS gate on the
+        // chart's TARGET-object data lives downstream in
+        // DocGenDataRetriever.getRecordData and the bucket-resolver SOQL.
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> templates = [
+            SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (templates.isEmpty()) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
+        DocGen_Template__c template = templates[0];
 
         Map<String, String> chartCvMap = new Map<String, String>();
         // Word AND HTML templates both flow through the PNG-via-CV pipeline.
@@ -329,11 +324,12 @@ public with sharing class DocGenChartImageController {
     // =====================================================================
 
     private static String loadActiveWordBody(Id templateId) {
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vs = [
             SELECT Id
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         if (vs.isEmpty()) {
@@ -364,11 +360,12 @@ public with sharing class DocGenChartImageController {
      * sees the same body text the merge engine processes.
      */
     private static String loadActiveHtmlBody(Id templateId) {
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vs = [
             SELECT Id, Content_Version_Id__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         if (vs.isEmpty() || String.isBlank(vs[0].Content_Version_Id__c)) {
