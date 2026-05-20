@@ -4158,6 +4158,111 @@ private class DocGenControllerTests {
         }
     }
 
+    // Issue #100: export/import must carry inline image + watermark CVs across
+    // orgs. Previously the export captured only template scalar fields and the
+    // body file; shepherd URLs in Header_Html__c / Footer_Html__c / HTML body
+    // and Watermark_Image_CV_Id__c on the version would 404 in the target org.
+    @IsTest
+    static void testExportImportRoundTripPreservesBinaryAssets() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            // Inline-image CV (simulates a Google-Docs paste of an image)
+            ContentVersion inlineCv = new ContentVersion(
+                Title = 'inline_image_src',
+                PathOnClient = 'inline_image_src.png',
+                VersionData = Blob.valueOf('FAKE_INLINE_IMAGE_BYTES')
+            );
+            insert inlineCv;
+            ContentVersion inlineInserted = [
+                SELECT Id, ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :inlineCv.Id
+            ];
+
+            // Watermark CV
+            ContentVersion wmCv = new ContentVersion(
+                Title = 'watermark_src',
+                PathOnClient = 'watermark_src.png',
+                VersionData = Blob.valueOf('FAKE_WATERMARK_BYTES')
+            );
+            insert wmCv;
+            ContentVersion wmInserted = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :wmCv.Id];
+
+            String headerHtml =
+                '<div>logo: <img src="/sfc/servlet.shepherd/version/download/' +
+                inlineInserted.Id +
+                '"/></div>';
+
+            DocGen_Template__c src = new DocGen_Template__c(
+                Name = 'BinaryAssets Source',
+                Base_Object_API__c = 'Account',
+                Type__c = 'Word',
+                Output_Format__c = 'PDF',
+                Header_Html__c = headerHtml
+            );
+            insert src;
+
+            // Active version with watermark wired to wmCv
+            DocGen_Template_Version__c srcVer = new DocGen_Template_Version__c(
+                Template__c = src.Id,
+                Is_Active__c = true,
+                Type__c = 'Word',
+                Base_Object_API__c = 'Account',
+                Watermark_Image_CV_Id__c = String.valueOf(wmInserted.Id)
+            );
+            insert srcVer;
+
+            Test.startTest();
+            String json = DocGenController.exportTemplate(src.Id);
+            Map<String, Object> bundle = (Map<String, Object>) System.JSON.deserializeUntyped(json);
+            ((Map<String, Object>) bundle.get('template')).put('Name', 'BinaryAssets Imported');
+            Id importedId = DocGenController.importTemplate(System.JSON.serialize(bundle));
+            Test.stopTest();
+
+            // Export bundle must include both CVs as assets
+            List<Object> assets = (List<Object>) bundle.get('assets');
+            System.assertNotEquals(null, assets, 'Export bundle must include an assets array');
+            System.assertEquals(2, assets.size(), 'Both inline-image and watermark CVs must be exported');
+            System.assertEquals(
+                String.valueOf(wmInserted.Id),
+                (String) bundle.get('watermarkOriginalCvId'),
+                'Watermark CV ID must be tagged in the bundle'
+            );
+
+            // Imported template Header_Html__c must reference the NEW CV ID, not the source-org one
+            DocGen_Template__c imp = [SELECT Header_Html__c FROM DocGen_Template__c WHERE Id = :importedId LIMIT 1];
+            System.assert(
+                !imp.Header_Html__c.contains(String.valueOf(inlineInserted.Id)),
+                'Imported Header_Html__c must not reference the source-org CV ID (' +
+                    inlineInserted.Id +
+                    '): ' +
+                    imp.Header_Html__c
+            );
+            System.assert(
+                imp.Header_Html__c.contains('/sfc/servlet.shepherd/version/download/'),
+                'Imported Header_Html__c must still have a rewritten shepherd URL: ' + imp.Header_Html__c
+            );
+
+            // Imported version's Watermark_Image_CV_Id__c must point at the NEW watermark CV
+            DocGen_Template_Version__c impVer = [
+                SELECT Watermark_Image_CV_Id__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :importedId AND Is_Active__c = TRUE
+                LIMIT 1
+            ];
+            System.assertNotEquals(
+                null,
+                impVer.Watermark_Image_CV_Id__c,
+                'Imported version must have a watermark CV reference (was silently dropping pre-fix)'
+            );
+            System.assertNotEquals(
+                String.valueOf(wmInserted.Id),
+                impVer.Watermark_Image_CV_Id__c,
+                'Watermark CV reference must be the NEW CV ID, not the source-org ID'
+            );
+        }
+    }
+
     // =======================================================================
     // NEW COVERAGE TESTS — importTemplate
     // =======================================================================
