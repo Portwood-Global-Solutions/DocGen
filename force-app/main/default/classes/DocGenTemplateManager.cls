@@ -58,14 +58,8 @@ public with sharing class DocGenTemplateManager {
         // SYSTEM_MODE: the template body CV is a package-internal artifact whose
         // access is already gated upstream — the caller had to reach this point via
         // the active version of a DocGen_Template__c that the user can read (via the
-        // Template's sharing rule). USER_MODE breaks two callers we care about:
-        //
-        //   - Experience Cloud guest renders, where the file's CDL defaults to
-        //     Visibility=InternalUsers on a fresh upload and guest can't see it.
-        //   - The DocGen_Guest_Render__e queueable running as Automated Process,
-        //     which has its own quirks resolving file access against ContentVersion.
-        //
-        // Both surfaced the "ContentVersion not found" error before this swap.
+        // Template's sharing rule). USER_MODE can return "ContentVersion not found"
+        // when the body CV's CDL defaults to Visibility=InternalUsers on fresh upload.
         List<ContentVersion> cvs = [
             SELECT VersionData, Title, FileExtension
             FROM ContentVersion

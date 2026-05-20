@@ -7,9 +7,6 @@ import getContentVersionBase64 from '@salesforce/apex/DocGenController.getConten
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import saveGeneratedDocument from '@salesforce/apex/DocGenController.saveGeneratedDocument';
 import generatePdfAsync from '@salesforce/apex/DocGenController.generatePdfAsync';
-import isCurrentUserGuest from '@salesforce/apex/DocGenController.isCurrentUserGuest';
-import queueGuestRender from '@salesforce/apex/DocGenController.queueGuestRender';
-import getGuestRenderStatus from '@salesforce/apex/DocGenController.getGuestRenderStatus';
 import scoutAttachedImageSize from '@salesforce/apex/DocGenController.scoutAttachedImageSize';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
 import getChildRecordPdfs from '@salesforce/apex/DocGenController.getChildRecordPdfs';
@@ -86,7 +83,6 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     @track selectedChildPdfCvIds = [];
 
     _templateData = [];
-    _isGuest = false;
 
     // --- Modern SaaS Mode Getters ---
 
@@ -147,16 +143,9 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     }
 
     get allowedOutputModes() {
-        // Authenticated mobile path historically had Blob.toPdf base64 +
-        // blob-URL download issues (iOS Safari especially), so we restricted
-        // mobile to save-to-record only. The guest Experience Cloud path
-        // is different: it routes through DocGen_Guest_Render__e and
-        // downloads via a real shepherd URL link (no base64, no blob URL),
-        // which mobile browsers handle natively. Guests on community pages
-        // typically don't have save-to-record either, so blocking download
-        // would leave them with no output mode at all and a greyed-out
-        // generate button. Exempt guests from the mobile restriction.
-        if (this._isMobile && !this._isGuest) {
+        // Mobile Blob.toPdf has historical base64 + blob-URL download issues
+        // (iOS Safari especially), so we restrict mobile to save-to-record only.
+        if (this._isMobile) {
             return this.canSaveToRecord ? ['save'] : [];
         }
         // Combine PDFs (mergeOnly) and Document Packet are download-only.
@@ -289,18 +278,6 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     get mergeChildrenButtonLabel() {
         const count = this.selectedChildPdfCvIds.length;
         return count > 0 ? `Combine ${count} Files 📂✨` : 'Combine Files ✨';
-    }
-
-    @wire(isCurrentUserGuest)
-    wiredIsGuest({ data }) {
-        // Drives the platform-event render path when running on Experience Cloud
-        // public pages. The inline Blob.toPdf path can't fetch shepherd image URLs
-        // against the lightning subdomain that guests have no session against —
-        // routing through DocGen_Guest_Render__e moves the actual render to the
-        // Automated Process user, which does authenticate. See DocGenController.queueGuestRender.
-        if (data === true || data === false) {
-            this._isGuest = data;
-        }
     }
 
     @wire(getTemplatesForObject, { objectApiName: '$objectApiName', recordId: '$recordId' })
@@ -650,12 +627,6 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                         'PDF is being generated. It will appear on the record in a moment — refresh the page to see it.',
                         'success'
                     );
-                } else if (this._isGuest) {
-                    // Experience Cloud guest path: route through DocGen_Guest_Render__e
-                    // so the render runs as Automated Process (which can fetch shepherd
-                    // image URLs that guests can't authenticate to). LWC polls the
-                    // tracking job, then downloads the resulting CV from the site domain.
-                    await this._generateGuestPdf();
                 } else {
                     this.showToast('Info', 'Generating PDF...', 'info');
                     const result = await generatePdf({
@@ -704,80 +675,6 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             this.isLoading = false;
             this.loadingMessage = '';
         }
-    }
-
-    /**
-     * Guest-context PDF render path. Publishes a DocGen_Guest_Render__e platform
-     * event via DocGenController.queueGuestRender, polls the tracking job, then
-     * downloads the resulting ContentVersion via the site-domain shepherd URL
-     * (which the guest's browser session can fetch — unlike the lightning subdomain
-     * the inline Blob.toPdf path tries to resolve relative URLs against).
-     */
-    async _generateGuestPdf() {
-        this.showToast('Info', 'Generating PDF — running in the background...', 'info');
-        const jobId = await queueGuestRender({
-            templateId: this.selectedTemplateId,
-            recordId: this.recordId
-        });
-        // v1.90 — bumped from 60s to 180s. Scratch / sandbox orgs have shown
-        // tail-latency past 60s on simple Word→PDF renders; the previous 60s
-        // ceiling produced a confusing "spins forever then dies" UX when the
-        // queueable was still in flight. 3 min covers the worst observed case
-        // while still bailing out if the queueable truly stalls.
-        const start = Date.now();
-        const TIMEOUT_MS = 180000;
-        const POLL_INTERVAL_MS = 2000;
-        let result = null;
-        while (Date.now() - start < TIMEOUT_MS) {
-            await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-            // eslint-disable-next-line no-await-in-loop
-            result = await getGuestRenderStatus({ jobId });
-            if (!result) continue;
-            if (result.status === 'Completed' || result.status === 'Failed' || result.status === 'NotFound') {
-                break;
-            }
-        }
-        if (!result || result.status !== 'Completed') {
-            const reason = result && result.errorMessage ? result.errorMessage : result ? result.status : 'timeout';
-            throw new Error('Guest render did not complete: ' + reason);
-        }
-        if (!result.cvId) {
-            throw new Error('Guest render completed but no result file was returned.');
-        }
-        // Download via the site-domain shepherd URL — guest's browser is authenticated
-        // against the site, not the lightning subdomain, so this fetch succeeds.
-        //
-        // v1.90 — derive the prefix from window.location.pathname only. The shepherd
-        // endpoint lives at the BARE host `/sfc/servlet.shepherd/...`. For Aura
-        // communities at `/<sitename>/s/<route>`, Salesforce maps the site's URL
-        // namespace so `/<sitename>/sfc/...` is also valid and required (the bare
-        // path returns a JSON redirect). For LWR sites the shepherd endpoint stays
-        // at the bare host regardless of the Site's UrlPathPrefix.
-        //
-        // The earlier Apex fallback (Site.getPathPrefix) returned the Site's
-        // configured prefix (e.g. `/s`) which is correct for page routes but wrong
-        // for shepherd — prepending it produced URLs like `/s/sfc/...` that the
-        // LWR site returns as 404 HTML, which the browser saved as the file.
-        const pathname = window.location.pathname || '';
-        let sitePrefix = '';
-        const auraMatch = pathname.match(/^(.+?)\/s(?:\/|$)/);
-        if (auraMatch && auraMatch[1] && !auraMatch[1].startsWith('/lightning')) {
-            sitePrefix = auraMatch[1];
-        }
-        const url = sitePrefix + '/sfc/servlet.shepherd/version/download/' + result.cvId;
-        const link = document.createElement('a');
-        link.href = url;
-        // v1.90 — explicit download filename. With download="" + target="_blank",
-        // some browsers drop the server's Content-Disposition and fall back to
-        // the URL's last path segment (the CV Id), so the file saves as
-        // "068xxx" with no extension or with an arbitrary .txt appended.
-        // Server returns docTitle = "<Title>.<ext>" derived from the CV.
-        link.download = result.docTitle || 'Document.pdf';
-        link.target = '_blank';
-        link.rel = 'noopener';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
     }
 
     /**
