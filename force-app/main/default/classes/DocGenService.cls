@@ -2551,10 +2551,30 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return mr.documentXml == null ? '' : mr.documentXml;
         }
 
-        Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
-        setNumberingXml(mr);
-        applyWatermarkOverride(templateId);
-        return DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
+        // Mirror renderPdf's renderer setup. Without these, the Print-Ready
+        // Packet (mergeOnly) path renders tables with no borders/padding when
+        // the template uses a named <w:tblStyle> (resolveTableStyleBorder
+        // returns empty if stylesXml is null), and ignores the template's
+        // orientation/size/margins. Cleared in finally so per-record state
+        // doesn't leak across the bulk loop.
+        DocGenHtmlRenderer.orientationOverride = mr.pageOrientation;
+        DocGenHtmlRenderer.pageSizeOverride = mr.pageSize;
+        DocGenHtmlRenderer.marginsOverride = mr.pageMargins;
+        DocGenHtmlRenderer.customMarginsOverride = mr.customMargins;
+        try {
+            Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
+            if (mr.processedXmlEntries != null && mr.processedXmlEntries.containsKey('word/styles.xml')) {
+                DocGenHtmlRenderer.stylesXml = mr.processedXmlEntries.get('word/styles.xml');
+            }
+            setNumberingXml(mr);
+            applyWatermarkOverride(templateId);
+            return DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
+        } finally {
+            DocGenHtmlRenderer.orientationOverride = null;
+            DocGenHtmlRenderer.pageSizeOverride = null;
+            DocGenHtmlRenderer.marginsOverride = null;
+            DocGenHtmlRenderer.customMarginsOverride = null;
+        }
     }
 
     /**
