@@ -159,8 +159,8 @@ public class DocGenChartRasterizer {
      *   bar    : 500 × max(80, buckets*(barHeight+barGap) + barGap)
      *            where barHeight=22, barGap=8 → n*30 + 8
      *   column : 500 × 280
-     *   pie    : 540 × 280
-     *   donut  : 540 × 280
+     *   pie    : 360 × 190
+     *   donut  : 360 × 190
      *   empty  : 500 × 80
      *
      * `width=N` and `height=N` options always win over the defaults — same
@@ -183,8 +183,12 @@ public class DocGenChartRasterizer {
             width = optInt(opts, 'width', 500);
             height = optInt(opts, 'height', 280);
         } else if (style == 'pie' || style == 'donut') {
-            width = optInt(opts, 'width', 540);
-            height = optInt(opts, 'height', 280);
+            // Smaller than bar/column because the downstream PNG encoder
+            // is the dominant cost at scale=2 and a 540×280 logical pie
+            // (=605k physical pixels) exceeds the 10s sync CPU budget on
+            // its own. See the comment in emitPie for full context.
+            width = optInt(opts, 'width', 360);
+            height = optInt(opts, 'height', 190);
         } else {
             // Unknown styles never reach here — emit() throws first. Defensive
             // fallback to bar dimensions so a future style added to KNOWN_STYLES
@@ -334,21 +338,34 @@ public class DocGenChartRasterizer {
     // =====================================================================
     // Pie / Donut — circular slices
     //
-    // Strategy: per-pixel test inside the bounding box of the circle. For
-    // each pixel within the outer radius (and outside the inner radius for
-    // donut), compute the polar angle and find which slice it belongs to.
-    // O(R^2) where R is the radius — for a 280px chart this is ~62k pixel
-    // tests, well within Apex CPU budget.
+    // Strategy: sector-based scanline fill. For each scanline y inside the
+    // outer disk we compute (a) the disk's x-range from the implicit-circle
+    // equation `dx² ≤ outerR² - dy²`, (b) the donut hole x-range from the
+    // inner-circle equation, and (c) the x-intersections of each slice's
+    // boundary rays via the closed-form parametric formula
+    // `x = cx - dy · tan θ`. Sorting those x-values along the scanline gives
+    // us a small set of horizontal spans (≤ 2·nSlices+4 per row), each
+    // belonging to exactly one slice. The spans are filled in tight inline
+    // loops — no atan2 or per-pixel angle test ever runs.
+    //
+    // Per-scanline cost is O(nSlices²) for the insertion sort plus O(R) for
+    // the actual pixel writes. At a 360×190 logical chart with scale=2
+    // (720×380 physical) this is roughly 380 scanlines × (~30 ops + ~200
+    // pixel writes) = comfortably under the 10s sync Apex CPU budget where
+    // the previous per-pixel atan2 path tipped over even at scale=1.
     // =====================================================================
     private static Blob emitPie(List<Map<String, Object>> buckets, Map<String, String> opts, Boolean donut) {
-        // Pie/donut at 2x supersample blows the sync Apex CPU budget — every
-        // pixel runs atan2 + slice-index lookup, and 4x more pixels at scale=2
-        // tips us over 10s. Default to 1x for the arc render; a future
-        // sector-fill optimization (paint by slice instead of per-pixel angle
-        // test) would let us match bar/column at 2x.
-        Integer scale = optInt(opts, 'scale', 1);
-        Integer width = optInt(opts, 'width', 540) * scale;
-        Integer height = optInt(opts, 'height', 280) * scale;
+        Integer scale = optInt(opts, 'scale', 2);
+        // Pie/donut default logical dimensions sit below the bar/column
+        // defaults so that at scale=2 the total pixel count
+        // (~360 × 190 × 4 ≈ 274k) stays comfortably under the sync Apex CPU
+        // budget when the downstream PNG encoder iterates the pixel buffer
+        // for filter emission, adler-32, and CRC. The encoder cost scales
+        // linearly with pixel count and is the dominant term at scale=2 —
+        // empirically a 540×280 logical pie exceeds 10s on its own.
+        // Callers wanting larger pies can override via opts.width / .height.
+        Integer width = optInt(opts, 'width', 360) * scale;
+        Integer height = optInt(opts, 'height', 190) * scale;
         Canvas c = new Canvas(width, height, buildPalette(opts));
 
         Decimal total = 0;
@@ -387,58 +404,229 @@ public class DocGenChartRasterizer {
         }
         Integer innerR2 = innerR * innerR;
 
-        // Pre-compute slice end angles (in turns 0..1 starting at 12 o'clock).
-        // We represent the angle as a fraction of total to avoid trig in the
-        // inner loop — pixel angle = atan2(dy, dx); we compare against
-        // cumulative slice fractions converted to angle thresholds.
-        List<Decimal> sliceEndAngle = new List<Decimal>();
+        Integer nSlices = buckets.size();
+
+        // Slice boundary angles in radians, measured CLOCKWISE from 12 o'clock.
+        // sliceEndAngle[i] = end of slice i = start of slice (i+1). The
+        // start of slice 0 is implicitly 0 (12 o'clock).
+        //
+        // Screen coords: y grows DOWN. A ray at angle θ (clockwise from 12
+        // o'clock) has direction vector (sin θ, -cos θ).
+        List<Double> sliceEndAngle = new List<Double>();
+        List<Double> sinTheta = new List<Double>();
+        List<Double> cosTheta = new List<Double>();
+        Double TWO_PI = 2.0 * Math.PI;
         Decimal running = 0;
-        for (Map<String, Object> b : buckets) {
-            Decimal v = decimalOf(b.get('count'));
+        for (Integer i = 0; i < nSlices; i++) {
+            Decimal v = decimalOf(buckets[i].get('count'));
             if (v == null) {
                 v = 0;
             }
             running += v;
-            sliceEndAngle.add(running / total); // 0..1
+            Double theta = (Double) (running / total) * TWO_PI;
+            sliceEndAngle.add(theta);
+            sinTheta.add(Math.sin(theta));
+            cosTheta.add(Math.cos(theta));
         }
 
-        // 12 o'clock start, clockwise sweep — matches the SVG emitter.
-        Double TWO_PI = 2.0 * Math.PI;
-        Double START = -Math.PI / 2;
+        // Slice START angles (sin/cos) for the cross-product half-plane
+        // test used to classify a span midpoint to a slice. start[0] = 0.
+        List<Double> sinStart = new List<Double>();
+        List<Double> cosStart = new List<Double>();
+        sinStart.add(0.0);
+        cosStart.add(1.0);
+        for (Integer i = 1; i < nSlices; i++) {
+            sinStart.add(sinTheta[i - 1]);
+            cosStart.add(cosTheta[i - 1]);
+        }
 
-        for (Integer y = cy - outerR; y <= cy + outerR; y++) {
-            if (y < 0 || y >= height) {
+        // A slice with arc length > π requires inverted half-plane logic
+        // (a point is in the slice iff it is on the clockwise side of
+        // EITHER ray, not BOTH).
+        List<Boolean> sliceIsLarge = new List<Boolean>();
+        Double prev = 0.0;
+        for (Integer i = 0; i < nSlices; i++) {
+            sliceIsLarge.add((sliceEndAngle[i] - prev) > Math.PI);
+            prev = sliceEndAngle[i];
+        }
+
+        // Pre-resolve per-slice palette indices.
+        List<Integer> slicePalette = new List<Integer>();
+        for (Integer i = 0; i < nSlices; i++) {
+            slicePalette.add(paletteIndexForBucket(buckets[i], i, nSlices));
+        }
+
+        // Pre-compute tan(θ_end) for each slice boundary so the per-scanline
+        // intersection x = cx - dy · tan(θ) is a single multiply per ray.
+        // Rays with |cos θ| ≈ 0 (3 o'clock / 9 o'clock) only touch the
+        // y == cy scanline; flagged separately.
+        List<Double> tanTheta = new List<Double>();
+        List<Boolean> isHorizontal = new List<Boolean>();
+        for (Integer i = 0; i < nSlices; i++) {
+            Double cosT = cosTheta[i];
+            Double sinT = sinTheta[i];
+            if (Math.abs(cosT) < 0.000000001) {
+                tanTheta.add(0.0);
+                isHorizontal.add(true);
+            } else {
+                tanTheta.add(sinT / cosT);
+                isHorizontal.add(false);
+            }
+        }
+
+        Integer yMin = Math.max(0, cy - outerR);
+        Integer yMax = Math.min(height - 1, cy + outerR);
+        Integer canvasW = c.width;
+        List<Integer> px = c.pixels;
+
+        // Pre-allocate per-scanline scratch storage so the hot loop reuses
+        // the same backing List on every iteration instead of allocating.
+        // Each slice contributes up to 2 break-points (bx and bx+1) plus the
+        // two disk endpoints.
+        Integer maxBreaks = 2 * nSlices + 4;
+        List<Integer> breakXs = new List<Integer>();
+        for (Integer i = 0; i < maxBreaks; i++) {
+            breakXs.add(0);
+        }
+
+        for (Integer y = yMin; y <= yMax; y++) {
+            Integer dy = y - cy;
+            Integer dy2 = dy * dy;
+            Integer outerSpan2 = outerR2 - dy2;
+            if (outerSpan2 < 0) {
                 continue;
             }
-            for (Integer x = cx - outerR; x <= cx + outerR; x++) {
-                if (x < 0 || x >= width) {
-                    continue;
+            Integer dxOuter = (Integer) Math.sqrt((Double) outerSpan2);
+            Integer xLeft = Math.max(0, cx - dxOuter);
+            Integer xRight = Math.min(width - 1, cx + dxOuter);
+            if (xLeft > xRight) {
+                continue;
+            }
+
+            // Donut hole on this scanline. holeMax = -1 means "no hole".
+            Integer holeMax = -1;
+            if (donut && dy2 < innerR2) {
+                Integer innerSpan2 = innerR2 - dy2;
+                holeMax = (Integer) Math.sqrt((Double) innerSpan2);
+            }
+
+            Integer rowBase = y * canvasW;
+            Double ddy = (Double) dy;
+
+            // Analytical x-intersection of each slice boundary ray with this
+            // scanline. A ray (sin θ, -cos θ) hits y when
+            //   t = -dy / cos θ ≥ 0
+            // i.e. dy and cos θ have opposite signs (or one is 0). The
+            // intersection x is x = cx + t · sin θ = cx - dy · tan θ.
+            Integer breakN = 0;
+            breakXs[breakN++] = xLeft;
+            breakXs[breakN++] = xRight + 1;
+            for (Integer i = 0; i < nSlices; i++) {
+                Double cosT = cosTheta[i];
+                Integer bx;
+                if (isHorizontal[i]) {
+                    if (dy != 0) {
+                        continue;
+                    }
+                    bx = sinTheta[i] > 0 ? xRight : xLeft;
+                } else {
+                    // Skip rays whose t < 0 (don't reach this scanline).
+                    if ((dy > 0 && cosT > 0) || (dy < 0 && cosT < 0)) {
+                        continue;
+                    }
+                    Double xExact = (Double) cx - ddy * tanTheta[i];
+                    bx = (Integer) Math.round(xExact);
                 }
-                Integer dx = x - cx;
-                Integer dy = y - cy;
-                Integer d2 = dx * dx + dy * dy;
-                if (d2 > outerR2 || d2 < innerR2) {
-                    continue;
+                if (bx < xLeft) {
+                    bx = xLeft;
                 }
-                // angle in 0..1 turns, starting at 12 o'clock clockwise
-                Double a = Math.atan2((Double) dy, (Double) dx) - START;
-                if (a < 0) {
-                    a += TWO_PI;
+                if (bx > xRight) {
+                    bx = xRight;
                 }
-                if (a >= TWO_PI) {
-                    a -= TWO_PI;
+                breakXs[breakN++] = bx;
+                // Add bx+1 so both sides of the boundary form distinct spans.
+                if (bx + 1 <= xRight) {
+                    breakXs[breakN++] = bx + 1;
                 }
-                Decimal turn = (Decimal) (a / TWO_PI);
-                // Find which slice this turn falls into.
-                Integer sliceIdx = sliceEndAngle.size() - 1;
-                for (Integer s = 0; s < sliceEndAngle.size(); s++) {
-                    if (turn <= sliceEndAngle[s]) {
-                        sliceIdx = s;
-                        break;
+            }
+
+            // Insertion sort the active prefix. n ≤ ~14 entries in practice;
+            // insertion sort beats List.sort() (Comparable boxing) at this
+            // size and avoids the allocation List.sort() does internally.
+            for (Integer i = 1; i < breakN; i++) {
+                Integer v = breakXs[i];
+                Integer j = i - 1;
+                while (j >= 0 && breakXs[j] > v) {
+                    breakXs[j + 1] = breakXs[j];
+                    j--;
+                }
+                breakXs[j + 1] = v;
+            }
+
+            // Walk the sorted breakpoints in pairs, classify each span by
+            // its midpoint, and fill.
+            Integer prevBp = -1;
+            Integer holeLeftX = holeMax >= 0 ? (cx - holeMax) : -2;
+            Integer holeRightX = holeMax >= 0 ? (cx + holeMax) : -2;
+            for (Integer k = 0; k < breakN; k++) {
+                Integer bp = breakXs[k];
+                if (bp == prevBp) {
+                    continue; // dedup
+                }
+                if (prevBp >= 0 && bp > prevBp) {
+                    Integer sa = prevBp;
+                    Integer sb = bp - 1; // inclusive right end of span
+                    if (sa <= xRight && sb >= xLeft) {
+                        if (sa < xLeft) {
+                            sa = xLeft;
+                        }
+                        if (sb > xRight) {
+                            sb = xRight;
+                        }
+                        Boolean spanInHole = (holeMax >= 0) && (sa >= holeLeftX) && (sb <= holeRightX);
+                        if (!spanInHole) {
+                            Integer mid = (sa + sb) / 2;
+                            Integer mdx = mid - cx;
+                            Integer sliceIdx = locateSlice(
+                                (Double) mdx,
+                                ddy,
+                                nSlices,
+                                sinStart,
+                                cosStart,
+                                sinTheta,
+                                cosTheta,
+                                sliceIsLarge
+                            );
+                            Integer color = slicePalette[sliceIdx];
+                            if (holeMax < 0) {
+                                for (Integer xp = sa; xp <= sb; xp++) {
+                                    px[rowBase + xp] = color;
+                                }
+                            } else {
+                                // Span may straddle the donut hole — split fill.
+                                if (sb < holeLeftX || sa > holeRightX) {
+                                    for (Integer xp = sa; xp <= sb; xp++) {
+                                        px[rowBase + xp] = color;
+                                    }
+                                } else {
+                                    if (sa < holeLeftX) {
+                                        Integer leftEnd = Math.min(sb, holeLeftX - 1);
+                                        for (Integer xp = sa; xp <= leftEnd; xp++) {
+                                            px[rowBase + xp] = color;
+                                        }
+                                    }
+                                    if (sb > holeRightX) {
+                                        Integer rightStart = Math.max(sa, holeRightX + 1);
+                                        for (Integer xp = rightStart; xp <= sb; xp++) {
+                                            px[rowBase + xp] = color;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                Integer paletteIdx = paletteIndexForBucket(buckets[sliceIdx], sliceIdx, buckets.size());
-                c.setPixel(x, y, paletteIdx);
+                prevBp = bp;
             }
         }
 
@@ -469,6 +657,48 @@ public class DocGenChartRasterizer {
         }
 
         return c.toPng();
+    }
+
+    /**
+     * Classify a point (ddx, ddy) — offset from pie center — into one of
+     * the slices using the cross-product half-plane test. No atan2.
+     *
+     * A ray at angle θ (clockwise from 12 o'clock, screen coords with y
+     * growing down) has direction r_θ = (sin θ, -cos θ). The 2D cross of
+     * r_θ with point P = (dx, dy) is sin(θ)·dy + cos(θ)·dx; positive means
+     * P sits clockwise of the ray, negative counter-clockwise.
+     *
+     * A slice spans [θ_start, θ_end] clockwise. For arc length ≤ π:
+     *   in-slice iff cross_S ≥ 0 AND cross_E ≤ 0
+     * For arc length > π (slice covers more than half the pie) the test
+     * inverts to OR — equivalent to "NOT in the small complement slice".
+     */
+    private static Integer locateSlice(
+        Double ddx,
+        Double ddy,
+        Integer nSlices,
+        List<Double> sinStart,
+        List<Double> cosStart,
+        List<Double> sinEnd,
+        List<Double> cosEnd,
+        List<Boolean> sliceIsLarge
+    ) {
+        for (Integer i = 0; i < nSlices; i++) {
+            Double crossS = sinStart[i] * ddy + cosStart[i] * ddx;
+            Double crossE = sinEnd[i] * ddy + cosEnd[i] * ddx;
+            Boolean inSlice;
+            if (sliceIsLarge[i]) {
+                inSlice = (crossS >= 0) || (crossE <= 0);
+            } else {
+                inSlice = (crossS >= 0) && (crossE <= 0);
+            }
+            if (inSlice) {
+                return i;
+            }
+        }
+        // Numerical edge — pick the last slice. This shouldn't happen for
+        // points strictly inside the disk by construction.
+        return nSlices - 1;
     }
 
     // =====================================================================
