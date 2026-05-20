@@ -56,7 +56,7 @@ If your fix touches `processXml`, do not add `VersionData` to the PDF-path SOQL 
 ## Package info
 
 - Package: Portwood DocGen, Unlocked 2GP, namespace `portwoodglobal`
-- Current shipped version: **v1.92.0** (`04tVx000000S9I5IAK`)
+- Current shipped version: **v1.98.0** (`04tVx000000Si9NIAS`)
 - DevHub: `Portwood Global - Production` (dave@portwoodglobalsolutions.com)
 - Staging org for release validation: `portwood-staging` — must be created with `--no-namespace` so source-deploy lands in the default namespace and the e2e scripts' bare class/field references compile. Assign `DocGen_Admin` permset to the running user immediately after deploy or field-level security blocks the e2e scripts.
 - Dev scratch: `docgen-designer`
