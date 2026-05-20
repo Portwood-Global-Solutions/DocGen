@@ -1062,19 +1062,28 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         // body to PNGs (uploaded as transient CVs) before kicking off the
         // server-side merge. The merge sees the signature → CV Id map and
         // substitutes each chart tag with the existing image-tag path.
-        // try/finally guarantees CV cleanup even if generateDocumentParts
-        // throws. No-op for templates with no chart tags.
+        //
+        // Cleanup MUST run after buildDocx finishes — the server returns
+        // chart CV IDs in `imageCvIdMap`, and the client-side ZIP assembly
+        // (below) fetches each CV's bytes via getContentVersionBase64. If
+        // we delete the CVs in a tight try/finally around
+        // generateDocumentParts, those fetches return empty and the DOCX
+        // ships with no chart images. Hold the chartContext across the
+        // whole flow and reap only after the document is fully assembled.
         const chartContext = await this._prepareCharts();
-        let parts;
         try {
-            parts = await generateDocumentParts({
-                templateId: this.selectedTemplateId,
-                recordId: this.recordId,
-                chartCvMap: chartContext.map
-            });
+            await this._generateOfficeClientSideInner(saveToRecord, extension, mimeType, chartContext);
         } finally {
             await this._cleanupCharts(chartContext.cvIds);
         }
+    }
+
+    async _generateOfficeClientSideInner(saveToRecord, extension, mimeType, chartContext) {
+        const parts = await generateDocumentParts({
+            templateId: this.selectedTemplateId,
+            recordId: this.recordId,
+            chartCvMap: chartContext.map
+        });
         if (!parts || !parts.allXmlParts) {
             throw new Error('Document generation returned empty result.');
         }

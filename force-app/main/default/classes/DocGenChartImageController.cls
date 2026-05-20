@@ -29,6 +29,12 @@ public with sharing class DocGenChartImageController {
     private static final String CHART_OPEN_PREFIX = '{Chart:';
     private static final String CV_TITLE_PREFIX = 'docgen_chart_';
 
+    // Styles the SVG serializer can emit natively. Cross-tab styles
+    // (pivot/clustered/stacked) currently flow through the HTML CSS-bar path
+    // for HTML output and degrade to plain `bar` SVG for Word until their
+    // PNG-via-CV emitters land in a follow-up commit.
+    private static final Set<String> SVG_STYLES = new Set<String>{ 'bar', 'column', 'pie', 'donut' };
+
     /**
      * Discovers top-level chart tags in the active Word template body, resolves
      * each tag's buckets against the source record, and emits an SVG fragment
@@ -316,15 +322,16 @@ public with sharing class DocGenChartImageController {
             tag.modifiersRaw
         );
         // The SVG serializer expects the style to be in the options map so its
-        // dispatch can route by it. v1 only emits `bar` SVGs — cross-tab
-        // styles stay on the HTML+CSS path for now.
+        // dispatch can route by it. Styles known to the emitter ship per
+        // follow-up commit; styles still served by the HTML+CSS path
+        // (pivot/clustered/stacked cross-tabs) fall back to `bar` here so a
+        // Word render still produces something visible rather than crashing.
         Map<String, String> svgOptions = new Map<String, String>();
         for (String k : tag.options.keySet()) {
             svgOptions.put(k, tag.options.get(k));
         }
-        // Force bar for v1 — pivot/clustered/stacked SVG emitters land in
-        // follow-up commits on this branch.
-        svgOptions.put('style', 'bar');
+        String svgStyle = (tag.style != null && SVG_STYLES.contains(tag.style)) ? tag.style : 'bar';
+        svgOptions.put('style', svgStyle);
         String svg = DocGenSvgChartSerializer.emit(buckets, svgOptions);
 
         ChartImageRequest req = new ChartImageRequest();

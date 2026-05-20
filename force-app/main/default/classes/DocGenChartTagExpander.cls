@@ -35,8 +35,22 @@
  */
 public with sharing class DocGenChartTagExpander {
     private static final String OPEN_PREFIX = '{Chart:';
-    private static final Set<String> ALLOWED_STYLES = new Set<String>{ 'bar', 'pivot', 'clustered', 'stacked' };
+    private static final Set<String> ALLOWED_STYLES = new Set<String>{
+        'bar',
+        'column',
+        'pie',
+        'donut',
+        'pivot',
+        'clustered',
+        'stacked'
+    };
     private static final Set<String> CROSS_TAB_STYLES = new Set<String>{ 'pivot', 'clustered', 'stacked' };
+    // Styles renderable as inline SVG for HTML output (browser-rendered, not
+    // Blob.toPdf — Flying Saucer drops <svg>, but Word/PPT/Excel routes
+    // through PNG-via-CV anyway). Cross-tab styles stay on the CSS-bar path
+    // because their HTML rendering uses {#cols} loops that don't translate
+    // to a single inline SVG without losing template-author flexibility.
+    private static final Set<String> HTML_INLINE_SVG_STYLES = new Set<String>{ 'column', 'pie', 'donut' };
 
     /**
      * Legacy two-arg entry point. Routes to the chart-CV-aware overload with
