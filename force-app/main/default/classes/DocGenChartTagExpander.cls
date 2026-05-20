@@ -195,14 +195,27 @@ public with sharing class DocGenChartTagExpander {
         if (!isHtml) {
             // `signature` was precomputed above against the options map that
             // still included title — matches what the controller hashed.
-            String cvId = (chartCvMap == null) ? null : chartCvMap.get(signature);
-            if (String.isNotBlank(cvId)) {
+            //
+            // Map value shape: either "<cvId>" (legacy) or "<cvId>|WxH" — the
+            // runner LWC packs nominal SVG dimensions into the value so the
+            // image-tag scanner sizes the embedded PNG via {%FieldName:WxH}.
+            // Without WxH, Word renders the 4x-rasterized PNG at its full
+            // pixel size and the chart fills the page.
+            String entry = (chartCvMap == null) ? null : chartCvMap.get(signature);
+            if (String.isNotBlank(entry)) {
+                String cvId = entry;
+                String sizeSuffix = '';
+                Integer pipeAt = entry.indexOf('|');
+                if (pipeAt > 0) {
+                    cvId = entry.substring(0, pipeAt);
+                    sizeSuffix = ':' + entry.substring(pipeAt + 1);
+                }
                 if (data != null) {
                     // Synthetic key seeding mirrors how DocGenChartBucketResolver.
                     // preprocessInline injects _cb_N for bucket lists.
                     data.put('__dgchart_' + cvId, cvId);
                 }
-                return '{%__dgchart_' + cvId + '}';
+                return '{%__dgchart_' + cvId + sizeSuffix + '}';
             }
             String labelText = String.isNotBlank(title) ? title : (relationship + '.' + field);
             return '[Chart: ' + labelText + ']';

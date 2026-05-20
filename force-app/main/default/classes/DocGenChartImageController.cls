@@ -337,13 +337,42 @@ public with sharing class DocGenChartImageController {
         ChartImageRequest req = new ChartImageRequest();
         req.signature = tagSignature(tag.relName, tag.fieldApi, tag.style, tag.options);
         req.svgString = svg;
-        req.width = svgOptions.containsKey('width') ? safeInt(svgOptions.get('width'), 500) : 500;
-        // Match DocGenSvgChartSerializer.emitBar's height formula for non-titled,
-        // non-overridden charts: title(0) + (n * 24) + 6.
-        req.height = svgOptions.containsKey('height')
-            ? safeInt(svgOptions.get('height'), 280)
-            : Math.max(80, 6 + buckets.size() * 24);
+        // Parse the actual emitted dimensions out of the <svg ...> root so
+        // the LWC rasterizes at the right size AND the Word substitution gets
+        // accurate WxH for {%FieldName:WxH} sizing. Each style auto-computes
+        // its own height (bar grows by bucket count, pie/donut by legend
+        // length, etc.), so the SVG itself is the source of truth.
+        Integer parsedW = parseSvgDimension(svg, 'width');
+        Integer parsedH = parseSvgDimension(svg, 'height');
+        req.width = parsedW > 0 ? parsedW : 500;
+        req.height = parsedH > 0 ? parsedH : 200;
         return req;
+    }
+
+    /**
+     * Pulls `width="N"` or `height="N"` out of the SVG root element. The
+     * emitter always sets these as the first attributes, so a simple
+     * substring search is enough — no XML parsing needed.
+     */
+    private static Integer parseSvgDimension(String svg, String attr) {
+        if (svg == null) {
+            return 0;
+        }
+        String needle = attr + '="';
+        Integer at = svg.indexOf(needle);
+        if (at == -1 || at > 100) {
+            return 0;
+        }
+        Integer start = at + needle.length();
+        Integer endAt = svg.indexOf('"', start);
+        if (endAt == -1) {
+            return 0;
+        }
+        try {
+            return Integer.valueOf(svg.substring(start, endAt));
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private static Integer safeInt(String raw, Integer fallback) {

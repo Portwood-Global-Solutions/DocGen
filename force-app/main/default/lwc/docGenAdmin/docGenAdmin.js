@@ -13,6 +13,9 @@ import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVe
 import deleteTemplateVersion from '@salesforce/apex/DocGenController.deleteTemplateVersion';
 import processAndReturnDocument from '@salesforce/apex/DocGenController.processAndReturnDocument';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
+import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
+import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
+import deleteChartImages from '@salesforce/apex/DocGenChartImageController.deleteChartImages';
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import createSampleTemplates from '@salesforce/apex/DocGenController.createSampleTemplates';
 import exportTemplate from '@salesforce/apex/DocGenController.exportTemplate';
@@ -2492,11 +2495,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     'Generating PDF sample for ' + this.previewVersion.VersionNumber + '...',
                     'info'
                 );
-                const pdfResult = await generatePdf({
-                    templateId: this.editTemplateId,
-                    recordId: this.editTemplateTestRecordId,
-                    saveToRecord: false
-                });
+                const chartContext = await this._prepareChartsForAdmin(
+                    this.editTemplateId,
+                    this.editTemplateTestRecordId
+                );
+                let pdfResult;
+                try {
+                    pdfResult = await generatePdf({
+                        templateId: this.editTemplateId,
+                        recordId: this.editTemplateTestRecordId,
+                        saveToRecord: false,
+                        chartCvMap: chartContext.map
+                    });
+                } finally {
+                    await this._cleanupChartsForAdmin(chartContext.cvIds);
+                }
                 if (!pdfResult || !pdfResult.base64) {
                     throw new Error('PDF generation returned empty result.');
                 }
@@ -2665,11 +2678,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             } else {
                 // PDF generation — same path as bulk
                 this.showToast('Info', 'Generating PDF Sample...', 'info');
-                const pdfResult = await generatePdf({
-                    templateId: this.editTemplateId,
-                    recordId: this.editTemplateTestRecordId,
-                    saveToRecord: false
-                });
+                const chartContext = await this._prepareChartsForAdmin(
+                    this.editTemplateId,
+                    this.editTemplateTestRecordId
+                );
+                let pdfResult;
+                try {
+                    pdfResult = await generatePdf({
+                        templateId: this.editTemplateId,
+                        recordId: this.editTemplateTestRecordId,
+                        saveToRecord: false,
+                        chartCvMap: chartContext.map
+                    });
+                } finally {
+                    await this._cleanupChartsForAdmin(chartContext.cvIds);
+                }
 
                 if (!pdfResult || !pdfResult.base64) {
                     throw new Error('PDF generation returned empty result.');
@@ -3037,6 +3060,86 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.showToast('Clear failed', msg, 'error');
         } finally {
             this.isUploadingWatermark = false;
+        }
+    }
+
+    // ─── Chart pipeline helpers ────────────────────────────────────────────
+    // Inlined here (rather than imported from c/docGenUtils) for the same
+    // reason docGenRunner inlines them — cross-bundle export resolution can
+    // serve a stale module proxy after the util gains a new export.
+
+    _rasterizeSvgToPng(svgString, width, height, scale = 4) {
+        return new Promise((resolve, reject) => {
+            const blob = new Blob([svgString], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width * scale;
+                    canvas.height = height * scale;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    URL.revokeObjectURL(url);
+                    resolve(canvas.toDataURL('image/png').split(',')[1]);
+                } catch (err) {
+                    URL.revokeObjectURL(url);
+                    reject(err);
+                }
+            };
+            img.onerror = (err) => {
+                URL.revokeObjectURL(url);
+                reject(err instanceof Error ? err : new Error('SVG image load failed'));
+            };
+            img.src = url;
+        });
+    }
+
+    async _prepareChartsForAdmin(templateId, recordId) {
+        try {
+            const requests = await prepareChartImages({ templateId, recordId });
+            if (!Array.isArray(requests) || requests.length === 0) {
+                return { map: {}, cvIds: [] };
+            }
+            const map = {};
+            const cvIds = [];
+            for (const req of requests) {
+                try {
+                    // eslint-disable-next-line no-await-in-loop
+                    const pngBase64 = await this._rasterizeSvgToPng(req.svgString, req.width, req.height);
+                    // eslint-disable-next-line no-await-in-loop
+                    const cvId = await uploadChartImage({
+                        recordId,
+                        signature: req.signature,
+                        base64Png: pngBase64
+                    });
+                    if (cvId) {
+                        map[req.signature] = cvId + '|' + req.width + 'x' + req.height;
+                        cvIds.push(cvId);
+                    }
+                } catch (chartErr) {
+                    console.warn('DocGen admin: chart prep failed for signature ' + req.signature, chartErr);
+                }
+            }
+            return { map, cvIds };
+        } catch (e) {
+            console.warn('DocGen admin: prepareChartImages failed; charts will text-fallback', e);
+            return { map: {}, cvIds: [] };
+        }
+    }
+
+    async _cleanupChartsForAdmin(cvIds) {
+        if (!Array.isArray(cvIds) || cvIds.length === 0) {
+            return;
+        }
+        try {
+            await deleteChartImages({ cvIds });
+        } catch (cleanupErr) {
+            console.warn('DocGen admin: chart CV cleanup failed', cleanupErr);
         }
     }
 }

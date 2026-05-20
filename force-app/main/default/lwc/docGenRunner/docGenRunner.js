@@ -800,7 +800,12 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                         base64Png: pngBase64
                     });
                     if (cvId) {
-                        map[req.signature] = cvId;
+                        // Pack dimensions into the map value so the chart-tag
+                        // expander can emit {%__dgchart_<cvId>:WxH}, constraining
+                        // the embedded image to its nominal SVG size in Word.
+                        // Otherwise Word renders the 4x-rasterized PNG at full
+                        // pixel size and the chart fills the whole page.
+                        map[req.signature] = cvId + '|' + req.width + 'x' + req.height;
                         cvIds.push(cvId);
                     }
                 } catch (chartErr) {
