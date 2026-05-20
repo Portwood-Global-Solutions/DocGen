@@ -1688,11 +1688,27 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             const partIds = fragResult.partPdfCvIds || [];
 
             if (finalCvId) {
-                // Single PDF — already saved to record
+                // Single PDF. The batch always saves it to the record — but the
+                // runner forced outputMode='download' at the routing decision,
+                // so we ALSO need to trigger a browser download here. Fetch
+                // the bytes and hand them to downloadBase64. Leave the record
+                // CV in place so refreshing-the-page-and-coming-back finds the
+                // result; ~zero harm in having both copies for the user.
                 this.progressPercent = 100;
+                try {
+                    const finalB64 = await getContentVersionBase64({ contentVersionId: finalCvId });
+                    if (finalB64) {
+                        const docTitle = (fragResult && fragResult.docTitle) || 'Document';
+                        this.downloadBase64(finalB64, docTitle + '.pdf', 'application/pdf');
+                    }
+                } catch (dlErr) {
+                    // Download failure is non-fatal — the PDF is still on the
+                    // record's Files tab so the user can retrieve it manually.
+                    console.warn('DocGen: giant PDF download fetch failed', dlErr);
+                }
                 this.showToast(
                     'Success',
-                    `PDF saved to record — ${totalRecords.toLocaleString()} ${giantRelationship} rows.`,
+                    `PDF downloaded and saved to record — ${totalRecords.toLocaleString()} ${giantRelationship} rows.`,
                     'success'
                 );
             } else if (partIds.length > 0) {
