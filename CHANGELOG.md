@@ -1,5 +1,105 @@
 # Changelog
 
+## v1.99.0 — Chart engine: 9 styles, pure-Apex PNG, one pipeline (#117)
+
+The chart engine ships. Nine styles — **bar, column, pie, donut, pivot, stacked, clustered, line, area** — rendered as real PNG images that flow through every DocGen output format. Authors write one tag (`{Chart:Survey_Responses__r:Selected_Answer__c:line:groupBy=Department__c&colSort=Sales,Eng,Ops}`) and get the same chart in HTML→PDF (via Flying Saucer), Word DOCX, Word→PDF, and PowerPoint PPTX. Zero external callouts — the rasterizer is 100% native Apex including a hand-coded PNG encoder and an anti-aliased Arial font baked into Apex constants. The same chart engine drives server-side Flow / batch / Queueable contexts via `prepareChartImagesServerSide` — no browser canvas required for bulk runs.
+
+Adding a new chart style now requires touching **one place**: `DocGenChartRasterizer`. Every output path picks it up automatically. The legacy "Word doesn't do pivot/stacked/clustered" limitation from v1.91 is no longer in effect.
+
+### One-line tag, nine styles
+
+```
+{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=Commute Mode Distribution}
+{Chart:Survey_Responses__r:Selected_Answer__c:pie:colors=#1e40af,#b91c1c,#16a34a}
+{Chart:Survey_Responses__r:Selected_Answer__c:stacked:groupBy=Location__c&colSort=Marina,Bayshore}
+{Chart:Survey_Responses__r:Selected_Answer__c:line:groupBy=Location__c&colSort=Marina,Bayshore}
+```
+
+| Style       | Visual                                                              | Cross-tab | Use case                                      |
+| ----------- | ------------------------------------------------------------------- | --------- | --------------------------------------------- |
+| `bar`       | Horizontal bars, label + count + percent                            | no        | One dimension, long labels                    |
+| `column`    | Vertical bars                                                       | no        | One dimension, short labels                   |
+| `pie`       | Pie + right-side legend                                             | no        | Share-of-total, ≤8 slices                     |
+| `donut`     | Pie with center hole                                                | no        | Same as pie, lighter visual                   |
+| `pivot`     | Cross-tab table (rows × cols, Total column)                         | required  | Numeric matrix readout                        |
+| `stacked`   | Horizontal stacked bar segmented by `groupBy`                       | required  | "How does each row split across dimension 2?" |
+| `clustered` | Vertical clustered bars, one mini-bar per col                       | required  | Side-by-side comparison                       |
+| `line`      | Polyline through (bucket index, count), multi-series when cross-tab | optional  | Trend / ordering matters                      |
+| `area`      | Line + semi-transparent fill below each series                      | optional  | Trend + accumulated volume                    |
+
+Ten composable modifiers: `title`, `width`, `height`, `where`, `groupBy`, `colSort`, `colors`, `split`, `scale`, `htmlRender`. Identifier validation against `Schema.SObjectType.fields.getMap()` and `ChildRelationship`; `where=` fragments sanitized through the same keyword blocklist that protects Query Builder. SOQL injection is structurally impossible.
+
+### Pure-Apex PNG rasterization (zero external callouts)
+
+Constraint from day one: **no Heroku, no Cloudflare Worker, no Lambda, no external HTTP**. The package ships as a 2GP managed install — anything that depends on a separate service is operationally a non-starter for AppExchange security review and managed-package customers.
+
+- **`DocGenPngEncoder`** — pure-Apex PNG byte writer. Extracts DEFLATE-compressed bytes from a single-entry `Compression.ZipWriter` ZIP via central-directory parsing, wraps the result in zlib (`78 9C` header + DEFLATE payload + Adler-32 trailer), and packages PNG chunks with CRC-32. ~310 lines, no `Http.send` anywhere.
+- **`DocGenChartRasterizer`** — ~1700-line pixel renderer. 8-bit indexed color, a `Canvas` inner class for primitives (`setPixel`, `fillRect`, `drawChar`, `drawText`, `textWidth`, `toPng`), a 16-shade text gray ramp for AA font glyphs, sector-based scanline pie/donut fill (analytical x-intersections — no `atan2` per pixel), Bresenham polylines for line/area with optional dot-pattern fill (indexed color has no alpha — checkered pattern stands in).
+- **`DocGenChartFont`** — pre-rendered Arial-style font as Apex constants. Each glyph is an 8×13 cell with 4-bit grayscale per pixel; generated offline from a real Arial.ttf via Pillow at 4× supersample + LANCZOS downsample + 16-shade quantize (`tools/generate-aa-font.py`). Per-glyph proportional advances baked in for tight Arial spacing.
+
+CPU budget for 8-chart documents fits comfortably inside the 10-second sync Apex limit. Pie/donut default to scale=2 supersample for free anti-aliasing on arc edges when Word/PDF downsample to the logical size; bar/column/stacked/clustered/line/area default to scale=1 (the rectilinear shapes don't need the curve-AA boost and scale=2 at default dimensions would exceed the budget).
+
+### One pipeline for HTML, Word, PowerPoint
+
+| Template Type | Output           | What gets embedded                                         | Engine path                                                              |
+| ------------- | ---------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------- |
+| HTML          | Browser / PDF    | `<img src="/sfc/servlet.shepherd/version/download/CV_ID">` | Flying Saucer (`Blob.toPdf`) fetches the CV server-side; browser too     |
+| Word          | DOCX             | `<w:drawing>` referencing PNG in `word/media/`             | Client-side ZIP assembly fetches CV bytes via `getContentVersionBase64`  |
+| Word          | PDF              | Same DOCX assembly → `DocGenHtmlRenderer` → `Blob.toPdf`   | Word → HTML → PDF chain                                                  |
+| PowerPoint    | PPTX             | `<p:pic>` referencing PNG in `ppt/media/`                  | Server-side OOXML embed via two-pass `<!--DGPIC                          | ...-->` comment marker |
+| Flow / batch  | any of the above | PNG via `prepareChartImagesServerSide` (no browser canvas) | Bucket resolver SOQL aggregate → rasterizer → CV → standard substitution |
+
+The `DocGenChartTagExpander` runs as a preprocessing pass inside `DocGenService.processXml`. For each tag, it computes a stable SHA-256 signature (16 hex chars of `rel:field:style:sortedOptions`), looks up the signature in `chartCvMap`, and emits format-appropriate substitution: `<img src="/sfc/...">` for HTML, `{%__dgchart_<cvId>:WxH}` synthetic image tag for Word/PPTX. The synthetic-key + `__dgchart_<cvId> → cvId` data-map seeding mirrors how `DocGenChartBucketResolver.preprocessInline` already injects `_cb_N` keys for bucket lists — zero changes required to the existing image substitution path.
+
+### Author-friendly `UserGuide` §7.6 — paste-into-an-LLM authoring prompt
+
+Eleven sub-sections (~315 lines) covering: tag syntax + all 9 styles with worked examples, the complete modifier reference, the output-format matrix, an LLM authoring prompt, reference templates, Query_Config resolution paths, security model, governor budget, hand-authored `{#ChartBucket}` for custom layouts, CSS 2.1 reminders, and the v1.92 Word parity note.
+
+§7.6.3 is the standout: a copy-paste prompt for Claude/GPT/Gemini with one data-shape substitution. An LLM fed the user guide can produce a working DocGen chart template without any other context.
+
+Reference templates shipped:
+
+- `docs/ChartEngineShowcase.html` — all 8 chart styles against Commute Survey Demo, one chart per page
+- `docs/ChartEngineShowcase.docx` — same template in Word format
+
+### Verified end-to-end at 30,000 rows
+
+Same template — `Survey_Responses__r:Selected_Answer__c:line:groupBy=Location__c` — was rendered against:
+
+- **`a0Bcb00000ArR7aEAF`** (Commute Survey Demo, 425 responses) — sub-second PDF, 8 distinct chart styles
+- **`a0Bcb00000ArZDGEA3`** (DocGen Chart Demo 30K Commute, 30,000 responses) — same template, same sub-second PDF, line chart's peak Y-axis tick `10,290` matches the actual Marina/Drive-Alone count
+
+The 30K case works because the SOQL-aggregate fallback (resolver path 2) is constant-cost regardless of row count — the chart resolver issues one `GROUP BY` query per chart, never loading the 30K rows into Apex heap. The author follows the documented pattern: omit the chart's target relationship from `Query_Config__c` so the retriever doesn't eager-load it. UserGuide §7.6.5 documents this with a worked example.
+
+### Permset audit rolled into this release
+
+The package version build initially failed on `DocGenChartImageControllerTest` with `WITH USER_MODE` SOQL queries throwing QueryException in the build's test context. Triaged the failure to a misleading permset comment that read "FLS auto-granted" for required fields — true for DML, false for `WITH USER_MODE` SOQL. Confirmed the rest of the codebase (`DocGenController` and the now-fixed `DocGenChartImageController`) use `WITH SYSTEM_MODE` for template-metadata queries on these required fields, the documented workaround since Salesforce blocks explicit `<fieldPermissions>` entries on required fields ("You cannot deploy to a required field").
+
+Ran a full permset × custom-field audit across all 4 DocGen permsets (`DocGen_Admin`, `DocGen_User`, `DocGen_Guest_Runner`, `DocGen_Guest_Signature`) and all 6 DocGen objects:
+
+- **One real gap fixed** — `DocGen_Admin × DocGen_Signer__c.Reminder_Sent_At__c` now granted (alphabetical order between `PIN_Verified_At__c` and `Role_Name__c`).
+- **Misleading "FLS auto-granted" comments replaced** with the accurate explanation in both `DocGen_Admin` and `DocGen_User` so future maintainers don't re-litigate this.
+- **All remaining "gaps" verified intentional** — master-detail auto-grants (`Template__c` on Template_Version/Job/Saved_Query, `Signature_Request__c` on Signer/Audit) or deliberate security boundaries (`DocGen_User × Signer.PIN_Hash__c / Secure_Token__c / Signature_Data__c`, `DocGen_Guest_Signature × Signer.Reminder_Sent_At__c`).
+
+### New classes / files
+
+- `DocGenChartTagExpander.cls` + test — author-facing `{Chart:...}` tag parser and expansion engine (HTML branch, Word/PPTX branch, error-block branch)
+- `DocGenChartBucketResolver.cls` + test — 4-path bucket aggregation (in-memory, SOQL fallback, parent-level, giant-query parent)
+- `DocGenChartImageController.cls` + test — `@AuraEnabled` bridge for LWC chart prep + the new `prepareChartImagesServerSide` for non-LWC contexts (Flow, batch, Queueable, Apex tests)
+- `DocGenSvgChartSerializer.cls` — SVG emitter, also used by the LWC for browser-canvas rasterization
+- `DocGenChartRasterizer.cls` + test — pure-Apex PNG rasterizer, 91% test coverage
+- `DocGenPngEncoder.cls` — `Compression.ZipWriter` DEFLATE-extraction PNG encoder
+- `DocGenChartFont.cls` — pre-rendered AA Arial glyph table
+- `docs/ChartEngineShowcase.html` + `docs/ChartEngineShowcase.docx` — reference templates
+- `tools/generate-aa-font.py` — offline font generator (not deployed; tooling only)
+
+### Tests
+
+- **E2E suite: 11 scripts, 224 / 224 PASS** on `portwood-staging` (e2e-01 42, e2e-02 10, e2e-03 16, e2e-04 15, e2e-05 13, e2e-06 23, e2e-07-syntax1 35, syntax2 31, syntax3 17, syntax4 10, e2e-08 12).
+- **Apex local tests: 1435 methods, 100% pass, org-wide coverage 75%** (at threshold). Chart class coverage: `DocGenChartRasterizer` 91%, `DocGenChartTagExpander` 95%, `DocGenChartImageController` 88%, `DocGenChartBucketResolver` 89%, `DocGenChartFont` 99%.
+- **Prettier**: clean. **Code Analyzer** (Security + AppExchange): **0 High**, 38 Moderate — all `pmd:ProtectSensitiveData` false-positives on signature-domain field metadata (within the documented ~30–41 baseline).
+- **Visual verification** — all 8 chart styles rendered against both the 425-row Commute Survey Demo and the 30,000-row Commute Demo. Line chart peak Y matches the underlying SOQL aggregate.
+
 ## v1.97.0 — Version-pinned render config, multi-hop parents, authored widths, sibling-section paragraphs
 
 Six things ride this release: render-time **version snapshots** so editing a template no longer rewrites how prior versions render; **multi-hop parent traversal** in the visual builder (`Account.Parent.Parent.Owner.Name`); **authored table and image widths** respected in PDF output (no more silent 100% override); **deduped headers/footers** when a docx has multiple sections referencing the same default part; the **table column-grid alignment** fix (#104, formerly the sole v1.97 scope); and a **sibling-section paragraph bug** that dropped everything after the first `{/Field}` when multiple section tags shared one bulleted line (Ben's checkbox template).
