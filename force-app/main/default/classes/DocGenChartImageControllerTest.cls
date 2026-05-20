@@ -372,6 +372,202 @@ private class DocGenChartImageControllerTest {
         System.assertEquals(200, reqs[0].height, 'Height modifier should override default.');
     }
 
+    // -------------------------------------------------------------------------
+    // prepareChartImagesServerSide — pure-Apex PNG-via-CV variant. Same scan
+    // and parse as prepareChartImages, but rasterizes via DocGenChartRasterizer
+    // and uploads transient CVs instead of returning SVG strings. End-to-end
+    // happy path against a real bucket-bearing record is exercised by the
+    // manual checklist / e2e scripts; this asserts the scaffold + map shape.
+    // -------------------------------------------------------------------------
+
+    @IsTest
+    static void prepareChartImagesServerSide_nullArgs_throws() {
+        Boolean caught = false;
+        try {
+            DocGenChartImageController.prepareChartImagesServerSide(null, null);
+        } catch (AuraHandledException e) {
+            caught = true;
+        }
+        System.assert(caught, 'Null inputs must throw.');
+    }
+
+    @IsTest
+    static void prepareChartImagesServerSide_nonWordTemplate_returnsEmpty() {
+        Account acc = new Account(Name = 'Chart Pipeline SS HTML');
+        insert acc;
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Chart Pipeline SS HTML Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML'
+        );
+        insert tpl;
+        Map<String, String> out = DocGenChartImageController.prepareChartImagesServerSide(tpl.Id, acc.Id);
+        System.assertNotEquals(null, out, 'Should return empty map, not null.');
+        System.assertEquals(0, out.size(), 'HTML templates produce no chart CVs.');
+    }
+
+    @IsTest
+    static void prepareChartImagesServerSide_noActiveVersion_returnsEmpty() {
+        Account acc = new Account(Name = 'Chart Pipeline SS NoVer');
+        insert acc;
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Chart Pipeline SS NoVer Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word'
+        );
+        insert tpl;
+        Map<String, String> out = DocGenChartImageController.prepareChartImagesServerSide(tpl.Id, acc.Id);
+        System.assertEquals(0, out.size());
+    }
+
+    @IsTest
+    static void prepareChartImagesServerSide_wordTemplateWithChartTag_emitsCvMap() {
+        // Same skeleton as prepareChartImages_wordTemplateWithChartTag_emitsRequest
+        // but exercises the server-side path: bucket resolution → rasterizer →
+        // transient CV upload → map of signature -> "cvId|WxH". Buckets resolve
+        // to empty (no preloaded child data) so the rasterizer emits its empty
+        // placeholder; the assertion is that the wiring runs end-to-end.
+        Account acc = new Account(Name = 'Chart Pipeline SS Word');
+        insert acc;
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Chart Pipeline SS Word Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Query_Config__c = 'Name'
+        );
+        insert tpl;
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
+        insert ver;
+        String docXml =
+            '<?xml version="1.0" encoding="UTF-8"?>' +
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body>' +
+            '<w:p><w:r><w:t>{Chart:Survey_Responses__r:A__c:bar:title=SS}</w:t></w:r></w:p>' +
+            '</w:body></w:document>';
+        ContentVersion xmlCv = new ContentVersion(
+            Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
+            PathOnClient = 'document.xml',
+            VersionData = Blob.valueOf(docXml)
+        );
+        insert xmlCv;
+
+        Test.startTest();
+        Map<String, String> out = DocGenChartImageController.prepareChartImagesServerSide(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, out);
+        System.assertEquals(1, out.size(), 'One top-level chart tag → one CV map entry.');
+        String sig = new List<String>(out.keySet())[0];
+        System.assertEquals(16, sig.length(), 'Signature key is 16 hex chars.');
+        String value = out.get(sig);
+        System.assert(value.contains('|'), 'Map value must be in "cvId|WxH" format.');
+        List<String> parts = value.split('\\|');
+        System.assertEquals(2, parts.size(), 'Value should split into cvId and WxH.');
+        System.assert(parts[1].contains('x'), 'Dimensions must be in WxH form.');
+        Id cvId = parts[0];
+        // Verify the uploaded CV exists and looks like a chart CV.
+        List<ContentVersion> cvs = [SELECT Id, Title, VersionData FROM ContentVersion WHERE Id = :cvId];
+        System.assertEquals(1, cvs.size(), 'CV must be created.');
+        System.assert(cvs[0].Title.startsWith('docgen_chart_'), 'CV title must use the reaper-friendly prefix.');
+        // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+        Blob png = cvs[0].VersionData;
+        System.assertNotEquals(null, png, 'CV must have VersionData.');
+        String hexHeader = EncodingUtil.convertToHex(png).substring(0, 16).toLowerCase();
+        System.assertEquals('89504e470d0a1a0a', hexHeader, 'VersionData must be a real PNG.');
+    }
+
+    @IsTest
+    static void prepareChartImagesServerSide_chartInLoopBodySkipped() {
+        // Mirrors the LWC-path test: top-level only — loop-body charts are
+        // skipped because their bucket data is loop-iteration-scoped.
+        Account acc = new Account(Name = 'Chart Pipeline SS Loop');
+        insert acc;
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Chart Pipeline SS Loop Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Query_Config__c = 'Name'
+        );
+        insert tpl;
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
+        insert ver;
+        String docXml =
+            '<w:document>' +
+            '<w:body>' +
+            '<w:p>{#Surveys__r}{Chart:Responses__r:A__c:bar}{/Surveys__r}</w:p>' +
+            '<w:p>{Chart:TopLevel__r:A__c:bar}</w:p>' +
+            '</w:body></w:document>';
+        ContentVersion xmlCv = new ContentVersion(
+            Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
+            PathOnClient = 'document.xml',
+            VersionData = Blob.valueOf(docXml)
+        );
+        insert xmlCv;
+
+        Map<String, String> out = DocGenChartImageController.prepareChartImagesServerSide(tpl.Id, acc.Id);
+        System.assertEquals(1, out.size(), 'Only the top-level chart should produce a CV (loop-body chart skipped).');
+    }
+
+    @IsTest
+    static void prepareChartImagesServerSide_widthOverride_inLogicalDims() {
+        // width=720 + height=200 from the tag modifiers should flow through
+        // emitWithMeta into the "|WxH" suffix of the CV map value.
+        Account acc = new Account(Name = 'Chart Pipeline SS Width');
+        insert acc;
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Chart Pipeline SS Width Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Query_Config__c = 'Name'
+        );
+        insert tpl;
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
+        insert ver;
+        ContentVersion xmlCv = new ContentVersion(
+            Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
+            PathOnClient = 'document.xml',
+            VersionData = Blob.valueOf(
+                '<w:document><w:body><w:p>{Chart:R__r:F__c:bar:width=720&height=200}</w:p></w:body></w:document>'
+            )
+        );
+        insert xmlCv;
+
+        Map<String, String> out = DocGenChartImageController.prepareChartImagesServerSide(tpl.Id, acc.Id);
+        System.assertEquals(1, out.size());
+        String value = out.values()[0];
+        System.assert(value.endsWith('|720x200'), 'CV map value should encode the overridden logical dims: ' + value);
+    }
+
+    @IsTest
+    static void prepareChartImagesServerSide_returnedCvIsValidPng() {
+        // Already asserted in _emitsCvMap, but as a dedicated test to keep the
+        // "CV bytes are a real PNG" guarantee searchable in the suite.
+        Account acc = new Account(Name = 'Chart Pipeline SS PNG');
+        insert acc;
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Chart Pipeline SS PNG Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Query_Config__c = 'Name'
+        );
+        insert tpl;
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
+        insert ver;
+        ContentVersion xmlCv = new ContentVersion(
+            Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
+            PathOnClient = 'document.xml',
+            VersionData = Blob.valueOf('<w:document><w:body><w:p>{Chart:R__r:F__c:column}</w:p></w:body></w:document>')
+        );
+        insert xmlCv;
+
+        Map<String, String> out = DocGenChartImageController.prepareChartImagesServerSide(tpl.Id, acc.Id);
+        System.assertEquals(1, out.size());
+        Id cvId = out.values()[0].split('\\|')[0];
+        ContentVersion cv = [SELECT VersionData FROM ContentVersion WHERE Id = :cvId LIMIT 1];
+        String hex = EncodingUtil.convertToHex(cv.VersionData).substring(0, 16).toLowerCase();
+        System.assertEquals('89504e470d0a1a0a', hex, 'Column-style CV must also be a valid PNG.');
+    }
+
     @IsTest
     static void prepareChartImages_nonWordTemplate_returnsEmpty() {
         // Insert a minimal HTML template and verify the controller returns

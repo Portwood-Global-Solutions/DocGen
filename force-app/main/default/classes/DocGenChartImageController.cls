@@ -96,6 +96,113 @@ public with sharing class DocGenChartImageController {
     }
 
     /**
+     * Server-side equivalent of `prepareChartImages` — rasterizes each
+     * top-level {Chart:...} tag in the active Word body to a PNG entirely in
+     * Apex (no browser, no canvas, no callouts), uploads each PNG as a
+     * transient `docgen_chart_*` ContentVersion, and returns the chartCvMap
+     * the merge pipeline already understands: `signature -> "cvId|WxH"`.
+     *
+     * Same map shape the LWC currently produces after rasterizing SVGs in a
+     * hidden <canvas>; lets Flow actions, batch jobs, Queueables, and bulk
+     * runners produce Word/PDF charts without a DOM. Pairs with
+     * `DocGenChartRasterizer.emitWithMeta` (PNG + logical dimensions).
+     *
+     * Cleanup contract: the CALLER owns the returned CV ids. They get the
+     * full map back and decide when to call `deleteChartImages` (typically
+     * in a try/finally around `processAndReturnDocument`). The
+     * `docgen_chart_*` title prefix also lets the orphan-reaper schedulable
+     * clean up if the caller dies mid-flow.
+     *
+     * Returns an empty map for non-Word templates and for templates whose
+     * active body has no {Chart:...} tags — same early-exit semantics as
+     * `prepareChartImages`.
+     */
+    @AuraEnabled
+    public static Map<String, String> prepareChartImagesServerSide(Id templateId, Id recordId) {
+        if (templateId == null || recordId == null) {
+            throw DocGenService.ahe('Template and record IDs are required.');
+        }
+
+        // USER_MODE template fetch — mirrors prepareChartImages so the
+        // server-side path enforces the same FLS gate as the LWC path.
+        DocGen_Template__c template;
+        try {
+            List<DocGen_Template__c> templates = [
+                SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH USER_MODE
+                LIMIT 1
+            ];
+            if (templates.isEmpty()) {
+                throw DocGenService.ahe('Template not found or access denied.');
+            }
+            template = templates[0];
+        } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+
+        Map<String, String> chartCvMap = new Map<String, String>();
+        if (template.Type__c != 'Word') {
+            return chartCvMap;
+        }
+
+        String body = loadActiveWordBody(templateId);
+        if (String.isBlank(body) || !body.contains(CHART_OPEN_PREFIX)) {
+            return chartCvMap;
+        }
+
+        Map<String, Object> recordData = DocGenDataRetriever.getRecordData(
+            recordId,
+            template.Base_Object_API__c,
+            template.Query_Config__c
+        );
+
+        for (ParsedChartTag tag : findTopLevelChartTags(body)) {
+            // Mirror renderChartAsRequest's style normalization so cross-tab
+            // styles still produce a Word-embeddable PNG (degrades to `bar`
+            // for now; pivot/clustered/stacked PNG emitters land in a
+            // follow-up).
+            List<Map<String, Object>> buckets = DocGenChartBucketResolver.resolveBucketsForTag(
+                recordData,
+                tag.relName,
+                tag.fieldApi,
+                tag.modifiersRaw
+            );
+            Map<String, String> rasterOpts = new Map<String, String>();
+            for (String k : tag.options.keySet()) {
+                rasterOpts.put(k, tag.options.get(k));
+            }
+            String rasterStyle = (tag.style != null && SVG_STYLES.contains(tag.style)) ? tag.style : 'bar';
+            rasterOpts.put('style', rasterStyle);
+            // Default scale=1 for the server-side path. The rasterizer's
+            // bar/column emitters default to 2x supersampling which is great
+            // for one-off browser-canvas rasterization but blows the 10s sync
+            // CPU budget when stacking multiple charts in one Apex
+            // transaction (single 6-bucket bar at scale=2 measured ~11s on
+            // staging). The author can still opt back in per-tag via
+            // `:scale=2` for higher quality when chart count is low.
+            if (!rasterOpts.containsKey('scale')) {
+                rasterOpts.put('scale', '1');
+            }
+
+            Map<String, Object> meta = DocGenChartRasterizer.emitWithMeta(buckets, rasterOpts);
+            Blob png = (Blob) meta.get('png');
+            Integer logicalW = (Integer) meta.get('logicalWidth');
+            Integer logicalH = (Integer) meta.get('logicalHeight');
+            if (png == null) {
+                continue;
+            }
+
+            String signature = tagSignature(tag.relName, tag.fieldApi, tag.style, tag.options);
+            String base64Png = EncodingUtil.base64Encode(png);
+            Id cvId = uploadChartImage(recordId, signature, base64Png);
+            chartCvMap.put(signature, String.valueOf(cvId) + '|' + logicalW + 'x' + logicalH);
+        }
+        return chartCvMap;
+    }
+
+    /**
      * Saves a base64-encoded PNG as a ContentVersion linked to the source
      * record. Returns the CV Id for the LWC to pass back into the generate
      * call (and later into `deleteChartImages` for cleanup).

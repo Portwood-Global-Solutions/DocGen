@@ -122,6 +122,79 @@ public class DocGenChartRasterizer {
         throw new DocGenException('Unhandled chart style: ' + style);
     }
 
+    /**
+     * Server-side companion to `emit`: returns the rasterized PNG alongside
+     * the LOGICAL width/height the chart was drawn at (pre-supersample). The
+     * caller needs the logical dims to pack into the {%cvId:WxH} chart-image
+     * marker so Word/PDF downsamples the supersampled PNG to the intended
+     * physical size — that downsampling is where the anti-aliased look comes
+     * from. See `prepareChartImagesServerSide` in DocGenChartImageController.
+     *
+     * Returns:
+     *   {
+     *     'png'           : Blob,    // PNG bytes at logical*scale physical pixels
+     *     'logicalWidth'  : Integer, // pre-supersample width  (W in {%cvId:WxH})
+     *     'logicalHeight' : Integer  // pre-supersample height (H in {%cvId:WxH})
+     *   }
+     */
+    public static Map<String, Object> emitWithMeta(List<Map<String, Object>> buckets, Map<String, String> options) {
+        Map<String, String> opts = options == null ? new Map<String, String>() : options;
+        Blob png = emit(buckets, opts);
+        Map<String, Integer> dims = logicalDimensions(buckets, opts);
+        Map<String, Object> out = new Map<String, Object>();
+        out.put('png', png);
+        out.put('logicalWidth', dims.get('width'));
+        out.put('logicalHeight', dims.get('height'));
+        return out;
+    }
+
+    /**
+     * Computes the LOGICAL (pre-supersample) chart dimensions for a given
+     * style + bucket list + options. Mirrors the default-size logic baked
+     * into each per-style emitter so the controller can pack the right
+     * dimensions into the chart-image substitution marker without parsing
+     * the emitted PNG bytes.
+     *
+     * Style defaults (matching the emitters):
+     *   bar    : 500 × max(80, buckets*(barHeight+barGap) + barGap)
+     *            where barHeight=22, barGap=8 → n*30 + 8
+     *   column : 500 × 280
+     *   pie    : 540 × 280
+     *   donut  : 540 × 280
+     *   empty  : 500 × 80
+     *
+     * `width=N` and `height=N` options always win over the defaults — same
+     * behavior as the emitters.
+     */
+    private static Map<String, Integer> logicalDimensions(List<Map<String, Object>> buckets, Map<String, String> opts) {
+        String style = opts != null && opts.containsKey('style') ? opts.get('style').toLowerCase() : 'bar';
+        Integer width;
+        Integer height;
+        if (buckets == null || buckets.isEmpty()) {
+            // emitEmpty defaults
+            width = optInt(opts, 'width', 500);
+            height = optInt(opts, 'height', 80);
+        } else if (style == 'bar') {
+            Integer barHeight = 22;
+            Integer barGap = 8;
+            width = optInt(opts, 'width', 500);
+            height = optInt(opts, 'height', (buckets.size() * (barHeight + barGap)) + barGap);
+        } else if (style == 'column') {
+            width = optInt(opts, 'width', 500);
+            height = optInt(opts, 'height', 280);
+        } else if (style == 'pie' || style == 'donut') {
+            width = optInt(opts, 'width', 540);
+            height = optInt(opts, 'height', 280);
+        } else {
+            // Unknown styles never reach here — emit() throws first. Defensive
+            // fallback to bar dimensions so a future style added to KNOWN_STYLES
+            // without a matching branch here at least returns sane numbers.
+            width = optInt(opts, 'width', 500);
+            height = optInt(opts, 'height', 200);
+        }
+        return new Map<String, Integer>{ 'width' => width, 'height' => height };
+    }
+
     // =====================================================================
     // Bar — horizontal bars, one row per bucket
     // =====================================================================
