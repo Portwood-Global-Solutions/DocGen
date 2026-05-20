@@ -124,6 +124,29 @@
                                         </div>
                                     </template>
 
+                                    <!-- JSON Data (from Flow) path: nothing to configure here.
+                                         The template receives its data at runtime from a Flow that
+                                         supplies DocGenFlowAction.jsonData — no Base Object, no SOQL,
+                                         no merge-field picker required. -->
+                                    <template if:true={isFlowDataSource}>
+                                        <div
+                                            class="slds-box slds-theme_default slds-var-m-top_medium"
+                                            style="border-radius: 8px"
+                                        >
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:flow"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                This template receives its data from a Flow at runtime via
+                                                <code>DocGenFlowAction.jsonData</code>. No Base Object or SOQL config
+                                                needed — build the JSON payload in your Flow before invoking Generate
+                                                Document. Next step: upload the template document.
+                                            </p>
+                                        </div>
+                                    </template>
+
                                     <!-- Apex Data Provider path: class picker right here on Step 1 -->
                                     <template if:true={isApexDataSource}>
                                         <div class="slds-var-m-top_medium">
@@ -901,20 +924,32 @@
                             <div class="slds-box slds-theme_shade" style="border-radius: 8px">
                                 <h3 class="slds-text-heading_medium slds-var-m-bottom_medium">Review Template</h3>
                                 <p class="slds-var-m-bottom_small"><strong>Name:</strong> {newTemplateName}</p>
-                                <p class="slds-var-m-bottom_small"><strong>Object:</strong> {newTemplateObject}</p>
-                                <p class="slds-var-m-bottom_small"><strong>Query:</strong></p>
-                                <pre
-                                    style="
-                                        font-size: 0.8125rem;
-                                        background: #f3f2f2;
-                                        padding: 0.75rem;
-                                        border-radius: 6px;
-                                        white-space: pre-wrap;
-                                        margin: 0 0 0.5rem 0;
-                                    "
-                                >
+                                <template if:true={isFlowDataSource}>
+                                    <p class="slds-var-m-bottom_small">
+                                        <strong>Data Source:</strong> JSON Data (from Flow)
+                                    </p>
+                                    <p class="slds-var-m-bottom_small slds-text-body_small slds-text-color_weak">
+                                        Data is supplied at runtime via
+                                        <code>DocGenFlowAction.jsonData</code>. No SOQL or Apex Provider class is bound
+                                        to this template.
+                                    </p>
+                                </template>
+                                <template if:false={isFlowDataSource}>
+                                    <p class="slds-var-m-bottom_small"><strong>Object:</strong> {newTemplateObject}</p>
+                                    <p class="slds-var-m-bottom_small"><strong>Query:</strong></p>
+                                    <pre
+                                        style="
+                                            font-size: 0.8125rem;
+                                            background: #f3f2f2;
+                                            padding: 0.75rem;
+                                            border-radius: 6px;
+                                            white-space: pre-wrap;
+                                            margin: 0 0 0.5rem 0;
+                                        "
+                                    >
 {readableQueryConfig}</pre
-                                >
+                                    >
+                                </template>
                                 <p class="slds-var-m-top_large">Click "Create Template" to save.</p>
                             </div>
                         </template>
@@ -1443,13 +1478,39 @@
                                 >
                                     <div style="display: flex; align-items: center; gap: 8px">
                                         <lightning-icon icon-name="standard:account" size="x-small"></lightning-icon>
-                                        <span style="font-weight: 700">{editTemplateObject}</span>
+                                        <span style="font-weight: 700">{editBaseObjectDisplay}</span>
                                     </div>
-                                    <div style="display: flex; align-items: center; gap: 16px">
-                                        <template if:false={editUseApexProvider}>
+                                    <template if:false={isEditFlowDataSource}>
+                                        <div style="display: flex; align-items: center; gap: 16px">
+                                            <template if:false={editUseApexProvider}>
+                                                <a
+                                                    href="javascript:void(0)"
+                                                    onclick={toggleEditVisualBuilder}
+                                                    style="
+                                                        font-size: 0.82rem;
+                                                        color: #7c3aed;
+                                                        text-decoration: none;
+                                                        display: flex;
+                                                        align-items: center;
+                                                        gap: 4px;
+                                                    "
+                                                >
+                                                    <lightning-icon
+                                                        icon-name={editVisualBuilderToggleIcon}
+                                                        size="xx-small"
+                                                        style="--sds-c-icon-color-foreground-default: #7c3aed"
+                                                    ></lightning-icon>
+                                                    <template if:false={editUseVisualBuilder}
+                                                        >Try our visual builder</template
+                                                    >
+                                                    <template if:true={editUseVisualBuilder}
+                                                        >Switch to manual query</template
+                                                    >
+                                                </a>
+                                            </template>
                                             <a
                                                 href="javascript:void(0)"
-                                                onclick={toggleEditVisualBuilder}
+                                                onclick={toggleEditApexProvider}
                                                 style="
                                                     font-size: 0.82rem;
                                                     color: #7c3aed;
@@ -1460,449 +1521,247 @@
                                                 "
                                             >
                                                 <lightning-icon
-                                                    icon-name={editVisualBuilderToggleIcon}
+                                                    icon-name="utility:apex"
                                                     size="xx-small"
                                                     style="--sds-c-icon-color-foreground-default: #7c3aed"
                                                 ></lightning-icon>
-                                                <template if:false={editUseVisualBuilder}
-                                                    >Try our visual builder</template
-                                                >
-                                                <template if:true={editUseVisualBuilder}
-                                                    >Switch to manual query</template
-                                                >
+                                                {editApexProviderToggleLabel}
                                             </a>
-                                        </template>
-                                        <a
-                                            href="javascript:void(0)"
-                                            onclick={toggleEditApexProvider}
-                                            style="
-                                                font-size: 0.82rem;
-                                                color: #7c3aed;
-                                                text-decoration: none;
-                                                display: flex;
-                                                align-items: center;
-                                                gap: 4px;
-                                            "
-                                        >
-                                            <lightning-icon
-                                                icon-name="utility:apex"
-                                                size="xx-small"
-                                                style="--sds-c-icon-color-foreground-default: #7c3aed"
-                                            ></lightning-icon>
-                                            {editApexProviderToggleLabel}
-                                        </a>
-                                    </div>
+                                        </div>
+                                    </template>
                                 </div>
 
-                                <!-- Apex Data Provider mode (V4) -->
-                                <template if:true={editUseApexProvider}>
+                                <!-- JSON Data (from Flow) mode: no SOQL/Apex config -->
+                                <template if:true={isEditFlowDataSource}>
                                     <div class="slds-box slds-theme_default" style="border-radius: 8px">
-                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_small">
-                                            This template is bound to an Apex class implementing
-                                            <code>portwoodglobal.DocGenDataProvider</code>. The class supplies merge
-                                            data at render time — no SOQL config needed.
+                                        <p class="slds-text-body_small">
+                                            <lightning-icon
+                                                icon-name="utility:flow"
+                                                size="x-small"
+                                                class="slds-var-m-right_x-small"
+                                            ></lightning-icon>
+                                            This template receives its data from a Flow at runtime via
+                                            <code>DocGenFlowAction.jsonData</code>. Merge tags resolve against the JSON
+                                            payload your Flow builds before invoking Generate Document — no SOQL or Apex
+                                            Data Provider class to configure here.
                                         </p>
-                                        <template if:false={isProviderConnected}>
-                                            <div style="position: relative">
-                                                <lightning-input
-                                                    type="search"
-                                                    label="Search for a Data Provider class"
-                                                    placeholder="Type at least 2 characters..."
-                                                    value={providerSearchTerm}
-                                                    onchange={handleApexProviderSearch}
-                                                >
-                                                </lightning-input>
-                                                <template if:true={showProviderPicker}>
-                                                    <div
-                                                        class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
-                                                        style="position: absolute; z-index: 100"
+                                    </div>
+                                </template>
+
+                                <!-- Apex / SOQL config bodies — hidden entirely for JSON Flow templates -->
+                                <template if:false={isEditFlowDataSource}>
+                                    <template if:true={editUseApexProvider}>
+                                        <div class="slds-box slds-theme_default" style="border-radius: 8px">
+                                            <p
+                                                class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_small"
+                                            >
+                                                This template is bound to an Apex class implementing
+                                                <code>portwoodglobal.DocGenDataProvider</code>. The class supplies merge
+                                                data at render time — no SOQL config needed.
+                                            </p>
+                                            <template if:false={isProviderConnected}>
+                                                <div style="position: relative">
+                                                    <lightning-input
+                                                        type="search"
+                                                        label="Search for a Data Provider class"
+                                                        placeholder="Type at least 2 characters..."
+                                                        value={providerSearchTerm}
+                                                        onchange={handleApexProviderSearch}
                                                     >
-                                                        <ul class="slds-listbox slds-listbox_vertical">
-                                                            <template if:true={providerOptions.length}>
-                                                                <template for:each={providerOptions} for:item="cls">
-                                                                    <li key={cls} class="slds-listbox__item">
+                                                    </lightning-input>
+                                                    <template if:true={showProviderPicker}>
+                                                        <div
+                                                            class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
+                                                            style="position: absolute; z-index: 100"
+                                                        >
+                                                            <ul class="slds-listbox slds-listbox_vertical">
+                                                                <template if:true={providerOptions.length}>
+                                                                    <template for:each={providerOptions} for:item="cls">
+                                                                        <li key={cls} class="slds-listbox__item">
+                                                                            <div
+                                                                                class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
+                                                                                data-value={cls}
+                                                                                onclick={handleApexProviderSelect}
+                                                                            >
+                                                                                <span class="slds-truncate"
+                                                                                    ><lightning-icon
+                                                                                        icon-name="utility:apex"
+                                                                                        size="x-small"
+                                                                                        class="slds-var-m-right_x-small"
+                                                                                    ></lightning-icon
+                                                                                    >{cls}</span
+                                                                                >
+                                                                            </div>
+                                                                        </li>
+                                                                    </template>
+                                                                </template>
+                                                                <template if:false={providerOptions.length}>
+                                                                    <li class="slds-listbox__item">
                                                                         <div
                                                                             class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
-                                                                            data-value={cls}
-                                                                            onclick={handleApexProviderSelect}
                                                                         >
-                                                                            <span class="slds-truncate"
-                                                                                ><lightning-icon
-                                                                                    icon-name="utility:apex"
-                                                                                    size="x-small"
-                                                                                    class="slds-var-m-right_x-small"
-                                                                                ></lightning-icon
-                                                                                >{cls}</span
+                                                                            <span class="slds-text-color_weak"
+                                                                                >No classes implementing
+                                                                                DocGenDataProvider found</span
                                                                             >
                                                                         </div>
                                                                     </li>
                                                                 </template>
-                                                            </template>
-                                                            <template if:false={providerOptions.length}>
-                                                                <li class="slds-listbox__item">
-                                                                    <div
-                                                                        class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small"
-                                                                    >
-                                                                        <span class="slds-text-color_weak"
-                                                                            >No classes implementing DocGenDataProvider
-                                                                            found</span
-                                                                        >
-                                                                    </div>
-                                                                </li>
-                                                            </template>
-                                                        </ul>
+                                                            </ul>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                                <template if:true={isValidatingProvider}>
+                                                    <div
+                                                        class="slds-var-m-top_small slds-is-relative"
+                                                        style="height: 30px"
+                                                    >
+                                                        <lightning-spinner
+                                                            alternative-text="Validating..."
+                                                            size="small"
+                                                        ></lightning-spinner>
                                                     </div>
                                                 </template>
-                                            </div>
-                                            <template if:true={isValidatingProvider}>
-                                                <div class="slds-var-m-top_small slds-is-relative" style="height: 30px">
-                                                    <lightning-spinner
-                                                        alternative-text="Validating..."
-                                                        size="small"
-                                                    ></lightning-spinner>
-                                                </div>
                                             </template>
-                                        </template>
 
-                                        <template if:true={isProviderConnected}>
-                                            <div
-                                                style="
-                                                    display: flex;
-                                                    align-items: center;
-                                                    justify-content: space-between;
-                                                    margin-bottom: 8px;
-                                                "
-                                            >
-                                                <div style="display: flex; align-items: center; gap: 8px">
-                                                    <lightning-icon
-                                                        icon-name="utility:apex"
-                                                        size="x-small"
-                                                    ></lightning-icon>
-                                                    <span style="font-weight: 700">{selectedProviderClassName}</span>
-                                                    <span class="slds-badge slds-badge_lightest"
-                                                        >{providerFields.length} fields</span
-                                                    >
-                                                </div>
-                                                <lightning-button
-                                                    label="Change class"
-                                                    variant="base"
-                                                    icon-name="utility:close"
-                                                    onclick={handleClearApexProvider}
-                                                >
-                                                </lightning-button>
-                                            </div>
-                                            <p class="slds-text-body_small slds-text-color_weak">
-                                                Available merge tags from this provider:
-                                            </p>
-                                            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px">
-                                                <template for:each={providerTagPills} for:item="p">
-                                                    <span
-                                                        key={p.raw}
-                                                        style="
-                                                            background: #f3e8ff;
-                                                            border: 1px solid #d8c4f0;
-                                                            color: #7c3aed;
-                                                            padding: 2px 8px;
-                                                            border-radius: 4px;
-                                                            font-size: 0.78rem;
-                                                            font-family: monospace;
-                                                        "
-                                                        >{p.tag}</span
-                                                    >
-                                                </template>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-
-                                <!-- Visual Builder -->
-                                <template if:true={editUseVisualBuilder}>
-                                    <c-doc-gen-tree-builder
-                                        selected-object={editTemplateObject}
-                                        query-config={editTemplateQuery}
-                                        onconfigchange={handleEditConfigChange}
-                                    >
-                                    </c-doc-gen-tree-builder>
-                                </template>
-
-                                <!-- Manual Query Textarea (hidden when visual builder OR Apex Provider is on) -->
-                                <template if:false={editUseVisualBuilder}>
-                                    <template if:false={editUseApexProvider}>
-                                        <div style="position: relative">
-                                            <textarea
-                                                class="slds-textarea edit-query-textarea"
-                                                value={editTemplateQuery}
-                                                oninput={handleEditDirectQueryEdit}
-                                                onkeydown={handleQueryKeyDown}
-                                                placeholder="Paste a SOQL query or type field names — suggestions will appear.&#10;&#10;Examples:&#10;  SELECT Name, Industry, (SELECT FirstName FROM Contacts) FROM Account&#10;  Name, Industry, Phone&#10;  Owner.Name, CreatedBy.Email&#10;  (SELECT FirstName, LastName FROM Contacts)"
-                                                style="
-                                                    width: 100%;
-                                                    min-height: 240px;
-                                                    font-family: 'SF Mono', Monaco, Consolas, monospace;
-                                                    font-size: 0.9rem;
-                                                    line-height: 1.8;
-                                                    padding: 14px;
-                                                    border: 1px solid #d8dde6;
-                                                    border-radius: 8px;
-                                                    resize: vertical;
-                                                "
-                                            >
-                                            </textarea>
-                                            <template if:true={showSuggestions}>
+                                            <template if:true={isProviderConnected}>
                                                 <div
                                                     style="
-                                                        position: absolute;
-                                                        z-index: 20;
-                                                        left: 14px;
-                                                        right: 14px;
-                                                        max-height: 200px;
-                                                        overflow-y: auto;
-                                                        background: #fff;
-                                                        border: 1px solid #d8dde6;
-                                                        border-radius: 6px;
-                                                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-                                                        padding: 4px 0;
+                                                        display: flex;
+                                                        align-items: center;
+                                                        justify-content: space-between;
+                                                        margin-bottom: 8px;
                                                     "
-                                                    onmousedown={handleSuggestionMouseDown}
                                                 >
-                                                    <template for:each={suggestions} for:item="s">
-                                                        <div
-                                                            key={s.value}
-                                                            class="slash-item"
-                                                            data-value={s.value}
-                                                            onclick={handleSuggestionClick}
-                                                            style="
-                                                                padding: 6px 12px;
-                                                                cursor: pointer;
-                                                                display: flex;
-                                                                align-items: baseline;
-                                                                gap: 8px;
-                                                            "
+                                                    <div style="display: flex; align-items: center; gap: 8px">
+                                                        <lightning-icon
+                                                            icon-name="utility:apex"
+                                                            size="x-small"
+                                                        ></lightning-icon>
+                                                        <span style="font-weight: 700"
+                                                            >{selectedProviderClassName}</span
                                                         >
-                                                            <span
-                                                                style="
-                                                                    font-family: monospace;
-                                                                    font-size: 0.85rem;
-                                                                    color: #7c3aed;
-                                                                    font-weight: 600;
-                                                                "
-                                                                >{s.value}</span
-                                                            >
-                                                            <span style="font-size: 0.78rem; color: #706e6b"
-                                                                >{s.label}</span
-                                                            >
-                                                            <template if:true={s.extra}>
-                                                                <span
-                                                                    style="
-                                                                        font-size: 0.68rem;
-                                                                        color: #999;
-                                                                        margin-left: auto;
-                                                                    "
-                                                                    >{s.extra}</span
-                                                                >
-                                                            </template>
-                                                        </div>
+                                                        <span class="slds-badge slds-badge_lightest"
+                                                            >{providerFields.length} fields</span
+                                                        >
+                                                    </div>
+                                                    <lightning-button
+                                                        label="Change class"
+                                                        variant="base"
+                                                        icon-name="utility:close"
+                                                        onclick={handleClearApexProvider}
+                                                    >
+                                                    </lightning-button>
+                                                </div>
+                                                <p class="slds-text-body_small slds-text-color_weak">
+                                                    Available merge tags from this provider:
+                                                </p>
+                                                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px">
+                                                    <template for:each={providerTagPills} for:item="p">
+                                                        <span
+                                                            key={p.raw}
+                                                            style="
+                                                                background: #f3e8ff;
+                                                                border: 1px solid #d8c4f0;
+                                                                color: #7c3aed;
+                                                                padding: 2px 8px;
+                                                                border-radius: 4px;
+                                                                font-size: 0.78rem;
+                                                                font-family: monospace;
+                                                            "
+                                                            >{p.tag}</span
+                                                        >
                                                     </template>
                                                 </div>
                                             </template>
                                         </div>
                                     </template>
-                                </template>
 
-                                <!-- Manual-only: Query warnings, tree preview, quick reference -->
-                                <template if:false={editUseVisualBuilder}>
-                                    <template if:false={editUseApexProvider}>
-                                        <template if:true={queryWarnings}>
-                                            <template for:each={queryWarnings} for:item="warn">
-                                                <div
-                                                    key={warn}
+                                    <!-- Visual Builder -->
+                                    <template if:true={editUseVisualBuilder}>
+                                        <c-doc-gen-tree-builder
+                                            selected-object={editTemplateObject}
+                                            query-config={editTemplateQuery}
+                                            onconfigchange={handleEditConfigChange}
+                                        >
+                                        </c-doc-gen-tree-builder>
+                                    </template>
+
+                                    <!-- Manual Query Textarea (hidden when visual builder OR Apex Provider is on) -->
+                                    <template if:false={editUseVisualBuilder}>
+                                        <template if:false={editUseApexProvider}>
+                                            <div style="position: relative">
+                                                <textarea
+                                                    class="slds-textarea edit-query-textarea"
+                                                    value={editTemplateQuery}
+                                                    oninput={handleEditDirectQueryEdit}
+                                                    onkeydown={handleQueryKeyDown}
+                                                    placeholder="Paste a SOQL query or type field names — suggestions will appear.&#10;&#10;Examples:&#10;  SELECT Name, Industry, (SELECT FirstName FROM Contacts) FROM Account&#10;  Name, Industry, Phone&#10;  Owner.Name, CreatedBy.Email&#10;  (SELECT FirstName, LastName FROM Contacts)"
                                                     style="
-                                                        margin-top: 8px;
-                                                        padding: 8px 12px;
-                                                        background: #fff8e1;
-                                                        border: 1px solid #f9a825;
-                                                        border-radius: 6px;
-                                                        font-size: 0.8rem;
-                                                        color: #5d4037;
-                                                        display: flex;
-                                                        align-items: center;
-                                                        gap: 6px;
+                                                        width: 100%;
+                                                        min-height: 240px;
+                                                        font-family: 'SF Mono', Monaco, Consolas, monospace;
+                                                        font-size: 0.9rem;
+                                                        line-height: 1.8;
+                                                        padding: 14px;
+                                                        border: 1px solid #d8dde6;
+                                                        border-radius: 8px;
+                                                        resize: vertical;
                                                     "
                                                 >
-                                                    <lightning-icon
-                                                        icon-name="utility:warning"
-                                                        size="xx-small"
-                                                        variant="warning"
-                                                    ></lightning-icon>
-                                                    {warn}
-                                                </div>
-                                            </template>
-                                        </template>
-
-                                        <template if:true={queryTreeNodes.length}>
-                                            <div
-                                                style="
-                                                    margin-top: 12px;
-                                                    border: 1px solid #e5e5e5;
-                                                    border-radius: 8px;
-                                                    padding: 10px 14px;
-                                                    background: #fafaf9;
-                                                "
-                                            >
-                                                <template for:each={queryTreeNodes} for:item="node">
-                                                    <div key={node.id}>
-                                                        <div
-                                                            style="
-                                                                display: flex;
-                                                                align-items: center;
-                                                                gap: 4px;
-                                                                margin-bottom: 6px;
-                                                            "
-                                                        >
-                                                            <lightning-icon
-                                                                icon-name="standard:account"
-                                                                size="xx-small"
-                                                            ></lightning-icon>
-                                                            <span style="font-weight: 700; font-size: 0.85rem"
-                                                                >{node.label}</span
-                                                            >
-                                                        </div>
-                                                        <template if:true={node.hasFields}>
+                                                </textarea>
+                                                <template if:true={showSuggestions}>
+                                                    <div
+                                                        style="
+                                                            position: absolute;
+                                                            z-index: 20;
+                                                            left: 14px;
+                                                            right: 14px;
+                                                            max-height: 200px;
+                                                            overflow-y: auto;
+                                                            background: #fff;
+                                                            border: 1px solid #d8dde6;
+                                                            border-radius: 6px;
+                                                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+                                                            padding: 4px 0;
+                                                        "
+                                                        onmousedown={handleSuggestionMouseDown}
+                                                    >
+                                                        <template for:each={suggestions} for:item="s">
                                                             <div
+                                                                key={s.value}
+                                                                class="slash-item"
+                                                                data-value={s.value}
+                                                                onclick={handleSuggestionClick}
                                                                 style="
-                                                                    margin-left: 22px;
+                                                                    padding: 6px 12px;
+                                                                    cursor: pointer;
                                                                     display: flex;
-                                                                    flex-wrap: wrap;
-                                                                    gap: 4px;
-                                                                    margin-bottom: 6px;
+                                                                    align-items: baseline;
+                                                                    gap: 8px;
                                                                 "
                                                             >
-                                                                <template for:each={node.fieldPills} for:item="fp">
+                                                                <span
+                                                                    style="
+                                                                        font-family: monospace;
+                                                                        font-size: 0.85rem;
+                                                                        color: #7c3aed;
+                                                                        font-weight: 600;
+                                                                    "
+                                                                    >{s.value}</span
+                                                                >
+                                                                <span style="font-size: 0.78rem; color: #706e6b"
+                                                                    >{s.label}</span
+                                                                >
+                                                                <template if:true={s.extra}>
                                                                     <span
-                                                                        key={fp.key}
                                                                         style="
-                                                                            background: #eef4ff;
-                                                                            border: 1px solid #c7d7f5;
-                                                                            padding: 2px 8px;
-                                                                            border-radius: 4px;
-                                                                            font-size: 0.75rem;
-                                                                            font-family: monospace;
-                                                                            display: inline-flex;
-                                                                            align-items: baseline;
-                                                                            gap: 4px;
+                                                                            font-size: 0.68rem;
+                                                                            color: #999;
+                                                                            margin-left: auto;
                                                                         "
+                                                                        >{s.extra}</span
                                                                     >
-                                                                        <span style="color: #1a56db">{fp.name}</span>
-                                                                    </span>
-                                                                </template>
-                                                            </div>
-                                                        </template>
-                                                        <template if:true={node.hasParentFields}>
-                                                            <div
-                                                                style="
-                                                                    margin-left: 22px;
-                                                                    display: flex;
-                                                                    flex-wrap: wrap;
-                                                                    gap: 4px;
-                                                                    margin-bottom: 6px;
-                                                                "
-                                                            >
-                                                                <template for:each={node.parentPills} for:item="pp">
-                                                                    <span
-                                                                        key={pp.key}
-                                                                        style="
-                                                                            background: #f3e8ff;
-                                                                            border: 1px solid #d8c4f0;
-                                                                            padding: 2px 8px;
-                                                                            border-radius: 4px;
-                                                                            font-size: 0.75rem;
-                                                                            font-family: monospace;
-                                                                        "
-                                                                    >
-                                                                        <span style="color: #7c3aed">{pp.name}</span>
-                                                                    </span>
-                                                                </template>
-                                                            </div>
-                                                        </template>
-                                                        <template if:true={node.hasFlatChildren}>
-                                                            <div style="margin-left: 22px">
-                                                                <template for:each={node.flatChildren} for:item="child">
-                                                                    <div key={child.id} style={child.indentStyle}>
-                                                                        <div
-                                                                            style="
-                                                                                display: flex;
-                                                                                align-items: center;
-                                                                                gap: 4px;
-                                                                                margin-bottom: 4px;
-                                                                            "
-                                                                        >
-                                                                            <lightning-icon
-                                                                                icon-name="standard:related_list"
-                                                                                size="xx-small"
-                                                                            ></lightning-icon>
-                                                                            <span
-                                                                                style="
-                                                                                    font-weight: 600;
-                                                                                    font-size: 0.82rem;
-                                                                                "
-                                                                                >{child.label}</span
-                                                                            >
-                                                                            <span
-                                                                                style="
-                                                                                    font-size: 0.72rem;
-                                                                                    color: #706e6b;
-                                                                                    margin-left: 4px;
-                                                                                "
-                                                                                >({child.fieldCount} fields)</span
-                                                                            >
-                                                                        </div>
-                                                                        <div
-                                                                            style="
-                                                                                margin-left: 20px;
-                                                                                display: flex;
-                                                                                flex-wrap: wrap;
-                                                                                gap: 3px;
-                                                                            "
-                                                                        >
-                                                                            <template
-                                                                                for:each={child.fields}
-                                                                                for:item="cf"
-                                                                            >
-                                                                                <span
-                                                                                    key={cf}
-                                                                                    style="
-                                                                                        background: #ecfdf5;
-                                                                                        color: #065f46;
-                                                                                        padding: 2px 8px;
-                                                                                        border-radius: 4px;
-                                                                                        font-size: 0.75rem;
-                                                                                        font-family: monospace;
-                                                                                    "
-                                                                                    >{cf}</span
-                                                                                >
-                                                                            </template>
-                                                                            <template if:true={child.hasParentFields}>
-                                                                                <template
-                                                                                    for:each={child.parentFields}
-                                                                                    for:item="pf"
-                                                                                >
-                                                                                    <span
-                                                                                        key={pf}
-                                                                                        style="
-                                                                                            background: #f3e8ff;
-                                                                                            color: #7c3aed;
-                                                                                            border: 1px solid #d8c4f0;
-                                                                                            padding: 2px 8px;
-                                                                                            border-radius: 4px;
-                                                                                            font-size: 0.75rem;
-                                                                                            font-family: monospace;
-                                                                                        "
-                                                                                        >{pf}</span
-                                                                                    >
-                                                                                </template>
-                                                                            </template>
-                                                                        </div>
-                                                                    </div>
                                                                 </template>
                                                             </div>
                                                         </template>
@@ -1910,61 +1769,308 @@
                                                 </template>
                                             </div>
                                         </template>
+                                    </template>
 
-                                        <div
-                                            style="
-                                                margin-top: 14px;
-                                                background: #f8fafc;
-                                                border: 1px solid #e5e5e5;
-                                                border-radius: 8px;
-                                                padding: 12px 16px;
-                                                font-size: 0.8rem;
-                                                color: #444;
-                                                line-height: 1.7;
-                                            "
-                                        >
-                                            <div style="font-weight: 700; color: #181818; margin-bottom: 6px">
-                                                Quick Reference
+                                    <!-- Manual-only: Query warnings, tree preview, quick reference -->
+                                    <template if:false={editUseVisualBuilder}>
+                                        <template if:false={editUseApexProvider}>
+                                            <template if:true={queryWarnings}>
+                                                <template for:each={queryWarnings} for:item="warn">
+                                                    <div
+                                                        key={warn}
+                                                        style="
+                                                            margin-top: 8px;
+                                                            padding: 8px 12px;
+                                                            background: #fff8e1;
+                                                            border: 1px solid #f9a825;
+                                                            border-radius: 6px;
+                                                            font-size: 0.8rem;
+                                                            color: #5d4037;
+                                                            display: flex;
+                                                            align-items: center;
+                                                            gap: 6px;
+                                                        "
+                                                    >
+                                                        <lightning-icon
+                                                            icon-name="utility:warning"
+                                                            size="xx-small"
+                                                            variant="warning"
+                                                        ></lightning-icon>
+                                                        {warn}
+                                                    </div>
+                                                </template>
+                                            </template>
+
+                                            <template if:true={queryTreeNodes.length}>
+                                                <div
+                                                    style="
+                                                        margin-top: 12px;
+                                                        border: 1px solid #e5e5e5;
+                                                        border-radius: 8px;
+                                                        padding: 10px 14px;
+                                                        background: #fafaf9;
+                                                    "
+                                                >
+                                                    <template for:each={queryTreeNodes} for:item="node">
+                                                        <div key={node.id}>
+                                                            <div
+                                                                style="
+                                                                    display: flex;
+                                                                    align-items: center;
+                                                                    gap: 4px;
+                                                                    margin-bottom: 6px;
+                                                                "
+                                                            >
+                                                                <lightning-icon
+                                                                    icon-name="standard:account"
+                                                                    size="xx-small"
+                                                                ></lightning-icon>
+                                                                <span style="font-weight: 700; font-size: 0.85rem"
+                                                                    >{node.label}</span
+                                                                >
+                                                            </div>
+                                                            <template if:true={node.hasFields}>
+                                                                <div
+                                                                    style="
+                                                                        margin-left: 22px;
+                                                                        display: flex;
+                                                                        flex-wrap: wrap;
+                                                                        gap: 4px;
+                                                                        margin-bottom: 6px;
+                                                                    "
+                                                                >
+                                                                    <template for:each={node.fieldPills} for:item="fp">
+                                                                        <span
+                                                                            key={fp.key}
+                                                                            style="
+                                                                                background: #eef4ff;
+                                                                                border: 1px solid #c7d7f5;
+                                                                                padding: 2px 8px;
+                                                                                border-radius: 4px;
+                                                                                font-size: 0.75rem;
+                                                                                font-family: monospace;
+                                                                                display: inline-flex;
+                                                                                align-items: baseline;
+                                                                                gap: 4px;
+                                                                            "
+                                                                        >
+                                                                            <span style="color: #1a56db"
+                                                                                >{fp.name}</span
+                                                                            >
+                                                                        </span>
+                                                                    </template>
+                                                                </div>
+                                                            </template>
+                                                            <template if:true={node.hasParentFields}>
+                                                                <div
+                                                                    style="
+                                                                        margin-left: 22px;
+                                                                        display: flex;
+                                                                        flex-wrap: wrap;
+                                                                        gap: 4px;
+                                                                        margin-bottom: 6px;
+                                                                    "
+                                                                >
+                                                                    <template for:each={node.parentPills} for:item="pp">
+                                                                        <span
+                                                                            key={pp.key}
+                                                                            style="
+                                                                                background: #f3e8ff;
+                                                                                border: 1px solid #d8c4f0;
+                                                                                padding: 2px 8px;
+                                                                                border-radius: 4px;
+                                                                                font-size: 0.75rem;
+                                                                                font-family: monospace;
+                                                                            "
+                                                                        >
+                                                                            <span style="color: #7c3aed"
+                                                                                >{pp.name}</span
+                                                                            >
+                                                                        </span>
+                                                                    </template>
+                                                                </div>
+                                                            </template>
+                                                            <template if:true={node.hasFlatChildren}>
+                                                                <div style="margin-left: 22px">
+                                                                    <template
+                                                                        for:each={node.flatChildren}
+                                                                        for:item="child"
+                                                                    >
+                                                                        <div key={child.id} style={child.indentStyle}>
+                                                                            <div
+                                                                                style="
+                                                                                    display: flex;
+                                                                                    align-items: center;
+                                                                                    gap: 4px;
+                                                                                    margin-bottom: 4px;
+                                                                                "
+                                                                            >
+                                                                                <lightning-icon
+                                                                                    icon-name="standard:related_list"
+                                                                                    size="xx-small"
+                                                                                ></lightning-icon>
+                                                                                <span
+                                                                                    style="
+                                                                                        font-weight: 600;
+                                                                                        font-size: 0.82rem;
+                                                                                    "
+                                                                                    >{child.label}</span
+                                                                                >
+                                                                                <span
+                                                                                    style="
+                                                                                        font-size: 0.72rem;
+                                                                                        color: #706e6b;
+                                                                                        margin-left: 4px;
+                                                                                    "
+                                                                                    >({child.fieldCount} fields)</span
+                                                                                >
+                                                                            </div>
+                                                                            <div
+                                                                                style="
+                                                                                    margin-left: 20px;
+                                                                                    display: flex;
+                                                                                    flex-wrap: wrap;
+                                                                                    gap: 3px;
+                                                                                "
+                                                                            >
+                                                                                <template
+                                                                                    for:each={child.fields}
+                                                                                    for:item="cf"
+                                                                                >
+                                                                                    <span
+                                                                                        key={cf}
+                                                                                        style="
+                                                                                            background: #ecfdf5;
+                                                                                            color: #065f46;
+                                                                                            padding: 2px 8px;
+                                                                                            border-radius: 4px;
+                                                                                            font-size: 0.75rem;
+                                                                                            font-family: monospace;
+                                                                                        "
+                                                                                        >{cf}</span
+                                                                                    >
+                                                                                </template>
+                                                                                <template
+                                                                                    if:true={child.hasParentFields}
+                                                                                >
+                                                                                    <template
+                                                                                        for:each={child.parentFields}
+                                                                                        for:item="pf"
+                                                                                    >
+                                                                                        <span
+                                                                                            key={pf}
+                                                                                            style="
+                                                                                                background: #f3e8ff;
+                                                                                                color: #7c3aed;
+                                                                                                border: 1px solid
+                                                                                                    #d8c4f0;
+                                                                                                padding: 2px 8px;
+                                                                                                border-radius: 4px;
+                                                                                                font-size: 0.75rem;
+                                                                                                font-family: monospace;
+                                                                                            "
+                                                                                            >{pf}</span
+                                                                                        >
+                                                                                    </template>
+                                                                                </template>
+                                                                            </div>
+                                                                        </div>
+                                                                    </template>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+
+                                            <div
+                                                style="
+                                                    margin-top: 14px;
+                                                    background: #f8fafc;
+                                                    border: 1px solid #e5e5e5;
+                                                    border-radius: 8px;
+                                                    padding: 12px 16px;
+                                                    font-size: 0.8rem;
+                                                    color: #444;
+                                                    line-height: 1.7;
+                                                "
+                                            >
+                                                <div style="font-weight: 700; color: #181818; margin-bottom: 6px">
+                                                    Quick Reference
+                                                </div>
+                                                <div
+                                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px"
+                                                >
+                                                    <div>
+                                                        <strong>Fields:</strong>
+                                                        <code
+                                                            style="
+                                                                background: #eee;
+                                                                padding: 1px 4px;
+                                                                border-radius: 3px;
+                                                            "
+                                                            >Name, Industry, Phone</code
+                                                        >
+                                                    </div>
+                                                    <div>
+                                                        <strong>Parent lookup:</strong>
+                                                        <code
+                                                            style="
+                                                                background: #eee;
+                                                                padding: 1px 4px;
+                                                                border-radius: 3px;
+                                                            "
+                                                            >Owner.Name, Account.Industry</code
+                                                        >
+                                                    </div>
+                                                    <div>
+                                                        <strong>Related list:</strong>
+                                                        <code
+                                                            style="
+                                                                background: #eee;
+                                                                padding: 1px 4px;
+                                                                border-radius: 3px;
+                                                            "
+                                                            >(SELECT FirstName FROM Contacts)</code
+                                                        >
+                                                    </div>
+                                                    <div>
+                                                        <strong>With filter:</strong>
+                                                        <code
+                                                            style="
+                                                                background: #eee;
+                                                                padding: 1px 4px;
+                                                                border-radius: 3px;
+                                                            "
+                                                            >(SELECT Name FROM Opps WHERE StageName = 'Closed
+                                                            Won')</code
+                                                        >
+                                                    </div>
+                                                    <div>
+                                                        <strong>With sort:</strong>
+                                                        <code
+                                                            style="
+                                                                background: #eee;
+                                                                padding: 1px 4px;
+                                                                border-radius: 3px;
+                                                            "
+                                                            >(SELECT Name FROM Contacts ORDER BY LastName)</code
+                                                        >
+                                                    </div>
+                                                    <div>
+                                                        <strong>With limit:</strong>
+                                                        <code
+                                                            style="
+                                                                background: #eee;
+                                                                padding: 1px 4px;
+                                                                border-radius: 3px;
+                                                            "
+                                                            >(SELECT Name FROM Cases LIMIT 10)</code
+                                                        >
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px">
-                                                <div>
-                                                    <strong>Fields:</strong>
-                                                    <code style="background: #eee; padding: 1px 4px; border-radius: 3px"
-                                                        >Name, Industry, Phone</code
-                                                    >
-                                                </div>
-                                                <div>
-                                                    <strong>Parent lookup:</strong>
-                                                    <code style="background: #eee; padding: 1px 4px; border-radius: 3px"
-                                                        >Owner.Name, Account.Industry</code
-                                                    >
-                                                </div>
-                                                <div>
-                                                    <strong>Related list:</strong>
-                                                    <code style="background: #eee; padding: 1px 4px; border-radius: 3px"
-                                                        >(SELECT FirstName FROM Contacts)</code
-                                                    >
-                                                </div>
-                                                <div>
-                                                    <strong>With filter:</strong>
-                                                    <code style="background: #eee; padding: 1px 4px; border-radius: 3px"
-                                                        >(SELECT Name FROM Opps WHERE StageName = 'Closed Won')</code
-                                                    >
-                                                </div>
-                                                <div>
-                                                    <strong>With sort:</strong>
-                                                    <code style="background: #eee; padding: 1px 4px; border-radius: 3px"
-                                                        >(SELECT Name FROM Contacts ORDER BY LastName)</code
-                                                    >
-                                                </div>
-                                                <div>
-                                                    <strong>With limit:</strong>
-                                                    <code style="background: #eee; padding: 1px 4px; border-radius: 3px"
-                                                        >(SELECT Name FROM Cases LIMIT 10)</code
-                                                    >
-                                                </div>
-                                            </div>
-                                        </div>
+                                        </template>
                                     </template>
                                 </template>
                             </div>
