@@ -81,6 +81,72 @@ public class DocGenChartRasterizer {
         FONT_5X7.put(')', new List<Integer>{ 8, 4, 2, 2, 2, 4, 8 });
         FONT_5X7.put('-', new List<Integer>{ 0, 0, 0, 14, 0, 0, 0 });
         FONT_5X7.put(' ', new List<Integer>{ 0, 0, 0, 0, 0, 0, 0 });
+
+        // ─── Uppercase A-Z ────────────────────────────────────────────────
+        FONT_5X7.put('A', new List<Integer>{ 14, 17, 17, 31, 17, 17, 17 });
+        FONT_5X7.put('B', new List<Integer>{ 30, 17, 17, 30, 17, 17, 30 });
+        FONT_5X7.put('C', new List<Integer>{ 14, 17, 16, 16, 16, 17, 14 });
+        FONT_5X7.put('D', new List<Integer>{ 28, 18, 17, 17, 17, 18, 28 });
+        FONT_5X7.put('E', new List<Integer>{ 31, 16, 16, 30, 16, 16, 31 });
+        FONT_5X7.put('F', new List<Integer>{ 31, 16, 16, 30, 16, 16, 16 });
+        FONT_5X7.put('G', new List<Integer>{ 14, 17, 16, 23, 17, 17, 14 });
+        FONT_5X7.put('H', new List<Integer>{ 17, 17, 17, 31, 17, 17, 17 });
+        FONT_5X7.put('I', new List<Integer>{ 14, 4, 4, 4, 4, 4, 14 });
+        FONT_5X7.put('J', new List<Integer>{ 7, 2, 2, 2, 2, 18, 12 });
+        FONT_5X7.put('K', new List<Integer>{ 17, 18, 20, 24, 20, 18, 17 });
+        FONT_5X7.put('L', new List<Integer>{ 16, 16, 16, 16, 16, 16, 31 });
+        FONT_5X7.put('M', new List<Integer>{ 17, 27, 21, 21, 17, 17, 17 });
+        FONT_5X7.put('N', new List<Integer>{ 17, 25, 21, 19, 17, 17, 17 });
+        FONT_5X7.put('O', new List<Integer>{ 14, 17, 17, 17, 17, 17, 14 });
+        FONT_5X7.put('P', new List<Integer>{ 30, 17, 17, 30, 16, 16, 16 });
+        FONT_5X7.put('Q', new List<Integer>{ 14, 17, 17, 17, 21, 18, 13 });
+        FONT_5X7.put('R', new List<Integer>{ 30, 17, 17, 30, 20, 18, 17 });
+        FONT_5X7.put('S', new List<Integer>{ 15, 16, 16, 14, 1, 1, 30 });
+        FONT_5X7.put('T', new List<Integer>{ 31, 4, 4, 4, 4, 4, 4 });
+        FONT_5X7.put('U', new List<Integer>{ 17, 17, 17, 17, 17, 17, 14 });
+        FONT_5X7.put('V', new List<Integer>{ 17, 17, 17, 17, 17, 10, 4 });
+        FONT_5X7.put('W', new List<Integer>{ 17, 17, 17, 21, 21, 21, 10 });
+        FONT_5X7.put('X', new List<Integer>{ 17, 17, 10, 4, 10, 17, 17 });
+        FONT_5X7.put('Y', new List<Integer>{ 17, 17, 10, 4, 4, 4, 4 });
+        FONT_5X7.put('Z', new List<Integer>{ 31, 1, 2, 4, 8, 16, 31 });
+
+        // ─── Lowercase a-z ────────────────────────────────────────────────
+        FONT_5X7.put('a', new List<Integer>{ 0, 0, 14, 1, 15, 17, 15 });
+        FONT_5X7.put('b', new List<Integer>{ 16, 16, 30, 17, 17, 17, 30 });
+        FONT_5X7.put('c', new List<Integer>{ 0, 0, 14, 17, 16, 17, 14 });
+        FONT_5X7.put('d', new List<Integer>{ 1, 1, 15, 17, 17, 17, 15 });
+        FONT_5X7.put('e', new List<Integer>{ 0, 0, 14, 17, 31, 16, 14 });
+        FONT_5X7.put('f', new List<Integer>{ 6, 9, 8, 30, 8, 8, 8 });
+        FONT_5X7.put('g', new List<Integer>{ 0, 0, 15, 17, 15, 1, 14 });
+        FONT_5X7.put('h', new List<Integer>{ 16, 16, 30, 17, 17, 17, 17 });
+        FONT_5X7.put('i', new List<Integer>{ 4, 0, 12, 4, 4, 4, 14 });
+        FONT_5X7.put('j', new List<Integer>{ 2, 0, 6, 2, 2, 18, 12 });
+        FONT_5X7.put('k', new List<Integer>{ 16, 16, 18, 20, 24, 20, 18 });
+        FONT_5X7.put('l', new List<Integer>{ 12, 4, 4, 4, 4, 4, 14 });
+        FONT_5X7.put('m', new List<Integer>{ 0, 0, 26, 21, 21, 17, 17 });
+        FONT_5X7.put('n', new List<Integer>{ 0, 0, 22, 25, 17, 17, 17 });
+        FONT_5X7.put('o', new List<Integer>{ 0, 0, 14, 17, 17, 17, 14 });
+        FONT_5X7.put('p', new List<Integer>{ 0, 0, 30, 17, 30, 16, 16 });
+        FONT_5X7.put('q', new List<Integer>{ 0, 0, 15, 17, 15, 1, 1 });
+        FONT_5X7.put('r', new List<Integer>{ 0, 0, 22, 25, 16, 16, 16 });
+        FONT_5X7.put('s', new List<Integer>{ 0, 0, 15, 16, 14, 1, 30 });
+        FONT_5X7.put('t', new List<Integer>{ 8, 8, 30, 8, 8, 9, 6 });
+        FONT_5X7.put('u', new List<Integer>{ 0, 0, 17, 17, 17, 19, 13 });
+        FONT_5X7.put('v', new List<Integer>{ 0, 0, 17, 17, 17, 10, 4 });
+        FONT_5X7.put('w', new List<Integer>{ 0, 0, 17, 17, 21, 21, 10 });
+        FONT_5X7.put('x', new List<Integer>{ 0, 0, 17, 10, 4, 10, 17 });
+        FONT_5X7.put('y', new List<Integer>{ 0, 0, 17, 17, 15, 1, 14 });
+        FONT_5X7.put('z', new List<Integer>{ 0, 0, 31, 2, 4, 8, 31 });
+
+        // ─── Common punctuation ───────────────────────────────────────────
+        FONT_5X7.put(':', new List<Integer>{ 0, 6, 6, 0, 6, 6, 0 });
+        FONT_5X7.put(';', new List<Integer>{ 0, 6, 6, 0, 6, 6, 4 });
+        FONT_5X7.put('/', new List<Integer>{ 1, 2, 2, 4, 8, 8, 16 });
+        FONT_5X7.put('?', new List<Integer>{ 14, 17, 1, 2, 4, 0, 4 });
+        FONT_5X7.put('!', new List<Integer>{ 4, 4, 4, 4, 4, 0, 4 });
+        FONT_5X7.put('+', new List<Integer>{ 0, 0, 4, 14, 4, 0, 0 });
+        FONT_5X7.put('=', new List<Integer>{ 0, 0, 14, 0, 14, 0, 0 });
+        FONT_5X7.put('\'', new List<Integer>{ 4, 4, 0, 0, 0, 0, 0 });
     }
 
     private static final Set<String> KNOWN_STYLES = new Set<String>{ 'bar', 'column', 'pie', 'donut' };
@@ -119,7 +185,10 @@ public class DocGenChartRasterizer {
     // =====================================================================
     private static Blob emitBar(List<Map<String, Object>> buckets, Map<String, String> opts) {
         Integer width = optInt(opts, 'width', 500);
-        Integer marginLeft = 8;
+        // Reserve left-side strip for category labels ("Drive Alone" etc.)
+        // and right-side strip for value labels ("267 (62.8%)").
+        Integer categoryStripPx = 105;
+        Integer valueStripPx = 80;
         Integer barHeight = 22;
         Integer barGap = 8;
         Integer height = optInt(opts, 'height', (buckets.size() * (barHeight + barGap)) + barGap);
@@ -129,9 +198,8 @@ public class DocGenChartRasterizer {
         if (maxPct <= 0) {
             maxPct = 100;
         }
-        // Reserve right-side strip for value label like "267 (62.8%)"
-        Integer labelStripPx = 80;
-        Integer barAreaWidth = width - marginLeft - labelStripPx;
+        Integer barAreaWidth = width - categoryStripPx - valueStripPx;
+        Integer barStartX = categoryStripPx;
 
         for (Integer i = 0; i < buckets.size(); i++) {
             Map<String, Object> b = buckets[i];
@@ -149,12 +217,27 @@ public class DocGenChartRasterizer {
             if (barW < 1 && pct > 0) {
                 barW = 1;
             }
-            c.fillRect(marginLeft, rowY, barW, barHeight, paletteIdx);
-            // Value label: " 267 (62.8%)" placed to the right of the bar,
-            // vertically centered within the bar's row.
-            String label = formatCountPercent(count, pct);
+            c.fillRect(barStartX, rowY, barW, barHeight, paletteIdx);
+
             Integer textY = rowY + (barHeight - FONT_H) / 2;
-            c.drawText(marginLeft + barW + 4, textY, label, COLOR_TEXT);
+
+            // Category label on the LEFT, truncated if needed.
+            String catLabel = stringOf(b.get('key_label'));
+            if (String.isBlank(catLabel)) {
+                catLabel = stringOf(b.get('key'));
+            }
+            if (catLabel == null) {
+                catLabel = '';
+            }
+            Integer maxCatChars = (categoryStripPx - 6) / FONT_CHAR_ADVANCE;
+            if (catLabel.length() > maxCatChars && maxCatChars > 1) {
+                catLabel = catLabel.substring(0, maxCatChars);
+            }
+            c.drawText(4, textY, catLabel, COLOR_TEXT);
+
+            // Value label on the RIGHT, after the bar.
+            String valLabel = formatCountPercent(count, pct);
+            c.drawText(barStartX + barW + 4, textY, valLabel, COLOR_TEXT);
         }
 
         return c.toPng();
@@ -234,9 +317,12 @@ public class DocGenChartRasterizer {
     // tests, well within Apex CPU budget.
     // =====================================================================
     private static Blob emitPie(List<Map<String, Object>> buckets, Map<String, String> opts, Boolean donut) {
-        Integer size = optInt(opts, 'size', 280);
-        Integer width = optInt(opts, 'width', size);
-        Integer height = optInt(opts, 'height', size);
+        // Default layout: 540 wide, 280 tall — pie/donut in the left half,
+        // a vertical legend on the right (color swatch + label + count/%).
+        // Matches the SVG emitter's default sizing so server-side and
+        // browser-side rasterization look visually equivalent.
+        Integer width = optInt(opts, 'width', 540);
+        Integer height = optInt(opts, 'height', 280);
         Canvas c = new Canvas(width, height, buildPalette(opts));
 
         Decimal total = 0;
@@ -250,9 +336,13 @@ public class DocGenChartRasterizer {
             return c.toPng();
         }
 
-        Integer cx = width / 2;
-        Integer cy = height / 2;
-        Integer outerR = Math.min(width, height) / 2 - 4;
+        // Pie sits in the left half of the canvas; legend in the right.
+        Integer legendStartX = Math.max((Integer) (width * 0.5), width - 240);
+        Integer pieAreaWidth = legendStartX - 8;
+        Integer pieAreaHeight = height;
+        Integer cx = pieAreaWidth / 2;
+        Integer cy = pieAreaHeight / 2;
+        Integer outerR = Math.min(pieAreaWidth, pieAreaHeight) / 2 - 8;
         Integer outerR2 = outerR * outerR;
         Integer innerR = 0;
         if (donut) {
@@ -324,6 +414,34 @@ public class DocGenChartRasterizer {
                 Integer paletteIdx = paletteIndexForBucket(buckets[sliceIdx], sliceIdx, buckets.size());
                 c.setPixel(x, y, paletteIdx);
             }
+        }
+
+        // ─── Legend rendering on the right half ───────────────────────────
+        // One row per bucket: 11x11 color swatch + " " + "Label — count(pct%)".
+        Integer swatchSize = 11;
+        Integer rowH = swatchSize + 5; // 16 px per row
+        Integer maxRows = (height - 8) / rowH;
+        Integer legendY = (height - (Math.min(buckets.size(), maxRows) * rowH)) / 2;
+        for (Integer i = 0; i < buckets.size() && i < maxRows; i++) {
+            Map<String, Object> b = buckets[i];
+            Integer paletteIdx = paletteIndexForBucket(b, i, buckets.size());
+            Integer yRow = legendY + i * rowH;
+            c.fillRect(legendStartX, yRow, swatchSize, swatchSize, paletteIdx);
+            String label = stringOf(b.get('key_label'));
+            if (String.isBlank(label)) {
+                label = stringOf(b.get('key'));
+            }
+            if (label == null) {
+                label = '';
+            }
+            String row = label + ' ' + formatCountPercent(decimalOf(b.get('count')), decimalOf(b.get('percent')));
+            // Truncate to fit available legend width
+            Integer availPx = width - (legendStartX + swatchSize + 6);
+            Integer maxChars = availPx / FONT_CHAR_ADVANCE;
+            if (row.length() > maxChars && maxChars > 1) {
+                row = row.substring(0, maxChars);
+            }
+            c.drawText(legendStartX + swatchSize + 5, yRow + 2, row, COLOR_TEXT);
         }
 
         return c.toPng();
@@ -481,6 +599,10 @@ public class DocGenChartRasterizer {
         } catch (Exception e) {
             return fallback;
         }
+    }
+
+    private static String stringOf(Object v) {
+        return v == null ? null : String.valueOf(v);
     }
 
     private static Decimal decimalOf(Object v) {
