@@ -46,6 +46,42 @@ public class DocGenChartRasterizer {
     };
     private static final Integer COLOR_BG = 0;
     private static final Integer COLOR_GRID = 1;
+    private static final Integer COLOR_TEXT = 2;
+
+    // 5x7 bitmap font for value labels — digits, percent, period, space, (, ).
+    // Each glyph is 7 bytes; bit 4 (0x10) = leftmost pixel, bit 0 = rightmost.
+    // Hand-encoded for the value-label use case (e.g. "267 (62.8%)").
+    // Letters/etc not included in v1 — category labels live in surrounding
+    // Word document text where the host app's fonts render at full quality.
+    // Apex Map literals don't accept nested List<Integer> initializers, so
+    // we build the table once in a static initializer.
+    private static Map<String, List<Integer>> FONT_5X7;
+    private static final Integer FONT_W = 5;
+    private static final Integer FONT_H = 7;
+    private static final Integer FONT_CHAR_ADVANCE = 6; // 5px glyph + 1px gap
+
+    static {
+        // Apex has no hex integer literals — values stored as decimal.
+        // Each row uses the low 5 bits; bit 4 (16) = leftmost pixel.
+        FONT_5X7 = new Map<String, List<Integer>>();
+        FONT_5X7.put('0', new List<Integer>{ 14, 17, 19, 21, 25, 17, 14 });
+        FONT_5X7.put('1', new List<Integer>{ 4, 12, 4, 4, 4, 4, 14 });
+        FONT_5X7.put('2', new List<Integer>{ 14, 17, 1, 2, 4, 8, 31 });
+        FONT_5X7.put('3', new List<Integer>{ 31, 2, 4, 2, 1, 17, 14 });
+        FONT_5X7.put('4', new List<Integer>{ 2, 6, 10, 18, 31, 2, 2 });
+        FONT_5X7.put('5', new List<Integer>{ 31, 16, 30, 1, 1, 17, 14 });
+        FONT_5X7.put('6', new List<Integer>{ 6, 8, 16, 30, 17, 17, 14 });
+        FONT_5X7.put('7', new List<Integer>{ 31, 1, 2, 4, 8, 8, 8 });
+        FONT_5X7.put('8', new List<Integer>{ 14, 17, 17, 14, 17, 17, 14 });
+        FONT_5X7.put('9', new List<Integer>{ 14, 17, 17, 15, 1, 2, 12 });
+        FONT_5X7.put('.', new List<Integer>{ 0, 0, 0, 0, 0, 6, 6 });
+        FONT_5X7.put(',', new List<Integer>{ 0, 0, 0, 0, 6, 6, 4 });
+        FONT_5X7.put('%', new List<Integer>{ 24, 25, 2, 4, 8, 19, 3 });
+        FONT_5X7.put('(', new List<Integer>{ 2, 4, 8, 8, 8, 4, 2 });
+        FONT_5X7.put(')', new List<Integer>{ 8, 4, 2, 2, 2, 4, 8 });
+        FONT_5X7.put('-', new List<Integer>{ 0, 0, 0, 14, 0, 0, 0 });
+        FONT_5X7.put(' ', new List<Integer>{ 0, 0, 0, 0, 0, 0, 0 });
+    }
 
     private static final Set<String> KNOWN_STYLES = new Set<String>{ 'bar', 'column', 'pie', 'donut' };
 
@@ -83,8 +119,6 @@ public class DocGenChartRasterizer {
     // =====================================================================
     private static Blob emitBar(List<Map<String, Object>> buckets, Map<String, String> opts) {
         Integer width = optInt(opts, 'width', 500);
-        // Reserve a narrow left margin for visual breathing room. No labels
-        // are drawn in-chart (per Option A).
         Integer marginLeft = 8;
         Integer barHeight = 22;
         Integer barGap = 8;
@@ -95,11 +129,17 @@ public class DocGenChartRasterizer {
         if (maxPct <= 0) {
             maxPct = 100;
         }
-        Integer barAreaWidth = width - marginLeft - 6;
+        // Reserve right-side strip for value label like "267 (62.8%)"
+        Integer labelStripPx = 80;
+        Integer barAreaWidth = width - marginLeft - labelStripPx;
 
         for (Integer i = 0; i < buckets.size(); i++) {
             Map<String, Object> b = buckets[i];
+            Decimal count = decimalOf(b.get('count'));
             Decimal pct = decimalOf(b.get('percent'));
+            if (count == null) {
+                count = 0;
+            }
             if (pct == null) {
                 pct = 0;
             }
@@ -110,6 +150,11 @@ public class DocGenChartRasterizer {
                 barW = 1;
             }
             c.fillRect(marginLeft, rowY, barW, barHeight, paletteIdx);
+            // Value label: " 267 (62.8%)" placed to the right of the bar,
+            // vertically centered within the bar's row.
+            String label = formatCountPercent(count, pct);
+            Integer textY = rowY + (barHeight - FONT_H) / 2;
+            c.drawText(marginLeft + barW + 4, textY, label, COLOR_TEXT);
         }
 
         return c.toPng();
@@ -152,8 +197,12 @@ public class DocGenChartRasterizer {
         for (Integer i = 0; i < buckets.size(); i++) {
             Map<String, Object> b = buckets[i];
             Decimal count = decimalOf(b.get('count'));
+            Decimal pct = decimalOf(b.get('percent'));
             if (count == null) {
                 count = 0;
+            }
+            if (pct == null) {
+                pct = 0;
             }
             Integer paletteIdx = paletteIndexForBucket(b, i, buckets.size());
             Integer slotCenter = marginLeft + (i * slotW) + (slotW / 2);
@@ -164,6 +213,12 @@ public class DocGenChartRasterizer {
             }
             Integer barY = baselineY - barH;
             c.fillRect(barX, barY, barW, barH, paletteIdx);
+            // Value label centered above each column, just above the bar top.
+            String label = formatPercent(pct);
+            Integer textW = c.textWidth(label);
+            Integer textX = slotCenter - (textW / 2);
+            Integer textY = Math.max(0, barY - FONT_H - 2);
+            c.drawText(textX, textY, label, COLOR_TEXT);
         }
 
         return c.toPng();
@@ -379,6 +434,29 @@ public class DocGenChartRasterizer {
     // Bucket helpers (mirror DocGenSvgChartSerializer)
     // =====================================================================
 
+    /** Format like "267 (62.8%)" — count integer, percent 1 decimal. */
+    private static String formatCountPercent(Decimal count, Decimal pct) {
+        return formatInt(count) + ' (' + formatPercent(pct) + ')';
+    }
+
+    /** Format like "62.8%" — drops decimal when whole. */
+    private static String formatPercent(Decimal pct) {
+        if (pct == null) {
+            return '0%';
+        }
+        if (pct == pct.setScale(0)) {
+            return String.valueOf(pct.intValue()) + '%';
+        }
+        return String.valueOf(pct.setScale(1)) + '%';
+    }
+
+    private static String formatInt(Decimal v) {
+        if (v == null) {
+            return '0';
+        }
+        return String.valueOf(v.intValue());
+    }
+
     private static Decimal computeMaxPercent(List<Map<String, Object>> buckets) {
         Decimal max = decimalOf(buckets[0].get('max_percent'));
         if (max != null && max > 0) {
@@ -468,6 +546,44 @@ public class DocGenChartRasterizer {
                     pixels[rowStart + px] = colorIdx;
                 }
             }
+        }
+
+        /**
+         * Draws one character from FONT_5X7 at (x, y) — top-left corner of
+         * the glyph bounding box. Unsupported chars render as blank (space).
+         */
+        public void drawChar(Integer x, Integer y, String ch, Integer colorIdx) {
+            List<Integer> glyph = FONT_5X7.get(ch);
+            if (glyph == null) {
+                return;
+            }
+            for (Integer row = 0; row < FONT_H; row++) {
+                Integer bits = glyph[row];
+                for (Integer col = 0; col < FONT_W; col++) {
+                    // bit 4 = leftmost pixel
+                    Integer mask = 1 << (FONT_W - 1 - col);
+                    if ((bits & mask) != 0) {
+                        setPixel(x + col, y + row, colorIdx);
+                    }
+                }
+            }
+        }
+
+        /** Draws a string left-to-right at (x, y). Returns the width drawn. */
+        public Integer drawText(Integer x, Integer y, String text, Integer colorIdx) {
+            if (text == null) {
+                return 0;
+            }
+            Integer cursorX = x;
+            for (Integer i = 0; i < text.length(); i++) {
+                drawChar(cursorX, y, text.substring(i, i + 1), colorIdx);
+                cursorX += FONT_CHAR_ADVANCE;
+            }
+            return cursorX - x;
+        }
+
+        public Integer textWidth(String text) {
+            return text == null ? 0 : text.length() * FONT_CHAR_ADVANCE;
         }
 
         public Blob toPng() {
