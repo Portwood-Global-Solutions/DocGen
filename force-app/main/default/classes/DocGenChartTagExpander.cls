@@ -52,8 +52,13 @@ public with sharing class DocGenChartTagExpander {
         'donut',
         'pivot',
         'clustered',
-        'stacked'
+        'stacked',
+        'line',
+        'area'
     };
+    // Cross-tab styles require groupBy + colSort to produce a sensible pivot.
+    // `line`/`area` accept groupBy but don't REQUIRE it (single-series mode is
+    // a valid use), so they're NOT in this set.
     private static final Set<String> CROSS_TAB_STYLES = new Set<String>{ 'pivot', 'clustered', 'stacked' };
     // Styles the SVG serializer can render natively. When an HTML template
     // author opts in with `htmlRender=svg`, the expander resolves buckets
@@ -77,7 +82,16 @@ public with sharing class DocGenChartTagExpander {
     // Cloud, raw HTML download). HTML→PDF authors who need the chart in the
     // PDF must keep the default `htmlRender=cssbar` path until Flying Saucer
     // SVG support arrives (banked as a separate sub-issue).
-    private static final Set<String> HTML_INLINE_SVG_STYLES = new Set<String>{ 'bar', 'column', 'pie', 'donut' };
+    private static final Set<String> HTML_INLINE_SVG_STYLES = new Set<String>{
+        'bar',
+        'column',
+        'pie',
+        'donut',
+        'stacked',
+        'clustered',
+        'line',
+        'area'
+    };
 
     /**
      * Legacy two-arg entry point. Routes to the chart-CV-aware overload with
@@ -205,7 +219,9 @@ public with sharing class DocGenChartTagExpander {
         }
         if (!ALLOWED_STYLES.contains(style)) {
             throw new ChartTagException(
-                'Unknown style "' + style + '". Allowed: bar, column, pie, donut, pivot, clustered, stacked.'
+                'Unknown style "' +
+                    style +
+                    '". Allowed: bar, column, pie, donut, pivot, clustered, stacked, line, area.'
             );
         }
 
