@@ -285,6 +285,60 @@ public with sharing class DocGenChartBucketResolver {
     }
 
     /**
+     * Public bucket-resolution helper, used by DocGenChartImageController to
+     * compute buckets for the PNG-via-CV chart pipeline (#117) without
+     * recursing through the full preprocessInline scanner.
+     *
+     * Mirrors the dispatch at preprocessInline:163-206:
+     *   - Pivot (groupBy=) or filtered (where=) → SOQL fallback
+     *   - Pre-loaded relationship on the data map → in-memory bucket math
+     *   - Otherwise → SOQL fallback
+     * Honors the same SOQL budget. Applies the `colors=` palette override.
+     *
+     * `modifiersRaw` is the same query-string-shape string the inline scanner
+     * passes through (e.g. "colors=#aaa,#bbb&groupBy=Field__c&where=...").
+     * Returns the bucket list directly (not wrapped in List<Object>) — the
+     * controller doesn't need the runtime-type hack the inline scanner needs.
+     */
+    public static List<Map<String, Object>> resolveBucketsForTag(
+        Map<String, Object> data,
+        String relName,
+        String fieldApi,
+        String modifiersRaw
+    ) {
+        Map<String, String> mods = parseTagModifiers(modifiersRaw);
+        String whereClause = mods.get('where');
+        String splitDelim = mods.get('split');
+        String groupByField = mods.get('groupby');
+        List<String> colOrder = parseColSortModifier(mods.get('colsort'));
+
+        List<Map<String, Object>> buckets;
+        Boolean forceSoql = String.isNotBlank(groupByField) || String.isNotBlank(whereClause);
+        List<Object> records = forceSoql ? null : resolveRecords(data, relName);
+        if (records != null && !records.isEmpty()) {
+            buckets = computeBucketsWithSplit(records, fieldApi, splitDelim);
+        } else {
+            buckets = tryFallbackSoqlAggregateAdvanced(
+                data,
+                relName,
+                fieldApi,
+                groupByField,
+                whereClause,
+                splitDelim,
+                colOrder
+            );
+        }
+
+        List<String> customPalette = parsePaletteModifier(modifiersRaw);
+        if (customPalette != null && !customPalette.isEmpty()) {
+            for (Integer bi = 0; bi < buckets.size(); bi++) {
+                buckets[bi].put('color', customPalette[Math.mod(bi, customPalette.size())]);
+            }
+        }
+        return buckets;
+    }
+
+    /**
      * Builds the bucket list from an in-memory child collection.
      *
      * Records may be `Map<String, Object>` (the shape produced by the

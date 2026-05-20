@@ -107,17 +107,53 @@ private class DocGenChartTagExpanderTest {
     }
 
     @IsTest
-    static void wordTemplate_throws() {
-        String input = '{Chart:Survey_Responses__r:Selected_Answer__c}';
-        try {
-            DocGenChartTagExpander.expand(input, 'Word');
-            System.assert(false, 'Expected DocGenException in Word template.');
-        } catch (DocGenException e) {
-            System.assert(
-                e.getMessage().contains('HTML-only') || e.getMessage().contains('HTML'),
-                'Word-mode error should reference HTML-only constraint. Got: ' + e.getMessage()
-            );
-        }
+    static void wordTemplate_noChartCvMap_emitsTextPlaceholder() {
+        // Post-#117: Word templates no longer throw on {Chart:...}. The
+        // server-side path with no LWC to rasterize emits a text placeholder
+        // identifying the chart so authors see the gap rather than silent loss.
+        String input = '{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=How satisfied?}';
+        String out = DocGenChartTagExpander.expand(input, 'Word');
+        System.assert(out.contains('[Chart:'), 'Word + no chartCvMap should emit text placeholder. Got: ' + out);
+        System.assert(out.contains('How satisfied?'), 'Placeholder should include the chart title. Got: ' + out);
+        System.assert(!out.contains('<h2'), 'Placeholder must NOT emit HTML in Word output (would corrupt OOXML).');
+    }
+
+    @IsTest
+    static void wordTemplate_withChartCvMap_emitsImageTag() {
+        String input = '{Chart:Responses__r:A__c:bar}';
+        // Same option set produces the same signature both sides; here we
+        // pre-compute the signature with the controller's helper so the test
+        // doesn't have to hand-roll a SHA-256.
+        Map<String, String> opts = new Map<String, String>();
+        String sig = DocGenChartImageController.tagSignature('Responses__r', 'A__c', 'bar', opts);
+        String fakeCvId = '0681x00000000000001';
+        Map<String, String> chartCvMap = new Map<String, String>{ sig => fakeCvId };
+        Map<String, Object> data = new Map<String, Object>();
+
+        String out = DocGenChartTagExpander.expand(input, 'Word', data, chartCvMap);
+
+        System.assert(
+            out.contains('{%__dgchart_' + fakeCvId + '}'),
+            'Word + chartCvMap should emit synthetic image tag. Got: ' + out
+        );
+        System.assertEquals(
+            fakeCvId,
+            (String) data.get('__dgchart_' + fakeCvId),
+            'Data map should be seeded with the synthetic key → CV Id.'
+        );
+    }
+
+    @IsTest
+    static void wordTemplate_signatureStable_acrossOptionOrder() {
+        // Same options in different order must hash to the same signature so
+        // the LWC and the expander agree on which CV maps to which tag.
+        Map<String, String> aFirst = new Map<String, String>{ 'colors' => '#aaa,#bbb', 'width' => '400' };
+        Map<String, String> bFirst = new Map<String, String>{ 'width' => '400', 'colors' => '#aaa,#bbb' };
+        System.assertEquals(
+            DocGenChartImageController.tagSignature('Rel__r', 'F__c', 'bar', aFirst),
+            DocGenChartImageController.tagSignature('Rel__r', 'F__c', 'bar', bFirst),
+            'Signature must be order-independent.'
+        );
     }
 
     @IsTest

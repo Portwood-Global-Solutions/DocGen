@@ -459,11 +459,20 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * @return Map containing allXmlParts, imageBase64Map, imageCvIdMap, title, and templateType
      */
     @AuraEnabled
-    public static Map<String, Object> generateDocumentParts(Id templateId, Id recordId) {
+    public static Map<String, Object> generateDocumentParts(
+        Id templateId,
+        Id recordId,
+        Map<String, String> chartCvMap
+    ) {
+        // chartCvMap (#117): signature → CV Id map for charts the LWC pre-
+        // rasterized to PNG. Null for non-chart templates and legacy callers.
+        DocGenService.beginChartContext(chartCvMap);
         try {
             return DocGenService.generateDocumentParts(templateId, recordId);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error generating document parts. Please check the template configuration.');
+        } finally {
+            DocGenService.endChartContext();
         }
     }
 
@@ -2675,7 +2684,16 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     @AuraEnabled
-    public static Map<String, Object> generatePdf(Id templateId, Id recordId, Boolean saveToRecord) {
+    public static Map<String, Object> generatePdf(
+        Id templateId,
+        Id recordId,
+        Boolean saveToRecord,
+        Map<String, String> chartCvMap
+    ) {
+        // chartCvMap (#117): signature → CV Id map for charts the LWC pre-
+        // rasterized to PNG. Null for non-chart templates and legacy callers
+        // that haven't been updated.
+        DocGenService.beginChartContext(chartCvMap);
         try {
             if (saveToRecord) {
                 Id contentDocId = DocGenService.generateDocument(templateId, recordId);
@@ -2693,6 +2711,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 return heapPressureSignal(null);
             }
             throw DocGenService.ahe(e, 'Error generating PDF document. Please check the template configuration.');
+        } finally {
+            DocGenService.endChartContext();
         }
     }
 

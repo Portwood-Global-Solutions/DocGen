@@ -22,7 +22,10 @@ import launchGiantQueryPdfBatch from '@salesforce/apex/DocGenController.launchGi
 import getSortedChildIds from '@salesforce/apex/DocGenController.getSortedChildIds';
 import getChildRecordsByIds from '@salesforce/apex/DocGenController.getChildRecordsByIds';
 import { NavigationMixin } from 'lightning/navigation';
-import { downloadBase64 as downloadBase64Util } from 'c/docGenUtils';
+import { downloadBase64 as downloadBase64Util, rasterizeSvgToPng } from 'c/docGenUtils';
+import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
+import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
+import deleteChartImages from '@salesforce/apex/DocGenChartImageController.deleteChartImages';
 import { buildDocx } from './docGenZipWriter';
 import { mergePdfs } from './docGenPdfMerger';
 import { extractFirstImageFromPdfBase64 } from './docGenPdfImageExtractor';
@@ -629,11 +632,18 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                     );
                 } else {
                     this.showToast('Info', 'Generating PDF...', 'info');
-                    const result = await generatePdf({
-                        templateId: this.selectedTemplateId,
-                        recordId: this.recordId,
-                        saveToRecord: false
-                    });
+                    const chartContext = await this._prepareCharts();
+                    let result;
+                    try {
+                        result = await generatePdf({
+                            templateId: this.selectedTemplateId,
+                            recordId: this.recordId,
+                            saveToRecord: false,
+                            chartCvMap: chartContext.map
+                        });
+                    } finally {
+                        await this._cleanupCharts(chartContext.cvIds);
+                    }
                     if (await this._handledHeapPressure(result)) {
                         return;
                     }
@@ -715,6 +725,69 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         this.outputMode = 'download';
         await this._assembleGiantQueryPdf(rel, counts, childNodes[rel]);
         return true;
+    }
+
+    /**
+     * #117 chart pipeline. Asks the controller for the SVG fragments needed
+     * for this template/record combo, rasterizes each to PNG via the shared
+     * docGenUtils helper, and uploads each PNG as a transient ContentVersion.
+     * Returns {map, cvIds} — `map` is signature → CV Id (passed to the merge
+     * call so the Word path can substitute charts with image tags), `cvIds`
+     * is the list of CV IDs to reap once the merge finishes.
+     *
+     * Returns {map: {}, cvIds: []} for templates with no chart tags (no
+     * server round-trip wasted — `prepareChartImages` returns empty for
+     * non-Word templates and templates with no {Chart:...} tags).
+     */
+    async _prepareCharts() {
+        try {
+            const requests = await prepareChartImages({
+                templateId: this.selectedTemplateId,
+                recordId: this.recordId
+            });
+            if (!Array.isArray(requests) || requests.length === 0) {
+                return { map: {}, cvIds: [] };
+            }
+            const map = {};
+            const cvIds = [];
+            for (const req of requests) {
+                try {
+                    // eslint-disable-next-line no-await-in-loop
+                    const pngBase64 = await rasterizeSvgToPng(req.svgString, req.width, req.height);
+                    // eslint-disable-next-line no-await-in-loop
+                    const cvId = await uploadChartImage({
+                        recordId: this.recordId,
+                        signature: req.signature,
+                        base64Png: pngBase64
+                    });
+                    if (cvId) {
+                        map[req.signature] = cvId;
+                        cvIds.push(cvId);
+                    }
+                } catch (chartErr) {
+                    // One bad chart shouldn't abort the whole generate — the
+                    // tag will fall back to its text-placeholder branch.
+                    console.warn('DocGen: chart prep failed for signature ' + req.signature, chartErr);
+                }
+            }
+            return { map, cvIds };
+        } catch (e) {
+            console.warn('DocGen: prepareChartImages failed; charts will render as text placeholders', e);
+            return { map: {}, cvIds: [] };
+        }
+    }
+
+    async _cleanupCharts(cvIds) {
+        if (!Array.isArray(cvIds) || cvIds.length === 0) {
+            return;
+        }
+        try {
+            await deleteChartImages({ cvIds });
+        } catch (cleanupErr) {
+            // Cleanup failure is non-fatal — the cleanup schedulable (or
+            // Salesforce's own CV recycle bin sweep) will catch these later.
+            console.warn('DocGen: chart CV cleanup failed', cleanupErr);
+        }
     }
 
     async handleGiantQuery() {
@@ -946,10 +1019,23 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
      * For DOCX images, use {%FieldName} tags with ContentVersion IDs.
      */
     async _generateOfficeClientSide(saveToRecord, extension, mimeType) {
-        const parts = await generateDocumentParts({
-            templateId: this.selectedTemplateId,
-            recordId: this.recordId
-        });
+        // #117 chart pipeline: rasterize any {Chart:...} tags in the template
+        // body to PNGs (uploaded as transient CVs) before kicking off the
+        // server-side merge. The merge sees the signature → CV Id map and
+        // substitutes each chart tag with the existing image-tag path.
+        // try/finally guarantees CV cleanup even if generateDocumentParts
+        // throws. No-op for templates with no chart tags.
+        const chartContext = await this._prepareCharts();
+        let parts;
+        try {
+            parts = await generateDocumentParts({
+                templateId: this.selectedTemplateId,
+                recordId: this.recordId,
+                chartCvMap: chartContext.map
+            });
+        } finally {
+            await this._cleanupCharts(chartContext.cvIds);
+        }
         if (!parts || !parts.allXmlParts) {
             throw new Error('Document generation returned empty result.');
         }

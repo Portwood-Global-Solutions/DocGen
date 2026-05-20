@@ -43,6 +43,27 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     // skips DocGenController.generateDocumentData() and uses this data instead. Cleared after each use.
     private static Map<String, Object> preloadedRecordDataOverride;
 
+    // Chart pipeline (#117): signature → ContentVersion Id for charts the LWC
+    // pre-rasterized to PNG before calling generate(). DocGenChartTagExpander
+    // reads this in processXml to substitute {Chart:...} with a CV-referencing
+    // image tag for Word templates. Empty for non-chart templates and for
+    // server-side flows that have no LWC to rasterize.
+    @TestVisible
+    private static Map<String, String> currentChartCvMap;
+
+    /**
+     * Controller-facing setter for the chart CV map. Called by DocGenController
+     * generate entry points before invoking the merge; paired with `endChartContext`
+     * in a `finally` so per-request state doesn't leak across transactions.
+     */
+    public static void beginChartContext(Map<String, String> chartCvMap) {
+        currentChartCvMap = chartCvMap;
+    }
+
+    public static void endChartContext() {
+        currentChartCvMap = null;
+    }
+
     // Static cache for pre-decomposed XML parts — same template, queried once, reused across batch
     private static Id cachedPreDecompTemplateId;
     private static Map<String, String> cachedXmlParts; // key (e.g. 'rels', 'word__document.xml') → raw XML
@@ -2687,12 +2708,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
     private static String processXml(String xml, Map<String, Object> data) {
         // Chart tag expansion: rewrites {Chart:rel:field:style:opts} into the
-        // corresponding HTML snippet (with embedded {#ChartBucket:...} loops).
-        // Runs before ChartBucket preprocessing so the expanded snippets feed
-        // through the existing bucket resolver. Cheap contains() guard keeps
-        // the no-chart hot path at zero overhead.
+        // corresponding substitution. HTML templates get the CSS-bar snippet
+        // (with embedded {#ChartBucket:...} loops, which feed through the
+        // existing bucket resolver). Word templates with chartCvMap entries
+        // get a {%__dgchart_<cvId>} image tag (resolved via the existing
+        // image-tag scanner + buildImageXml case-4 path). Cheap contains()
+        // guard keeps the no-chart hot path at zero overhead.
         if (xml != null && xml.contains('{Chart:')) {
-            xml = DocGenChartTagExpander.expand(xml, currentTemplateType);
+            xml = DocGenChartTagExpander.expand(xml, currentTemplateType, data, currentChartCvMap);
         }
 
         // ChartBucket preprocessing: rewrites {#ChartBucket:rel:field}...{/ChartBucket}

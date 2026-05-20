@@ -29,8 +29,9 @@
  *
  * Bad tags render an inline error block in HTML output so the author sees
  * the problem in their generated PDF rather than chasing a silent miss.
- * In Word/Excel templates the tag is unsupported (HTML-only chart output);
- * the expander emits an error block there too rather than corrupting OOXML.
+ * In Word templates (#117 PNG-via-CV pipeline), bad tags emit a `[Chart error: ...]`
+ * text placeholder instead — keeping the document well-formed even when a
+ * template author writes a malformed tag.
  */
 public with sharing class DocGenChartTagExpander {
     private static final String OPEN_PREFIX = '{Chart:';
@@ -38,10 +39,38 @@ public with sharing class DocGenChartTagExpander {
     private static final Set<String> CROSS_TAB_STYLES = new Set<String>{ 'pivot', 'clustered', 'stacked' };
 
     /**
-     * Top-level entry point. Returns xml with all {Chart:...} tags expanded.
-     * Cheap no-op if the template doesn't contain the prefix.
+     * Legacy two-arg entry point. Routes to the chart-CV-aware overload with
+     * no map / no data so existing callers (and tests that exercised the
+     * HTML-only behavior) keep their shape.
      */
     public static String expand(String xml, String templateType) {
+        return expand(xml, templateType, null, null);
+    }
+
+    /**
+     * Top-level entry point with chart-CV awareness (#117).
+     *
+     * For HTML templates: behavior unchanged — emits the existing CSS-bar
+     * table per chart.
+     *
+     * For Word templates with `chartCvMap` populated: each chart tag whose
+     * signature matches a CV in the map is substituted with `{%__dgchart_<cvId>}`,
+     * and the data map is seeded with `__dgchart_<cvId> → cvId` so the existing
+     * image-tag scanner at DocGenService:3079 resolves the synthetic field to
+     * the CV Id. From there `buildImageXml` case-4 handles DOCX (blob embed)
+     * vs PDF (relative CV URL) automatically.
+     *
+     * For Word templates with no matching CV (server-side flow with no LWC
+     * to rasterize, or a chart added to the template after preflight): emits
+     * a text placeholder `[Chart: rel.field]` rather than corrupting the
+     * document with an unresolved image tag.
+     */
+    public static String expand(
+        String xml,
+        String templateType,
+        Map<String, Object> data,
+        Map<String, String> chartCvMap
+    ) {
         if (xml == null || !xml.contains(OPEN_PREFIX)) {
             return xml;
         }
@@ -72,7 +101,7 @@ public with sharing class DocGenChartTagExpander {
             String tagBody = decodeEntities(xml.substring(next + OPEN_PREFIX.length(), close));
             String fullTag = xml.substring(next, close + 1);
             try {
-                out.add(buildSnippet(tagBody, isHtml));
+                out.add(buildSnippet(tagBody, isHtml, templateType, data, chartCvMap));
             } catch (ChartTagException e) {
                 out.add(renderError(isHtml, e.getMessage(), fullTag));
             }
@@ -84,22 +113,25 @@ public with sharing class DocGenChartTagExpander {
 
     /**
      * Parses one tag body (everything between "{Chart:" and "}") and returns
-     * the corresponding HTML snippet. Throws ChartTagException with a human-
-     * readable reason on any validation failure — caller renders it as an
-     * inline error block.
+     * the corresponding substitution snippet. Throws ChartTagException with a
+     * human-readable reason on any validation failure — caller renders it as
+     * an inline error block (HTML) or escalates (non-HTML).
+     *
+     * For non-HTML templates (Word): looks up the tag's signature in
+     * `chartCvMap`; if found, emits `{%__dgchart_<cvId>}` and seeds `data`
+     * with the synthetic key. If not found, emits a `[Chart: rel.field]`
+     * text placeholder — documented v1 fallback for server-side flows.
+     *
+     * For HTML templates: behavior unchanged from pre-#117 — emits the
+     * existing CSS-bar / pivot / clustered / stacked table.
      */
-    private static String buildSnippet(String tagBody, Boolean isHtml) {
-        if (!isHtml) {
-            // Phrasing avoids curly-brace literals so the message survives
-            // Salesforce's error-banner rendering, which strips {/} chars
-            // (you'd otherwise see empty quotes where the tag name should be).
-            throw new ChartTagException(
-                'This template uses Chart merge tags, which require an HTML template (Type = HTML). ' +
-                    'To fix: in Google Docs use File > Download > Web Page (.html, zipped), unzip, and upload the .html as the template body with Type = HTML. ' +
-                    'Or remove the Chart tags and use ChartBucket loop tags directly in your Word template.'
-            );
-        }
-
+    private static String buildSnippet(
+        String tagBody,
+        Boolean isHtml,
+        String templateType,
+        Map<String, Object> data,
+        Map<String, String> chartCvMap
+    ) {
         // Tag form: REL:FIELD[:STYLE[:k=v&k=v...]]
         // We split on ':' up to 3 times so option values can contain ':'.
         List<String> parts = splitLimit(tagBody, ':', 4);
@@ -132,6 +164,26 @@ public with sharing class DocGenChartTagExpander {
                     'Style "' + style + '" requires colSort=Val1,Val2,... so column headers can be generated.'
                 );
             }
+        }
+
+        // Non-HTML templates (Word/PPT/Excel for #117): route to the PNG-via-CV
+        // pipeline. The LWC has already rasterized each chart's SVG to a PNG and
+        // uploaded it as a ContentVersion; `chartCvMap[signature]` is the CV Id.
+        // Server-side flows (Flow / batch / async) hit this path with an empty
+        // map and get a text placeholder — documented v1 limitation.
+        if (!isHtml) {
+            String signature = DocGenChartImageController.tagSignature(relationship, field, style, opts);
+            String cvId = (chartCvMap == null) ? null : chartCvMap.get(signature);
+            if (String.isNotBlank(cvId)) {
+                if (data != null) {
+                    // Synthetic key seeding mirrors how DocGenChartBucketResolver.
+                    // preprocessInline injects _cb_N for bucket lists.
+                    data.put('__dgchart_' + cvId, cvId);
+                }
+                return '{%__dgchart_' + cvId + '}';
+            }
+            String labelText = String.isNotBlank(title) ? title : (relationship + '.' + field);
+            return '[Chart: ' + labelText + ']';
         }
 
         String chartBucketTag = buildChartBucketTag(relationship, field, opts);
@@ -324,12 +376,16 @@ public with sharing class DocGenChartTagExpander {
     // ─── helpers ─────────────────────────────────────────────────────────
 
     /**
-     * Renders a visually obvious error in HTML output, or throws in Word/Excel
-     * where injecting HTML into OOXML would corrupt the document.
+     * Renders a visually obvious error in HTML output, or a plain-text
+     * placeholder in Word/PPT/Excel where injecting HTML into OOXML would
+     * corrupt the document. Pre-#117 this threw for non-HTML — that gate is
+     * gone now that Word supports charts via the PNG-via-CV pipeline; a
+     * malformed tag should never halt the whole document, just flag itself
+     * inline so the author sees it.
      */
     private static String renderError(Boolean isHtml, String reason, String snippet) {
         if (!isHtml) {
-            throw new DocGenException('Chart tag error in non-HTML template: ' + reason + ' (' + snippet + ')');
+            return '[Chart error: ' + reason + ']';
         }
         // escapeForDisplay turns the original tag's curly braces into HTML
         // entities so the rendered error block can't be re-parsed as a tag on

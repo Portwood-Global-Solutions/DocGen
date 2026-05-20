@@ -150,7 +150,7 @@ try {
 
 // ===== Test generateDocumentParts (client-side assembly path) =====
 try {
-    Map<String, Object> parts = DocGenController.generateDocumentParts(tmplId, acctId);
+    Map<String, Object> parts = DocGenController.generateDocumentParts(tmplId, acctId, null);
     if (parts != null) {
         Boolean hasXmlParts = parts.containsKey('allXmlParts');
         if (hasXmlParts) {

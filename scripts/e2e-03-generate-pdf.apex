@@ -129,7 +129,7 @@ try {
 
 // ===== Test generatePdf endpoint =====
 try {
-    Map<String, Object> pdfResult = DocGenController.generatePdf(tmplId, acctId, false);
+    Map<String, Object> pdfResult = DocGenController.generatePdf(tmplId, acctId, false, null);
     if (pdfResult != null) {
         String gpBase64 = (String) pdfResult.get('base64');
         if (String.isNotBlank(gpBase64)) {
@@ -150,7 +150,7 @@ try {
 
 // ===== Test generatePdf with saveToRecord=true =====
 try {
-    Map<String, Object> saveResult = DocGenController.generatePdf(tmplId, acctId, true);
+    Map<String, Object> saveResult = DocGenController.generatePdf(tmplId, acctId, true, null);
     if (saveResult != null) {
         // Check that a ContentDocumentId was returned
         Object cdId = saveResult.get('contentDocumentId');
