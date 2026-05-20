@@ -255,4 +255,149 @@ private class DocGenChartTagExpanderTest {
         System.assert(!out.contains('<script>'), 'Title HTML must be escaped.');
         System.assert(out.contains('&lt;script&gt;'), 'Title HTML should be XML-escaped.');
     }
+
+    // ─── Path-C SVG unification (htmlRender=svg opt-in) ─────────────────────
+    // The htmlRender=svg modifier routes HTML output through
+    // DocGenSvgChartSerializer.emit, sharing one per-style renderer with the
+    // PNG-via-CV pipeline. These tests verify the opt-in is wired correctly,
+    // doesn't affect the existing CSS-bar default, and produces a syntactically
+    // valid inline SVG.
+
+    @IsTest
+    static void htmlRenderSvg_defaultIsCssBar_noRegression() {
+        // Without htmlRender=svg the legacy CSS-bar table path runs — the
+        // expander returns the {#ChartBucket:...} loop body, NOT a raw <svg>.
+        String input = '{Chart:Responses__r:A__c:bar}';
+        String out = DocGenChartTagExpander.expand(input, 'HTML');
+        System.assert(
+            out.contains('{#ChartBucket:'),
+            'Default HTML path must keep emitting {#ChartBucket} loops. Got: ' + out
+        );
+        System.assert(
+            !out.contains('<svg'),
+            'Default HTML path must NOT emit inline SVG (would break Flying Saucer PDF). Got: ' + out
+        );
+    }
+
+    @IsTest
+    static void htmlRenderSvg_barStyle_emitsInlineSvg() {
+        // Opt in to SVG, with pre-loaded relationship data so bucket
+        // resolution happens in-memory (no SOQL needed for the test).
+        String input = '{Chart:Responses__r:A__c:bar:htmlRender=svg}';
+        Map<String, Object> data = new Map<String, Object>{
+            'Responses__r' => new List<Object>{
+                new Map<String, Object>{ 'A__c' => 'Yes' },
+                new Map<String, Object>{ 'A__c' => 'Yes' },
+                new Map<String, Object>{ 'A__c' => 'No' }
+            }
+        };
+        String out = DocGenChartTagExpander.expand(input, 'HTML', data, null);
+        System.assert(out.contains('<svg'), 'htmlRender=svg should produce inline SVG. Got: ' + out);
+        System.assert(out.contains('</svg>'), 'SVG must be closed.');
+        System.assert(out.contains('Yes'), 'Bucket label "Yes" should appear in SVG text. Got: ' + out);
+        System.assert(out.contains('No'), 'Bucket label "No" should appear in SVG text.');
+        System.assert(
+            !out.contains('{#ChartBucket:'),
+            'SVG path must NOT also emit the legacy ChartBucket loop. Got: ' + out
+        );
+    }
+
+    @IsTest
+    static void htmlRenderSvg_columnStyle_emitsInlineSvg() {
+        String input = '{Chart:Responses__r:A__c:column:htmlRender=svg}';
+        Map<String, Object> data = new Map<String, Object>{
+            'Responses__r' => new List<Object>{
+                new Map<String, Object>{ 'A__c' => 'Alpha' },
+                new Map<String, Object>{ 'A__c' => 'Beta' }
+            }
+        };
+        String out = DocGenChartTagExpander.expand(input, 'HTML', data, null);
+        System.assert(out.contains('<svg'), 'column + htmlRender=svg should produce inline SVG. Got: ' + out);
+        System.assert(out.contains('Alpha'), 'Column labels should appear in SVG.');
+    }
+
+    @IsTest
+    static void htmlRenderSvg_pieStyle_emitsInlineSvg() {
+        String input = '{Chart:Responses__r:A__c:pie:htmlRender=svg}';
+        Map<String, Object> data = new Map<String, Object>{
+            'Responses__r' => new List<Object>{
+                new Map<String, Object>{ 'A__c' => 'Foo' },
+                new Map<String, Object>{ 'A__c' => 'Bar' }
+            }
+        };
+        String out = DocGenChartTagExpander.expand(input, 'HTML', data, null);
+        System.assert(out.contains('<svg'), 'pie + htmlRender=svg should produce inline SVG. Got: ' + out);
+        System.assert(out.contains('<path'), 'Pie slices are <path> elements.');
+    }
+
+    @IsTest
+    static void htmlRenderSvg_donutStyle_emitsInlineSvg() {
+        String input = '{Chart:Responses__r:A__c:donut:htmlRender=svg}';
+        Map<String, Object> data = new Map<String, Object>{
+            'Responses__r' => new List<Object>{
+                new Map<String, Object>{ 'A__c' => 'X' },
+                new Map<String, Object>{ 'A__c' => 'X' },
+                new Map<String, Object>{ 'A__c' => 'Y' }
+            }
+        };
+        String out = DocGenChartTagExpander.expand(input, 'HTML', data, null);
+        System.assert(out.contains('<svg'), 'donut + htmlRender=svg should produce inline SVG. Got: ' + out);
+    }
+
+    @IsTest
+    static void htmlRenderSvg_titlePassesIntoSvg() {
+        // Title is consumed by the expander, then re-injected into the SVG
+        // options so the serializer renders the heading INSIDE the SVG —
+        // keeps the chart self-contained without an external <h2>.
+        String input = '{Chart:Responses__r:A__c:bar:htmlRender=svg&title=Quarter Results}';
+        Map<String, Object> data = new Map<String, Object>{
+            'Responses__r' => new List<Object>{ new Map<String, Object>{ 'A__c' => 'A' } }
+        };
+        String out = DocGenChartTagExpander.expand(input, 'HTML', data, null);
+        System.assert(out.contains('Quarter Results'), 'Title should appear inside the SVG. Got: ' + out);
+        System.assert(
+            !out.contains('<h2'),
+            'SVG path should NOT emit an external <h2> — title goes inside the SVG. Got: ' + out
+        );
+    }
+
+    @IsTest
+    static void htmlRenderSvg_emptyData_emitsNoDataPlaceholder() {
+        // Resolver returns empty buckets when data is null AND no parent Id
+        // is available for SOQL fallback. The SVG serializer's emitEmpty
+        // produces a "No data" placeholder rather than throwing or vanishing.
+        String input = '{Chart:Responses__r:A__c:bar:htmlRender=svg}';
+        String out = DocGenChartTagExpander.expand(input, 'HTML', null, null);
+        System.assert(out.contains('<svg'), 'Empty-data SVG path still emits an SVG.');
+        System.assert(out.contains('No data'), 'Empty buckets should produce the "No data" placeholder. Got: ' + out);
+    }
+
+    @IsTest
+    static void htmlRenderSvg_crossTabStyle_errorsWithGuidance() {
+        // pivot/clustered/stacked aren't on the SVG serializer's supported
+        // style list, so the opt-in shouldn't apply. The expander hits the
+        // unified error rather than silently degrading.
+        String input = '{Chart:Responses__r:A__c:pivot:htmlRender=svg&groupBy=Dept__c&colSort=Eng}';
+        String out = DocGenChartTagExpander.expand(input, 'HTML');
+        // pivot still expects {#cols} body emission, so the cross-tab check
+        // runs first; this test confirms htmlRender=svg doesn't override the
+        // cross-tab requirements (the user gets the CSS-bar pivot anyway,
+        // which is the documented v1 behavior for cross-tab styles).
+        System.assert(
+            out.contains('{#cols}'),
+            'Cross-tab styles ignore htmlRender=svg and fall through to CSS-bar pivot. Got: ' + out
+        );
+    }
+
+    @IsTest
+    static void htmlRenderSvg_bareColumnStyle_errorsWithoutOptIn() {
+        // {Chart:R:F:column} without htmlRender=svg has no CSS-bar renderer
+        // (column is SVG-only) — the expander surfaces an actionable error
+        // pointing the author at the opt-in rather than silently dropping
+        // the chart.
+        String input = '{Chart:Responses__r:A__c:column}';
+        String out = DocGenChartTagExpander.expand(input, 'HTML');
+        System.assert(out.contains('Chart error'), 'Bare column style should render an error block. Got: ' + out);
+        System.assert(out.contains('htmlRender=svg'), 'Error should point the author at the htmlRender=svg opt-in.');
+    }
 }

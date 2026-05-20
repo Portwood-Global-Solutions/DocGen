@@ -17,11 +17,21 @@
  * unchanged. The tag composes; styles are inline so Flying Saucer renders
  * them in PDF without CSS-class lookups.
  *
- * Styles (v1):
- *   bar       horizontal bar per bucket, label + colored fill + count(percent)
+ * Styles:
+ *   bar       horizontal bar per bucket (CSS-bar default, or SVG via htmlRender=svg)
+ *   column    vertical bar chart — HTML opt-in via htmlRender=svg (SVG only)
+ *   pie       pie chart with right-side legend — HTML opt-in via htmlRender=svg
+ *   donut     pie with center hole — HTML opt-in via htmlRender=svg
  *   pivot     cross-tab: rows = answers, cols = groupBy values (% per cell)
  *   clustered vertical clustered bar chart: column per answer, bar per groupBy
  *   stacked   horizontal stacked bar: one row per answer, segments per groupBy
+ *
+ * SVG vs CSS-bar (HTML output): the htmlRender=svg modifier routes through
+ * DocGenSvgChartSerializer.emit, sharing a single per-style implementation
+ * with the Word/PDF/PPT/Excel PNG-via-CV pipeline. Default stays CSS-bar
+ * for zero regression on shipped templates. Inline <svg> renders in the
+ * browser but Flying Saucer drops it from Blob.toPdf — HTML→PDF authors who
+ * need the chart visible in PDF must use the default cssbar.
  *
  * Cross-tab styles require groupBy=Field__c AND colSort=Val1,Val2,... — the
  * colSort drives header generation since column labels can't be known
@@ -45,12 +55,29 @@ public with sharing class DocGenChartTagExpander {
         'stacked'
     };
     private static final Set<String> CROSS_TAB_STYLES = new Set<String>{ 'pivot', 'clustered', 'stacked' };
-    // Styles renderable as inline SVG for HTML output (browser-rendered, not
-    // Blob.toPdf — Flying Saucer drops <svg>, but Word/PPT/Excel routes
-    // through PNG-via-CV anyway). Cross-tab styles stay on the CSS-bar path
-    // because their HTML rendering uses {#cols} loops that don't translate
-    // to a single inline SVG without losing template-author flexibility.
-    private static final Set<String> HTML_INLINE_SVG_STYLES = new Set<String>{ 'column', 'pie', 'donut' };
+    // Styles the SVG serializer can render natively. When an HTML template
+    // author opts in with `htmlRender=svg`, the expander resolves buckets
+    // eagerly and inlines an <svg>...</svg> string instead of emitting the
+    // CSS-bar table + {#ChartBucket:...} loop. Path C unification: single
+    // bucket-data resolution (DocGenChartBucketResolver.resolveBucketsForTag)
+    // feeds both this HTML-inline-SVG path AND the PNG-via-CV path used by
+    // Word/PPTX/PDF — adding a new chart style means writing it ONCE in
+    // DocGenSvgChartSerializer (browser HTML preview) and once in
+    // DocGenChartRasterizer (server PNG for Flying Saucer / OOXML).
+    //
+    // Cross-tab styles stay on the CSS-bar+{#cols} path because the SVG
+    // serializer doesn't yet support them and their {#cols} body is the
+    // mechanism that gives authors per-cell customization. When cross-tab
+    // PNG/SVG emitters land they'll switch over automatically.
+    //
+    // IMPORTANT: this path emits inline <svg>, which the spike memory
+    // project_117_chart_pipeline_state.md confirms Flying Saucer SILENTLY
+    // DROPS in `Blob.toPdf`. Inline SVG therefore only renders correctly
+    // in browser-rendered HTML preview (Lightning admin preview, Experience
+    // Cloud, raw HTML download). HTML→PDF authors who need the chart in the
+    // PDF must keep the default `htmlRender=cssbar` path until Flying Saucer
+    // SVG support arrives (banked as a separate sub-issue).
+    private static final Set<String> HTML_INLINE_SVG_STYLES = new Set<String>{ 'bar', 'column', 'pie', 'donut' };
 
     /**
      * Legacy two-arg entry point. Routes to the chart-CV-aware overload with
@@ -62,10 +89,24 @@ public with sharing class DocGenChartTagExpander {
     }
 
     /**
-     * Top-level entry point with chart-CV awareness (#117).
+     * Top-level entry point with chart-CV awareness (#117) and SVG-render
+     * opt-in (Path C unification).
      *
-     * For HTML templates: behavior unchanged — emits the existing CSS-bar
-     * table per chart.
+     * For HTML templates (default): emits the legacy CSS-bar table per chart,
+     * with an embedded {#ChartBucket:...} loop that the existing bucket
+     * resolver feeds at merge time. Unchanged from pre-unification behavior
+     * — zero regression for shipped templates.
+     *
+     * For HTML templates with `htmlRender=svg` modifier AND a SVG-supported
+     * style (bar/column/pie/donut): resolves buckets eagerly via
+     * DocGenChartBucketResolver.resolveBucketsForTag and inlines the SVG
+     * fragment produced by DocGenSvgChartSerializer.emit. Single per-style
+     * implementation in the serializer also serves the Word/PDF/PPT/Excel
+     * pipeline (via the rasterizer + PNG-via-CV path) — adding a new chart
+     * style means writing it ONCE per renderer (SVG + rasterizer) instead of
+     * three times. Note: inline <svg> is browser-render-only — Flying Saucer's
+     * Blob.toPdf silently drops it. HTML→PDF authors stay on the default
+     * CSS-bar path until Flying Saucer SVG support arrives.
      *
      * For Word templates with `chartCvMap` populated: each chart tag whose
      * signature matches a CV in the map is substituted with `{%__dgchart_<cvId>}`,
@@ -163,7 +204,9 @@ public with sharing class DocGenChartTagExpander {
             throw new ChartTagException('Relationship and field are required.');
         }
         if (!ALLOWED_STYLES.contains(style)) {
-            throw new ChartTagException('Unknown style "' + style + '". Allowed: bar, pivot, clustered, stacked.');
+            throw new ChartTagException(
+                'Unknown style "' + style + '". Allowed: bar, column, pie, donut, pivot, clustered, stacked.'
+            );
         }
 
         Map<String, String> opts = parseOptions(rawOpts);
@@ -221,6 +264,21 @@ public with sharing class DocGenChartTagExpander {
             return '[Chart: ' + labelText + ']';
         }
 
+        // HTML SVG opt-in (Path C unification): when the author writes
+        // `htmlRender=svg` AND the style is one the SVG serializer can emit,
+        // resolve buckets here and inline the same SVG that the rasterizer
+        // would draw — same data model, same per-style code, no duplicate
+        // implementation. Default stays `cssbar` so shipped templates render
+        // unchanged. See HTML_INLINE_SVG_STYLES comment for the Flying Saucer
+        // caveat (inline <svg> is browser-render-only, NOT PDF-via-toPdf).
+        String htmlRender = opts.remove('htmlRender');
+        if (htmlRender != null) {
+            htmlRender = htmlRender.toLowerCase();
+        }
+        if (htmlRender == 'svg' && HTML_INLINE_SVG_STYLES.contains(style)) {
+            return renderViaSvgSerializer(title, style, relationship, field, opts, data);
+        }
+
         String chartBucketTag = buildChartBucketTag(relationship, field, opts);
 
         if (style == 'bar') {
@@ -232,8 +290,79 @@ public with sharing class DocGenChartTagExpander {
         } else if (style == 'stacked') {
             return renderStacked(title, chartBucketTag, opts.get('colSort'));
         }
-        // Unreachable due to ALLOWED_STYLES guard above.
-        throw new ChartTagException('Unhandled style: ' + style);
+        // Unreachable due to ALLOWED_STYLES guard above — `column`, `pie`,
+        // `donut` only render in HTML output via the `htmlRender=svg` opt-in
+        // branch above, since the CSS-bar renderers don't (yet) cover them.
+        // If an author writes a bare {Chart:Rel:Field:column} we surface an
+        // actionable error rather than silently falling through.
+        throw new ChartTagException(
+            'Style "' +
+                style +
+                '" is supported in HTML output only via `htmlRender=svg`. ' +
+                'Add `:htmlRender=svg` to the tag or pick a CSS-bar style (bar, pivot, clustered, stacked).'
+        );
+    }
+
+    /**
+     * Path-C unification helper: resolves chart buckets eagerly via the same
+     * resolver the rasterizer uses, then emits the same SVG the rasterizer
+     * would draw — but inlined into the HTML stream instead of rasterized to
+     * a PNG-via-CV. One per-style implementation in DocGenSvgChartSerializer
+     * serves both this browser-HTML path AND (after rasterization) the
+     * Word/PDF/PPT/Excel path.
+     *
+     * `data` is the merge data map the runtime hands to processXml. When the
+     * relationship is pre-loaded there, buckets resolve in-memory (zero
+     * SOQL). When it isn't AND the data carries a parent record Id, the
+     * resolver issues a single GROUP BY against the 50-chart SOQL budget.
+     * When the data is null (e.g. processXmlForTest with no live record),
+     * buckets come back empty and the SVG serializer renders its "No data"
+     * placeholder — never throws, never silently disappears.
+     */
+    private static String renderViaSvgSerializer(
+        String title,
+        String style,
+        String relationship,
+        String field,
+        Map<String, String> opts,
+        Map<String, Object> data
+    ) {
+        // Reassemble the modifier string the resolver expects. `opts` is the
+        // post-title-removal map (title was already lifted into the caller's
+        // local `title` parameter so it doesn't double-render).
+        List<String> kvs = new List<String>();
+        for (String key : opts.keySet()) {
+            kvs.add(key + '=' + opts.get(key));
+        }
+        String modifiersRaw = String.join(kvs, '&');
+
+        // resolveBucketsForTag's SOQL fallback NPEs on null data — it
+        // dereferences `data.get('Id')` to discover the parent record's Id
+        // for the GROUP BY aggregate. Short-circuit to empty when data is
+        // null (processXmlForTest paths, ad-hoc unit calls) so the SVG
+        // serializer renders the "No data" placeholder instead of throwing.
+        List<Map<String, Object>> buckets;
+        if (data == null) {
+            buckets = new List<Map<String, Object>>();
+        } else {
+            buckets = DocGenChartBucketResolver.resolveBucketsForTag(data, relationship, field, modifiersRaw);
+        }
+
+        // The SVG serializer dispatches on options.style. Pass the rest of
+        // the modifier surface (width, height, colors, title) through. Title
+        // is re-attached here so the serializer renders its own heading line
+        // inside the SVG — keeps the embedded chart visually self-contained
+        // without an HTML <h2> outside it.
+        Map<String, String> svgOpts = new Map<String, String>();
+        for (String k : opts.keySet()) {
+            svgOpts.put(k, opts.get(k));
+        }
+        svgOpts.put('style', style);
+        if (String.isNotBlank(title)) {
+            svgOpts.put('title', title);
+        }
+
+        return DocGenSvgChartSerializer.emit(buckets, svgOpts);
     }
 
     /**
