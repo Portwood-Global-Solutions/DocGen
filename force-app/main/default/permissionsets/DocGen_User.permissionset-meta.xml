@@ -296,7 +296,11 @@
         <field>DocGen_Template_Version__c.Document_Title_Format__c</field>
         <readable>true</readable>
     </fieldPermissions>
-    <!-- DocGen_Template__c: Base_Object_API__c, Output_Format__c, Type__c are required; FLS auto-granted -->
+    <!-- DocGen_Template__c.Base_Object_API__c, Output_Format__c, Type__c are <required>true</required>;
+         FLS is auto-granted for insert/update but NOT for `WITH USER_MODE` SOQL — that's why
+         DocGenController and DocGenChartImageController use `WITH SYSTEM_MODE` for those queries.
+         Salesforce blocks explicit fieldPermissions entries on required fields, so this is the
+         documented workaround. -->
     <fieldPermissions>
         <editable>false</editable>
         <field>DocGen_Template__c.Category__c</field>
