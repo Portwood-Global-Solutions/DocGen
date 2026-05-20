@@ -3,6 +3,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     private static List<Map<String, Object>> pendingImages = new List<Map<String, Object>>();
     private static Integer imageCounter = 0;
     private static String currentTemplateType = 'Word'; // Set before processXml calls
+    // PPTX/XLSX image embedding (#117): tracks which slide / worksheet processXml
+    // is currently walking. Pendings tagged with this slidePath so the post-process
+    // can update the correct ppt/slides/_rels/slideN.xml.rels file. Null for Word
+    // (Word puts every image in word/_rels/document.xml.rels regardless of source).
+    private static String currentEntryName;
     @TestVisible
     private static String currentOutputFormat = 'Native'; // Set before processXml — PDF skips blob loading for images
 
@@ -359,6 +364,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     ) {
         pendingImages = new List<Map<String, Object>>();
         imageCounter = 0;
+        currentEntryName = null;
 
         Map<String, Object> dataMap;
         try {
@@ -487,6 +493,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 Blob content = reader.extract(name);
                 String xml = content.toString();
                 currentTemplateType = templateType;
+                currentEntryName = name;
 
                 // Excel: capture shared strings table (not merged, just stored)
                 if (templateType == 'Excel' && name == 'xl/sharedStrings.xml') {
@@ -519,11 +526,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             for (String sheetName : pendingExcelSheets.keySet()) {
                 String xml = pendingExcelSheets.get(sheetName);
                 xml = inlineSharedStrings(xml, sharedStrings);
+                currentEntryName = sheetName;
                 xml = processXml(xml, recordDataMap);
                 mr.processedXmlEntries.put(sheetName, xml);
             }
             // Remove sharedStrings.xml from passthrough — cells are now inline
             mr.passthroughEntries.remove('xl/sharedStrings.xml');
+        }
+
+        // PowerPoint post-process: convert {%}-emitted DGPIC markers into real
+        // <p:pic> shapes on each slide, and inject the per-slide image
+        // relationships into ppt/slides/_rels/slideN.xml.rels.
+        if (templateType == 'PowerPoint') {
+            postProcessPowerPointSlides(mr);
         }
 
         // Collect existing template images into imageBase64ByRelId for HTML rendering.
@@ -724,6 +739,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
         if (mr.relsXml != null) {
             for (Map<String, Object> img : pendingImages) {
+                // PowerPoint images live in ppt/slides/_rels/slideN.xml.rels,
+                // not the presentation-level rels — postProcessPowerPointSlides
+                // owns that wiring. Skip them here.
+                if (img.get('pptHandled') == true) {
+                    continue;
+                }
                 String relId = (String) img.get('relId');
                 String fName = (String) img.get('fileName');
                 String newRel =
@@ -3115,11 +3136,6 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 cursor = tagClose + 1;
             } else if (tagContent.startsWith('%')) {
                 // Image tag: {%FieldName} or {%FieldName:WxH} or {%Image:N} or {%Image:N:SIZE}
-                // PowerPoint: skip image injection (Word-specific DrawingML corrupts PPTX)
-                if (currentTemplateType == 'PowerPoint') {
-                    cursor = tagClose + 1;
-                    continue;
-                }
                 String imageTagSpec = tagContent.substring(1).trim();
 
                 // Positional record-attached-image tag: {%Image:N} or {%Image:N:SIZE}
@@ -3130,7 +3146,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 if ('Image'.equalsIgnoreCase(imageTagHead)) {
                     ImageRenderSpec indexedSpec = resolveImageByIndexTag(imageTagSpec, data);
                     if (indexedSpec != null && String.isNotBlank(indexedSpec.fieldValue)) {
-                        String imageXml = buildImageXml(indexedSpec);
+                        String imageXml = dispatchImageXml(indexedSpec);
                         if (imageXml != null) {
                             output += imageXml;
                         }
@@ -3143,7 +3159,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 Object val = resolveValue(data, imageRenderSpec.imageField);
                 if (val != null) {
                     imageRenderSpec.fieldValue = String.valueOf(val);
-                    String imageXml = buildImageXml(imageRenderSpec);
+                    String imageXml = dispatchImageXml(imageRenderSpec);
                     if (imageXml != null) {
                         output += imageXml;
                     }
@@ -5308,6 +5324,22 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return buildImageXml(spec);
     }
 
+    /**
+     * Routes an image-tag substitution to the appropriate template-type builder.
+     * Word/HTML/PDF flow through buildImageXml (DrawingML or <img>); PowerPoint
+     * emits a DGPIC marker that postProcessPowerPointSlides converts into a
+     * <p:pic> shape; Excel currently strips the tag with a v2 TODO.
+     */
+    private static String dispatchImageXml(ImageRenderSpec spec) {
+        if (currentTemplateType == 'PowerPoint') {
+            return buildImageXmlForPowerPoint(spec);
+        }
+        if (currentTemplateType == 'Excel') {
+            return buildImageXmlForExcel(spec);
+        }
+        return buildImageXml(spec);
+    }
+
     private static String buildImageXml(ImageRenderSpec spec) {
         if (spec == null || String.isBlank(spec.fieldValue)) {
             return null;
@@ -5568,6 +5600,482 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // Image injection failed (invalid CV ID, corrupt base64, etc.) — skip this image
             return null;
         }
+    }
+
+    /**
+     * PowerPoint image builder. Resolves an image to a binary blob using the
+     * same case-1..7 logic as buildImageXml (rich-text, data URI, raw base64,
+     * ContentVersion, refid, /sfc/), registers it in pendingImages with the
+     * current slide path, and returns a `<!--DGPIC|relId|cx|cy-->` XML comment
+     * marker. The marker is harmless inside any PPTX element (slides are valid
+     * XML with comments allowed everywhere); postProcessPowerPointSlides walks
+     * each slide after processXml, finds each marker's enclosing <p:sp>, and
+     * replaces the shape with a <p:pic> referencing the rId.
+     *
+     * For the chart pipeline, this is exactly the path that {%__dgchart_<cvId>}
+     * tags take after DocGenChartTagExpander rewrites a {Chart:...} tag — the
+     * spec.fieldValue is the ContentVersion Id of the pre-rasterized PNG.
+     *
+     * Width/height in EMU: PowerPoint default canvas is 9144000×6858000 EMU
+     * (10×7.5 in for legacy 4:3, or 12192000×6858000 for 16:9). For PPTX we
+     * size charts to 4×3 in (3657600×2743200 EMU) by default — fits two
+     * side-by-side on a 16:9 slide — and respect explicit widthPx/heightPx
+     * from {%Field:WxH} when given (matches the runner LWC's sizeSuffix).
+     */
+    private static String buildImageXmlForPowerPoint(ImageRenderSpec spec) {
+        if (spec == null || String.isBlank(spec.fieldValue)) {
+            return null;
+        }
+
+        String ext = 'png';
+
+        try {
+            // Identical case-1..7 image resolution to buildImageXml. PPTX always
+            // needs the blob (no zero-heap PDF path here — PPTX templates can't
+            // render to PDF, see line 882).
+            if (spec.fieldValue.containsIgnoreCase('<img')) {
+                spec.imageBlobData = extractImageFromHtml(spec.fieldValue);
+            } else if (spec.fieldValue.startsWith('data:image/')) {
+                String base64Part = spec.fieldValue.substringAfter(',');
+                if (spec.fieldValue.containsIgnoreCase('jpeg') || spec.fieldValue.containsIgnoreCase('jpg')) {
+                    ext = 'jpeg';
+                }
+                spec.imageBlobData = EncodingUtil.base64Decode(base64Part);
+            } else if (
+                spec.fieldValue.length() > 100 &&
+                !spec.fieldValue.contains('/') &&
+                !spec.fieldValue.contains(' ')
+            ) {
+                spec.imageBlobData = EncodingUtil.base64Decode(spec.fieldValue);
+            } else if (spec.fieldValue.startsWith('068') && spec.fieldValue.length() >= 15) {
+                List<ContentVersion> cvs = [
+                    SELECT Id, VersionData, FileExtension
+                    FROM ContentVersion
+                    WHERE Id = :spec.fieldValue
+                    WITH USER_MODE
+                    LIMIT 1
+                ];
+                if (!cvs.isEmpty()) {
+                    spec.imageBlobData = cvs[0].VersionData;
+                    if (cvs[0].FileExtension != null) {
+                        ext = cvs[0].FileExtension.toLowerCase();
+                    }
+                }
+            } else if (spec.fieldValue.containsIgnoreCase('refid=')) {
+                String refId = spec.fieldValue.substringAfterLast('refid=').substringBefore('&');
+                if (String.isBlank(refId)) {
+                    refId = spec.fieldValue.substringAfterLast('refid=');
+                }
+                spec.imageBlobData = fetchSalesforceImage(refId);
+            } else if (spec.fieldValue.containsIgnoreCase('/servlet/') || spec.fieldValue.containsIgnoreCase('/sfc/')) {
+                String docId = spec.fieldValue.substringAfterLast('/');
+                if (docId.contains('?')) {
+                    docId = docId.substringBefore('?');
+                }
+                spec.imageBlobData = fetchSalesforceImage(docId);
+            }
+
+            if (spec.imageBlobData == null) {
+                return null;
+            }
+
+            imageCounter++;
+            spec.relationshipId = 'rIdImg' + imageCounter;
+            spec.fileName = 'docgen_image_' + imageCounter + '.' + ext;
+            spec.fileExtension = ext;
+
+            // Compute size in EMU. Prefer explicit WxH from the tag (e.g.
+            // `{%cvId:600x450}` from the chart runner's sizeSuffix), then fall
+            // back to intrinsic PNG/JPEG dimensions, then to a 4×3in default.
+            Integer widthEmu;
+            Integer heightEmu;
+            if (spec.widthPx != null && spec.heightPx != null) {
+                widthEmu = spec.widthPx * 9525;
+                heightEmu = spec.heightPx * 9525;
+            } else {
+                List<Integer> intrinsicSizeEmu = getImageDimensionsInEmu(spec.imageBlobData, ext);
+                if (intrinsicSizeEmu != null && intrinsicSizeEmu.size() == 2) {
+                    // Intrinsic dims may be larger than the slide; cap at 8×6in
+                    // (7315200×5486400 EMU) preserving aspect.
+                    Integer maxW = 7315200;
+                    Integer maxH = 5486400;
+                    Integer w = intrinsicSizeEmu[0];
+                    Integer h = intrinsicSizeEmu[1];
+                    if (w > maxW || h > maxH) {
+                        Double scaleW = (Double) maxW / w;
+                        Double scaleH = (Double) maxH / h;
+                        Double scale = Math.min(scaleW, scaleH);
+                        w = (Integer) Math.floor(w * scale);
+                        h = (Integer) Math.floor(h * scale);
+                    }
+                    widthEmu = w;
+                    heightEmu = h;
+                } else {
+                    widthEmu = 3657600; // 4 in
+                    heightEmu = 2743200; // 3 in
+                }
+            }
+
+            // Register the image. `slidePath` lets postProcessPowerPointSlides
+            // route it to the right slide rels file; `assembleZip` honors it
+            // when writing the media entry. `pptHandled` flags this entry so
+            // applyPendingImages doesn't also try to put it in the presentation
+            // rels (PPTX images go in slide rels, not the top-level rels).
+            Map<String, Object> imgEntry = new Map<String, Object>{
+                'relId' => spec.relationshipId,
+                'fileName' => spec.fileName,
+                'blob' => spec.imageBlobData,
+                'slidePath' => currentEntryName,
+                'pptHandled' => true,
+                'widthEmu' => widthEmu,
+                'heightEmu' => heightEmu
+            };
+            pendingImages.add(imgEntry);
+
+            // Marker that postProcessPowerPointSlides will swap for <p:pic>.
+            // XML comment form is universally tolerated inside any element —
+            // including <a:t>, <p:txBody>, anywhere in a <p:sp>. Pipe-delimited
+            // payload survives ZIP roundtrip and grep cleanly.
+            return '<!--DGPIC|' + spec.relationshipId + '|' + widthEmu + '|' + heightEmu + '|' + imageCounter + '-->';
+        } catch (Exception e) {
+            // Image resolution failed (invalid CV, corrupt base64) — skip silently
+            return null;
+        }
+    }
+
+    /**
+     * Excel image builder — v1 stub. Excel embeds images via a separate
+     * xl/drawings/drawingN.xml part with <xdr:twoCellAnchor>/<xdr:oneCellAnchor>
+     * elements that anchor to cell coordinates, plus a relationship in
+     * xl/drawings/_rels/drawingN.xml.rels and a <drawing r:id="..."/> reference
+     * in the worksheet XML. Implementing this correctly requires:
+     *   1. Parsing the worksheet cell that contains the {%} tag to recover its
+     *      row/col coordinates (so the anchor lands in the right cell).
+     *   2. Creating xl/drawings/drawing1.xml if absent, or appending to it.
+     *   3. Writing xl/drawings/_rels/drawing1.xml.rels with the image
+     *      relationship.
+     *   4. Inserting <drawing r:id="rIdN"/> into the worksheet XML if missing.
+     *   5. Adding a <Relationship Type=".../drawing"/> in the worksheet rels.
+     *   6. Adding <Override> entries in [Content_Types].xml for the drawing.
+     * For v1 (#117 PowerPoint slice) we strip the tag and emit nothing so the
+     * cell text renders cleanly. Excel chart support is tracked as a follow-up
+     * (file new issue, mirror this design sketch in the issue body).
+     */
+    private static String buildImageXmlForExcel(ImageRenderSpec spec) {
+        // Strip the tag silently — produces an empty cell value instead of a
+        // broken render. The PowerPoint-style marker approach won't work here
+        // because Excel cell text lives inside <c><v>shared-string-idx</v></c>
+        // or <c t="inlineStr"><is><t>...</t></is></c>; injecting an XML comment
+        // into <t> would break the cell parser in Excel.
+        return '';
+    }
+
+    /**
+     * Walks every processed PPTX slide, converts <!--DGPIC|...--> markers into
+     * real <p:pic> shapes, and injects per-slide image relationships into
+     * ppt/slides/_rels/slideN.xml.rels. Each marker either:
+     *   (a) sits inside a <p:sp> whose text body contained the original tag —
+     *       we replace the whole <p:sp> with a <p:pic> at the shape's position
+     *       (so authors can size+place the image by placing a placeholder shape).
+     *   (b) sits outside any <p:sp> (or we can't find one) — we append a
+     *       free-floating <p:pic> to <p:spTree> at the marker's location.
+     * Either way, the image renders at the size we computed when registering
+     * it (intrinsic for PNG/JPEG, fallback 4×3in for ContentVersion blobs we
+     * can't size, override from the {%Field:WxH} suffix when given).
+     */
+    private static void postProcessPowerPointSlides(MergeResult mr) {
+        if (pendingImages.isEmpty()) {
+            return;
+        }
+        // Bucket images by slidePath so we update each slide's rels file once.
+        Map<String, List<Map<String, Object>>> imagesBySlide = new Map<String, List<Map<String, Object>>>();
+        for (Map<String, Object> img : pendingImages) {
+            if (img.get('pptHandled') != true) {
+                continue;
+            }
+            String slidePath = (String) img.get('slidePath');
+            if (String.isBlank(slidePath)) {
+                continue;
+            }
+            if (!imagesBySlide.containsKey(slidePath)) {
+                imagesBySlide.put(slidePath, new List<Map<String, Object>>());
+            }
+            imagesBySlide.get(slidePath).add(img);
+        }
+        if (imagesBySlide.isEmpty()) {
+            return;
+        }
+
+        // Iterate every slide that had at least one image. Convert each marker
+        // into a <p:pic> element + update the slide rels file in passthrough.
+        for (String slidePath : imagesBySlide.keySet()) {
+            String slideXml = mr.processedXmlEntries.get(slidePath);
+            if (slideXml == null || !slideXml.contains('<!--DGPIC|')) {
+                continue;
+            }
+
+            slideXml = convertDgPicMarkersInSlide(slideXml, imagesBySlide.get(slidePath));
+            mr.processedXmlEntries.put(slidePath, slideXml);
+
+            // Update the matching slide rels file (ppt/slides/_rels/slideN.xml.rels)
+            String relsName = slidePath.replace('slides/', 'slides/_rels/') + '.rels';
+            Blob existingRelsBlob = mr.passthroughEntries.get(relsName);
+            String existingRelsXml;
+            if (existingRelsBlob != null) {
+                existingRelsXml = existingRelsBlob.toString();
+            } else {
+                // Slide had no prior rels (unusual but possible) — start a fresh file
+                existingRelsXml =
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+            }
+
+            String inserts = '';
+            for (Map<String, Object> img : imagesBySlide.get(slidePath)) {
+                String relId = (String) img.get('relId');
+                String fileName = (String) img.get('fileName');
+                inserts +=
+                    '<Relationship Id="' +
+                    relId +
+                    '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/' +
+                    fileName +
+                    '"/>';
+            }
+            existingRelsXml = existingRelsXml.replace('</Relationships>', inserts + '</Relationships>');
+            mr.passthroughEntries.put(relsName, Blob.valueOf(existingRelsXml));
+        }
+    }
+
+    /**
+     * Per-slide DGPIC marker conversion. Walks the slide XML, replacing each
+     * marker with a <p:pic> element. If the marker sits inside a <p:sp>, the
+     * whole shape gets swapped (preserving the shape's <a:off>/<a:ext> so the
+     * image lands where the author drew the placeholder). Otherwise the
+     * <p:pic> is inserted in place with a default position near the top-left.
+     */
+    @TestVisible
+    private static String convertDgPicMarkersInSlide(String slideXml, List<Map<String, Object>> images) {
+        // Sort markers in order of appearance so position-preservation is stable.
+        Integer searchFrom = 0;
+        while (true) {
+            Integer markerStart = slideXml.indexOf('<!--DGPIC|', searchFrom);
+            if (markerStart == -1) {
+                break;
+            }
+            Integer markerEnd = slideXml.indexOf('-->', markerStart);
+            if (markerEnd == -1) {
+                // Malformed marker — strip and continue to avoid infinite loop.
+                slideXml = slideXml.substring(0, markerStart) + slideXml.substring(markerStart + 10);
+                continue;
+            }
+            String payload = slideXml.substring(markerStart + 10, markerEnd);
+            // Marker payload: relId|widthEmu|heightEmu|picId (4 parts after stripping
+            // the leading <!--DGPIC| and trailing -->). Apex String.split drops
+            // trailing empty strings, so we require exactly 4.
+            List<String> parts = payload.split('\\|');
+            if (parts.size() < 4) {
+                slideXml = slideXml.substring(0, markerStart) + slideXml.substring(markerEnd + 3);
+                continue;
+            }
+            String relId = parts[0];
+            Integer widthEmu = Integer.valueOf(parts[1]);
+            Integer heightEmu = Integer.valueOf(parts[2]);
+            Integer picId = Integer.valueOf(parts[3]);
+
+            // Find enclosing <p:sp> (the shape that contains the marker). If
+            // we find one, replace it; if not, fall back to in-place insert.
+            Integer spOpenStart = findOpeningSpBefore(slideXml, markerStart);
+            Integer spCloseEnd = -1;
+            String offX = '914400';
+            String offY = '914400';
+            if (spOpenStart != -1) {
+                spCloseEnd = findClosingSpAfter(slideXml, markerEnd);
+                if (spCloseEnd != -1) {
+                    // Capture the shape's transform so the picture replaces it
+                    // at the same position. The <a:xfrm> sits in <p:spPr>; if
+                    // absent (rare), we fall back to the default position.
+                    String shapeXml = slideXml.substring(spOpenStart, spCloseEnd);
+                    Integer xfrmStart = shapeXml.indexOf('<a:xfrm');
+                    if (xfrmStart != -1) {
+                        Integer offIdx = shapeXml.indexOf('<a:off', xfrmStart);
+                        if (offIdx != -1) {
+                            String offTag = shapeXml.substring(offIdx, shapeXml.indexOf('/>', offIdx));
+                            String xVal = extractXmlAttrValue(offTag, 'x');
+                            String yVal = extractXmlAttrValue(offTag, 'y');
+                            if (xVal != null) {
+                                offX = xVal;
+                            }
+                            if (yVal != null) {
+                                offY = yVal;
+                            }
+                        }
+                    }
+                }
+            }
+
+            String picXml = buildPicElement(picId, relId, offX, offY, widthEmu, heightEmu);
+
+            if (spOpenStart != -1 && spCloseEnd != -1) {
+                // Swap the entire <p:sp>...</p:sp> with the <p:pic>
+                slideXml = slideXml.substring(0, spOpenStart) + picXml + slideXml.substring(spCloseEnd);
+                searchFrom = spOpenStart + picXml.length();
+            } else {
+                // No enclosing shape found — insert in place (will likely render
+                // as a free-floating image which authors may not expect but
+                // beats silent loss).
+                slideXml = slideXml.substring(0, markerStart) + picXml + slideXml.substring(markerEnd + 3);
+                searchFrom = markerStart + picXml.length();
+            }
+        }
+        return slideXml;
+    }
+
+    /**
+     * Finds the start of the <p:sp> opening tag that encloses `pos`. Returns
+     * -1 if `pos` isn't inside a <p:sp> (e.g. marker is inside a <p:pic> or
+     * floating in <p:spTree> outside any shape). Apex String.lastIndexOf has
+     * no fromIndex form, so we substring up to `pos` and scan backwards. Skip
+     * <p:spPr> / <p:spTree> false matches by requiring '<p:sp>' or '<p:sp '.
+     *
+     * Algorithm: list all `<p:sp ` / `<p:sp>` opens before pos and `</p:sp>`
+     * closes before pos in order; walk them, tracking depth. Last unmatched
+     * open is the enclosing shape.
+     */
+    private static Integer findOpeningSpBefore(String xml, Integer pos) {
+        String prefix = xml.substring(0, pos);
+        List<Integer> opens = new List<Integer>();
+        List<Integer> closes = new List<Integer>();
+        Integer c = 0;
+        while (c < prefix.length()) {
+            Integer o1 = prefix.indexOf('<p:sp>', c);
+            Integer o2 = prefix.indexOf('<p:sp ', c);
+            Integer cl = prefix.indexOf('</p:sp>', c);
+            Integer nextOpen = -1;
+            if (o1 != -1 && o2 != -1) {
+                nextOpen = Math.min(o1, o2);
+            } else if (o1 != -1) {
+                nextOpen = o1;
+            } else if (o2 != -1) {
+                nextOpen = o2;
+            }
+            if (nextOpen == -1 && cl == -1) {
+                break;
+            }
+            if (nextOpen != -1 && (cl == -1 || nextOpen < cl)) {
+                opens.add(nextOpen);
+                c = nextOpen + 6;
+            } else {
+                closes.add(cl);
+                c = cl + 7;
+            }
+        }
+        // Walk events in order; depth-track. Stack of unmatched opens.
+        List<Integer> stack = new List<Integer>();
+        Integer oi = 0;
+        Integer ci = 0;
+        // Apex Integer has no MAX_VALUE constant; 2^31-1 hardcoded as sentinel.
+        Integer SENTINEL = 2147483647;
+        while (oi < opens.size() || ci < closes.size()) {
+            Integer nextO = oi < opens.size() ? opens[oi] : SENTINEL;
+            Integer nextC = ci < closes.size() ? closes[ci] : SENTINEL;
+            if (nextO < nextC) {
+                stack.add(nextO);
+                oi++;
+            } else {
+                if (!stack.isEmpty()) {
+                    stack.remove(stack.size() - 1);
+                }
+                ci++;
+            }
+        }
+        if (stack.isEmpty()) {
+            return -1;
+        }
+        return stack[stack.size() - 1];
+    }
+
+    /**
+     * Finds the end position (exclusive) of the matching </p:sp> after `pos`.
+     * Returns -1 if no close found. Walks forward with depth tracking on the
+     * same `<p:sp ` / `<p:sp>` open vs `</p:sp>` close events.
+     */
+    private static Integer findClosingSpAfter(String xml, Integer pos) {
+        Integer depth = 0;
+        Integer cursor = pos;
+        while (cursor < xml.length()) {
+            Integer o1 = xml.indexOf('<p:sp>', cursor);
+            Integer o2 = xml.indexOf('<p:sp ', cursor);
+            Integer cl = xml.indexOf('</p:sp>', cursor);
+            Integer nextOpen = -1;
+            if (o1 != -1 && o2 != -1) {
+                nextOpen = Math.min(o1, o2);
+            } else if (o1 != -1) {
+                nextOpen = o1;
+            } else if (o2 != -1) {
+                nextOpen = o2;
+            }
+            if (cl == -1) {
+                return -1;
+            }
+            if (nextOpen != -1 && nextOpen < cl) {
+                depth++;
+                cursor = nextOpen + 6;
+            } else {
+                if (depth == 0) {
+                    return cl + 7; // length of '</p:sp>'
+                }
+                depth--;
+                cursor = cl + 7;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Emits a PowerPoint <p:pic> element. Namespaces `p:`, `a:`, `r:` are
+     * already declared on the slide root (<p:sld xmlns:p="..." xmlns:a="..."
+     * xmlns:r="..."/>), so we don't redeclare them here.
+     */
+    private static String buildPicElement(
+        Integer picId,
+        String relId,
+        String offX,
+        String offY,
+        Integer widthEmu,
+        Integer heightEmu
+    ) {
+        return '<p:pic>' +
+            '<p:nvPicPr>' +
+            '<p:cNvPr id="' +
+            picId +
+            '" name="DocGenPicture' +
+            picId +
+            '"/>' +
+            '<p:cNvPicPr/>' +
+            '<p:nvPr/>' +
+            '</p:nvPicPr>' +
+            '<p:blipFill>' +
+            '<a:blip r:embed="' +
+            relId +
+            '"/>' +
+            '<a:stretch><a:fillRect/></a:stretch>' +
+            '</p:blipFill>' +
+            '<p:spPr>' +
+            '<a:xfrm>' +
+            '<a:off x="' +
+            offX +
+            '" y="' +
+            offY +
+            '"/>' +
+            '<a:ext cx="' +
+            widthEmu +
+            '" cy="' +
+            heightEmu +
+            '"/>' +
+            '</a:xfrm>' +
+            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+            '</p:spPr>' +
+            '</p:pic>';
     }
 
     /**
