@@ -190,4 +190,228 @@ private class DocGenChartRasterizerTest {
         );
         System.assertEquals(400, (Integer) result.get('logicalWidth'));
     }
+
+    // ─── Original 4 styles: bar / column / pie / donut ──────────────────────
+
+    @IsTest
+    static void emitBar_producesPng() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'bar', 'scale' => '1' }
+        );
+        assertPngSignature(png, 'bar');
+    }
+
+    @IsTest
+    static void emitBar_withTitle_producesPng() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'bar', 'scale' => '1', 'title' => 'My Bar Chart' }
+        );
+        assertPngSignature(png, 'bar-titled');
+    }
+
+    @IsTest
+    static void emitColumn_producesPng() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'column', 'scale' => '1' }
+        );
+        assertPngSignature(png, 'column');
+    }
+
+    @IsTest
+    static void emitPie_producesPng() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'pie', 'scale' => '1' }
+        );
+        assertPngSignature(png, 'pie');
+    }
+
+    @IsTest
+    static void emitDonut_producesPng() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'donut', 'scale' => '1' }
+        );
+        assertPngSignature(png, 'donut');
+    }
+
+    @IsTest
+    static void emitDonut_withInnerRadiusOverride_producesPng() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'donut', 'scale' => '1', 'innerRadius' => '0.7' }
+        );
+        assertPngSignature(png, 'donut-custom-radius');
+    }
+
+    // ─── Palette + color overrides ──────────────────────────────────────────
+
+    @IsTest
+    static void colorsModifier_acceptsHexPalette() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'bar', 'scale' => '1', 'colors' => '#1e40af,#b91c1c,#16a34a' }
+        );
+        assertPngSignature(png, 'bar-custom-palette');
+    }
+
+    @IsTest
+    static void colorsModifier_acceptsBareHexWithoutHash() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'bar', 'scale' => '1', 'colors' => '1e40af,b91c1c' }
+        );
+        assertPngSignature(png, 'bar-bare-hex');
+    }
+
+    @IsTest
+    static void colorsModifier_blankFallsBackToDefaultPalette() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'bar', 'scale' => '1', 'colors' => '' }
+        );
+        assertPngSignature(png, 'bar-blank-colors');
+    }
+
+    @IsTest
+    static void colorsModifier_badHexSkipped_falsThroughToDefault() {
+        Blob png = DocGenChartRasterizer.emit(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'bar', 'scale' => '1', 'colors' => '#xyz123,not_a_color' }
+        );
+        // Bad hex parses to null and falls through to default palette — should
+        // still produce a real PNG, not throw.
+        assertPngSignature(png, 'bar-bad-hex-fallback');
+    }
+
+    // ─── Empty / edge cases ─────────────────────────────────────────────────
+
+    @IsTest
+    static void emitEmpty_nullBuckets_producesPlaceholderPng() {
+        Blob png = DocGenChartRasterizer.emit(null, new Map<String, String>{ 'style' => 'bar' });
+        assertPngSignature(png, 'empty-null');
+    }
+
+    @IsTest
+    static void emitEmpty_emptyList_producesPlaceholderPng() {
+        Blob png = DocGenChartRasterizer.emit(
+            new List<Map<String, Object>>(),
+            new Map<String, String>{ 'style' => 'pie' }
+        );
+        assertPngSignature(png, 'empty-list');
+    }
+
+    @IsTest
+    static void singleBucket_producesPng() {
+        List<Map<String, Object>> single = new List<Map<String, Object>>{
+            new Map<String, Object>{ 'key' => 'Only', 'key_label' => 'Only', 'count' => 5, 'percent' => 100 }
+        };
+        Blob png = DocGenChartRasterizer.emit(single, new Map<String, String>{ 'style' => 'line', 'scale' => '1' });
+        assertPngSignature(png, 'line-single-bucket');
+    }
+
+    @IsTest
+    static void zeroCountBuckets_producesPng() {
+        List<Map<String, Object>> zeroes = new List<Map<String, Object>>{
+            new Map<String, Object>{ 'key' => 'A', 'count' => 0, 'percent' => 0 },
+            new Map<String, Object>{ 'key' => 'B', 'count' => 0, 'percent' => 0 }
+        };
+        Blob png = DocGenChartRasterizer.emit(zeroes, new Map<String, String>{ 'style' => 'bar', 'scale' => '1' });
+        assertPngSignature(png, 'bar-zeroes');
+    }
+
+    @IsTest
+    static void bucketWithKeyLabel_overridesKey() {
+        List<Map<String, Object>> buckets = new List<Map<String, Object>>{
+            new Map<String, Object>{
+                'key' => 'RAW_VAL',
+                'key_label' => 'Pretty Label',
+                'count' => 10,
+                'percent' => 100
+            }
+        };
+        Blob png = DocGenChartRasterizer.emit(buckets, new Map<String, String>{ 'style' => 'bar', 'scale' => '1' });
+        assertPngSignature(png, 'bar-key-label');
+    }
+
+    @IsTest
+    static void emitWithMeta_bar_returnsCorrectHeightForBuckets() {
+        // bar height auto-grows: legendH + buckets*(22+8) + 8 + 4 + ...
+        // simpleBuckets has 3 buckets, no legend → 0 + 3*30 + 8 = 98 → with adjustments
+        Map<String, Object> result = DocGenChartRasterizer.emitWithMeta(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'bar' }
+        );
+        Integer h = (Integer) result.get('logicalHeight');
+        System.assert(h > 80, 'bar height should grow with buckets: ' + h);
+    }
+
+    @IsTest
+    static void emitWithMeta_pie_defaultDims() {
+        Map<String, Object> result = DocGenChartRasterizer.emitWithMeta(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'pie' }
+        );
+        System.assertEquals(360, (Integer) result.get('logicalWidth'));
+        System.assertEquals(190, (Integer) result.get('logicalHeight'));
+    }
+
+    @IsTest
+    static void emitWithMeta_donut_defaultDims() {
+        Map<String, Object> result = DocGenChartRasterizer.emitWithMeta(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'donut' }
+        );
+        System.assertEquals(360, (Integer) result.get('logicalWidth'));
+    }
+
+    @IsTest
+    static void emitWithMeta_area_singleSeries_returnsCorrectDims() {
+        Map<String, Object> result = DocGenChartRasterizer.emitWithMeta(
+            simpleBuckets(),
+            new Map<String, String>{ 'style' => 'area' }
+        );
+        System.assertEquals(500, (Integer) result.get('logicalWidth'));
+        // No cross-tab → no legend → matches line single-series
+        System.assertEquals(274, (Integer) result.get('logicalHeight'));
+    }
+
+    // ─── hexToRgb helper coverage ───────────────────────────────────────────
+
+    @IsTest
+    static void hexToRgb_validHex_returnsRgb() {
+        List<Integer> rgb = DocGenChartRasterizer.hexToRgb('#3b82f6');
+        System.assertEquals(3, rgb.size());
+        System.assertEquals(59, rgb[0]);
+        System.assertEquals(130, rgb[1]);
+        System.assertEquals(246, rgb[2]);
+    }
+
+    @IsTest
+    static void hexToRgb_bareWithoutHash_returnsRgb() {
+        List<Integer> rgb = DocGenChartRasterizer.hexToRgb('ffffff');
+        System.assertEquals(255, rgb[0]);
+        System.assertEquals(255, rgb[1]);
+        System.assertEquals(255, rgb[2]);
+    }
+
+    @IsTest
+    static void hexToRgb_blank_returnsNull() {
+        System.assertEquals(null, DocGenChartRasterizer.hexToRgb(''));
+        System.assertEquals(null, DocGenChartRasterizer.hexToRgb(null));
+    }
+
+    @IsTest
+    static void hexToRgb_wrongLength_returnsNull() {
+        System.assertEquals(null, DocGenChartRasterizer.hexToRgb('#abc'));
+        System.assertEquals(null, DocGenChartRasterizer.hexToRgb('#abcde'));
+    }
+
+    @IsTest
+    static void hexToRgb_invalidChars_returnsNull() {
+        System.assertEquals(null, DocGenChartRasterizer.hexToRgb('#zzzzzz'));
+    }
 }
