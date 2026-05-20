@@ -215,8 +215,10 @@ public with sharing class DocGenChartTagExpander {
         // map (including title) when assigning a CV. If we strip title first
         // and then hash, expander signature ≠ controller signature, the CV
         // lookup misses, and every titled chart falls back to text. Must
-        // mirror the controller's input exactly.
-        String signature = isHtml ? null : DocGenChartImageController.tagSignature(relationship, field, style, opts);
+        // mirror the controller's input exactly. Signature is computed for
+        // every template type so HTML can route through PNG-via-CV when
+        // chartCvMap is populated (task #23 unification).
+        String signature = DocGenChartImageController.tagSignature(relationship, field, style, opts);
         String title = opts.remove('title');
 
         if (CROSS_TAB_STYLES.contains(style)) {
@@ -264,13 +266,50 @@ public with sharing class DocGenChartTagExpander {
             return '[Chart: ' + labelText + ']';
         }
 
+        // HTML PNG-via-CV (task #23 — true one-maintenance-place): when an
+        // upstream caller has rasterized the chart and populated chartCvMap,
+        // emit an <img> referencing the CV's relative URL. This is the
+        // PRIMARY HTML chart path going forward — Flying Saucer fetches the
+        // PNG server-side, the browser fetches it client-side, and every new
+        // chart style only has to land in DocGenChartRasterizer once.
+        //
+        // Server-side flows without chart prep (raw Flow / batch / async)
+        // fall through to the CSS-bar / SVG-opt-in branches below — zero
+        // regression for existing HTML templates that haven't gone through
+        // the PNG prep step.
+        if (chartCvMap != null && chartCvMap.containsKey(signature)) {
+            String entry = chartCvMap.get(signature);
+            String cvId = entry;
+            String widthAttr = '';
+            String heightAttr = '';
+            Integer pipeAt = entry.indexOf('|');
+            if (pipeAt > 0) {
+                cvId = entry.substring(0, pipeAt);
+                String size = entry.substring(pipeAt + 1);
+                Integer xAt = size.indexOf('x');
+                if (xAt > 0) {
+                    widthAttr = ' width="' + size.substring(0, xAt) + '"';
+                    heightAttr = ' height="' + size.substring(xAt + 1) + '"';
+                }
+            }
+            String alt = String.isNotBlank(title) ? title : (relationship + '.' + field);
+            return '<img src="/sfc/servlet.shepherd/version/download/' +
+                cvId +
+                '"' +
+                widthAttr +
+                heightAttr +
+                ' alt="' +
+                alt.replace('"', '&quot;') +
+                '"/>';
+        }
+
         // HTML SVG opt-in (Path C unification): when the author writes
         // `htmlRender=svg` AND the style is one the SVG serializer can emit,
         // resolve buckets here and inline the same SVG that the rasterizer
         // would draw — same data model, same per-style code, no duplicate
-        // implementation. Default stays `cssbar` so shipped templates render
-        // unchanged. See HTML_INLINE_SVG_STYLES comment for the Flying Saucer
-        // caveat (inline <svg> is browser-render-only, NOT PDF-via-toPdf).
+        // implementation. Falls through to CSS-bar default when not set.
+        // Inline SVG is browser-render-only and drops in Flying Saucer PDF
+        // output; for PDF the PNG-via-CV path above is what works.
         String htmlRender = opts.remove('htmlRender');
         if (htmlRender != null) {
             htmlRender = htmlRender.toLowerCase();

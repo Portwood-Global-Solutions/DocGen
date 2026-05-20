@@ -70,11 +70,11 @@ public with sharing class DocGenChartImageController {
             throw DocGenService.ahe('Template not found or access denied.');
         }
 
-        if (template.Type__c != 'Word') {
+        if (template.Type__c != 'Word' && template.Type__c != 'HTML') {
             return new List<ChartImageRequest>();
         }
 
-        String body = loadActiveWordBody(templateId);
+        String body = template.Type__c == 'HTML' ? loadActiveHtmlBody(templateId) : loadActiveWordBody(templateId);
         if (String.isBlank(body) || !body.contains(CHART_OPEN_PREFIX)) {
             return new List<ChartImageRequest>();
         }
@@ -143,11 +143,15 @@ public with sharing class DocGenChartImageController {
         }
 
         Map<String, String> chartCvMap = new Map<String, String>();
-        if (template.Type__c != 'Word') {
+        // Word AND HTML templates both flow through the PNG-via-CV pipeline.
+        // PowerPoint/Excel use their own embedding helpers in DocGenService;
+        // they're routed via Apex callers that pass templateType explicitly,
+        // not through this LWC entry point.
+        if (template.Type__c != 'Word' && template.Type__c != 'HTML') {
             return chartCvMap;
         }
 
-        String body = loadActiveWordBody(templateId);
+        String body = template.Type__c == 'HTML' ? loadActiveHtmlBody(templateId) : loadActiveWordBody(templateId);
         if (String.isBlank(body) || !body.contains(CHART_OPEN_PREFIX)) {
             return chartCvMap;
         }
@@ -334,6 +338,38 @@ public with sharing class DocGenChartImageController {
             SELECT VersionData
             FROM ContentVersion
             WHERE Title = :xmlTitle AND IsLatest = TRUE
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (cvs.isEmpty() || cvs[0].VersionData == null) {
+            return null;
+        }
+        return cvs[0].VersionData.toString();
+    }
+
+    /**
+     * HTML template body loader — pulls the raw template HTML from the CV
+     * referenced by the active version's Content_Version_Id__c. Mirrors the
+     * load path DocGenService uses (see line 7300+) so chart-tag scanning
+     * sees the same body text the merge engine processes.
+     */
+    private static String loadActiveHtmlBody(Id templateId) {
+        List<DocGen_Template_Version__c> vs = [
+            SELECT Id, Content_Version_Id__c
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH USER_MODE
+            LIMIT 1
+        ];
+        if (vs.isEmpty() || String.isBlank(vs[0].Content_Version_Id__c)) {
+            return null;
+        }
+        Id sourceCvId = (Id) vs[0].Content_Version_Id__c;
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Id = :sourceCvId
             WITH SYSTEM_MODE
             LIMIT 1
         ];

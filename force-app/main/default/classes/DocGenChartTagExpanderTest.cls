@@ -400,4 +400,66 @@ private class DocGenChartTagExpanderTest {
         System.assert(out.contains('Chart error'), 'Bare column style should render an error block. Got: ' + out);
         System.assert(out.contains('htmlRender=svg'), 'Error should point the author at the htmlRender=svg opt-in.');
     }
+
+    // ─── Task #23: HTML chart output via PNG-via-CV ──────────────────────────
+    // When chartCvMap is populated, the HTML branch emits <img> tags pointing
+    // at the relative CV download URL — same one-maintenance-place path the
+    // Word side uses. Flying Saucer fetches the PNG when rendering HTML→PDF,
+    // and the browser fetches it when rendering HTML→browser. Adding a new
+    // chart style only requires landing it in DocGenChartRasterizer.
+
+    @IsTest
+    static void htmlChartCvMap_emitsImgWithRelativeUrl() {
+        String input = '<body>{Chart:Responses__r:A__c:bar}</body>';
+        Map<String, String> opts = new Map<String, String>();
+        String signature = DocGenChartImageController.tagSignature('Responses__r', 'A__c', 'bar', opts);
+        Id fakeCvId = '068000000000000AAA';
+        Map<String, String> chartCvMap = new Map<String, String>();
+        chartCvMap.put(signature, fakeCvId + '|420x260');
+
+        String out = DocGenChartTagExpander.expand(input, 'HTML', new Map<String, Object>(), chartCvMap);
+        System.assert(
+            out.contains('/sfc/servlet.shepherd/version/download/' + fakeCvId),
+            'HTML+chartCvMap should emit relative CV download URL. Got: ' + out
+        );
+        System.assert(out.contains('width="420"'), 'Image width attr should match the chartCvMap WxH. Got: ' + out);
+        System.assert(out.contains('height="260"'), 'Image height attr should match the chartCvMap WxH. Got: ' + out);
+        System.assert(
+            !out.contains('{#ChartBucket'),
+            'CSS-bar loop should NOT emit when chartCvMap claims the chart. Got: ' + out
+        );
+    }
+
+    @IsTest
+    static void htmlChartCvMap_titleBecomesAltText() {
+        String input = '{Chart:Responses__r:A__c:bar:title=Satisfaction Scores}';
+        Map<String, String> opts = new Map<String, String>{ 'title' => 'Satisfaction Scores' };
+        String signature = DocGenChartImageController.tagSignature('Responses__r', 'A__c', 'bar', opts);
+        Map<String, String> chartCvMap = new Map<String, String>();
+        chartCvMap.put(signature, '068000000000000AAA|500x300');
+        String out = DocGenChartTagExpander.expand(input, 'HTML', new Map<String, Object>(), chartCvMap);
+        System.assert(
+            out.contains('alt="Satisfaction Scores"'),
+            'Chart title should become the img alt text. Got: ' + out
+        );
+    }
+
+    @IsTest
+    static void htmlChartCvMap_emptyMap_fallsBackToCssBar() {
+        // chartCvMap supplied but no entry for this chart's signature → fall
+        // through to CSS-bar default, no regression for HTML templates that
+        // skip chart prep (Flow/batch).
+        String input = '{Chart:Responses__r:A__c:bar}';
+        Map<String, String> chartCvMap = new Map<String, String>(); // empty
+        String out = DocGenChartTagExpander.expand(input, 'HTML', new Map<String, Object>(), chartCvMap);
+        System.assert(out.contains('{#ChartBucket:'), 'Empty chartCvMap should fall through to CSS-bar. Got: ' + out);
+        System.assert(!out.contains('<img'), 'No img tag expected when signature absent from map. Got: ' + out);
+    }
+
+    @IsTest
+    static void htmlChartCvMap_nullMap_fallsBackToCssBar() {
+        String input = '{Chart:Responses__r:A__c:bar}';
+        String out = DocGenChartTagExpander.expand(input, 'HTML', new Map<String, Object>(), null);
+        System.assert(out.contains('{#ChartBucket:'), 'Null chartCvMap should fall through to CSS-bar. Got: ' + out);
+    }
 }
