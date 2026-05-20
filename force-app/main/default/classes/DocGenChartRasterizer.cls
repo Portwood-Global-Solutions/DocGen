@@ -153,6 +153,13 @@ public class DocGenChartRasterizer {
 
     /**
      * Top-level entry point. Dispatches by `options.style` (default `bar`).
+     *
+     * `options.scale` (default 2) supersamples the entire chart — internally
+     * the rasterizer draws at scale× the logical width/height. The PNG is
+     * emitted at the larger size; when Word embeds it at the logical size
+     * (via {%cvId:WxH}) the document app does bilinear downsampling for
+     * free, smoothing pie/donut arc edges and font glyphs alike. The trick
+     * matches what the browser canvas does at scale=4.
      */
     public static Blob emit(List<Map<String, Object>> buckets, Map<String, String> options) {
         Map<String, String> opts = options == null ? new Map<String, String>() : options;
@@ -184,14 +191,25 @@ public class DocGenChartRasterizer {
     // Bar — horizontal bars, one row per bucket
     // =====================================================================
     private static Blob emitBar(List<Map<String, Object>> buckets, Map<String, String> opts) {
-        Integer width = optInt(opts, 'width', 500);
-        // Reserve left-side strip for category labels ("Drive Alone" etc.)
-        // and right-side strip for value labels ("267 (62.8%)").
+        Integer scale = optInt(opts, 'scale', 2);
+        // All values below are LOGICAL; we multiply by `scale` when drawing
+        // so the output PNG is 2x the requested dimensions. Word/PDF
+        // downsamples to the logical size via {%cvId:WxH} — that
+        // downsampling gives free anti-aliasing on arcs + font glyphs.
+        Integer logicalWidth = optInt(opts, 'width', 500);
         Integer categoryStripPx = 105;
         Integer valueStripPx = 80;
         Integer barHeight = 22;
         Integer barGap = 8;
-        Integer height = optInt(opts, 'height', (buckets.size() * (barHeight + barGap)) + barGap);
+        Integer logicalHeight = optInt(opts, 'height', (buckets.size() * (barHeight + barGap)) + barGap);
+
+        // Scale up physically
+        Integer width = logicalWidth * scale;
+        Integer height = logicalHeight * scale;
+        categoryStripPx *= scale;
+        valueStripPx *= scale;
+        barHeight *= scale;
+        barGap *= scale;
 
         Canvas c = new Canvas(width, height, buildPalette(opts));
         Decimal maxPct = computeMaxPercent(buckets);
@@ -200,6 +218,7 @@ public class DocGenChartRasterizer {
         }
         Integer barAreaWidth = width - categoryStripPx - valueStripPx;
         Integer barStartX = categoryStripPx;
+        Integer fontH = FONT_H * scale;
 
         for (Integer i = 0; i < buckets.size(); i++) {
             Map<String, Object> b = buckets[i];
@@ -215,13 +234,12 @@ public class DocGenChartRasterizer {
             Integer rowY = barGap + i * (barHeight + barGap);
             Integer barW = maxPct > 0 ? (Integer) ((pct / maxPct) * barAreaWidth) : 0;
             if (barW < 1 && pct > 0) {
-                barW = 1;
+                barW = scale;
             }
             c.fillRect(barStartX, rowY, barW, barHeight, paletteIdx);
 
-            Integer textY = rowY + (barHeight - FONT_H) / 2;
+            Integer textY = rowY + (barHeight - fontH) / 2;
 
-            // Category label on the LEFT, truncated if needed.
             String catLabel = stringOf(b.get('key_label'));
             if (String.isBlank(catLabel)) {
                 catLabel = stringOf(b.get('key'));
@@ -229,15 +247,14 @@ public class DocGenChartRasterizer {
             if (catLabel == null) {
                 catLabel = '';
             }
-            Integer maxCatChars = (categoryStripPx - 6) / FONT_CHAR_ADVANCE;
+            Integer maxCatChars = (categoryStripPx - 6 * scale) / (FONT_CHAR_ADVANCE * scale);
             if (catLabel.length() > maxCatChars && maxCatChars > 1) {
                 catLabel = catLabel.substring(0, maxCatChars);
             }
-            c.drawText(4, textY, catLabel, COLOR_TEXT);
+            c.drawText(4 * scale, textY, catLabel, COLOR_TEXT, scale);
 
-            // Value label on the RIGHT, after the bar.
             String valLabel = formatCountPercent(count, pct);
-            c.drawText(barStartX + barW + 4, textY, valLabel, COLOR_TEXT);
+            c.drawText(barStartX + barW + 4 * scale, textY, valLabel, COLOR_TEXT, scale);
         }
 
         return c.toPng();
@@ -247,14 +264,14 @@ public class DocGenChartRasterizer {
     // Column — vertical bars, one column per bucket
     // =====================================================================
     private static Blob emitColumn(List<Map<String, Object>> buckets, Map<String, String> opts) {
-        Integer width = optInt(opts, 'width', 500);
-        Integer height = optInt(opts, 'height', 280);
-        // Baseline 18px from bottom for the axis line; the rest is plot area.
-        Integer baselineY = height - 18;
-        Integer plotTop = 12;
+        Integer scale = optInt(opts, 'scale', 2);
+        Integer width = optInt(opts, 'width', 500) * scale;
+        Integer height = optInt(opts, 'height', 280) * scale;
+        Integer baselineY = height - 18 * scale;
+        Integer plotTop = 12 * scale;
         Integer plotHeight = baselineY - plotTop;
-        Integer marginLeft = 12;
-        Integer plotRight = width - 12;
+        Integer marginLeft = 12 * scale;
+        Integer plotRight = width - 12 * scale;
         Integer plotWidth = plotRight - marginLeft;
 
         Canvas c = new Canvas(width, height, buildPalette(opts));
@@ -272,10 +289,10 @@ public class DocGenChartRasterizer {
 
         Integer slotCount = buckets.size();
         Integer slotW = plotWidth / slotCount;
-        Integer barW = Math.max(6, Math.min(60, (Integer) (slotW * 0.7)));
+        Integer barW = Math.max(6 * scale, Math.min(60 * scale, (Integer) (slotW * 0.7)));
 
         // Draw baseline (axis grid)
-        c.fillRect(marginLeft, baselineY, plotWidth, 1, COLOR_GRID);
+        c.fillRect(marginLeft, baselineY, plotWidth, scale, COLOR_GRID);
 
         for (Integer i = 0; i < buckets.size(); i++) {
             Map<String, Object> b = buckets[i];
@@ -292,16 +309,15 @@ public class DocGenChartRasterizer {
             Integer barX = slotCenter - (barW / 2);
             Integer barH = maxCount > 0 ? (Integer) ((count / maxCount) * plotHeight) : 0;
             if (barH < 1 && count > 0) {
-                barH = 1;
+                barH = scale;
             }
             Integer barY = baselineY - barH;
             c.fillRect(barX, barY, barW, barH, paletteIdx);
-            // Value label centered above each column, just above the bar top.
             String label = formatPercent(pct);
-            Integer textW = c.textWidth(label);
+            Integer textW = c.textWidth(label, scale);
             Integer textX = slotCenter - (textW / 2);
-            Integer textY = Math.max(0, barY - FONT_H - 2);
-            c.drawText(textX, textY, label, COLOR_TEXT);
+            Integer textY = Math.max(0, barY - FONT_H * scale - 2 * scale);
+            c.drawText(textX, textY, label, COLOR_TEXT, scale);
         }
 
         return c.toPng();
@@ -317,12 +333,14 @@ public class DocGenChartRasterizer {
     // tests, well within Apex CPU budget.
     // =====================================================================
     private static Blob emitPie(List<Map<String, Object>> buckets, Map<String, String> opts, Boolean donut) {
-        // Default layout: 540 wide, 280 tall — pie/donut in the left half,
-        // a vertical legend on the right (color swatch + label + count/%).
-        // Matches the SVG emitter's default sizing so server-side and
-        // browser-side rasterization look visually equivalent.
-        Integer width = optInt(opts, 'width', 540);
-        Integer height = optInt(opts, 'height', 280);
+        // Pie/donut at 2x supersample blows the sync Apex CPU budget — every
+        // pixel runs atan2 + slice-index lookup, and 4x more pixels at scale=2
+        // tips us over 10s. Default to 1x for the arc render; a future
+        // sector-fill optimization (paint by slice instead of per-pixel angle
+        // test) would let us match bar/column at 2x.
+        Integer scale = optInt(opts, 'scale', 1);
+        Integer width = optInt(opts, 'width', 540) * scale;
+        Integer height = optInt(opts, 'height', 280) * scale;
         Canvas c = new Canvas(width, height, buildPalette(opts));
 
         Decimal total = 0;
@@ -337,12 +355,12 @@ public class DocGenChartRasterizer {
         }
 
         // Pie sits in the left half of the canvas; legend in the right.
-        Integer legendStartX = Math.max((Integer) (width * 0.5), width - 240);
-        Integer pieAreaWidth = legendStartX - 8;
+        Integer legendStartX = Math.max((Integer) (width * 0.5), width - 240 * scale);
+        Integer pieAreaWidth = legendStartX - 8 * scale;
         Integer pieAreaHeight = height;
         Integer cx = pieAreaWidth / 2;
         Integer cy = pieAreaHeight / 2;
-        Integer outerR = Math.min(pieAreaWidth, pieAreaHeight) / 2 - 8;
+        Integer outerR = Math.min(pieAreaWidth, pieAreaHeight) / 2 - 8 * scale;
         Integer outerR2 = outerR * outerR;
         Integer innerR = 0;
         if (donut) {
@@ -417,10 +435,9 @@ public class DocGenChartRasterizer {
         }
 
         // ─── Legend rendering on the right half ───────────────────────────
-        // One row per bucket: 11x11 color swatch + " " + "Label — count(pct%)".
-        Integer swatchSize = 11;
-        Integer rowH = swatchSize + 5; // 16 px per row
-        Integer maxRows = (height - 8) / rowH;
+        Integer swatchSize = 11 * scale;
+        Integer rowH = swatchSize + 5 * scale;
+        Integer maxRows = (height - 8 * scale) / rowH;
         Integer legendY = (height - (Math.min(buckets.size(), maxRows) * rowH)) / 2;
         for (Integer i = 0; i < buckets.size() && i < maxRows; i++) {
             Map<String, Object> b = buckets[i];
@@ -435,13 +452,12 @@ public class DocGenChartRasterizer {
                 label = '';
             }
             String row = label + ' ' + formatCountPercent(decimalOf(b.get('count')), decimalOf(b.get('percent')));
-            // Truncate to fit available legend width
-            Integer availPx = width - (legendStartX + swatchSize + 6);
-            Integer maxChars = availPx / FONT_CHAR_ADVANCE;
+            Integer availPx = width - (legendStartX + swatchSize + 6 * scale);
+            Integer maxChars = availPx / (FONT_CHAR_ADVANCE * scale);
             if (row.length() > maxChars && maxChars > 1) {
                 row = row.substring(0, maxChars);
             }
-            c.drawText(legendStartX + swatchSize + 5, yRow + 2, row, COLOR_TEXT);
+            c.drawText(legendStartX + swatchSize + 5 * scale, yRow + 2 * scale, row, COLOR_TEXT, scale);
         }
 
         return c.toPng();
@@ -672,9 +688,12 @@ public class DocGenChartRasterizer {
 
         /**
          * Draws one character from FONT_5X7 at (x, y) — top-left corner of
-         * the glyph bounding box. Unsupported chars render as blank (space).
+         * the glyph bounding box. Each font pixel is rendered as scale×scale
+         * physical pixels so callers running at supersampled resolution get
+         * proportionally larger glyphs (which Word later downsamples for
+         * anti-aliasing).
          */
-        public void drawChar(Integer x, Integer y, String ch, Integer colorIdx) {
+        public void drawChar(Integer x, Integer y, String ch, Integer colorIdx, Integer scale) {
             List<Integer> glyph = FONT_5X7.get(ch);
             if (glyph == null) {
                 return;
@@ -682,30 +701,36 @@ public class DocGenChartRasterizer {
             for (Integer row = 0; row < FONT_H; row++) {
                 Integer bits = glyph[row];
                 for (Integer col = 0; col < FONT_W; col++) {
-                    // bit 4 = leftmost pixel
                     Integer mask = 1 << (FONT_W - 1 - col);
                     if ((bits & mask) != 0) {
-                        setPixel(x + col, y + row, colorIdx);
+                        // Paint scale×scale block per glyph pixel.
+                        Integer px = x + col * scale;
+                        Integer py = y + row * scale;
+                        for (Integer dy = 0; dy < scale; dy++) {
+                            for (Integer dx = 0; dx < scale; dx++) {
+                                setPixel(px + dx, py + dy, colorIdx);
+                            }
+                        }
                     }
                 }
             }
         }
 
-        /** Draws a string left-to-right at (x, y). Returns the width drawn. */
-        public Integer drawText(Integer x, Integer y, String text, Integer colorIdx) {
+        public Integer drawText(Integer x, Integer y, String text, Integer colorIdx, Integer scale) {
             if (text == null) {
                 return 0;
             }
             Integer cursorX = x;
+            Integer advance = FONT_CHAR_ADVANCE * scale;
             for (Integer i = 0; i < text.length(); i++) {
-                drawChar(cursorX, y, text.substring(i, i + 1), colorIdx);
-                cursorX += FONT_CHAR_ADVANCE;
+                drawChar(cursorX, y, text.substring(i, i + 1), colorIdx, scale);
+                cursorX += advance;
             }
             return cursorX - x;
         }
 
-        public Integer textWidth(String text) {
-            return text == null ? 0 : text.length() * FONT_CHAR_ADVANCE;
+        public Integer textWidth(String text, Integer scale) {
+            return text == null ? 0 : text.length() * FONT_CHAR_ADVANCE * scale;
         }
 
         public Blob toPng() {
