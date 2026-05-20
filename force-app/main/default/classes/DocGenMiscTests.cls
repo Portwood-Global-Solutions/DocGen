@@ -8960,4 +8960,56 @@ private class DocGenMiscTests {
         Map<String, Object> simple = DocGenService.loadRecordDataForTitle(acc.Id);
         System.assertEquals('Edge', simple.get('Name'));
     }
+
+    // =========================================================================
+    // Issue #114 — pre-decomposed template CVs are looked up at render time
+    // in four production sites (DocGenService.cls, two in DocGenController.cls,
+    // DocGenGiantQueryFlowAction.cls). All four MUST use WITH SYSTEM_MODE so
+    // FLS/CRUD on ContentVersion fields don't block non-admin users whose
+    // implicit CDL access already permits them to read the CV.
+    //
+    // Commit a0b10ee (v1.15.0) flipped these to WITH USER_MODE during the
+    // Checkmarx hardening pass and broke render for non-admin users with the
+    // DocGen_User permset. A true cross-user runtime test for this is brittle
+    // — the implicit CDL chain depends on permset + sharing + CDL Visibility
+    // none of which a focused unit test can mock cleanly — so guard the fix
+    // with a source-text assertion that catches any future revert to USER_MODE.
+    // =========================================================================
+    @IsTest
+    static void testIssue114NoUserModeOnPreDecompCvLookups() {
+        List<String> classNames = new List<String>{ 'DocGenService', 'DocGenController', 'DocGenGiantQueryFlowAction' };
+        for (ApexClass ac : [SELECT Name, Body FROM ApexClass WHERE Name IN :classNames AND NamespacePrefix = NULL]) {
+            String body = ac.Body;
+            Integer cursor = 0;
+            Integer hits = 0;
+            while (true) {
+                Integer idx = body.indexOf('docgen_tmpl_xml_', cursor);
+                if (idx == -1) {
+                    break;
+                }
+                hits++;
+                // Look forward to the SOQL closing bracket and assert no
+                // WITH USER_MODE appears between the prefix and that bracket.
+                Integer close = body.indexOf('];', idx);
+                if (close != -1) {
+                    String slice = body.substring(idx, close);
+                    System.assert(
+                        !slice.contains('WITH USER_MODE'),
+                        ac.Name +
+                            ' uses WITH USER_MODE for a pre-decomposed CV lookup — see #114. ' +
+                            'Offending block starts around char ' +
+                            idx +
+                            '.'
+                    );
+                }
+                cursor = idx + 16;
+            }
+            System.assert(
+                hits > 0,
+                'Sanity: expected at least one docgen_tmpl_xml_ reference in ' +
+                    ac.Name +
+                    ' — test may need updating if the prefix was renamed.'
+            );
+        }
+    }
 }

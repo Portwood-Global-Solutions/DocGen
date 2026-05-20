@@ -1140,7 +1140,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             SELECT Title, VersionData
             FROM ContentVersion
             WHERE Title IN (:docKey, :stylesKey)
-            WITH USER_MODE // NOPMD — internal pre-decomposed parts
+            WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts; access gated by DocGen permission sets via the parent template (#114)
         ];
         for (ContentVersion cv : xmlCvs) {
             if (cv.Title == docKey) {

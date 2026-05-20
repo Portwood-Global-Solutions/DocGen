@@ -173,8 +173,8 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
                 SELECT VersionData
                 FROM ContentVersion
                 WHERE Title = :xmlKey
-                WITH USER_MODE
-                LIMIT 1 // NOPMD — internal pre-decomposed part
+                WITH SYSTEM_MODE
+                LIMIT 1 // NOPMD — package-internal pre-decomposed part; access gated by DocGen permission sets via the parent template (#114)
             ];
             if (!xmlCvs.isEmpty()) {
                 documentXml = xmlCvs[0].VersionData.toString();
