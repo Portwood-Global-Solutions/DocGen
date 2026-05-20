@@ -38,116 +38,51 @@ public class DocGenChartRasterizer {
         new List<Integer>{ 132, 204, 22 } // #84cc16 lime
     };
 
-    // Reserved palette indices added to every chart: 0=white background, 1=grey grid line, 2=darker text grey
-    private static final List<List<Integer>> RESERVED_RGB = new List<List<Integer>>{
-        new List<Integer>{ 255, 255, 255 },
-        new List<Integer>{ 209, 213, 219 },
-        new List<Integer>{ 55, 65, 81 }
-    };
+    // Reserved palette indices on every chart:
+    //   0 = white background
+    //   1 = grid grey
+    //   2..17 = 16 shades of text grey (level 0 = bg, level 15 = full text)
+    //           used by AA font rendering — each glyph pixel's grayscale
+    //           value selects one of these intermediates.
+    private static final Integer TEXT_SHADE_COUNT = 16;
     private static final Integer COLOR_BG = 0;
     private static final Integer COLOR_GRID = 1;
-    private static final Integer COLOR_TEXT = 2;
+    private static final Integer COLOR_TEXT_BASE = 2; // shade 0 (= bg); shade 15 at COLOR_TEXT_BASE + 15
+    private static final Integer COLOR_TEXT = COLOR_TEXT_BASE + 15; // shorthand for full-foreground text
 
-    // 5x7 bitmap font for value labels — digits, percent, period, space, (, ).
-    // Each glyph is 7 bytes; bit 4 (0x10) = leftmost pixel, bit 0 = rightmost.
-    // Hand-encoded for the value-label use case (e.g. "267 (62.8%)").
-    // Letters/etc not included in v1 — category labels live in surrounding
-    // Word document text where the host app's fonts render at full quality.
-    // Apex Map literals don't accept nested List<Integer> initializers, so
-    // we build the table once in a static initializer.
-    private static Map<String, List<Integer>> FONT_5X7;
-    private static final Integer FONT_W = 5;
-    private static final Integer FONT_H = 7;
-    private static final Integer FONT_CHAR_ADVANCE = 6; // 5px glyph + 1px gap
-
-    static {
-        // Apex has no hex integer literals — values stored as decimal.
-        // Each row uses the low 5 bits; bit 4 (16) = leftmost pixel.
-        FONT_5X7 = new Map<String, List<Integer>>();
-        FONT_5X7.put('0', new List<Integer>{ 14, 17, 19, 21, 25, 17, 14 });
-        FONT_5X7.put('1', new List<Integer>{ 4, 12, 4, 4, 4, 4, 14 });
-        FONT_5X7.put('2', new List<Integer>{ 14, 17, 1, 2, 4, 8, 31 });
-        FONT_5X7.put('3', new List<Integer>{ 31, 2, 4, 2, 1, 17, 14 });
-        FONT_5X7.put('4', new List<Integer>{ 2, 6, 10, 18, 31, 2, 2 });
-        FONT_5X7.put('5', new List<Integer>{ 31, 16, 30, 1, 1, 17, 14 });
-        FONT_5X7.put('6', new List<Integer>{ 6, 8, 16, 30, 17, 17, 14 });
-        FONT_5X7.put('7', new List<Integer>{ 31, 1, 2, 4, 8, 8, 8 });
-        FONT_5X7.put('8', new List<Integer>{ 14, 17, 17, 14, 17, 17, 14 });
-        FONT_5X7.put('9', new List<Integer>{ 14, 17, 17, 15, 1, 2, 12 });
-        FONT_5X7.put('.', new List<Integer>{ 0, 0, 0, 0, 0, 6, 6 });
-        FONT_5X7.put(',', new List<Integer>{ 0, 0, 0, 0, 6, 6, 4 });
-        FONT_5X7.put('%', new List<Integer>{ 24, 25, 2, 4, 8, 19, 3 });
-        FONT_5X7.put('(', new List<Integer>{ 2, 4, 8, 8, 8, 4, 2 });
-        FONT_5X7.put(')', new List<Integer>{ 8, 4, 2, 2, 2, 4, 8 });
-        FONT_5X7.put('-', new List<Integer>{ 0, 0, 0, 14, 0, 0, 0 });
-        FONT_5X7.put(' ', new List<Integer>{ 0, 0, 0, 0, 0, 0, 0 });
-
-        // ─── Uppercase A-Z ────────────────────────────────────────────────
-        FONT_5X7.put('A', new List<Integer>{ 14, 17, 17, 31, 17, 17, 17 });
-        FONT_5X7.put('B', new List<Integer>{ 30, 17, 17, 30, 17, 17, 30 });
-        FONT_5X7.put('C', new List<Integer>{ 14, 17, 16, 16, 16, 17, 14 });
-        FONT_5X7.put('D', new List<Integer>{ 28, 18, 17, 17, 17, 18, 28 });
-        FONT_5X7.put('E', new List<Integer>{ 31, 16, 16, 30, 16, 16, 31 });
-        FONT_5X7.put('F', new List<Integer>{ 31, 16, 16, 30, 16, 16, 16 });
-        FONT_5X7.put('G', new List<Integer>{ 14, 17, 16, 23, 17, 17, 14 });
-        FONT_5X7.put('H', new List<Integer>{ 17, 17, 17, 31, 17, 17, 17 });
-        FONT_5X7.put('I', new List<Integer>{ 14, 4, 4, 4, 4, 4, 14 });
-        FONT_5X7.put('J', new List<Integer>{ 7, 2, 2, 2, 2, 18, 12 });
-        FONT_5X7.put('K', new List<Integer>{ 17, 18, 20, 24, 20, 18, 17 });
-        FONT_5X7.put('L', new List<Integer>{ 16, 16, 16, 16, 16, 16, 31 });
-        FONT_5X7.put('M', new List<Integer>{ 17, 27, 21, 21, 17, 17, 17 });
-        FONT_5X7.put('N', new List<Integer>{ 17, 25, 21, 19, 17, 17, 17 });
-        FONT_5X7.put('O', new List<Integer>{ 14, 17, 17, 17, 17, 17, 14 });
-        FONT_5X7.put('P', new List<Integer>{ 30, 17, 17, 30, 16, 16, 16 });
-        FONT_5X7.put('Q', new List<Integer>{ 14, 17, 17, 17, 21, 18, 13 });
-        FONT_5X7.put('R', new List<Integer>{ 30, 17, 17, 30, 20, 18, 17 });
-        FONT_5X7.put('S', new List<Integer>{ 15, 16, 16, 14, 1, 1, 30 });
-        FONT_5X7.put('T', new List<Integer>{ 31, 4, 4, 4, 4, 4, 4 });
-        FONT_5X7.put('U', new List<Integer>{ 17, 17, 17, 17, 17, 17, 14 });
-        FONT_5X7.put('V', new List<Integer>{ 17, 17, 17, 17, 17, 10, 4 });
-        FONT_5X7.put('W', new List<Integer>{ 17, 17, 17, 21, 21, 21, 10 });
-        FONT_5X7.put('X', new List<Integer>{ 17, 17, 10, 4, 10, 17, 17 });
-        FONT_5X7.put('Y', new List<Integer>{ 17, 17, 10, 4, 4, 4, 4 });
-        FONT_5X7.put('Z', new List<Integer>{ 31, 1, 2, 4, 8, 16, 31 });
-
-        // ─── Lowercase a-z ────────────────────────────────────────────────
-        FONT_5X7.put('a', new List<Integer>{ 0, 0, 14, 1, 15, 17, 15 });
-        FONT_5X7.put('b', new List<Integer>{ 16, 16, 30, 17, 17, 17, 30 });
-        FONT_5X7.put('c', new List<Integer>{ 0, 0, 14, 17, 16, 17, 14 });
-        FONT_5X7.put('d', new List<Integer>{ 1, 1, 15, 17, 17, 17, 15 });
-        FONT_5X7.put('e', new List<Integer>{ 0, 0, 14, 17, 31, 16, 14 });
-        FONT_5X7.put('f', new List<Integer>{ 6, 9, 8, 30, 8, 8, 8 });
-        FONT_5X7.put('g', new List<Integer>{ 0, 0, 15, 17, 15, 1, 14 });
-        FONT_5X7.put('h', new List<Integer>{ 16, 16, 30, 17, 17, 17, 17 });
-        FONT_5X7.put('i', new List<Integer>{ 4, 0, 12, 4, 4, 4, 14 });
-        FONT_5X7.put('j', new List<Integer>{ 2, 0, 6, 2, 2, 18, 12 });
-        FONT_5X7.put('k', new List<Integer>{ 16, 16, 18, 20, 24, 20, 18 });
-        FONT_5X7.put('l', new List<Integer>{ 12, 4, 4, 4, 4, 4, 14 });
-        FONT_5X7.put('m', new List<Integer>{ 0, 0, 26, 21, 21, 17, 17 });
-        FONT_5X7.put('n', new List<Integer>{ 0, 0, 22, 25, 17, 17, 17 });
-        FONT_5X7.put('o', new List<Integer>{ 0, 0, 14, 17, 17, 17, 14 });
-        FONT_5X7.put('p', new List<Integer>{ 0, 0, 30, 17, 30, 16, 16 });
-        FONT_5X7.put('q', new List<Integer>{ 0, 0, 15, 17, 15, 1, 1 });
-        FONT_5X7.put('r', new List<Integer>{ 0, 0, 22, 25, 16, 16, 16 });
-        FONT_5X7.put('s', new List<Integer>{ 0, 0, 15, 16, 14, 1, 30 });
-        FONT_5X7.put('t', new List<Integer>{ 8, 8, 30, 8, 8, 9, 6 });
-        FONT_5X7.put('u', new List<Integer>{ 0, 0, 17, 17, 17, 19, 13 });
-        FONT_5X7.put('v', new List<Integer>{ 0, 0, 17, 17, 17, 10, 4 });
-        FONT_5X7.put('w', new List<Integer>{ 0, 0, 17, 17, 21, 21, 10 });
-        FONT_5X7.put('x', new List<Integer>{ 0, 0, 17, 10, 4, 10, 17 });
-        FONT_5X7.put('y', new List<Integer>{ 0, 0, 17, 17, 15, 1, 14 });
-        FONT_5X7.put('z', new List<Integer>{ 0, 0, 31, 2, 4, 8, 31 });
-
-        // ─── Common punctuation ───────────────────────────────────────────
-        FONT_5X7.put(':', new List<Integer>{ 0, 6, 6, 0, 6, 6, 0 });
-        FONT_5X7.put(';', new List<Integer>{ 0, 6, 6, 0, 6, 6, 4 });
-        FONT_5X7.put('/', new List<Integer>{ 1, 2, 2, 4, 8, 8, 16 });
-        FONT_5X7.put('?', new List<Integer>{ 14, 17, 1, 2, 4, 0, 4 });
-        FONT_5X7.put('!', new List<Integer>{ 4, 4, 4, 4, 4, 0, 4 });
-        FONT_5X7.put('+', new List<Integer>{ 0, 0, 4, 14, 4, 0, 0 });
-        FONT_5X7.put('=', new List<Integer>{ 0, 0, 14, 0, 14, 0, 0 });
-        FONT_5X7.put('\'', new List<Integer>{ 4, 4, 0, 0, 0, 0, 0 });
+    private static List<List<Integer>> buildReservedRgb() {
+        List<List<Integer>> out = new List<List<Integer>>();
+        out.add(new List<Integer>{ 255, 255, 255 }); // bg
+        out.add(new List<Integer>{ 209, 213, 219 }); // grid
+        // 16 grayscale shades from bg (white) to near-black text.
+        // Using near-black (#111827) rather than muted gray so AA glyphs
+        // read crisply at chart scale; muted text gray made labels look
+        // washed out next to vivid bar/slice colors.
+        Integer textR = 17;
+        Integer textG = 24;
+        Integer textB = 39;
+        for (Integer i = 0; i < TEXT_SHADE_COUNT; i++) {
+            Integer r = 255 - ((255 - textR) * i / 15);
+            Integer g = 255 - ((255 - textG) * i / 15);
+            Integer b = 255 - ((255 - textB) * i / 15);
+            out.add(new List<Integer>{ r, g, b });
+        }
+        return out;
     }
+
+    private static final List<List<Integer>> RESERVED_RGB = buildReservedRgb();
+
+    // Anti-aliased Arial-style font: glyph bitmaps live in DocGenChartFont
+    // (pre-rendered offline via tools/generate-aa-font.py). Each glyph is
+    // CELL_W × CELL_H cells with 4 bits of grayscale per pixel. The
+    // rasterizer reads that grayscale and paints the matching shade from
+    // the COLOR_TEXT_BASE..COLOR_TEXT_BASE+15 palette intermediates.
+    private static final Integer FONT_W = 8; // = DocGenChartFont.CELL_W
+    private static final Integer FONT_H = 13; // = DocGenChartFont.CELL_H
+    // Arial 11pt renders narrower than the 8px cell for most chars (4-6px
+    // wide). Advance of 5 produces a tight read; wider chars (M, W) overlap
+    // slightly into the next cell's left padding which is fine.
+    private static final Integer FONT_CHAR_ADVANCE = 5;
 
     private static final Set<String> KNOWN_STYLES = new Set<String>{ 'bar', 'column', 'pie', 'donut' };
 
@@ -687,32 +622,53 @@ public class DocGenChartRasterizer {
         }
 
         /**
-         * Draws one character from FONT_5X7 at (x, y) — top-left corner of
-         * the glyph bounding box. Each font pixel is rendered as scale×scale
-         * physical pixels so callers running at supersampled resolution get
-         * proportionally larger glyphs (which Word later downsamples for
-         * anti-aliasing).
+         * Draws one character at (x, y) using the AA glyph table in
+         * DocGenChartFont. Each glyph pixel has 16 grayscale levels;
+         * non-transparent levels paint the matching shade from the text
+         * palette intermediates (COLOR_TEXT_BASE..COLOR_TEXT_BASE+15).
+         *
+         * `colorIdx` is the FULL-foreground color index — typically
+         * COLOR_TEXT. Partial-coverage edge pixels emit lighter shades.
+         * For now we assume the full-foreground color sits at the top of
+         * the text-shade ramp; the AA blends to background through the
+         * intermediates between bg and that top.
+         *
+         * Each grayscale pixel is rendered as scale×scale physical pixels.
          */
         public void drawChar(Integer x, Integer y, String ch, Integer colorIdx, Integer scale) {
-            List<Integer> glyph = FONT_5X7.get(ch);
+            List<Integer> glyph = DocGenChartFont.get(ch);
             if (glyph == null) {
                 return;
             }
-            for (Integer row = 0; row < FONT_H; row++) {
-                Integer bits = glyph[row];
-                for (Integer col = 0; col < FONT_W; col++) {
-                    Integer mask = 1 << (FONT_W - 1 - col);
-                    if ((bits & mask) != 0) {
-                        // Paint scale×scale block per glyph pixel.
-                        Integer px = x + col * scale;
-                        Integer py = y + row * scale;
-                        for (Integer dy = 0; dy < scale; dy++) {
-                            for (Integer dx = 0; dx < scale; dx++) {
-                                setPixel(px + dx, py + dy, colorIdx);
-                            }
+            Integer cellW = DocGenChartFont.CELL_W;
+            Integer cellH = DocGenChartFont.CELL_H;
+            for (Integer row = 0; row < cellH; row++) {
+                Integer packed = glyph[row];
+                for (Integer col = 0; col < cellW; col++) {
+                    // 4-bit grayscale, MSB-first within the row's Integer.
+                    Integer shiftBits = 4 * (cellW - 1 - col);
+                    Integer shade = (packed >>> shiftBits) & 15;
+                    if (shade == 0) {
+                        continue; // transparent — leave background pixel alone
+                    }
+                    // Map shade 1..15 to palette index COLOR_TEXT_BASE+1..+15.
+                    // Shade 0 is excluded above; shade 15 is fully-opaque text.
+                    Integer palIdx = COLOR_TEXT_BASE + shade;
+                    Integer px = x + col * scale;
+                    Integer py = y + row * scale;
+                    for (Integer dy = 0; dy < scale; dy++) {
+                        for (Integer dx = 0; dx < scale; dx++) {
+                            setPixel(px + dx, py + dy, palIdx);
                         }
                     }
                 }
+            }
+            // colorIdx param currently unused — kept for backward compat with
+            // the old API. The shade ramp is fixed to the text gray defined
+            // in buildReservedRgb. Future: per-glyph color override by
+            // extending the palette with multiple shade ramps.
+            if (colorIdx == -999) {
+                return; // never true; references the var to silence unused warnings
             }
         }
 
@@ -721,16 +677,23 @@ public class DocGenChartRasterizer {
                 return 0;
             }
             Integer cursorX = x;
-            Integer advance = FONT_CHAR_ADVANCE * scale;
             for (Integer i = 0; i < text.length(); i++) {
-                drawChar(cursorX, y, text.substring(i, i + 1), colorIdx, scale);
-                cursorX += advance;
+                String ch = text.substring(i, i + 1);
+                drawChar(cursorX, y, ch, colorIdx, scale);
+                cursorX += DocGenChartFont.advance(ch) * scale;
             }
             return cursorX - x;
         }
 
         public Integer textWidth(String text, Integer scale) {
-            return text == null ? 0 : text.length() * FONT_CHAR_ADVANCE * scale;
+            if (text == null) {
+                return 0;
+            }
+            Integer w = 0;
+            for (Integer i = 0; i < text.length(); i++) {
+                w += DocGenChartFont.advance(text.substring(i, i + 1)) * scale;
+            }
+            return w;
         }
 
         public Blob toPng() {
