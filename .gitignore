@@ -56,6 +56,8 @@ code-analyzer*.json
 !docs/SurveyChartExample.docx
 # Exception: Google Docs starter template (drop into Google Drive, open with Docs)
 !docs/SurveyChartTemplate-Starter.docx
+# Exception: v1.92 chart-engine showcase template (all 8 styles)
+!docs/ChartEngineShowcase.docx
 
 # Python scripts
 *.py

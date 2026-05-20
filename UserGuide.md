@@ -1257,83 +1257,248 @@ All five functions support any format suffix (`currency`, `number`, `percent`, c
 
 ### 7.6 Charts
 
-Render bar charts, pivot tables, and survey-style cross-tabs inline in your generated documents. Charts are pure HTML/CSS — no JavaScript, no `<svg>`, no external libraries — so they render reliably through the Flying Saucer PDF engine.
+Render **nine chart styles** inline in your generated documents — bar, column, pie, donut, pivot, stacked, clustered, line, and area. Charts produce real PNG images via a pure-Apex rasterizer (no `<canvas>`, no external services, no JavaScript libraries), so they render reliably in **every** output format DocGen ships:
 
-**Two ways to insert a chart:**
+| Output             | How charts get there                                                  |
+| ------------------ | --------------------------------------------------------------------- |
+| HTML → browser     | `<img src="/sfc/servlet.shepherd/version/download/CV_ID">`            |
+| HTML → PDF         | Same `<img>` — Flying Saucer (`Blob.toPdf`) fetches it server-side    |
+| Word `.docx`       | `<w:drawing>` referencing a PNG embedded in `word/media/`             |
+| Word → PDF         | Word → HTML → PDF chain; the embedded PNG flows through transparently |
+| PowerPoint `.pptx` | `<p:pic>` referencing a PNG in `ppt/media/`                           |
+| Excel `.xlsx`      | (Coming in a follow-up release)                                       |
 
-1. **`{Chart:relationship:field:style}`** — one-line tag. The expander generates the full styled HTML block for you. Recommended for 90% of cases. Works in HTML templates only (including Google Docs / Word → exported as Web Page).
-2. **`{#ChartBucket:relationship:field}...{/ChartBucket}`** — hand-authored loop. You write the chart's HTML body yourself. Full control over layout when you need pixel-perfect customization. Works in both HTML and Word templates.
+**Zero external callouts.** The chart engine is 100% native Apex — same constraint that makes DocGen suitable for AppExchange security review and managed-package customers. Charts work in Flow actions, batch jobs, Queueables, and Apex tests as well as the runner LWC.
 
-If you just want "a chart of answer distribution," use the first form. If you want a non-standard layout the expander doesn't ship, use the second.
+**Two authoring paths:**
 
-#### 7.6.0 One-line `{Chart:...}` blocks (v1.94+)
+1. **`{Chart:relationship:field:style:opts}`** — one-line tag. The engine resolves bucket data via SOQL aggregate (constant cost regardless of row count), rasterizes to PNG, embeds the image. Works in **all** template types. **This is the canonical path — use it for 95% of cases.**
+2. **`{#ChartBucket:relationship:field}…{/ChartBucket}`** — hand-authored loop. You write the chart HTML body yourself with `{key}` / `{count}` / `{percent}` placeholders. Use only when you need a custom layout the engine doesn't ship (e.g., embedded sparklines inside a table cell).
 
-A one-line tag that expands into a fully styled chart block at render time. You don't write any HTML — the expander emits the table, bar markup, colors, and embedded `{#ChartBucket:...}` loop.
+#### 7.6.0 One-line `{Chart:...}` blocks
 
-```
-{Chart:Survey_Responses__r:Selected_Answer__c}                              ← bar (default)
-{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=How satisfied?}
-{Chart:Survey_Responses__r:Selected_Answer__c:pivot:groupBy=Department__c&colSort=Eng,Sales,Mkt}
-{Chart:Survey_Responses__r:Selected_Answer__c:clustered:groupBy=Department__c&colSort=Eng,Sales,Mkt}
-{Chart:Survey_Responses__r:Selected_Answer__c:stacked:groupBy=Department__c&colSort=Eng,Sales,Mkt}
-```
-
-**Four styles ship today:**
-
-| Style       | Layout                                                                                              | Use when                                                |
-| ----------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `bar`       | Horizontal bar per bucket — label, colored fill sized by `{percent}%`, count + percent at the right | Default. One question, one dimension.                   |
-| `pivot`     | Cross-tab table — rows = answers, columns = `groupBy` values + Total, cells show `{percent}%`       | "How does each department answer this question?"        |
-| `clustered` | Vertical clustered bars — one column per answer, inner bars per `groupBy` value                     | Same data as pivot, visualized as comparative heights.  |
-| `stacked`   | Stacked horizontal bars — one row per answer, segments per `groupBy` value sized by share-of-row    | Composition by category ("what makes up each answer?"). |
-
-**Options** (any order, joined with `&`, after the style):
-
-| Option     | Required for            | Example                                                       |
-| ---------- | ----------------------- | ------------------------------------------------------------- |
-| `title=`   | optional                | `title=How satisfied are you with your role?`                 |
-| `where=`   | optional                | `where=Survey_Question__r.Display_Order__c=1` (SOQL fragment) |
-| `groupBy=` | pivot/clustered/stacked | `groupBy=Department__c`                                       |
-| `colSort=` | pivot/clustered/stacked | `colSort=Engineering,Sales,Marketing,Support,Operations`      |
-| `colors=`  | optional                | `colors=#1e40af,#b91c1c,#16a34a` (cycles by row index)        |
-
-Inside a `{#Survey_Questions__r}` loop, the `Survey_Responses__r` relationship resolves against the **iterating question** (Survey_Question**c has its own `Survey_Responses**r`child relationship), not the outer Survey — so one chart per question requires no`where=` filter:
+A single tag that expands into a complete chart image at render time. **Tag syntax:**
 
 ```
+{Chart:RELATIONSHIP:FIELD:STYLE:OPTS}
+```
+
+| Position       | Required | Meaning                                                |
+| -------------- | -------- | ------------------------------------------------------ |
+| `RELATIONSHIP` | yes      | Child relationship name on the parent record (one-hop) |
+| `FIELD`        | yes      | Field on the child to group by                         |
+| `STYLE`        | no       | One of nine styles (default: `bar`)                    |
+| `OPTS`         | no       | `key=value&key=value` modifiers                        |
+
+**All nine styles:**
+
+| Style       | Visual                                                                       | Cross-tab? | Best for                                                 |
+| ----------- | ---------------------------------------------------------------------------- | ---------- | -------------------------------------------------------- |
+| `bar`       | Horizontal bar per bucket, label left, count+% right                         | no         | One question, one dimension. Long category labels.       |
+| `column`    | Vertical bar per bucket, labels under, % above                               | no         | One question, one dimension. Short labels.               |
+| `pie`       | Pie chart with right-side legend showing count + %                           | no         | "Share of total" framing, ≤8 slices                      |
+| `donut`     | Pie with a center hole, same legend                                          | no         | Same as pie, lighter visual weight                       |
+| `pivot`     | Cross-tab table — rows = buckets, cols = `groupBy` values + Total            | required   | Numeric matrix readout. CSS-bar path (HTML-friendly).    |
+| `stacked`   | Horizontal stacked bar — one row per bucket, segments by `groupBy`           | required   | "How does each row break down across the 2nd dimension?" |
+| `clustered` | Vertical clustered bars — one cluster per bucket, mini-bar per col           | required   | Side-by-side comparison across the 2nd dimension         |
+| `line`      | Polyline through (bucket index, count). Multi-series when `groupBy` present. | optional   | Trend / ordering matters. Single or multi-series.        |
+| `area`      | Line chart with semi-transparent fill below each series                      | optional   | Trend + accumulated volume                               |
+
+**Worked examples** (against the canonical Commute Survey Demo — 425 responses, 6 modes, 2 locations):
+
+```
+{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=Commute Mode Distribution}
+{Chart:Survey_Responses__r:Selected_Answer__c:column:title=Commute Mode (Vertical)}
+{Chart:Survey_Responses__r:Selected_Answer__c:pie:title=Commute Mode Share}
+{Chart:Survey_Responses__r:Selected_Answer__c:donut:title=Commute Mode Share (Donut)}
+{Chart:Survey_Responses__r:Selected_Answer__c:stacked:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Location Mix per Mode}
+{Chart:Survey_Responses__r:Selected_Answer__c:clustered:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Mode by Location Comparison}
+{Chart:Survey_Responses__r:Selected_Answer__c:line:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Commute Trend by Location}
+{Chart:Survey_Responses__r:Selected_Answer__c:area:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Commute Volume by Location}
+{Chart:Survey_Responses__r:Selected_Answer__c:pivot:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Mode by Location (Table)}
+```
+
+#### 7.6.1 Complete modifier reference
+
+Modifiers come after the style, joined with `&`. **Order doesn't matter.** Values containing `&` or `=` are not supported (use `where=` for SOQL with operators — see below).
+
+| Modifier      | Applies to                        | Example                                                  | What it does                                                                                                                                                           |
+| ------------- | --------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title=`      | all styles                        | `title=How satisfied are you with your role?`            | Chart header text drawn above the chart. Becomes the `<img alt="…">` attribute on the HTML side.                                                                       |
+| `width=`      | all styles                        | `width=420`                                              | Logical-pixel width of the chart. Defaults: 540 (stacked/clustered), 500 (bar/column/line/area), 360 (pie/donut). Word/PDF downsample bigger PNGs for free AA.         |
+| `height=`     | all styles                        | `height=240`                                             | Logical-pixel height. Defaults vary per style (see source); bar auto-grows by bucket count.                                                                            |
+| `where=`      | all styles                        | `where=Survey_Question__r.Display_Order__c=1`            | SOQL fragment appended to the chart's `WHERE`. Identifier-only, sanitized through the same keyword blocklist as Query Builder. Forces server-side aggregation.         |
+| `groupBy=`    | stacked/clustered/pivot/line/area | `groupBy=Department__c`                                  | Cross-tab dimension. **Required** for `stacked`/`clustered`/`pivot`; **optional** for `line`/`area` (omit → single-series). Field on the same child object as `FIELD`. |
+| `colSort=`    | stacked/clustered/pivot/line/area | `colSort=Engineering,Sales,Marketing,Support,Operations` | Author-controlled column ordering. Named values appear first in this order; remaining values alpha-sorted; synthetic `Total` always last (pivot path only).            |
+| `colors=`     | all styles                        | `colors=#1e40af,#b91c1c,#16a34a`                         | Override the default 8-color palette. Cycles by row/series index. Each color is `#hex` (6 chars).                                                                      |
+| `split=`      | all (bucket-shape only)           | `split=;`                                                | Multi-select delimiter. Each respondent's pick contributes to every value they selected. Percentages sum to >100% by design.                                           |
+| `scale=`      | all (raster path only)            | `scale=2`                                                | Supersample multiplier. Default 1 for stacked/clustered/line/area, 2 for bar/column/pie/donut. Larger = sharper PNG but slower; 4 is the practical ceiling.            |
+| `htmlRender=` | HTML browser preview              | `htmlRender=svg`                                         | (HTML only, opt-in.) Inline `<svg>` instead of `<img>`. **Browser-only — Flying Saucer drops SVG**. Default `<img>` works in both HTML view and PDF.                   |
+
+**Composability:** every modifier composes with every other modifier where it makes sense:
+
+```
+{Chart:Survey_Responses__r:Mode__c:stacked:groupBy=Location__c&colSort=Marina,Bayshore&colors=#1e40af,#b91c1c&where=CreatedDate=THIS_YEAR&title=Modes by Office, 2026}
+```
+
+**Inside a relationship loop**, the chart's relationship resolves against the iterating record:
+
+```html
 {#Survey_Questions__r}
-  <h2>Question {Display_Order__c}: {Question_Text__c}</h2>
-  {Chart:Survey_Responses__r:Selected_Answer__c:bar}
-{/Survey_Questions__r}
+<h2>Q{Display_Order__c}: {Question_Text__c}</h2>
+{Chart:Survey_Responses__r:Selected_Answer__c:bar} {/Survey_Questions__r}
 ```
 
-**Error handling:** Malformed tags (unknown style, missing `groupBy`/`colSort` for cross-tabs, bad relationship name) render an obvious red error block inline in the PDF — you see the problem at first preview rather than chasing a silent miss. Non-HTML templates throw at generation time with the recovery steps.
+Here `Survey_Question__c.Survey_Responses__r` is the child relationship from Question (not from the outer Survey). One chart per question, no `where=` needed.
 
-**Authoring in Google Docs:** Type the tag as plain text anywhere in your document. When you `File → Download → Web Page (.html, zipped)`, the tag survives in the exported HTML. Upload the unzipped `.html` as the template body with **Type = HTML**. A starter file lives at `docs/SurveyChartTemplate-Starter.docx` — drop it into Google Drive, open with Docs, edit, export.
+**Error handling.** Malformed tags render an inline error block in HTML output (red border, monospace tag dump) and a `[Chart error: …]` text placeholder in Word — you see the problem at first preview rather than chasing a silent miss. Errors include the original tag verbatim so you can diff it against a working sample.
 
-For full control over the chart's HTML body (custom row markup, your own CSS classes, multi-chart layouts), drop down to `{#ChartBucket:...}` — documented in the rest of §7.6 below.
+#### 7.6.2 Output-format matrix — what flows where
 
-#### 7.6.1 Hand-authored `{#ChartBucket:...}` blocks
+The chart engine emits PNG (universal) with one opt-in alternative (inline SVG for browser-only HTML). The runner LWC, Flow actions, batch jobs, and the Apex `generate*` entry points all orchestrate chart preparation automatically — **you do not call `prepareChartImages` in your template; just write the tags.**
 
-A chart is a section tag that **groups a child relationship by a field** and exposes one row per distinct value to its body. You write the bar HTML once and DocGen repeats it for each bucket. Use this when the `{Chart:...}` expander's emitted layout doesn't fit (or for Word templates, which the expander doesn't support).
+| Template Type | Output           | Image format                                  | Engine path                                                                                   |
+| ------------- | ---------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| HTML          | HTML download    | `<img>` referencing CV URL                    | Browser fetches the CV via lightning subdomain                                                |
+| HTML          | PDF              | `<img>` referencing CV URL                    | Flying Saucer's `Blob.toPdf` fetches the CV server-side (relative URL — managed-package safe) |
+| HTML          | Browser preview  | `<img>` (default) OR inline `<svg>` (opt-in)  | Lightning UI / Experience Cloud render natively                                               |
+| Word          | DOCX             | PNG embedded in `word/media/`                 | LWC orchestrates: SVG → canvas → PNG → CV → client-side ZIP assembly fetches CV bytes         |
+| Word          | PDF              | PNG embedded in `word/media/`, then converted | Same DOCX assembly, then DocGenHtmlRenderer → `Blob.toPdf`                                    |
+| Word          | Sample PDF       | PNG embedded                                  | Same path                                                                                     |
+| PowerPoint    | PPTX             | PNG in `ppt/media/` via `<p:pic>`             | Server-side OOXML embed                                                                       |
+| Flow / batch  | any of the above | PNG via pure-Apex rasterizer                  | `DocGenChartImageController.prepareChartImagesServerSide` — no browser canvas, no callouts    |
 
-#### Basic syntax
+**Cleanup.** Each generated chart produces a transient `docgen_chart_*` ContentVersion. The runner cleans them up after the document downloads/saves. A daily orphan reaper (`DocGenChartCleanupSchedulable`) sweeps stragglers (failures or browser-closed-mid-flow).
+
+#### 7.6.3 LLM authoring prompt — copy this to generate a template
+
+Paste the block below into Claude / GPT / Gemini with one substitution: `${MY_DATA_DESCRIPTION}` should describe your child relationship name, the dimension field you want bucketed, and (optionally) the cross-tab field plus its expected values. The LLM will produce a complete HTML template you can upload.
+
+```text
+You are writing a Salesforce DocGen HTML template that renders 8 chart styles using DocGen's
+{Chart:...} tag syntax. DocGen is a native Salesforce 2GP package; the template is a single
+HTML file uploaded as a ContentVersion against a DocGen_Template__c with Type__c='HTML'.
+
+Hard constraints (Flying Saucer PDF engine, CSS 2.1 + small CSS 3 subset):
+- Use <table>/<tr>/<td> for layout OR <div> with display:table/table-row/table-cell.
+- Do NOT use: flex, grid, gap, linear-gradient, calc(), CSS variables. Silently ignored.
+- Do NOT use <svg> for charts — Flying Saucer drops it. {Chart:...} emits <img> by default.
+- Wrap @page in a <style> at the top. Do not also set Page_Size__c / Page_Orientation__c /
+  Custom_Margins__c on the template if the source HTML declares @page.
+
+Chart tag syntax: {Chart:RELATIONSHIP:FIELD:STYLE:OPTS}
+  - RELATIONSHIP: child relationship name on the parent record (e.g. Survey_Responses__r)
+  - FIELD: field on the child to bucket by (e.g. Selected_Answer__c)
+  - STYLE: bar, column, pie, donut, pivot, stacked, clustered, line, area
+  - OPTS: key=value&key=value (any order). All optional unless noted.
+
+Available modifiers:
+  - title=...                — chart header text, becomes img alt text
+  - width=N  height=N        — logical pixels (defaults: 500x ~by-style)
+  - where=SOQL_FRAGMENT      — appended to chart's WHERE. Identifier-only.
+  - groupBy=FIELD            — cross-tab dimension. REQUIRED for stacked/clustered/pivot;
+                               optional for line/area (omit → single-series).
+  - colSort=val1,val2,...    — author-controlled column order. Required when groupBy is used.
+  - colors=#hex,#hex,...     — palette override, cycles by row/series index
+  - split=DELIM              — multi-select picklist delimiter (sums to >100% by design)
+  - scale=N                  — PNG supersample (default 1-2). 4 max.
+
+Required output:
+1. A single self-contained HTML file (<!DOCTYPE html>...</html>) with inline <style>.
+2. A title row with {Name} of the parent record.
+3. Eight H2 sections — one per chart style. Each section:
+   - H2 heading numbered and named (e.g. "5. Stacked (cross-tab)")
+   - A one-line description of when to use this style
+   - The {Chart:...} tag itself, wrapped in <div class="chart">
+   - <h2 class="page-break"> on sections 2-8 so each chart gets its own page
+4. A footer line acknowledging "DocGen Chart Engine — pure-Apex PNG rasterization".
+
+Data shape — ${MY_DATA_DESCRIPTION}
+(Example: "Survey__c parent. Child relationship Survey_Responses__r. Bucket by Selected_Answer__c.
+Cross-tab dimension Location__c with values 8000 Marina, 3260 Bayshore.")
+
+Use the bucket field for bar/column/pie/donut single-dimension styles. Use the cross-tab field
+in groupBy for stacked/clustered/line/area/pivot. ColSort must match the cross-tab values.
+
+Return the complete HTML file, ready to upload as a DocGen HTML template. No commentary.
+```
+
+#### 7.6.4 Reference templates
+
+A ready-to-upload showcase ships in `docs/`:
+
+- **`docs/ChartEngineShowcase.html`** — all 8 chart styles against the Commute Survey Demo (Selected_Answer**c bucketed by Location**c). Upload as `Type=HTML`, set `Base_Object_API__c=Survey__c`, set `Query_Config__c=Survey_Questions__r` (omit `Survey_Responses__r` — see §7.6.5 for why).
+- **`docs/ChartEngineShowcase.docx`** — same template, Word format. Same chart tags, drops directly into the Word body as plain text.
+- **`docs/SurveyChartExample.html`** — per-question single-dimension chart pattern (one chart per question via outer `{#Survey_Questions__r}` loop).
+- **`docs/CommuteSurveyExample.html`** — full composition of all five chart modifiers using the `<div>` table-row layout.
+
+The showcase HTML is short enough to read end-to-end. Highly recommended starting point if you're authoring a template from scratch.
+
+#### 7.6.5 Resolution paths — `Query_Config__c` setup
+
+How you configure `Query_Config__c` determines whether your charts work at 30K rows, 300K rows, or fail. The engine picks one of four resolution paths automatically:
+
+1. **In-memory** — the child collection is already loaded into the data map (small relationship, eagerly queried), no `where=` / `groupBy=` used. Aggregation runs in Apex. Fastest path, zero extra SOQL.
+2. **SOQL fallback (recommended for >2000 rows)** — the relationship is **NOT** in `Query_Config__c`, OR `where=` / `groupBy=` is present. The engine issues one `GROUP BY` aggregate. **Constant cost regardless of row count.**
+3. **Parent-level** — chart sits outside any loop (header/summary). Same in-memory / SOQL behavior as above.
+4. **Giant-query parent** — chart targets a relationship in giant-query templates (>2000 rows under the "giant" child). Same modifiers, same shape, server-side aggregation.
+
+**Author's rule of thumb — applies to the chart's target relationship specifically:**
+
+> ✅ **DON'T pre-load the relationship the chart aggregates.** Leave it out of `Query_Config__c` (or omit it from any nested subquery). The chart aggregates it server-side at constant cost.
+>
+> ✅ **DO pre-load the relationship the chart's parent loop iterates.** If the chart sits inside `{#Survey_Questions__r}`, the **Questions** subquery is still required — but it must NOT include a nested `(SELECT … FROM Survey_Responses__r)` underneath it.
+>
+> ❌ **DON'T pre-load the chart's target AND also chart against it at >2000 rows** — that triggers the giant-query path looking for a traditional loop body that isn't there.
+
+The engine throws an actionable error pointing you to the fix when this misconfiguration is detected.
+
+**Worked example — Survey with 30K responses, per-question chart inside a Question loop:**
 
 ```
+Name, (SELECT Id, Question_Text__c, Display_Order__c FROM Survey_Questions__r ORDER BY Display_Order__c ASC)
+```
+
+- `Name` loads onto the Survey for the title bar.
+- The `Survey_Questions__r` subquery loads each Question's Id, prompt, and order — needed because the template iterates `{#Survey_Questions__r}`.
+- **`Id` in the question subquery is required** — the chart's SOQL fallback uses each question's Id as the parent record to scope its `GROUP BY` aggregate.
+- **No nested `(SELECT … FROM Survey_Responses__r)`** — that's what keeps responses out of Apex heap and lets the chart's server-side aggregate handle them at constant cost.
+
+The per-question chart tag inside the loop runs against each question's Id automatically. CPU stays under 500ms and SOQL queries stay under 10 regardless of whether the survey has 425 responses or 30,000.
+
+**Subquery syntax note (V1 Query Config):** the V1 flat-string format uses standard SOQL-style subqueries — `(SELECT field1, field2 FROM RelationshipName)`. Bare `RelationshipName(field1,field2)` does NOT parse and silently drops the relationship.
+
+#### 7.6.6 Security — FLS, sharing, and SOQL injection
+
+Charts run with **`AccessLevel.USER_MODE`** — Salesforce enforces object permissions, field-level security, sharing rules, and record-level access at the database layer. A user without read access to the child object or grouped field sees empty buckets (catch with `{:else}`), never a leaked aggregate.
+
+The chart resolver **validates every dynamic identifier** (relationship, child object, group field, lookup field, `groupBy` column) against `Schema.SObjectType.fields.getMap()` and `Schema.SObjectType.fields.ChildRelationship` before interpolation, and **sanitizes `where=` fragments** through the same keyword blocklist that protects Query Builder. SOQL injection is structurally impossible — identifiers are checked, values are bound.
+
+#### 7.6.7 Governor budget
+
+DocGen caps chart aggregates at **50 SOQL queries per transaction** (static budget inside `DocGenChartBucketResolver`). When the budget is exhausted, remaining charts render a single sentinel bucket labeled `"Chart limit reached"` — they never silently render as empty. Re-author the template to consolidate charts (or use a pivot instead of N single-dimension charts) if you hit the ceiling.
+
+Per-chart CPU budget is tracked too — the rasterizer auto-tunes `scale=` defaults so an 8-chart document fits comfortably in the 10-second synchronous Apex limit.
+
+#### 7.6.8 Hand-authored `{#ChartBucket:...}` loops
+
+When you want a custom layout the `{Chart:...}` engine doesn't ship (e.g., a chart inside a Word table cell, or a sparkline next to a text column), drop down to the underlying section tag. The aggregation is identical — same modifiers, same body fields, same SOQL fallback at scale.
+
+**Basic syntax:**
+
+```html
 {#ChartBucket:Survey_Responses__r:Selected_Answer__c}
-  <tr>
+<tr>
     <td>{key_label}</td>
     <td><div style="background:{color};width:{percent}%;height:14px;"></div></td>
     <td>{count} ({percent}%)</td>
-  </tr>
+</tr>
 {/ChartBucket}
 ```
 
-- `Survey_Responses__r` — child relationship name on the current record (one-hop).
-- `Selected_Answer__c` — field on the child to group by.
-
 Buckets sort **descending by count**, alpha by key for ties. Null/blank values collapse into a single bucket labeled `"Not Specified"`.
 
-#### Body fields
+**Body fields:**
 
 | Tag             | Type    | What it returns                                                                  |
 | --------------- | ------- | -------------------------------------------------------------------------------- |
@@ -1344,111 +1509,42 @@ Buckets sort **descending by count**, alpha by key for ties. Null/blank values c
 | `{percent_int}` | Integer | Rounded integer percent                                                          |
 | `{max_percent}` | Decimal | Percent normalized so the largest bucket = 100 (for "longest bar = full" charts) |
 | `{index}`       | Integer | 1-based bucket index                                                             |
-| `{color}`       | String  | Cycled palette color, `#hex` form (override with `colors=` — see below)          |
+| `{color}`       | String  | Cycled palette color, `#hex` form (override with `colors=` modifier)             |
 | `{color_hex}`   | String  | Same color without the leading `#` — for Word `w:shd w:fill` attributes          |
 
 Empty bucket lists render the body zero times. Add `{:else}No responses yet.{/:else}` inside the tag for a fallback.
 
-#### Modifiers (composable)
+**Modifiers** (pass as a third colon segment using `key=value&key=value`):
 
-Pass modifiers as a third colon segment using `key=value&key=value` syntax:
+| Modifier   | Example                                              | What it does                                                                                                                             |
+| ---------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `colors=`  | `colors=#1e40af,#b91c1c,#16a34a`                     | Override the default 8-color palette; cycles by row index.                                                                               |
+| `where=`   | `where=Mode__c='Drive Alone' AND Reasons__c != null` | SOQL fragment appended to the chart's WHERE. Forces server-side aggregation.                                                             |
+| `split=;`  | `split=;`                                            | Treat the field as multi-select (semicolon-separated).                                                                                   |
+| `groupBy=` | `groupBy=Location__c`                                | Cross-tab pivot. Each bucket exposes a `cols` sub-list — iterate with `{#cols}{key}={count} ({percent}%){/cols}`. Total column appended. |
+| `colSort=` | `colSort=8000 Marina,3260 Bayshore`                  | (Pairs with `groupBy=`.) Column ordering.                                                                                                |
 
-```
-{#ChartBucket:Survey_Responses__r:Mode__c:colors=#1e40af,#b91c1c&where=Survey__c != null}
-  ...
-{/ChartBucket}
-```
+**Pivot tables (`groupBy=`).** The body becomes a row containing another loop, `{#cols}`. Each col is one value of the `groupBy` field plus a final `Total` column:
 
-| Modifier   | Example                                              | What it does                                                                                                                                                                                     |
-| ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `colors=`  | `colors=#1e40af,#b91c1c,#16a34a`                     | Override the default 8-color palette; cycles by row index.                                                                                                                                       |
-| `where=`   | `where=Mode__c='Drive Alone' AND Reasons__c != null` | SOQL fragment appended to the chart's WHERE. Forces server-side aggregation (SOQL fallback).                                                                                                     |
-| `split=;`  | `split=;`                                            | Treat the field as multi-select (semicolon-separated). Each respondent's pick contributes to every value they selected; percentages sum to >100% by design.                                      |
-| `groupBy=` | `groupBy=Location__c`                                | Cross-tab pivot. Each bucket exposes a `cols` sub-list — iterate with `{#cols}{key}={count} ({percent}%){/cols}`. A synthetic **Total** column is appended last. Forces server-side aggregation. |
-| `colSort=` | `colSort=8000 Marina,3260 Bayshore`                  | (Pairs with `groupBy=`.) Author-controlled column order. Named values appear first in this order; remaining values alpha-sorted; Total always last.                                              |
-
-#### Pivot tables (`groupBy=`)
-
-A pivot chart turns the body into a row that contains another loop, `{#cols}`. Each col is one value of the `groupBy` field plus a final `Total` column.
-
-```
+```html
 <div class="row">
-  <div class="cell">{key_label}</div>
-  {#cols}<div class="cell">{count} ({percent}%)</div>{/cols}
+    <div class="cell">{key_label}</div>
+    {#cols}
+    <div class="cell">{count} ({percent}%)</div>
+    {/cols}
 </div>
 ```
 
-Inside `{#cols}` you get `{key}` / `{key_label}` / `{count}` / `{percent}` / `{percent_int}` / `{color}` / `{color_hex}` / `{index}` for the column, plus two pivot-only fields useful for stacked-segment bars:
+Inside `{#cols}` you get the standard bucket fields (`{key}` / `{key_label}` / `{count}` / `{percent}` / `{percent_int}` / `{color}` / `{color_hex}` / `{index}`) plus two pivot-only fields:
 
-- `{percent_of_row}` — Decimal — this cell's count as a percent of its row's total (1 decimal).
+- `{percent_of_row}` — Decimal — this cell's count as a percent of its row's total.
 - `{percent_of_row_int}` — Integer — same, rounded.
 
 Use these when you want each row's segments to sum to 100% (stacked-bar composition) rather than each cell's value as a percent of the overall total.
 
-**Layout gotcha for pivot charts:** DocGen's HTML container auto-expansion (the same logic that turns one `<tr>` into one row per loop iteration) reacts to nested loops by duplicating the nearest open `<tr>`. If you put `{#cols}` directly inside `<tr>`, every column gets a whole row of its own. **Use `<div>` + `display: table-row` + `display: table-cell` for pivot bodies, not `<tr>`/`<td>`.** See `docs/CommuteSurveyExample.html` for the canonical pattern.
+**Layout gotcha for pivot bodies:** DocGen's HTML container auto-expansion reacts to nested loops by duplicating the nearest open `<tr>`. If you put `{#cols}` directly inside `<tr>`, every column gets a whole row. **Use `<div>` + `display:table-row` + `display:table-cell` for pivot bodies, not `<tr>`/`<td>`.** See `docs/CommuteSurveyExample.html` for the canonical pattern.
 
-#### Where to use what — author's quick rules
-
-- **Counts/percentages by one field?** Plain ChartBucket, no modifiers.
-- **Filter the population first?** Add `where=...`.
-- **Multi-select picklist?** Add `split=;` (or whatever your delimiter is).
-- **Cross-tab two dimensions?** `groupBy=...`; iterate `{#cols}` in your body.
-- **Brand colors?** `colors=#...,#...`. Authors can also ignore `{color}` entirely and put their own CSS in the body.
-
-#### Resolution paths (and how to set up `Query_Config__c`)
-
-This is the critical operational detail — **how you configure `Query_Config__c` determines whether a chart works at 30K rows, 300K rows, or doesn't render at all.**
-
-The chart resolver picks one of four paths automatically:
-
-1. **In-memory** — when the child collection is already loaded into the data map (small relationships, eagerly queried) and you used no `where=` / `groupBy=` modifiers. Aggregation runs in Apex. Fastest, zero extra SOQL.
-2. **SOQL fallback (recommended for large datasets)** — when the relationship is **not** in `Query_Config__c`, OR when `where=` / `groupBy=` is used. The chart issues one `GROUP BY` aggregate query, **constant cost regardless of row count**. This is how 30K-row and 300K-row charts work.
-3. **Parent-level** — when the chart sits outside any loop (header/summary section). Same in-memory or SOQL behavior as above.
-4. **Giant-query parent** — for charts targeting a relationship in giant-query templates (>2000 rows under the "giant" child). Same modifiers, same shape, server-side aggregation.
-
-**The author's rule of thumb — applies to the chart's _target_ relationship specifically:**
-
-> ✅ **DON'T pre-load the relationship the chart aggregates.** Leave it out of `Query_Config__c` (or omit it from any nested subquery). The chart aggregates it server-side at constant cost.
->
-> ✅ **DO pre-load the relationship the chart's parent loop iterates.** If the chart sits inside `{#Survey_Questions__r}`, the **Questions** subquery is still required — but it must NOT include a nested `(SELECT … FROM Survey_Responses__r)` underneath it.
->
-> ❌ **DON'T pre-load a relationship AND also use `{#ChartBucket}` against it** — at >2000 rows this triggers the giant-query path looking for a traditional loop body that isn't there.
-
-If you misconfigure this, DocGen throws an actionable error pointing you to the fix:
-
-> _Template uses `{#ChartBucket:Survey_Responses__r:...}` but `Query_Config__c` also lists `Survey_Responses__r` as an eager-loaded child (currently 30000 rows, above the 2000-row giant-query threshold). Charts aggregate via their own SOQL, so remove `Survey_Responses__r` from `Query_Config__c` to let the chart handle this relationship server-side._
-
-**Worked example — Survey at 30K responses, per-question chart inside a Question loop:**
-
-```
-Name, (SELECT Id, Question_Text__c, Display_Order__c FROM Survey_Questions__r ORDER BY Display_Order__c ASC)
-```
-
-What's happening:
-
-- `Name` loads onto the Survey for the title bar.
-- The `Survey_Questions__r` subquery loads each Question's `Id`, prompt, and order — needed because the template iterates `{#Survey_Questions__r}` to render one chart block per question.
-- **`Id` in the question subquery is required** — the chart's SOQL fallback uses each question's Id as the parent record to scope its `GROUP BY` aggregate.
-- **No nested `(SELECT … FROM Survey_Responses__r)`** under the Questions subquery — that's what makes responses load via the chart's own server-side aggregate instead of pre-loading 30K rows into Apex heap.
-
-The per-question `{#ChartBucket:Survey_Responses__r:Selected_Answer__c}` runs against each question's Id automatically. CPU stays under 500ms and SOQL queries stay under 10 regardless of whether the survey has 425 or 30,000 responses.
-
-**Subquery syntax note (V1 Query Config):** the Query Config flat-string format uses standard SOQL-style subqueries — `(SELECT field1, field2 FROM RelationshipName)`. Bare `RelationshipName(field1,field2)` syntax does NOT parse and the relationship silently won't load, which makes outer loops render nothing and charts inside those loops look broken. Always wrap child relationships in `(SELECT … FROM Rel)`.
-
-#### Security — field-level security and sharing
-
-Charts run with the same **`AccessLevel.USER_MODE`** as every other DocGen SOQL — Salesforce enforces object permissions, field-level security, sharing rules, and record-level access at the database layer. A user without read access to `Survey_Response__c` or to the grouped field will see empty buckets (catch with `{:else}`), never a leaked aggregate. The chart resolver also validates every dynamic identifier (relationship, child object, group field, lookup field, `groupBy` column) against `Schema.SObjectType.fields.getMap()` and `Schema.SObjectType.fields.ChildRelationship` before interpolation, and sanitizes `where=` fragments through the same keyword blocklist that protects the rest of the giant-query pipeline.
-
-#### Governor budget
-
-DocGen caps chart aggregates at **50 SOQL queries per transaction** (a static budget inside `DocGenChartBucketResolver`). This guards against a misconfigured template stacking pathologically many charts in one render. When the budget is exhausted, remaining charts render a single sentinel bucket labeled `"Chart limit reached"` — they never silently render as empty. Re-author the template to consolidate charts (or use a pivot instead of N single-dimension charts) if you hit this ceiling.
-
-#### Reference templates
-
-- `docs/SurveyChartExample.html` — per-question single-dimension chart, ideal starting point.
-- `docs/CommuteSurveyExample.html` — full composition of all five modifiers (pivot + filter + multi-select + colSort + palette override) using the div-based table-row layout pattern.
-
-#### CSS 2.1 reminders (PDF output)
+#### 7.6.9 CSS 2.1 reminders (PDF output)
 
 Because Flying Saucer renders PDFs as CSS 2.1:
 
@@ -1460,26 +1556,22 @@ Because Flying Saucer renders PDFs as CSS 2.1:
 
 For DOCX output, an HTML-authored chart template still renders the same way; Word treats the chart `<div>` blocks as styled boxes.
 
-#### 7.6.1 Authoring charts in Word — caveats
+#### 7.6.10 Word templates — supported as of v1.92
 
-You can put `{#ChartBucket:...}` tags in a Word `.docx` template. The aggregation logic is identical to the HTML path — same modifiers, same body fields, same SOQL fallback at scale. What's different is **layout**, because Word's only side-by-side primitive is `<w:tbl>` with `<w:tc>` cells and DocGen's per-row auto-expansion (which makes `{#Lines}` produce one Word row per line item) conflicts with `{#cols}` when both want to drive cell placement inside the same row.
+The `{Chart:...}` PNG-via-CV pipeline (shipped this release) made Word a **peer of HTML** for chart output. All 9 styles render correctly in `.docx` output. The legacy "Word doesn't do pivot/stacked/clustered" caveat is **no longer in effect**.
 
-**Supported in Word today:**
+What's supported in Word today:
 
-- ✅ Simple horizontal bars: one row per answer with `w:tcW w:type="pct" w:w="{percent_int}00"` to size the bar cell and `w:shd w:fill="{color_hex}"` to color it
-- ✅ Single-dimension chart driving rows-per-answer with text fields (`{key_label}: {count} ({percent}%)`)
-- ✅ All five modifiers (`colors=`, `where=`, `split=`, `groupBy=`, `colSort=`) — data resolves correctly
+- ✅ All 9 styles via `{Chart:...}` tags
+- ✅ All five modifiers (`colors=`, `where=`, `split=`, `groupBy=`, `colSort=`)
 - ✅ Outer record loops driving page-per-iteration layout (page-breaks via `<w:pageBreakBefore/>`)
+- ✅ Hand-authored `{#ChartBucket:...}` simple-bar pattern (legacy)
 
-**Not supported in Word today (engine limitation):**
+What's still Word-specific:
 
-- ❌ Pivot `{#cols}` rendering cells side-by-side inside a `<w:tr>` — the row auto-expansion replicates the whole row per col instead of producing cells
-- ❌ Stacked-segment horizontal bars (same root cause)
-- ❌ Vertical clustered bar charts (same)
+- Hand-authored cross-tab `{#ChartBucket}` with `{#cols}` inside `<w:tr>` — **still hits the row auto-expansion limitation.** Use `{Chart:...:stacked}` or `{Chart:...:clustered}` instead, which generate PNGs server-side and embed them via `<w:drawing>`.
 
-The HTML path dodges this entirely because `<div>` with `display:table-cell` is never recognized by row auto-expansion. Customers needing cross-tab / pivot / stacked visualizations should author in HTML.
-
-Reference Word template: `docs/SurveyChartExample.docx` (one chart per page; uses the supported simple-bar pattern). Open in Word to inspect how merge tags drop into normal table-cell properties.
+Reference Word template: `docs/ChartEngineShowcase.docx` (all 8 chart styles, one per page). Open in Word to see how the `{Chart:...}` tags drop in as plain paragraph text. The engine handles every conversion downstream.
 
 ### 7.7 Images
 

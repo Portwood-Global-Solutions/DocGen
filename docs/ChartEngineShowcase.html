@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+@page { size: letter; margin: 0.75in; }
+body { font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5; }
+h1 { color: #1e3a8a; font-size: 32pt; margin: 0 0 8pt 0; }
+h2 { color: #1e3a8a; font-size: 18pt; margin: 24pt 0 6pt 0; border-bottom: 2pt solid #fbbf24; padding-bottom: 4pt; }
+.lede { color: #6b7280; font-size: 12pt; margin: 0 0 32pt 0; }
+.meta { color: #9ca3af; font-size: 9pt; margin-top: 4pt; }
+.desc { color: #374151; font-size: 11pt; margin: 8pt 0 12pt 0; }
+.chart { margin: 12pt 0 24pt 0; }
+img { max-width: 100%; height: auto; }
+.page-break { page-break-before: always; }
+.footer { color: #9ca3af; font-size: 9pt; text-align: center; margin-top: 24pt; border-top: 1pt solid #e5e7eb; padding-top: 8pt; }
+</style>
+</head>
+<body>
+
+<h1>{Name}</h1>
+<p class="lede">Chart Engine Showcase — all 8 styles rendered against {COUNT:Survey_Responses__r} commute responses across 2 office locations.</p>
+<p class="meta">Generated {today:MMMM d, yyyy} by DocGen</p>
+
+<h2>1. Bar (horizontal)</h2>
+<p class="desc">Baseline bucket aggregation — one bar per commute mode, length proportional to count.</p>
+<div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=Commute Mode Distribution}</div>
+
+<h2 class="page-break">2. Column (vertical)</h2>
+<p class="desc">Same data, vertical orientation. Useful when category labels are short.</p>
+<div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:column:title=Commute Mode (Vertical)}</div>
+
+<h2 class="page-break">3. Pie</h2>
+<p class="desc">Slice per commute mode with a right-side legend showing count and percentage.</p>
+<div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:pie:title=Commute Mode Share}</div>
+
+<h2 class="page-break">4. Donut</h2>
+<p class="desc">Pie with a center hole — visually lighter, leaves space for a totals callout.</p>
+<div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:donut:title=Commute Mode Share (Donut)}</div>
+
+<h2 class="page-break">5. Stacked (cross-tab)</h2>
+<p class="desc">Horizontal stacked bar — one row per commute mode, segmented by office location. Each row's segments sum to 100% of that mode's responses.</p>
+<div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:stacked:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Location Mix per Commute Mode}</div>
+
+<h2 class="page-break">6. Clustered (cross-tab)</h2>
+<p class="desc">Vertical clustered bars — one cluster per commute mode, one mini-bar per location. Heights auto-scale so the peak observed percentage fills the plot.</p>
+<div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:clustered:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Mode × Location Comparison}</div>
+
+<h2 class="page-break">7. Line (multi-series)</h2>
+<p class="desc">Polyline through (mode index, count) — one line per location when cross-tab is enabled.</p>
+<div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:line:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Commute Trend by Location}</div>
+
+<h2 class="page-break">8. Area (multi-series)</h2>
+<p class="desc">Line chart with a filled polygon under each series — emphasizes accumulated volume.</p>
+<div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:area:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Commute Volume by Location}</div>
+
+<p class="footer">DocGen Chart Engine — pure-Apex PNG rasterization, no external callouts.</p>
+
+</body>
+</html>
