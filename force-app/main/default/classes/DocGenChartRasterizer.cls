@@ -84,7 +84,16 @@ public class DocGenChartRasterizer {
     // slightly into the next cell's left padding which is fine.
     private static final Integer FONT_CHAR_ADVANCE = 5;
 
-    private static final Set<String> KNOWN_STYLES = new Set<String>{ 'bar', 'column', 'pie', 'donut' };
+    private static final Set<String> KNOWN_STYLES = new Set<String>{
+        'bar',
+        'column',
+        'pie',
+        'donut',
+        'stacked',
+        'clustered',
+        'line',
+        'area'
+    };
 
     /**
      * Top-level entry point. Dispatches by `options.style` (default `bar`).
@@ -118,6 +127,18 @@ public class DocGenChartRasterizer {
         }
         if (style == 'donut') {
             return emitPie(buckets, opts, true);
+        }
+        if (style == 'stacked') {
+            return emitStacked(buckets, opts);
+        }
+        if (style == 'clustered') {
+            return emitClustered(buckets, opts);
+        }
+        if (style == 'line') {
+            return emitLine(buckets, opts, false);
+        }
+        if (style == 'area') {
+            return emitLine(buckets, opts, true);
         }
         throw new DocGenException('Unhandled chart style: ' + style);
     }
@@ -189,6 +210,20 @@ public class DocGenChartRasterizer {
             // its own. See the comment in emitPie for full context.
             width = optInt(opts, 'width', 360);
             height = optInt(opts, 'height', 190);
+        } else if (style == 'stacked') {
+            Integer barHeight = 22;
+            Integer barGap = 8;
+            Integer legendH = hasCols(buckets) ? 22 : 0;
+            width = optInt(opts, 'width', 540);
+            height = optInt(opts, 'height', legendH + (buckets.size() * (barHeight + barGap)) + barGap + 4);
+        } else if (style == 'clustered') {
+            Integer legendH = hasCols(buckets) ? 22 : 0;
+            width = optInt(opts, 'width', 540);
+            height = optInt(opts, 'height', legendH + 14 + 200 + 64);
+        } else if (style == 'line' || style == 'area') {
+            Integer legendH = hasCols(buckets) ? 22 : 0;
+            width = optInt(opts, 'width', 500);
+            height = optInt(opts, 'height', legendH + 14 + 200 + 60);
         } else {
             // Unknown styles never reach here — emit() throws first. Defensive
             // fallback to bar dimensions so a future style added to KNOWN_STYLES
@@ -699,6 +734,614 @@ public class DocGenChartRasterizer {
         // Numerical edge — pick the last slice. This shouldn't happen for
         // points strictly inside the disk by construction.
         return nSlices - 1;
+    }
+
+    // =====================================================================
+    // Stacked — horizontal stacked bar, one row per bucket. Each row is
+    // segmented by the bucket's `cols` cross-tab list (Total column
+    // excluded). Mirrors DocGenSvgChartSerializer.emitStacked layout so
+    // the rasterized output matches the SVG output visually.
+    // =====================================================================
+    private static Blob emitStacked(List<Map<String, Object>> buckets, Map<String, String> opts) {
+        // scale=1 default: at scale=2 the encoder pass over 540×~300×4 pixels
+        // exceeds the 10s sync Apex CPU budget. Bars/segments are rectilinear
+        // so they don't need the curve-AA boost that pie/donut get from
+        // scale=2 + Word downsample. Caller can opt into scale=2 explicitly.
+        Integer scale = optInt(opts, 'scale', 1);
+        Integer logicalWidth = optInt(opts, 'width', 540);
+        Integer barHeight = 22;
+        Integer barGap = 8;
+        Integer labelWidth = 150;
+        Integer valueWidth = 90;
+        Boolean crossTab = hasCols(buckets);
+        Integer legendHeight = crossTab ? 22 : 0;
+        Integer logicalHeight = optInt(
+            opts,
+            'height',
+            legendHeight + (buckets.size() * (barHeight + barGap)) + barGap + 4
+        );
+
+        Integer width = logicalWidth * scale;
+        Integer height = logicalHeight * scale;
+        Integer pBarHeight = barHeight * scale;
+        Integer pBarGap = barGap * scale;
+        Integer pLabelWidth = labelWidth * scale;
+        Integer pValueWidth = valueWidth * scale;
+        Integer pLegendHeight = legendHeight * scale;
+
+        Canvas c = new Canvas(width, height, buildPalette(opts));
+        List<Map<String, Object>> legendCols = collectLegendCols(buckets, true);
+        if (crossTab) {
+            drawLegendRow(c, legendCols, 0, 0, width, scale);
+        }
+
+        Integer barAreaX = pLabelWidth;
+        Integer barAreaWidth = width - pLabelWidth - pValueWidth;
+        Integer fontH = FONT_H * scale;
+        Integer rowsTop = pLegendHeight;
+
+        for (Integer i = 0; i < buckets.size(); i++) {
+            Map<String, Object> b = buckets[i];
+            Decimal rowTotal = decimalOf(b.get('count'));
+            if (rowTotal == null) {
+                rowTotal = 0;
+            }
+            Integer rowY = rowsTop + pBarGap + i * (pBarHeight + pBarGap);
+            Integer textY = rowY + (pBarHeight - fontH) / 2;
+
+            // Left label (bucket key)
+            String label = bucketLabel(b);
+            Integer maxLabelChars = (pLabelWidth - 6 * scale) / (FONT_CHAR_ADVANCE * scale);
+            if (label.length() > maxLabelChars && maxLabelChars > 1) {
+                label = label.substring(0, maxLabelChars);
+            }
+            c.drawText(4 * scale, textY, label, COLOR_TEXT, scale);
+
+            // Empty bar slot outline (lets blank rows still show a slot).
+            c.fillRect(barAreaX, rowY, barAreaWidth, pBarHeight, COLOR_GRID);
+            // Fill the interior with bg so only the outline remains.
+            c.fillRect(barAreaX + scale, rowY + scale, barAreaWidth - 2 * scale, pBarHeight - 2 * scale, COLOR_BG);
+
+            List<Object> cols = (List<Object>) b.get('cols');
+            if (cols != null && !cols.isEmpty()) {
+                Integer segIdx = 0;
+                Double offset = 0.0;
+                for (Object co : cols) {
+                    Map<String, Object> col = (Map<String, Object>) co;
+                    if (isTotalCol(col)) {
+                        continue;
+                    }
+                    Decimal pct = decimalOf(col.get('percent_of_row'));
+                    if (pct == null) {
+                        pct = 0;
+                    }
+                    Double segW = (pct.doubleValue() / 100.0) * barAreaWidth;
+                    if (segW > 0) {
+                        Integer paletteIdx = RESERVED_RGB.size() + Math.mod(segIdx, DEFAULT_PALETTE_RGB.size());
+                        c.fillRect((Integer) (barAreaX + offset), rowY, (Integer) segW, pBarHeight, paletteIdx);
+                    }
+                    offset += segW;
+                    segIdx++;
+                }
+            }
+
+            // Right total label
+            String totalLabel = formatInt(rowTotal) + ' total';
+            c.drawText(barAreaX + barAreaWidth + 6 * scale, textY, totalLabel, COLOR_TEXT, scale);
+        }
+
+        return c.toPng();
+    }
+
+    // =====================================================================
+    // Clustered — vertical clustered bar chart, one cluster per bucket.
+    // Each cluster has one mini-bar per visible (non-Total) col. Bar heights
+    // auto-scale to peak observed percent so values fill the plot area.
+    // =====================================================================
+    private static Blob emitClustered(List<Map<String, Object>> buckets, Map<String, String> opts) {
+        // scale=1 default — see emitStacked comment for the CPU rationale.
+        Integer scale = optInt(opts, 'scale', 1);
+        Integer logicalWidth = optInt(opts, 'width', 540);
+        Boolean crossTab = hasCols(buckets);
+        Integer legendHeight = crossTab ? 22 : 0;
+        Integer labelArea = 64;
+        Integer plotPaddingTop = 14;
+        Integer plotPaddingLeft = 30;
+        Integer logicalHeight = optInt(opts, 'height', legendHeight + plotPaddingTop + 200 + labelArea);
+
+        Integer width = logicalWidth * scale;
+        Integer height = logicalHeight * scale;
+        Integer pLegendH = legendHeight * scale;
+        Integer pLabelArea = labelArea * scale;
+        Integer pPlotPadTop = plotPaddingTop * scale;
+        Integer pPlotPadLeft = plotPaddingLeft * scale;
+
+        Canvas c = new Canvas(width, height, buildPalette(opts));
+        List<Map<String, Object>> legendCols = collectLegendCols(buckets, true);
+        if (crossTab) {
+            drawLegendRow(c, legendCols, 0, 0, width, scale);
+        }
+
+        Integer plotTop = pLegendH + pPlotPadTop;
+        Integer plotBottom = height - pLabelArea;
+        Integer plotHeight = plotBottom - plotTop;
+        Integer plotLeft = pPlotPadLeft;
+        Integer plotRight = width - 10 * scale;
+        Integer plotWidth = plotRight - plotLeft;
+
+        // Find peak percent across visible cols.
+        Decimal peakPct = 0;
+        for (Map<String, Object> b : buckets) {
+            List<Object> cols = (List<Object>) b.get('cols');
+            if (cols == null) {
+                continue;
+            }
+            for (Object co : cols) {
+                Map<String, Object> col = (Map<String, Object>) co;
+                if (isTotalCol(col)) {
+                    continue;
+                }
+                Decimal pct = decimalOf(col.get('percent_int'));
+                if (pct == null) {
+                    pct = decimalOf(col.get('percent'));
+                }
+                if (pct != null && pct > peakPct) {
+                    peakPct = pct;
+                }
+            }
+        }
+        if (peakPct <= 0) {
+            peakPct = 100;
+        }
+
+        Integer slotCount = Math.max(1, buckets.size());
+        Integer slotWidth = plotWidth / slotCount;
+        Integer visibleColCount = legendCols.size();
+        Integer barSlotWidth = Math.max(4 * scale, (Integer) (slotWidth * 0.72));
+        Integer perBarWidth = visibleColCount > 0 ? Math.max(3 * scale, barSlotWidth / visibleColCount) : barSlotWidth;
+
+        // Baseline
+        c.fillRect(plotLeft, plotBottom, plotWidth, scale, COLOR_GRID);
+
+        Integer fontH = FONT_H * scale;
+        for (Integer i = 0; i < buckets.size(); i++) {
+            Map<String, Object> b = buckets[i];
+            String label = bucketLabel(b);
+            Integer slotCenter = plotLeft + (i * slotWidth) + (slotWidth / 2);
+
+            // Filter visible cols for placement.
+            List<Map<String, Object>> visible = new List<Map<String, Object>>();
+            List<Object> cols = (List<Object>) b.get('cols');
+            if (cols != null) {
+                for (Object co : cols) {
+                    Map<String, Object> col = (Map<String, Object>) co;
+                    if (!isTotalCol(col)) {
+                        visible.add(col);
+                    }
+                }
+            }
+            Integer clusterWidth = perBarWidth * visible.size();
+            Integer clusterX = slotCenter - (clusterWidth / 2);
+
+            for (Integer j = 0; j < visible.size(); j++) {
+                Map<String, Object> col = visible[j];
+                Decimal pct = decimalOf(col.get('percent_int'));
+                if (pct == null) {
+                    pct = decimalOf(col.get('percent'));
+                }
+                if (pct == null) {
+                    pct = 0;
+                }
+                Integer barH = ((pct * plotHeight) / peakPct).intValue();
+                if (barH < 1 && pct > 0) {
+                    barH = scale;
+                }
+                Integer barX = clusterX + (j * perBarWidth);
+                Integer barY = plotBottom - barH;
+                Integer paletteIdx = RESERVED_RGB.size() + Math.mod(j, DEFAULT_PALETTE_RGB.size());
+                c.fillRect(barX, barY, Math.max(scale, perBarWidth - scale), barH, paletteIdx);
+            }
+
+            // Bucket label centered under the cluster — truncated, not rotated.
+            // (The SVG variant rotates -25° but bitmap rotation is expensive
+            // and noisy at chart resolution; we accept truncation instead.)
+            Integer maxChars = Math.max(2, slotWidth / (FONT_CHAR_ADVANCE * scale));
+            String truncated = label;
+            if (truncated.length() > maxChars) {
+                truncated = truncated.substring(0, maxChars);
+            }
+            Integer labelW = c.textWidth(truncated, scale);
+            Integer labelX = slotCenter - labelW / 2;
+            c.drawText(labelX, plotBottom + 6 * scale, truncated, COLOR_TEXT, scale);
+        }
+
+        return c.toPng();
+    }
+
+    // =====================================================================
+    // Line / Area — sequential line chart through (x=bucket index, y=count).
+    // Multi-series when cross-tab `cols` is populated. `filled=true` adds a
+    // dot-pattern area fill below each polyline (indexed color has no alpha
+    // so we substitute a checkered fill — every-other-pixel — as a stylistic
+    // stand-in for SVG's semi-transparent polygon).
+    // =====================================================================
+    private static Blob emitLine(List<Map<String, Object>> buckets, Map<String, String> opts, Boolean filled) {
+        // scale=1 default — see emitStacked comment for the CPU rationale.
+        // Polyline 2px thickening is implemented in pixels (not via scale)
+        // so visual weight stays consistent.
+        Integer scale = optInt(opts, 'scale', 1);
+        Integer logicalWidth = optInt(opts, 'width', 500);
+        Boolean multiSeries = hasCols(buckets);
+        Integer legendHeight = multiSeries ? 22 : 0;
+        Integer labelArea = 60;
+        Integer plotPaddingTop = 14;
+        Integer plotPaddingLeft = 60;
+        Integer logicalHeight = optInt(opts, 'height', legendHeight + plotPaddingTop + 200 + labelArea);
+
+        Integer width = logicalWidth * scale;
+        Integer height = logicalHeight * scale;
+        Integer pLegendH = legendHeight * scale;
+        Integer pLabelArea = labelArea * scale;
+        Integer pPlotPadTop = plotPaddingTop * scale;
+        Integer pPlotPadLeft = plotPaddingLeft * scale;
+
+        Canvas c = new Canvas(width, height, buildPalette(opts));
+        List<Map<String, Object>> legendCols = multiSeries
+            ? collectLegendCols(buckets, true)
+            : new List<Map<String, Object>>();
+        if (multiSeries) {
+            drawLegendRow(c, legendCols, 0, 0, width, scale);
+        }
+
+        Integer plotTop = pLegendH + pPlotPadTop;
+        Integer plotBottom = height - pLabelArea;
+        Integer plotHeight = plotBottom - plotTop;
+        Integer plotLeft = pPlotPadLeft;
+        Integer plotRight = width - 14 * scale;
+        Integer plotWidth = plotRight - plotLeft;
+
+        // Find peak count across whichever series are in scope.
+        Decimal peakCount = 0;
+        if (multiSeries) {
+            for (Map<String, Object> b : buckets) {
+                List<Object> cols = (List<Object>) b.get('cols');
+                if (cols == null) {
+                    continue;
+                }
+                for (Object co : cols) {
+                    Map<String, Object> col = (Map<String, Object>) co;
+                    if (isTotalCol(col)) {
+                        continue;
+                    }
+                    Decimal cnt = decimalOf(col.get('count'));
+                    if (cnt != null && cnt > peakCount) {
+                        peakCount = cnt;
+                    }
+                }
+            }
+        } else {
+            for (Map<String, Object> b : buckets) {
+                Decimal cnt = decimalOf(b.get('count'));
+                if (cnt != null && cnt > peakCount) {
+                    peakCount = cnt;
+                }
+            }
+        }
+        if (peakCount <= 0) {
+            peakCount = 1;
+        }
+
+        // Y axis
+        c.fillRect(plotLeft, plotTop, scale, plotHeight, COLOR_GRID);
+        // X axis baseline
+        c.fillRect(plotLeft, plotBottom, plotWidth + scale, scale, COLOR_GRID);
+
+        // Y axis ticks: peak at top, 0 at bottom.
+        Integer fontH = FONT_H * scale;
+        String peakLabel = formatInt(peakCount);
+        Integer peakLabelW = c.textWidth(peakLabel, scale);
+        c.drawText(plotLeft - peakLabelW - 4 * scale, plotTop - fontH / 2, peakLabel, COLOR_TEXT, scale);
+        Integer zeroLabelW = c.textWidth('0', scale);
+        c.drawText(plotLeft - zeroLabelW - 4 * scale, plotBottom - fontH / 2, '0', COLOR_TEXT, scale);
+
+        Integer n = buckets.size();
+        // X positions per bucket (physical, integer for setPixel calls).
+        List<Integer> xs = new List<Integer>();
+        if (n == 1) {
+            xs.add(plotLeft + plotWidth / 2);
+        } else if (n > 1) {
+            for (Integer i = 0; i < n; i++) {
+                xs.add(plotLeft + (i * plotWidth) / (n - 1));
+            }
+        }
+
+        // Render series.
+        if (multiSeries) {
+            for (Integer s = 0; s < legendCols.size(); s++) {
+                Map<String, Object> legend = legendCols[s];
+                String seriesKeyLower = stringOf(legend.get('_keyLower'));
+                Integer paletteIdx = RESERVED_RGB.size() + Math.mod(s, DEFAULT_PALETTE_RGB.size());
+                drawLineSeries(
+                    c,
+                    buckets,
+                    xs,
+                    plotBottom,
+                    plotHeight,
+                    peakCount,
+                    paletteIdx,
+                    seriesKeyLower,
+                    filled,
+                    scale
+                );
+            }
+        } else {
+            Integer paletteIdx = RESERVED_RGB.size();
+            drawLineSeries(c, buckets, xs, plotBottom, plotHeight, peakCount, paletteIdx, null, filled, scale);
+        }
+
+        // X axis category labels — truncated, not rotated (see emitClustered note).
+        Integer labelY = plotBottom + 6 * scale;
+        Integer maxLabelChars = Math.max(2, ((n > 1 ? plotWidth / (n - 1) : plotWidth)) / (FONT_CHAR_ADVANCE * scale));
+        for (Integer i = 0; i < n; i++) {
+            String label = bucketLabel(buckets[i]);
+            if (label.length() > maxLabelChars) {
+                label = label.substring(0, maxLabelChars);
+            }
+            Integer lw = c.textWidth(label, scale);
+            c.drawText(xs[i] - lw / 2, labelY, label, COLOR_TEXT, scale);
+        }
+
+        return c.toPng();
+    }
+
+    /**
+     * Draws a single line/area series onto the canvas. When `seriesKeyLower`
+     * is null, pulls each point's value from bucket.count (single-series).
+     * Otherwise matches each bucket's `cols` entry by key (case-insensitive)
+     * to find the series value.
+     */
+    private static void drawLineSeries(
+        Canvas c,
+        List<Map<String, Object>> buckets,
+        List<Integer> xs,
+        Integer plotBottom,
+        Integer plotHeight,
+        Decimal peakCount,
+        Integer colorIdx,
+        String seriesKeyLower,
+        Boolean filled,
+        Integer scale
+    ) {
+        Integer n = buckets.size();
+        if (n == 0 || xs.isEmpty()) {
+            return;
+        }
+        List<Integer> ys = new List<Integer>();
+        for (Integer i = 0; i < n; i++) {
+            Decimal cnt = null;
+            if (seriesKeyLower == null) {
+                cnt = decimalOf(buckets[i].get('count'));
+            } else {
+                List<Object> cols = (List<Object>) buckets[i].get('cols');
+                if (cols != null) {
+                    for (Object co : cols) {
+                        Map<String, Object> col = (Map<String, Object>) co;
+                        String k = stringOf(col.get('key'));
+                        if (k != null && k.toLowerCase() == seriesKeyLower) {
+                            cnt = decimalOf(col.get('count'));
+                            break;
+                        }
+                    }
+                }
+            }
+            if (cnt == null) {
+                cnt = 0;
+            }
+            Integer y = plotBottom - (Integer) ((cnt.doubleValue() / peakCount.doubleValue()) * plotHeight);
+            ys.add(y);
+        }
+
+        // Area fill (drawn first so the line overdraws it).
+        // Indexed-color "alpha": draw the series color at every (x+y) even
+        // pixel within the area polygon. The dot pattern lets the bg show
+        // through and reads visually as a lighter shade of the series color.
+        if (filled && n > 0) {
+            for (Integer i = 0; i < n - 1; i++) {
+                Integer x0 = xs[i];
+                Integer x1 = xs[i + 1];
+                Integer y0 = ys[i];
+                Integer y1 = ys[i + 1];
+                // For each scanline column between x0 and x1, compute the
+                // interpolated y on the line and fill from there to baseline
+                // using the dot pattern.
+                Integer dx = x1 - x0;
+                if (dx <= 0) {
+                    continue;
+                }
+                for (Integer x = x0; x <= x1; x++) {
+                    Integer interpY = y0 + ((y1 - y0) * (x - x0)) / dx;
+                    for (Integer y = interpY; y <= plotBottom; y++) {
+                        if (Math.mod(x + y, 2) == 0) {
+                            c.setPixel(x, y, colorIdx);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Polyline (Bresenham). 2x supersample + Word downsample provides
+        // free anti-aliasing; we don't pay Wu's per-pixel intensity cost.
+        for (Integer i = 0; i < n - 1; i++) {
+            drawBresenhamLine(c, xs[i], ys[i], xs[i + 1], ys[i + 1], colorIdx);
+            // Thicken: also draw shifted-by-1 line so the polyline reads as
+            // ~2px wide before downsampling. Keeps the line visible after
+            // the Word downsample step.
+            drawBresenhamLine(c, xs[i], ys[i] + 1, xs[i + 1], ys[i + 1] + 1, colorIdx);
+        }
+
+        // Point markers (filled dots at each data point).
+        Integer dotR = Math.max(2, scale + 1);
+        for (Integer i = 0; i < n; i++) {
+            fillCircle(c, xs[i], ys[i], dotR, colorIdx);
+        }
+    }
+
+    // =====================================================================
+    // Shared helpers for stacked/clustered/line/area
+    // =====================================================================
+
+    /** True when any bucket carries a non-empty `cols` sub-list (cross-tab). */
+    private static Boolean hasCols(List<Map<String, Object>> buckets) {
+        if (buckets == null) {
+            return false;
+        }
+        for (Map<String, Object> b : buckets) {
+            List<Object> cols = (List<Object>) b.get('cols');
+            if (cols != null && !cols.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Detects the synthetic "Total" col the resolver appends to cross-tab rows. */
+    private static Boolean isTotalCol(Map<String, Object> col) {
+        if (col == null) {
+            return false;
+        }
+        String k = stringOf(col.get('key'));
+        return k != null && k.equalsIgnoreCase('Total');
+    }
+
+    /** Bucket display label: key_label, else key, else empty string. */
+    private static String bucketLabel(Map<String, Object> b) {
+        String label = stringOf(b.get('key_label'));
+        if (String.isBlank(label)) {
+            label = stringOf(b.get('key'));
+        }
+        return label == null ? '' : label;
+    }
+
+    /**
+     * Walks the first bucket with `cols` and returns a list of legend
+     * entries (excluding Total when requested). Each entry includes a
+     * `_keyLower` field for case-insensitive series-key matching in
+     * drawLineSeries.
+     */
+    private static List<Map<String, Object>> collectLegendCols(
+        List<Map<String, Object>> buckets,
+        Boolean excludeTotal
+    ) {
+        List<Map<String, Object>> out = new List<Map<String, Object>>();
+        if (buckets == null) {
+            return out;
+        }
+        for (Map<String, Object> b : buckets) {
+            List<Object> cols = (List<Object>) b.get('cols');
+            if (cols == null || cols.isEmpty()) {
+                continue;
+            }
+            for (Object co : cols) {
+                Map<String, Object> col = (Map<String, Object>) co;
+                if (excludeTotal && isTotalCol(col)) {
+                    continue;
+                }
+                Map<String, Object> entry = new Map<String, Object>(col);
+                String k = stringOf(entry.get('key'));
+                entry.put('_keyLower', k == null ? '' : k.toLowerCase());
+                out.add(entry);
+            }
+            return out;
+        }
+        return out;
+    }
+
+    /**
+     * Draws a top-of-chart legend strip — swatch + label per cross-tab col.
+     * Layout mirrors DocGenSvgChartSerializer.appendLegendRow: ~110px per
+     * entry, wraps when out of horizontal room.
+     */
+    private static void drawLegendRow(
+        Canvas c,
+        List<Map<String, Object>> legendCols,
+        Integer startX,
+        Integer startY,
+        Integer maxWidth,
+        Integer scale
+    ) {
+        if (legendCols == null || legendCols.isEmpty()) {
+            return;
+        }
+        Integer entryWidth = 110 * scale;
+        Integer swatchSize = 10 * scale;
+        Integer y = startY + 4 * scale;
+        Integer x = startX;
+        Integer fontH = FONT_H * scale;
+        for (Integer i = 0; i < legendCols.size(); i++) {
+            Map<String, Object> col = legendCols[i];
+            String label = stringOf(col.get('key_label'));
+            if (String.isBlank(label)) {
+                label = stringOf(col.get('key'));
+            }
+            if (label == null) {
+                label = '';
+            }
+            if (label.length() > 14) {
+                label = label.substring(0, 13);
+            }
+            Integer paletteIdx = RESERVED_RGB.size() + Math.mod(i, DEFAULT_PALETTE_RGB.size());
+            if (x + entryWidth > maxWidth) {
+                x = startX;
+                y += 16 * scale;
+            }
+            c.fillRect(x, y, 14 * scale, swatchSize, paletteIdx);
+            c.drawText(x + 20 * scale, y + (swatchSize - fontH) / 2, label, COLOR_TEXT, scale);
+            x += entryWidth;
+        }
+    }
+
+    /**
+     * Bresenham's line algorithm. Sets pixels along the integer line from
+     * (x0,y0) to (x1,y1). Crisp 1-pixel-wide; AA is achieved at scale=2 via
+     * the Word downsample step (same trick as bar/column).
+     */
+    private static void drawBresenhamLine(Canvas c, Integer x0, Integer y0, Integer x1, Integer y1, Integer colorIdx) {
+        Integer dx = Math.abs(x1 - x0);
+        Integer sx = x0 < x1 ? 1 : -1;
+        Integer dy = -Math.abs(y1 - y0);
+        Integer sy = y0 < y1 ? 1 : -1;
+        Integer err = dx + dy;
+        Integer x = x0;
+        Integer y = y0;
+        while (true) {
+            c.setPixel(x, y, colorIdx);
+            if (x == x1 && y == y1) {
+                return;
+            }
+            Integer e2 = 2 * err;
+            if (e2 >= dy) {
+                err += dy;
+                x += sx;
+            }
+            if (e2 <= dx) {
+                err += dx;
+                y += sy;
+            }
+        }
+    }
+
+    /**
+     * Filled circle via the midpoint algorithm: fill horizontal spans for
+     * each scanline within the circle. Used for line-chart data point dots.
+     */
+    private static void fillCircle(Canvas c, Integer cx, Integer cy, Integer r, Integer colorIdx) {
+        Integer r2 = r * r;
+        for (Integer dy = -r; dy <= r; dy++) {
+            Integer dx = (Integer) Math.sqrt((Double) (r2 - dy * dy));
+            for (Integer x = cx - dx; x <= cx + dx; x++) {
+                c.setPixel(x, cy + dy, colorIdx);
+            }
+        }
     }
 
     // =====================================================================
