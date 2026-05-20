@@ -226,27 +226,57 @@ try {
 }
 
 // ============================================================
-// Chart tag expander — unknown style + Word template error modes
+// Chart tag expander — unknown style + Word fallback (post-#117)
 // ============================================================
 try {
     String unknown = DocGenChartTagExpander.expand('{Chart:R__r:F__c:waterfall}', 'HTML');
     Boolean unknownErr = unknown.contains('Chart error') && unknown.contains('waterfall');
-    Boolean wordThrew = false;
-    try {
-        DocGenChartTagExpander.expand('{Chart:R__r:F__c}', 'Word');
-    } catch (DocGenException e) {
-        wordThrew = e.getMessage().contains('HTML-only') || e.getMessage().contains('HTML');
-    }
-    if (unknownErr && wordThrew) {
+    // #117: Word + no chartCvMap → text placeholder, NOT a thrown exception.
+    String wordPlaceholder = DocGenChartTagExpander.expand('{Chart:R__r:F__c:bar:title=Demo}', 'Word');
+    Boolean wordPlaceholderOk = wordPlaceholder.contains('[Chart:') && wordPlaceholder.contains('Demo');
+    if (unknownErr && wordPlaceholderOk) {
         pass++;
         System.debug('CHART TAG ERROR MODES: PASS');
     } else {
         fail++;
-        System.debug('CHART TAG ERROR MODES: FAIL — unknownErr=' + unknownErr + ' wordThrew=' + wordThrew);
+        System.debug(
+            'CHART TAG ERROR MODES: FAIL — unknownErr=' +
+                unknownErr +
+                ' wordPlaceholderOk=' +
+                wordPlaceholderOk +
+                ' wordPlaceholder=' +
+                wordPlaceholder
+        );
     }
 } catch (Exception e) {
     fail++;
     System.debug('CHART TAG ERROR MODES: FAIL — ' + e.getMessage());
+}
+
+// ============================================================
+// #117 chart pipeline — Word template + chartCvMap emits image tag
+// ============================================================
+try {
+    Map<String, String> opts = new Map<String, String>();
+    String sig = DocGenChartImageController.tagSignature('R__r', 'F__c', 'bar', opts);
+    String fakeCvId = '0681x00000000000001';
+    Map<String, String> chartCvMap = new Map<String, String>{ sig => fakeCvId };
+    Map<String, Object> data = new Map<String, Object>();
+    String out = DocGenChartTagExpander.expand('{Chart:R__r:F__c:bar}', 'Word', data, chartCvMap);
+    Boolean tagOk = out.contains('{%__dgchart_' + fakeCvId + '}');
+    Boolean dataSeeded = data.get('__dgchart_' + fakeCvId) == fakeCvId;
+    if (tagOk && dataSeeded) {
+        pass++;
+        System.debug('CHART PIPELINE WORD SUBSTITUTION: PASS');
+    } else {
+        fail++;
+        System.debug(
+            'CHART PIPELINE WORD SUBSTITUTION: FAIL — tagOk=' + tagOk + ' dataSeeded=' + dataSeeded + ' out=' + out
+        );
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('CHART PIPELINE WORD SUBSTITUTION: FAIL — ' + e.getMessage());
 }
 
 System.debug('========================================');

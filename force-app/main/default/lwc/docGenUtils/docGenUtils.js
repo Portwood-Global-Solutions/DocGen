@@ -425,3 +425,65 @@ export function extractWhereClause(queryConfigJson) {
 
     return null;
 }
+
+/**
+ * Rasterizes an SVG string to a base64-encoded PNG via a hidden <canvas>.
+ *
+ * Used by the chart pipeline (#117): Apex emits SVG via DocGenSvgChartSerializer,
+ * the runner LWC calls this to convert it to PNG, then uploads the PNG as a
+ * ContentVersion linked to the source record. The existing image substitution
+ * path embeds the PNG in every output format (DOCX / PPTX / XLSX / HTML / PDF)
+ * since all five render raster images natively.
+ *
+ * Server-side flows (Flow / batch / async) have no browser and skip this path
+ * — they render a text placeholder where the chart would go.
+ *
+ * The `scale` factor (default 4) controls oversampling. SVG is a vector format;
+ * rasterizing at 1x looks blurry on Retina displays and pixelates when zoomed
+ * or printed. Drawing at 4x nominal dimensions keeps text + edges crisp on
+ * high-DPI screens, in DOCX/PPTX zoom up to ~200%, and in PDF print at any
+ * reasonable size. File size grows ~16x at 4x scale (chart PNG ~25 KB → ~320 KB)
+ * — still small for typical business docs. Authors can override per-chart via
+ * the `scale=N` modifier on the chart tag (`{Chart:Rel:Field:bar:scale=2}`).
+ *
+ * @param {string} svgString - The full <svg>...</svg> markup as a string
+ * @param {number} width     - Nominal display width in pixels
+ * @param {number} height    - Nominal display height in pixels
+ * @param {number} [scale=4] - Oversampling factor (1 = 1x, 4 = default sharp, 5 = extreme zoom)
+ * @returns {Promise<string>} Base64-encoded PNG bytes (no `data:` prefix)
+ */
+export function rasterizeSvgToPng(svgString, width, height, scale = 4) {
+    return new Promise((resolve, reject) => {
+        const blob = new Blob([svgString], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = width * scale;
+                canvas.height = height * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                // White background — PNG defaults to transparent which renders
+                // as black in some PDF/DOCX viewers when the chart has no
+                // background <rect>. The SVG already paints its own background,
+                // but this is a safety belt.
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+                // toDataURL returns "data:image/png;base64,...."; strip the prefix.
+                resolve(canvas.toDataURL('image/png').split(',')[1]);
+            } catch (err) {
+                URL.revokeObjectURL(url);
+                reject(err);
+            }
+        };
+        img.onerror = (err) => {
+            URL.revokeObjectURL(url);
+            reject(err instanceof Error ? err : new Error('SVG load failed'));
+        };
+        img.src = url;
+    });
+}

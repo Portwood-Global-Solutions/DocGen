@@ -63,7 +63,7 @@ try {
 // ===== Generate DOCX via processAndReturnDocument =====
 String base64Docx;
 try {
-    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId);
+    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId, null);
 
     if (genResult == null) {
         fail++;
@@ -150,7 +150,7 @@ try {
 
 // ===== Test generateDocumentParts (client-side assembly path) =====
 try {
-    Map<String, Object> parts = DocGenController.generateDocumentParts(tmplId, acctId);
+    Map<String, Object> parts = DocGenController.generateDocumentParts(tmplId, acctId, null);
     if (parts != null) {
         Boolean hasXmlParts = parts.containsKey('allXmlParts');
         if (hasXmlParts) {

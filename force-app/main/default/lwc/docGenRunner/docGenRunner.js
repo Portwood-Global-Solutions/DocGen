@@ -23,6 +23,9 @@ import getSortedChildIds from '@salesforce/apex/DocGenController.getSortedChildI
 import getChildRecordsByIds from '@salesforce/apex/DocGenController.getChildRecordsByIds';
 import { NavigationMixin } from 'lightning/navigation';
 import { downloadBase64 as downloadBase64Util } from 'c/docGenUtils';
+import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
+import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
+import deleteChartImages from '@salesforce/apex/DocGenChartImageController.deleteChartImages';
 import { buildDocx } from './docGenZipWriter';
 import { mergePdfs } from './docGenPdfMerger';
 import { extractFirstImageFromPdfBase64 } from './docGenPdfImageExtractor';
@@ -629,11 +632,18 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                     );
                 } else {
                     this.showToast('Info', 'Generating PDF...', 'info');
-                    const result = await generatePdf({
-                        templateId: this.selectedTemplateId,
-                        recordId: this.recordId,
-                        saveToRecord: false
-                    });
+                    const chartContext = await this._prepareCharts();
+                    let result;
+                    try {
+                        result = await generatePdf({
+                            templateId: this.selectedTemplateId,
+                            recordId: this.recordId,
+                            saveToRecord: false,
+                            chartCvMap: chartContext.map
+                        });
+                    } finally {
+                        await this._cleanupCharts(chartContext.cvIds);
+                    }
                     if (await this._handledHeapPressure(result)) {
                         return;
                     }
@@ -647,11 +657,21 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 this.showToast('Info', 'Generating document...', 'info');
                 await this._generateOfficeClientSide(saveToRecord, ext, 'application/octet-stream');
             } else {
-                // PowerPoint — server-side
-                const result = await processAndReturnDocument({
-                    templateId: this.selectedTemplateId,
-                    recordId: this.recordId
-                });
+                // PowerPoint — server-side. Chart prep runs but PPTX chart
+                // embed is task #10 (deferred); the merge will text-fallback
+                // chart tags until that lands. Wiring it consistently now so
+                // the runner doesn't need re-plumbing later.
+                const chartContext = await this._prepareCharts();
+                let result;
+                try {
+                    result = await processAndReturnDocument({
+                        templateId: this.selectedTemplateId,
+                        recordId: this.recordId,
+                        chartCvMap: chartContext.map
+                    });
+                } finally {
+                    await this._cleanupCharts(chartContext.cvIds);
+                }
                 if (!result || !result.base64) {
                     throw new Error('Document generation returned empty result.');
                 }
@@ -715,6 +735,115 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         this.outputMode = 'download';
         await this._assembleGiantQueryPdf(rel, counts, childNodes[rel]);
         return true;
+    }
+
+    /**
+     * #117 chart pipeline. Asks the controller for the SVG fragments needed
+     * for this template/record combo, rasterizes each to PNG via the shared
+     * docGenUtils helper, and uploads each PNG as a transient ContentVersion.
+     * Returns {map, cvIds} — `map` is signature → CV Id (passed to the merge
+     * call so the Word path can substitute charts with image tags), `cvIds`
+     * is the list of CV IDs to reap once the merge finishes.
+     *
+     * Returns {map: {}, cvIds: []} for templates with no chart tags (no
+     * server round-trip wasted — `prepareChartImages` returns empty for
+     * non-Word templates and templates with no {Chart:...} tags).
+     */
+    /**
+     * Rasterizes an SVG string to a base64 PNG via a hidden <canvas>. Inlined
+     * here (rather than imported from c/docGenUtils) because LWC cross-bundle
+     * compilation can serve a stale runner bundle when only the util's exports
+     * change — observed as `TypeError: G.rasterizeSvgToPng is not a function`
+     * even after a clean redeploy. Inlining the function avoids the
+     * cross-bundle resolution path entirely.
+     */
+    _rasterizeSvgToPng(svgString, width, height, scale = 4) {
+        return new Promise((resolve, reject) => {
+            const blob = new Blob([svgString], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width * scale;
+                    canvas.height = height * scale;
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    URL.revokeObjectURL(url);
+                    resolve(canvas.toDataURL('image/png').split(',')[1]);
+                } catch (err) {
+                    URL.revokeObjectURL(url);
+                    reject(err);
+                }
+            };
+            img.onerror = (err) => {
+                URL.revokeObjectURL(url);
+                reject(err instanceof Error ? err : new Error('SVG image load failed'));
+            };
+            img.src = url;
+        });
+    }
+
+    async _prepareCharts() {
+        try {
+            const requests = await prepareChartImages({
+                templateId: this.selectedTemplateId,
+                recordId: this.recordId
+            });
+            if (!Array.isArray(requests) || requests.length === 0) {
+                return { map: {}, cvIds: [] };
+            }
+            const map = {};
+            const cvIds = [];
+            for (const req of requests) {
+                try {
+                    // eslint-disable-next-line no-await-in-loop
+                    const pngBase64 = await this._rasterizeSvgToPng(req.svgString, req.width, req.height);
+                    // eslint-disable-next-line no-await-in-loop
+                    const cvId = await uploadChartImage({
+                        recordId: this.recordId,
+                        signature: req.signature,
+                        base64Png: pngBase64
+                    });
+                    if (cvId) {
+                        // Pack dimensions into the map value so the chart-tag
+                        // expander can emit {%__dgchart_<cvId>:WxH}, constraining
+                        // the embedded image to its nominal SVG size in Word.
+                        // Otherwise Word renders the 4x-rasterized PNG at full
+                        // pixel size and the chart fills the whole page.
+                        map[req.signature] = cvId + '|' + req.width + 'x' + req.height;
+                        cvIds.push(cvId);
+                    }
+                } catch (chartErr) {
+                    // One bad chart shouldn't abort the whole generate — the
+                    // tag will fall back to its text-placeholder branch.
+                    const errMsg =
+                        (chartErr && (chartErr.body ? chartErr.body.message : chartErr.message)) || String(chartErr);
+                    console.warn('DocGen: chart prep failed for signature ' + req.signature + ' — ' + errMsg, chartErr);
+                }
+            }
+            return { map, cvIds };
+        } catch (e) {
+            console.warn('DocGen: prepareChartImages failed; charts will render as text placeholders', e);
+            return { map: {}, cvIds: [] };
+        }
+    }
+
+    async _cleanupCharts(cvIds) {
+        if (!Array.isArray(cvIds) || cvIds.length === 0) {
+            return;
+        }
+        try {
+            await deleteChartImages({ cvIds });
+        } catch (cleanupErr) {
+            // Cleanup failure is non-fatal — the cleanup schedulable (or
+            // Salesforce's own CV recycle bin sweep) will catch these later.
+            console.warn('DocGen: chart CV cleanup failed', cleanupErr);
+        }
     }
 
     async handleGiantQuery() {
@@ -946,9 +1075,31 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
      * For DOCX images, use {%FieldName} tags with ContentVersion IDs.
      */
     async _generateOfficeClientSide(saveToRecord, extension, mimeType) {
+        // #117 chart pipeline: rasterize any {Chart:...} tags in the template
+        // body to PNGs (uploaded as transient CVs) before kicking off the
+        // server-side merge. The merge sees the signature → CV Id map and
+        // substitutes each chart tag with the existing image-tag path.
+        //
+        // Cleanup MUST run after buildDocx finishes — the server returns
+        // chart CV IDs in `imageCvIdMap`, and the client-side ZIP assembly
+        // (below) fetches each CV's bytes via getContentVersionBase64. If
+        // we delete the CVs in a tight try/finally around
+        // generateDocumentParts, those fetches return empty and the DOCX
+        // ships with no chart images. Hold the chartContext across the
+        // whole flow and reap only after the document is fully assembled.
+        const chartContext = await this._prepareCharts();
+        try {
+            await this._generateOfficeClientSideInner(saveToRecord, extension, mimeType, chartContext);
+        } finally {
+            await this._cleanupCharts(chartContext.cvIds);
+        }
+    }
+
+    async _generateOfficeClientSideInner(saveToRecord, extension, mimeType, chartContext) {
         const parts = await generateDocumentParts({
             templateId: this.selectedTemplateId,
-            recordId: this.recordId
+            recordId: this.recordId,
+            chartCvMap: chartContext.map
         });
         if (!parts || !parts.allXmlParts) {
             throw new Error('Document generation returned empty result.');
@@ -1539,11 +1690,27 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             const partIds = fragResult.partPdfCvIds || [];
 
             if (finalCvId) {
-                // Single PDF — already saved to record
+                // Single PDF. The batch always saves it to the record — but the
+                // runner forced outputMode='download' at the routing decision,
+                // so we ALSO need to trigger a browser download here. Fetch
+                // the bytes and hand them to downloadBase64. Leave the record
+                // CV in place so refreshing-the-page-and-coming-back finds the
+                // result; ~zero harm in having both copies for the user.
                 this.progressPercent = 100;
+                try {
+                    const finalB64 = await getContentVersionBase64({ contentVersionId: finalCvId });
+                    if (finalB64) {
+                        const docTitle = (fragResult && fragResult.docTitle) || 'Document';
+                        this.downloadBase64(finalB64, docTitle + '.pdf', 'application/pdf');
+                    }
+                } catch (dlErr) {
+                    // Download failure is non-fatal — the PDF is still on the
+                    // record's Files tab so the user can retrieve it manually.
+                    console.warn('DocGen: giant PDF download fetch failed', dlErr);
+                }
                 this.showToast(
                     'Success',
-                    `PDF saved to record — ${totalRecords.toLocaleString()} ${giantRelationship} rows.`,
+                    `PDF downloaded and saved to record — ${totalRecords.toLocaleString()} ${giantRelationship} rows.`,
                     'success'
                 );
             } else if (partIds.length > 0) {

@@ -17,11 +17,21 @@
  * unchanged. The tag composes; styles are inline so Flying Saucer renders
  * them in PDF without CSS-class lookups.
  *
- * Styles (v1):
- *   bar       horizontal bar per bucket, label + colored fill + count(percent)
+ * Styles:
+ *   bar       horizontal bar per bucket (CSS-bar default, or SVG via htmlRender=svg)
+ *   column    vertical bar chart — HTML opt-in via htmlRender=svg (SVG only)
+ *   pie       pie chart with right-side legend — HTML opt-in via htmlRender=svg
+ *   donut     pie with center hole — HTML opt-in via htmlRender=svg
  *   pivot     cross-tab: rows = answers, cols = groupBy values (% per cell)
  *   clustered vertical clustered bar chart: column per answer, bar per groupBy
  *   stacked   horizontal stacked bar: one row per answer, segments per groupBy
+ *
+ * SVG vs CSS-bar (HTML output): the htmlRender=svg modifier routes through
+ * DocGenSvgChartSerializer.emit, sharing a single per-style implementation
+ * with the Word/PDF/PPT/Excel PNG-via-CV pipeline. Default stays CSS-bar
+ * for zero regression on shipped templates. Inline <svg> renders in the
+ * browser but Flying Saucer drops it from Blob.toPdf — HTML→PDF authors who
+ * need the chart visible in PDF must use the default cssbar.
  *
  * Cross-tab styles require groupBy=Field__c AND colSort=Val1,Val2,... — the
  * colSort drives header generation since column labels can't be known
@@ -29,19 +39,107 @@
  *
  * Bad tags render an inline error block in HTML output so the author sees
  * the problem in their generated PDF rather than chasing a silent miss.
- * In Word/Excel templates the tag is unsupported (HTML-only chart output);
- * the expander emits an error block there too rather than corrupting OOXML.
+ * In Word templates (#117 PNG-via-CV pipeline), bad tags emit a `[Chart error: ...]`
+ * text placeholder instead — keeping the document well-formed even when a
+ * template author writes a malformed tag.
  */
 public with sharing class DocGenChartTagExpander {
     private static final String OPEN_PREFIX = '{Chart:';
-    private static final Set<String> ALLOWED_STYLES = new Set<String>{ 'bar', 'pivot', 'clustered', 'stacked' };
+    private static final Set<String> ALLOWED_STYLES = new Set<String>{
+        'bar',
+        'column',
+        'pie',
+        'donut',
+        'pivot',
+        'clustered',
+        'stacked',
+        'line',
+        'area'
+    };
+    // Cross-tab styles require groupBy + colSort to produce a sensible pivot.
+    // `line`/`area` accept groupBy but don't REQUIRE it (single-series mode is
+    // a valid use), so they're NOT in this set.
     private static final Set<String> CROSS_TAB_STYLES = new Set<String>{ 'pivot', 'clustered', 'stacked' };
+    // Styles the SVG serializer can render natively. When an HTML template
+    // author opts in with `htmlRender=svg`, the expander resolves buckets
+    // eagerly and inlines an <svg>...</svg> string instead of emitting the
+    // CSS-bar table + {#ChartBucket:...} loop. Path C unification: single
+    // bucket-data resolution (DocGenChartBucketResolver.resolveBucketsForTag)
+    // feeds both this HTML-inline-SVG path AND the PNG-via-CV path used by
+    // Word/PPTX/PDF — adding a new chart style means writing it ONCE in
+    // DocGenSvgChartSerializer (browser HTML preview) and once in
+    // DocGenChartRasterizer (server PNG for Flying Saucer / OOXML).
+    //
+    // Cross-tab styles stay on the CSS-bar+{#cols} path because the SVG
+    // serializer doesn't yet support them and their {#cols} body is the
+    // mechanism that gives authors per-cell customization. When cross-tab
+    // PNG/SVG emitters land they'll switch over automatically.
+    //
+    // IMPORTANT: this path emits inline <svg>, which the spike memory
+    // project_117_chart_pipeline_state.md confirms Flying Saucer SILENTLY
+    // DROPS in `Blob.toPdf`. Inline SVG therefore only renders correctly
+    // in browser-rendered HTML preview (Lightning admin preview, Experience
+    // Cloud, raw HTML download). HTML→PDF authors who need the chart in the
+    // PDF must keep the default `htmlRender=cssbar` path until Flying Saucer
+    // SVG support arrives (banked as a separate sub-issue).
+    private static final Set<String> HTML_INLINE_SVG_STYLES = new Set<String>{
+        'bar',
+        'column',
+        'pie',
+        'donut',
+        'stacked',
+        'clustered',
+        'line',
+        'area'
+    };
 
     /**
-     * Top-level entry point. Returns xml with all {Chart:...} tags expanded.
-     * Cheap no-op if the template doesn't contain the prefix.
+     * Legacy two-arg entry point. Routes to the chart-CV-aware overload with
+     * no map / no data so existing callers (and tests that exercised the
+     * HTML-only behavior) keep their shape.
      */
     public static String expand(String xml, String templateType) {
+        return expand(xml, templateType, null, null);
+    }
+
+    /**
+     * Top-level entry point with chart-CV awareness (#117) and SVG-render
+     * opt-in (Path C unification).
+     *
+     * For HTML templates (default): emits the legacy CSS-bar table per chart,
+     * with an embedded {#ChartBucket:...} loop that the existing bucket
+     * resolver feeds at merge time. Unchanged from pre-unification behavior
+     * — zero regression for shipped templates.
+     *
+     * For HTML templates with `htmlRender=svg` modifier AND a SVG-supported
+     * style (bar/column/pie/donut): resolves buckets eagerly via
+     * DocGenChartBucketResolver.resolveBucketsForTag and inlines the SVG
+     * fragment produced by DocGenSvgChartSerializer.emit. Single per-style
+     * implementation in the serializer also serves the Word/PDF/PPT/Excel
+     * pipeline (via the rasterizer + PNG-via-CV path) — adding a new chart
+     * style means writing it ONCE per renderer (SVG + rasterizer) instead of
+     * three times. Note: inline <svg> is browser-render-only — Flying Saucer's
+     * Blob.toPdf silently drops it. HTML→PDF authors stay on the default
+     * CSS-bar path until Flying Saucer SVG support arrives.
+     *
+     * For Word templates with `chartCvMap` populated: each chart tag whose
+     * signature matches a CV in the map is substituted with `{%__dgchart_<cvId>}`,
+     * and the data map is seeded with `__dgchart_<cvId> → cvId` so the existing
+     * image-tag scanner at DocGenService:3079 resolves the synthetic field to
+     * the CV Id. From there `buildImageXml` case-4 handles DOCX (blob embed)
+     * vs PDF (relative CV URL) automatically.
+     *
+     * For Word templates with no matching CV (server-side flow with no LWC
+     * to rasterize, or a chart added to the template after preflight): emits
+     * a text placeholder `[Chart: rel.field]` rather than corrupting the
+     * document with an unresolved image tag.
+     */
+    public static String expand(
+        String xml,
+        String templateType,
+        Map<String, Object> data,
+        Map<String, String> chartCvMap
+    ) {
         if (xml == null || !xml.contains(OPEN_PREFIX)) {
             return xml;
         }
@@ -72,7 +170,7 @@ public with sharing class DocGenChartTagExpander {
             String tagBody = decodeEntities(xml.substring(next + OPEN_PREFIX.length(), close));
             String fullTag = xml.substring(next, close + 1);
             try {
-                out.add(buildSnippet(tagBody, isHtml));
+                out.add(buildSnippet(tagBody, isHtml, templateType, data, chartCvMap));
             } catch (ChartTagException e) {
                 out.add(renderError(isHtml, e.getMessage(), fullTag));
             }
@@ -84,22 +182,25 @@ public with sharing class DocGenChartTagExpander {
 
     /**
      * Parses one tag body (everything between "{Chart:" and "}") and returns
-     * the corresponding HTML snippet. Throws ChartTagException with a human-
-     * readable reason on any validation failure — caller renders it as an
-     * inline error block.
+     * the corresponding substitution snippet. Throws ChartTagException with a
+     * human-readable reason on any validation failure — caller renders it as
+     * an inline error block (HTML) or escalates (non-HTML).
+     *
+     * For non-HTML templates (Word): looks up the tag's signature in
+     * `chartCvMap`; if found, emits `{%__dgchart_<cvId>}` and seeds `data`
+     * with the synthetic key. If not found, emits a `[Chart: rel.field]`
+     * text placeholder — documented v1 fallback for server-side flows.
+     *
+     * For HTML templates: behavior unchanged from pre-#117 — emits the
+     * existing CSS-bar / pivot / clustered / stacked table.
      */
-    private static String buildSnippet(String tagBody, Boolean isHtml) {
-        if (!isHtml) {
-            // Phrasing avoids curly-brace literals so the message survives
-            // Salesforce's error-banner rendering, which strips {/} chars
-            // (you'd otherwise see empty quotes where the tag name should be).
-            throw new ChartTagException(
-                'This template uses Chart merge tags, which require an HTML template (Type = HTML). ' +
-                    'To fix: in Google Docs use File > Download > Web Page (.html, zipped), unzip, and upload the .html as the template body with Type = HTML. ' +
-                    'Or remove the Chart tags and use ChartBucket loop tags directly in your Word template.'
-            );
-        }
-
+    private static String buildSnippet(
+        String tagBody,
+        Boolean isHtml,
+        String templateType,
+        Map<String, Object> data,
+        Map<String, String> chartCvMap
+    ) {
         // Tag form: REL:FIELD[:STYLE[:k=v&k=v...]]
         // We split on ':' up to 3 times so option values can contain ':'.
         List<String> parts = splitLimit(tagBody, ':', 4);
@@ -117,10 +218,23 @@ public with sharing class DocGenChartTagExpander {
             throw new ChartTagException('Relationship and field are required.');
         }
         if (!ALLOWED_STYLES.contains(style)) {
-            throw new ChartTagException('Unknown style "' + style + '". Allowed: bar, pivot, clustered, stacked.');
+            throw new ChartTagException(
+                'Unknown style "' +
+                    style +
+                    '". Allowed: bar, column, pie, donut, pivot, clustered, stacked, line, area.'
+            );
         }
 
         Map<String, String> opts = parseOptions(rawOpts);
+        // Compute the chart signature BEFORE removing `title` from opts —
+        // DocGenChartImageController.prepareChartImages hashes the full options
+        // map (including title) when assigning a CV. If we strip title first
+        // and then hash, expander signature ≠ controller signature, the CV
+        // lookup misses, and every titled chart falls back to text. Must
+        // mirror the controller's input exactly. Signature is computed for
+        // every template type so HTML can route through PNG-via-CV when
+        // chartCvMap is populated (task #23 unification).
+        String signature = DocGenChartImageController.tagSignature(relationship, field, style, opts);
         String title = opts.remove('title');
 
         if (CROSS_TAB_STYLES.contains(style)) {
@@ -134,6 +248,92 @@ public with sharing class DocGenChartTagExpander {
             }
         }
 
+        // Non-HTML templates (Word/PPT/Excel for #117): route to the PNG-via-CV
+        // pipeline. The LWC has already rasterized each chart's SVG to a PNG and
+        // uploaded it as a ContentVersion; `chartCvMap[signature]` is the CV Id.
+        // Server-side flows (Flow / batch / async) hit this path with an empty
+        // map and get a text placeholder — documented v1 limitation.
+        if (!isHtml) {
+            // `signature` was precomputed above against the options map that
+            // still included title — matches what the controller hashed.
+            //
+            // Map value shape: either "<cvId>" (legacy) or "<cvId>|WxH" — the
+            // runner LWC packs nominal SVG dimensions into the value so the
+            // image-tag scanner sizes the embedded PNG via {%FieldName:WxH}.
+            // Without WxH, Word renders the 4x-rasterized PNG at its full
+            // pixel size and the chart fills the page.
+            String entry = (chartCvMap == null) ? null : chartCvMap.get(signature);
+            if (String.isNotBlank(entry)) {
+                String cvId = entry;
+                String sizeSuffix = '';
+                Integer pipeAt = entry.indexOf('|');
+                if (pipeAt > 0) {
+                    cvId = entry.substring(0, pipeAt);
+                    sizeSuffix = ':' + entry.substring(pipeAt + 1);
+                }
+                if (data != null) {
+                    // Synthetic key seeding mirrors how DocGenChartBucketResolver.
+                    // preprocessInline injects _cb_N for bucket lists.
+                    data.put('__dgchart_' + cvId, cvId);
+                }
+                return '{%__dgchart_' + cvId + sizeSuffix + '}';
+            }
+            String labelText = String.isNotBlank(title) ? title : (relationship + '.' + field);
+            return '[Chart: ' + labelText + ']';
+        }
+
+        // HTML PNG-via-CV (task #23 — true one-maintenance-place): when an
+        // upstream caller has rasterized the chart and populated chartCvMap,
+        // emit an <img> referencing the CV's relative URL. This is the
+        // PRIMARY HTML chart path going forward — Flying Saucer fetches the
+        // PNG server-side, the browser fetches it client-side, and every new
+        // chart style only has to land in DocGenChartRasterizer once.
+        //
+        // Server-side flows without chart prep (raw Flow / batch / async)
+        // fall through to the CSS-bar / SVG-opt-in branches below — zero
+        // regression for existing HTML templates that haven't gone through
+        // the PNG prep step.
+        if (chartCvMap != null && chartCvMap.containsKey(signature)) {
+            String entry = chartCvMap.get(signature);
+            String cvId = entry;
+            String widthAttr = '';
+            String heightAttr = '';
+            Integer pipeAt = entry.indexOf('|');
+            if (pipeAt > 0) {
+                cvId = entry.substring(0, pipeAt);
+                String size = entry.substring(pipeAt + 1);
+                Integer xAt = size.indexOf('x');
+                if (xAt > 0) {
+                    widthAttr = ' width="' + size.substring(0, xAt) + '"';
+                    heightAttr = ' height="' + size.substring(xAt + 1) + '"';
+                }
+            }
+            String alt = String.isNotBlank(title) ? title : (relationship + '.' + field);
+            return '<img src="/sfc/servlet.shepherd/version/download/' +
+                cvId +
+                '"' +
+                widthAttr +
+                heightAttr +
+                ' alt="' +
+                alt.replace('"', '&quot;') +
+                '"/>';
+        }
+
+        // HTML SVG opt-in (Path C unification): when the author writes
+        // `htmlRender=svg` AND the style is one the SVG serializer can emit,
+        // resolve buckets here and inline the same SVG that the rasterizer
+        // would draw — same data model, same per-style code, no duplicate
+        // implementation. Falls through to CSS-bar default when not set.
+        // Inline SVG is browser-render-only and drops in Flying Saucer PDF
+        // output; for PDF the PNG-via-CV path above is what works.
+        String htmlRender = opts.remove('htmlRender');
+        if (htmlRender != null) {
+            htmlRender = htmlRender.toLowerCase();
+        }
+        if (htmlRender == 'svg' && HTML_INLINE_SVG_STYLES.contains(style)) {
+            return renderViaSvgSerializer(title, style, relationship, field, opts, data);
+        }
+
         String chartBucketTag = buildChartBucketTag(relationship, field, opts);
 
         if (style == 'bar') {
@@ -145,8 +345,79 @@ public with sharing class DocGenChartTagExpander {
         } else if (style == 'stacked') {
             return renderStacked(title, chartBucketTag, opts.get('colSort'));
         }
-        // Unreachable due to ALLOWED_STYLES guard above.
-        throw new ChartTagException('Unhandled style: ' + style);
+        // Unreachable due to ALLOWED_STYLES guard above — `column`, `pie`,
+        // `donut` only render in HTML output via the `htmlRender=svg` opt-in
+        // branch above, since the CSS-bar renderers don't (yet) cover them.
+        // If an author writes a bare {Chart:Rel:Field:column} we surface an
+        // actionable error rather than silently falling through.
+        throw new ChartTagException(
+            'Style "' +
+                style +
+                '" is supported in HTML output only via `htmlRender=svg`. ' +
+                'Add `:htmlRender=svg` to the tag or pick a CSS-bar style (bar, pivot, clustered, stacked).'
+        );
+    }
+
+    /**
+     * Path-C unification helper: resolves chart buckets eagerly via the same
+     * resolver the rasterizer uses, then emits the same SVG the rasterizer
+     * would draw — but inlined into the HTML stream instead of rasterized to
+     * a PNG-via-CV. One per-style implementation in DocGenSvgChartSerializer
+     * serves both this browser-HTML path AND (after rasterization) the
+     * Word/PDF/PPT/Excel path.
+     *
+     * `data` is the merge data map the runtime hands to processXml. When the
+     * relationship is pre-loaded there, buckets resolve in-memory (zero
+     * SOQL). When it isn't AND the data carries a parent record Id, the
+     * resolver issues a single GROUP BY against the 50-chart SOQL budget.
+     * When the data is null (e.g. processXmlForTest with no live record),
+     * buckets come back empty and the SVG serializer renders its "No data"
+     * placeholder — never throws, never silently disappears.
+     */
+    private static String renderViaSvgSerializer(
+        String title,
+        String style,
+        String relationship,
+        String field,
+        Map<String, String> opts,
+        Map<String, Object> data
+    ) {
+        // Reassemble the modifier string the resolver expects. `opts` is the
+        // post-title-removal map (title was already lifted into the caller's
+        // local `title` parameter so it doesn't double-render).
+        List<String> kvs = new List<String>();
+        for (String key : opts.keySet()) {
+            kvs.add(key + '=' + opts.get(key));
+        }
+        String modifiersRaw = String.join(kvs, '&');
+
+        // resolveBucketsForTag's SOQL fallback NPEs on null data — it
+        // dereferences `data.get('Id')` to discover the parent record's Id
+        // for the GROUP BY aggregate. Short-circuit to empty when data is
+        // null (processXmlForTest paths, ad-hoc unit calls) so the SVG
+        // serializer renders the "No data" placeholder instead of throwing.
+        List<Map<String, Object>> buckets;
+        if (data == null) {
+            buckets = new List<Map<String, Object>>();
+        } else {
+            buckets = DocGenChartBucketResolver.resolveBucketsForTag(data, relationship, field, modifiersRaw);
+        }
+
+        // The SVG serializer dispatches on options.style. Pass the rest of
+        // the modifier surface (width, height, colors, title) through. Title
+        // is re-attached here so the serializer renders its own heading line
+        // inside the SVG — keeps the embedded chart visually self-contained
+        // without an HTML <h2> outside it.
+        Map<String, String> svgOpts = new Map<String, String>();
+        for (String k : opts.keySet()) {
+            svgOpts.put(k, opts.get(k));
+        }
+        svgOpts.put('style', style);
+        if (String.isNotBlank(title)) {
+            svgOpts.put('title', title);
+        }
+
+        return DocGenSvgChartSerializer.emit(buckets, svgOpts);
     }
 
     /**
@@ -324,12 +595,16 @@ public with sharing class DocGenChartTagExpander {
     // ─── helpers ─────────────────────────────────────────────────────────
 
     /**
-     * Renders a visually obvious error in HTML output, or throws in Word/Excel
-     * where injecting HTML into OOXML would corrupt the document.
+     * Renders a visually obvious error in HTML output, or a plain-text
+     * placeholder in Word/PPT/Excel where injecting HTML into OOXML would
+     * corrupt the document. Pre-#117 this threw for non-HTML — that gate is
+     * gone now that Word supports charts via the PNG-via-CV pipeline; a
+     * malformed tag should never halt the whole document, just flag itself
+     * inline so the author sees it.
      */
     private static String renderError(Boolean isHtml, String reason, String snippet) {
         if (!isHtml) {
-            throw new DocGenException('Chart tag error in non-HTML template: ' + reason + ' (' + snippet + ')');
+            return '[Chart error: ' + reason + ']';
         }
         // escapeForDisplay turns the original tag's curly braces into HTML
         // entities so the rendered error block can't be re-parsed as a tag on
