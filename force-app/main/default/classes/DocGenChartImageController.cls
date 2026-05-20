@@ -29,11 +29,21 @@ public with sharing class DocGenChartImageController {
     private static final String CHART_OPEN_PREFIX = '{Chart:';
     private static final String CV_TITLE_PREFIX = 'docgen_chart_';
 
-    // Styles the SVG serializer can emit natively. Cross-tab styles
-    // (pivot/clustered/stacked) currently flow through the HTML CSS-bar path
-    // for HTML output and degrade to plain `bar` SVG for Word until their
-    // PNG-via-CV emitters land in a follow-up commit.
-    private static final Set<String> SVG_STYLES = new Set<String>{ 'bar', 'column', 'pie', 'donut' };
+    // Styles both DocGenSvgChartSerializer AND DocGenChartRasterizer can emit.
+    // Any tag whose style is in this set keeps its style end-to-end through
+    // both the browser-canvas and the pure-Apex raster paths. Styles outside
+    // this set (e.g. `pivot`, future `scatter`) degrade to plain `bar` so a
+    // render still produces something visible rather than crashing.
+    private static final Set<String> SVG_STYLES = new Set<String>{
+        'bar',
+        'column',
+        'pie',
+        'donut',
+        'stacked',
+        'clustered',
+        'line',
+        'area'
+    };
 
     /**
      * Discovers top-level chart tags in the active Word template body, resolves
