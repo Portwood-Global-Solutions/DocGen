@@ -153,6 +153,13 @@ public with sharing class DocGenChartTagExpander {
         }
 
         Map<String, String> opts = parseOptions(rawOpts);
+        // Compute the chart signature BEFORE removing `title` from opts —
+        // DocGenChartImageController.prepareChartImages hashes the full options
+        // map (including title) when assigning a CV. If we strip title first
+        // and then hash, expander signature ≠ controller signature, the CV
+        // lookup misses, and every titled chart falls back to text. Must
+        // mirror the controller's input exactly.
+        String signature = isHtml ? null : DocGenChartImageController.tagSignature(relationship, field, style, opts);
         String title = opts.remove('title');
 
         if (CROSS_TAB_STYLES.contains(style)) {
@@ -172,7 +179,8 @@ public with sharing class DocGenChartTagExpander {
         // Server-side flows (Flow / batch / async) hit this path with an empty
         // map and get a text placeholder — documented v1 limitation.
         if (!isHtml) {
-            String signature = DocGenChartImageController.tagSignature(relationship, field, style, opts);
+            // `signature` was precomputed above against the options map that
+            // still included title — matches what the controller hashed.
             String cvId = (chartCvMap == null) ? null : chartCvMap.get(signature);
             if (String.isNotBlank(cvId)) {
                 if (data != null) {

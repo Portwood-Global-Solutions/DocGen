@@ -144,6 +144,37 @@ private class DocGenChartTagExpanderTest {
     }
 
     @IsTest
+    static void wordTemplate_titledChart_signatureMatchesController() {
+        // Regression guard: pre-fix, the expander stripped `title` from opts
+        // before hashing while the controller hashed with title intact. Result:
+        // every titled chart fell back to text in Word. Both sides must hash
+        // the SAME map shape.
+        String tag = '{Chart:Survey_Responses__r:Selected_Answer__c:bar:title=How Satisfied?}';
+        Map<String, String> opts = new Map<String, String>{ 'title' => 'How Satisfied?' };
+        String controllerSig = DocGenChartImageController.tagSignature(
+            'Survey_Responses__r',
+            'Selected_Answer__c',
+            'bar',
+            opts
+        );
+
+        String fakeCvId = '0681x00000000000099';
+        Map<String, String> chartCvMap = new Map<String, String>{ controllerSig => fakeCvId };
+        Map<String, Object> data = new Map<String, Object>();
+
+        String out = DocGenChartTagExpander.expand(tag, 'Word', data, chartCvMap);
+
+        System.assert(
+            out.contains('{%__dgchart_' + fakeCvId + '}'),
+            'Expander must hash the same map shape as the controller, including title. Got: ' + out
+        );
+        System.assert(
+            !out.contains('[Chart:'),
+            'Should NOT fall back to text placeholder when CV is present in the map.'
+        );
+    }
+
+    @IsTest
     static void wordTemplate_signatureStable_acrossOptionOrder() {
         // Same options in different order must hash to the same signature so
         // the LWC and the expander agree on which CV maps to which tag.
