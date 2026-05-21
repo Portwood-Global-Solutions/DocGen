@@ -58,10 +58,9 @@ public with sharing class DocGenSetupController {
             throw DocGenService.ahe('Insufficient privileges to modify DocGen settings.');
         }
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         settings.Experience_Site_Url__c = experienceSiteUrl;
         // Package-internal object — CRUD controlled by DocGen permission sets
-        upsert settings; // NOPMD ApexCRUDViolation - package-internal custom setting; CRUD checked on lines 15-18 above
+        Database.upsert(settings, AccessLevel.USER_MODE);
     }
 
     /**
@@ -77,11 +76,10 @@ public with sharing class DocGenSetupController {
         }
         List<Map<String, String>> results = new List<Map<String, String>>();
         results.add(new Map<String, String>{ 'label' => '-- Running User (default) --', 'value' => '' });
-        // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
-        /* code-analyzer-suppress ApexCrudViolation */
         for (OrgWideEmailAddress owa : [
-            SELECT Id, Address, DisplayName // NOPMD ApexCRUDViolation - read-only system table; admin-only AuraEnabled
+            SELECT Id, Address, DisplayName
             FROM OrgWideEmailAddress
+            WITH USER_MODE
             ORDER BY DisplayName
         ]) {
             String label = String.isNotBlank(owa.DisplayName)
@@ -122,7 +120,7 @@ public with sharing class DocGenSetupController {
         String siteName = '';
         try {
             /* code-analyzer-suppress ApexFlsViolation */
-            List<Site> sites = [SELECT Id, Name, Status FROM Site WHERE Status = 'Active' WITH SYSTEM_MODE LIMIT 10]; // NOPMD
+            List<Site> sites = [SELECT Id, Name, Status FROM Site WHERE Status = 'Active' WITH USER_MODE LIMIT 10];
             siteActive = !sites.isEmpty();
             if (siteActive) {
                 siteName = sites[0].Name;
@@ -151,7 +149,7 @@ public with sharing class DocGenSetupController {
                     SELECT Id, DisplayName, Address
                     FROM OrgWideEmailAddress
                     WHERE Id = :settings.Signature_OWA_Id__c
-                    WITH SYSTEM_MODE
+                    WITH USER_MODE
                     LIMIT 1
                 ]; // NOPMD
                 owaOk = !owas.isEmpty();
@@ -181,7 +179,7 @@ public with sharing class DocGenSetupController {
                 SELECT Id
                 FROM PermissionSet
                 WHERE Name = 'DocGen_Guest_Signature'
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ]; // NOPMD
             if (!ps.isEmpty()) {
@@ -190,7 +188,7 @@ public with sharing class DocGenSetupController {
                     SELECT Id
                     FROM PermissionSetAssignment
                     WHERE PermissionSetId = :ps[0].Id
-                    WITH SYSTEM_MODE
+                    WITH USER_MODE
                     LIMIT 1
                 ]; // NOPMD
                 guestPermOk = !psa.isEmpty();
@@ -217,7 +215,7 @@ public with sharing class DocGenSetupController {
                 SELECT Name
                 FROM ApexPage
                 WHERE Name IN ('DocGenSign', 'DocGenSignature', 'DocGenVerify')
-                WITH SYSTEM_MODE
+                WITH USER_MODE
             ]; // NOPMD
             vfPagesOk = pages.size() >= 3;
         } catch (Exception e) {
@@ -250,7 +248,7 @@ public with sharing class DocGenSetupController {
                 SELECT Profile.PermissionsModifyAllData
                 FROM User
                 WHERE Id = :UserInfo.getUserId()
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ]; // NOPMD ApexCRUDViolation - read-only User self-lookup
             return !rows.isEmpty() && rows[0].Profile != null && rows[0].Profile.PermissionsModifyAllData == true;
@@ -287,21 +285,14 @@ public with sharing class DocGenSetupController {
             throw DocGenService.ahe('Insufficient privileges to modify DocGen settings.');
         }
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         settings.Signature_Email_Brand_Color__c = brandColor;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         settings.Signature_Email_Logo_Url__c = logoUrl;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         settings.Signature_Email_Subject__c = emailSubject;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         settings.Signature_Email_Message__c = emailMessage;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         settings.Signature_Email_Footer_Text__c = footerText;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         settings.Company_Name__c = companyName;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         settings.Signature_OWA_Id__c = owaId;
-        upsert settings; // NOPMD ApexCRUDViolation - package-internal custom setting
+        Database.upsert(settings, AccessLevel.USER_MODE);
     }
 
     /**
@@ -320,7 +311,7 @@ public with sharing class DocGenSetupController {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Signature_Reminder_Enabled__c = enabled;
         settings.Signature_Reminder_Hours__c = hours != null && hours > 0 ? hours : 24;
-        upsert settings; // NOPMD ApexCRUDViolation - package-internal custom setting
+        Database.upsert(settings, AccessLevel.USER_MODE);
 
         // Auto-schedule or abort the reminder job
         String jobName = 'DocGen Signature Reminders';
@@ -331,7 +322,7 @@ public with sharing class DocGenSetupController {
                 SELECT Id
                 FROM CronTrigger
                 WHERE CronJobDetail.Name = :jobName
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ]; // NOPMD
             for (CronTrigger ct : existing) {

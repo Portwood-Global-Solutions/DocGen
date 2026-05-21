@@ -3,6 +3,11 @@
     width: 100%;
 }
 
+/* Dropdown overlay — paired with SLDS slds-is-absolute utility class */
+.dg-dropdown {
+    z-index: 100;
+}
+
 .badge-base {
     display: inline-block;
     font-size: var(--slds-g-font-scale-neg-2, 0.625rem);

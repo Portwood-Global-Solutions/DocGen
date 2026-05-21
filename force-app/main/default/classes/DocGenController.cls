@@ -29,7 +29,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Custom_Margins__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         return vers.isEmpty() ? null : vers[0];
@@ -63,7 +63,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Custom_Margins__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
 
@@ -173,7 +173,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     Custom_Margins__c
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
 
@@ -570,7 +570,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, VersionData
                 FROM ContentVersion
                 WHERE Id = :contentVersionId AND Title LIKE 'docgen_%'
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
         } else if (safeFields == 'Id, ContentSize') {
@@ -578,7 +578,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, ContentSize
                 FROM ContentVersion
                 WHERE Id = :contentVersionId AND Title LIKE 'docgen_%'
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
         } else {
@@ -586,7 +586,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, ContentDocumentId
                 FROM ContentVersion
                 WHERE Id = :contentVersionId AND Title LIKE 'docgen_%'
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
         }
@@ -682,10 +682,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             VersionData = imgBlob,
             FirstPublishLocationId = versionId
         );
-        insert cv; // NOPMD ApexCRUDViolation — package-internal field, admin-only LWC entry point
+        Database.insert(cv, AccessLevel.USER_MODE);
         // Persist the CV ID on the template version so the renderer knows about it
         DocGen_Template_Version__c v = new DocGen_Template_Version__c(Id = versionId, Watermark_Image_CV_Id__c = cv.Id);
-        update v; // NOPMD ApexCRUDViolation — package-internal field
+        Database.update(v, AccessLevel.USER_MODE);
         return cv.Id;
     }
 
@@ -719,7 +719,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe('Template version not found or access denied.');
         }
         DocGen_Template_Version__c v = new DocGen_Template_Version__c(Id = versionId, Watermark_Image_CV_Id__c = null);
-        update v; // NOPMD ApexCRUDViolation — package-internal field
+        Database.update(v, AccessLevel.USER_MODE);
     }
 
     @AuraEnabled
@@ -784,7 +784,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
             if (templates.isEmpty()) {
@@ -865,7 +865,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, Content_Version_Id__c
                 FROM DocGen_Template_Version__c
                 WHERE Template__c = :templateId AND Is_Active__c = TRUE
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
             String documentXml = null;
@@ -880,7 +880,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         SELECT VersionData
                         FROM ContentVersion
                         WHERE Id = :bodyCvId
-                        WITH SYSTEM_MODE
+                        WITH USER_MODE
                         LIMIT 1
                     ];
                     if (!htmlCvs.isEmpty()) {
@@ -900,7 +900,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         SELECT VersionData
                         FROM ContentVersion
                         WHERE Title = :xmlKey
-                        WITH SYSTEM_MODE
+                        WITH USER_MODE
                         LIMIT 1 // NOPMD — package-internal pre-decomposed part; access gated by DocGen permission sets via the parent template (#114)
                     ];
                     if (!xmlCvs.isEmpty()) {
@@ -952,12 +952,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             // Create Job record
             DocGen_Job__c job = new DocGen_Job__c(
                 Status__c = 'Draft',
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Template__c = templateId,
                 Label__c = 'Giant Query',
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Parent_Record_Id__c = String.valueOf(recordId),
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Giant_Query_Config__c = JSON.serialize(
                     new Map<String, Object>{
                         'relationshipName' => giantRelationship,
@@ -967,7 +964,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 )
             );
             /* code-analyzer-suppress ApexFlsViolation */
-            insert job; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.insert(job, AccessLevel.USER_MODE);
 
             // Launch batch — shell PDF generation happens in start() with fresh heap
             DocGenGiantQueryBatch batch = new DocGenGiantQueryBatch(
@@ -1006,7 +1003,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             SELECT Status__c, Success_Count__c, Total_Records__c, Label__c
             FROM DocGen_Job__c
             WHERE Id = :jobId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (jobs.isEmpty()) {
@@ -1151,8 +1148,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         ]) {
             docIds.add(cv.ContentDocumentId);
         }
-        if (!docIds.isEmpty() && Schema.sObjectType.ContentDocument.isDeletable()) {
-            delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds]; // NOPMD ApexCRUDViolation — CRUD checked above
+        if (!docIds.isEmpty()) {
+            Database.delete(
+                [SELECT Id FROM ContentDocument WHERE Id IN :docIds WITH USER_MODE],
+                true,
+                AccessLevel.USER_MODE
+            );
         }
     }
 
@@ -1191,7 +1192,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Type__c
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
             String templateType = tplForType.isEmpty() ? 'Word' : tplForType[0].Type__c;
@@ -1201,7 +1202,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, Content_Version_Id__c
                 FROM DocGen_Template_Version__c
                 WHERE Template__c = :templateId AND Is_Active__c = TRUE
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
             String documentXml = null;
@@ -1214,7 +1215,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         SELECT VersionData
                         FROM ContentVersion
                         WHERE Id = :bodyCvId
-                        WITH SYSTEM_MODE
+                        WITH USER_MODE
                         LIMIT 1
                     ];
                     if (!htmlCvs.isEmpty()) {
@@ -1233,7 +1234,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         SELECT VersionData
                         FROM ContentVersion
                         WHERE Title = :xmlKey
-                        WITH SYSTEM_MODE
+                        WITH USER_MODE
                         LIMIT 1 // NOPMD — package-internal pre-decomposed part; access gated by DocGen permission sets via the parent template (#114)
                     ];
                     if (!xmlCvs.isEmpty()) {
@@ -1253,15 +1254,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
             // Create Job record
             DocGen_Job__c job = new DocGen_Job__c(
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Status__c = 'Draft',
                 Template__c = templateId,
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Label__c = 'Giant Query PDF',
                 Parent_Record_Id__c = String.valueOf(recordId)
             );
             /* code-analyzer-suppress ApexFlsViolation */
-            insert job; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.insert(job, AccessLevel.USER_MODE);
 
             // Ensure relationshipName is in the config (V1 scout doesn't include it)
             childNodeConfig.put('relationshipName', giantRelationship);
@@ -1324,7 +1323,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             SELECT Query_Config__c, Base_Object_API__c, Output_Format__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (templates.isEmpty() || String.isBlank(templates[0].Query_Config__c)) {
@@ -1769,7 +1768,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Base_Object_API__c
             FROM DocGen_Template__c
             WHERE Base_Object_API__c = :objectApiName AND Is_Active__c != FALSE
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Is_Default__c DESC, Name ASC
         ];
         // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
@@ -1807,7 +1806,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             SELECT PermissionSet.Name
             FROM PermissionSetAssignment
             WHERE AssigneeId = :UserInfo.getUserId()
-            WITH SYSTEM_MODE
+            WITH USER_MODE
         ]) {
             if (psa.PermissionSet != null && psa.PermissionSet.Name != null) {
                 names.add(psa.PermissionSet.Name);
@@ -1892,7 +1891,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     safeClause +
                     ') LIMIT 1';
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-                List<SObject> rows = Database.query(soql, AccessLevel.SYSTEM_MODE); // NOPMD ApexSOQLInjection — clause sanitized via DocGenDataRetriever.sanitizeWhereClause; object name escaped; Id param bound
+                List<SObject> rows = Database.query(soql, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — clause sanitized via DocGenDataRetriever.sanitizeWhereClause; object name escaped; Id param bound
                 matched = !rows.isEmpty();
             }
         } catch (Exception e) {
@@ -1970,7 +1969,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 safeClause +
                 ') LIMIT 1';
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-            List<SObject> rows = Database.query(soql, AccessLevel.SYSTEM_MODE); // NOPMD ApexSOQLInjection — clause sanitized, object escaped, Id bound
+            List<SObject> rows = Database.query(soql, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — clause sanitized, object escaped, Id bound
             result.put('matched', !rows.isEmpty());
         } catch (DocGenException e) {
             result.put('error', e.getMessage());
@@ -2033,7 +2032,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Custom_Margins__c,
                 (SELECT ContentDocumentId FROM ContentDocumentLinks ORDER BY ContentDocument.CreatedDate DESC LIMIT 1)
             FROM DocGen_Template__c
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY Category__c ASC, Name ASC
             LIMIT 2000
         ];
@@ -2041,32 +2040,22 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
     /**
      * Saves template field updates and optionally creates a new template version.
-     // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
      * @param fields Map of field API names to values for the template record
-     // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
      * @param createVersion Whether to create a new active version snapshot
-     // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
      */
-    // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
     @AuraEnabled
-    // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
     public static void saveTemplate(Map<String, Object> fields, Boolean createVersion, String contentVersionId) {
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         try {
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             // 1. Update Template
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             Id templateId = (Id) fields.get('Id');
             DocGen_Template__c template = new DocGen_Template__c(Id = templateId);
             template.Name = (String) fields.get('Name');
             template.Category__c = (String) fields.get('Category__c');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             template.Type__c = (String) fields.get('Type__c');
             template.Base_Object_API__c = (String) fields.get('Base_Object_API__c');
             template.Description__c = (String) fields.get('Description__c');
             template.Query_Config__c = (String) fields.get('Query_Config__c');
             template.Test_Record_Id__c = (String) fields.get('Test_Record_Id__c');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             template.Document_Title_Format__c = (String) fields.get('Document_Title_Format__c');
 
             // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
@@ -2130,7 +2119,6 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (fields.containsKey('Is_Default__c')) {
                 Boolean isDefault = (Boolean) fields.get('Is_Default__c');
                 template.Is_Default__c = isDefault;
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 if (isDefault == true && template.Base_Object_API__c != null) {
                     String baseObj = (String) fields.get('Base_Object_API__c');
                     /* code-analyzer-suppress ApexFlsViolation */
@@ -2138,21 +2126,19 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         SELECT Id
                         FROM DocGen_Template__c
                         WHERE Base_Object_API__c = :baseObj AND Is_Default__c = TRUE AND Id != :templateId
-                        WITH SYSTEM_MODE
+                        WITH USER_MODE
                     ];
                     for (DocGen_Template__c other : otherDefaults) {
                         other.Is_Default__c = false;
                     }
                     if (!otherDefaults.isEmpty()) {
                         /* code-analyzer-suppress ApexFlsViolation */
-                        update otherDefaults; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                        Database.update(otherDefaults, AccessLevel.USER_MODE);
                     }
                 }
             }
             /* code-analyzer-suppress ApexFlsViolation */
-            update template; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+            Database.update(template, AccessLevel.USER_MODE);
 
             // 2. Create Version if requested
             if (createVersion == true) {
@@ -2166,7 +2152,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     SELECT Id, Watermark_Image_CV_Id__c
                     FROM DocGen_Template_Version__c
                     WHERE Template__c = :templateId AND Is_Active__c = TRUE
-                    WITH SYSTEM_MODE
+                    WITH USER_MODE
                 ];
                 String priorWatermarkCvId = null;
                 for (DocGen_Template_Version__c av : activeVersions) {
@@ -2177,7 +2163,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 }
                 if (!activeVersions.isEmpty()) {
                     /* code-analyzer-suppress ApexFlsViolation */
-                    update activeVersions; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                    Database.update(activeVersions, AccessLevel.USER_MODE);
                 }
 
                 // Use specific ContentVersion ID if provided (from upload event),
@@ -2197,10 +2183,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     }
                 }
 
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-
                 DocGen_Template_Version__c version = new DocGen_Template_Version__c();
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 version.Template__c = templateId;
                 version.Query_Config__c = (String) fields.get('Query_Config__c');
                 version.Content_Version_Id__c = cvId;
@@ -2239,7 +2222,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 }
 
                 /* code-analyzer-suppress ApexFlsViolation */
-                insert version; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                Database.insert(version, AccessLevel.USER_MODE);
 
                 // Decompose DOCX/PPTX into per-image and per-XML ContentVersions for
                 // heap-light PDF rendering. Runs in a Queueable (12 MB async heap)
@@ -2319,7 +2302,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         cv.VersionData = EncodingUtil.base64Decode(base64Content);
         cv.FirstPublishLocationId = templateId;
         /* code-analyzer-suppress ApexFlsViolation */
-        insert cv; // NOPMD — package-internal; CRUD via DocGen perm sets
+        Database.insert(cv, AccessLevel.USER_MODE);
 
         return new Map<String, Object>{
             'contentVersionId' => cv.Id,
@@ -2380,14 +2363,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         cv.VersionData = Blob.valueOf(htmlContent);
         cv.FirstPublishLocationId = templateId;
         /* code-analyzer-suppress ApexFlsViolation */
-        insert cv; // NOPMD — package-internal; CRUD via DocGen perm sets
+        Database.insert(cv, AccessLevel.USER_MODE);
 
         /* code-analyzer-suppress ApexFlsViolation */
         ContentVersion reload = [
             SELECT Id, ContentDocumentId
             FROM ContentVersion
             WHERE Id = :cv.Id
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
 
@@ -2457,7 +2440,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         }
         Id cdId = (Id) cv.ContentDocumentId;
         /* code-analyzer-suppress ApexFlsViolation */
-        delete [SELECT Id FROM ContentDocument WHERE Id = :cdId WITH SYSTEM_MODE];
+        Database.delete([SELECT Id FROM ContentDocument WHERE Id = :cdId WITH USER_MODE], true, AccessLevel.USER_MODE);
     }
 
     /**
@@ -2484,7 +2467,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Watermark_Image_CV_Id__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY CreatedDate DESC
         ];
     }
@@ -2511,7 +2494,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, Name, Is_Active__c, Content_Version_Id__c
                 FROM DocGen_Template_Version__c
                 WHERE Id = :versionId
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
             if (versions.isEmpty()) {
@@ -2535,7 +2518,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT ContentDocumentId
                 FROM ContentVersion
                 WHERE Title LIKE :likePattern
-                WITH SYSTEM_MODE
+                WITH USER_MODE
             ]) {
                 if (cv.ContentDocumentId != null) {
                     cdsToDelete.add(cv.ContentDocumentId);
@@ -2547,7 +2530,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     SELECT ContentDocumentId
                     FROM ContentVersion
                     WHERE Id = :v.Content_Version_Id__c
-                    WITH SYSTEM_MODE
+                    WITH USER_MODE
                     LIMIT 1
                 ];
                 if (!bodyCvs.isEmpty() && bodyCvs[0].ContentDocumentId != null) {
@@ -2557,11 +2540,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
             if (!cdsToDelete.isEmpty()) {
                 /* code-analyzer-suppress ApexFlsViolation */
-                delete [SELECT Id FROM ContentDocument WHERE Id IN :cdsToDelete WITH SYSTEM_MODE]; // NOPMD ApexCRUDViolation - cascade-cleanup of package-internal version files
+                Database.delete(
+                    [SELECT Id FROM ContentDocument WHERE Id IN :cdsToDelete WITH USER_MODE],
+                    true,
+                    AccessLevel.USER_MODE
+                );
             }
 
             /* code-analyzer-suppress ApexFlsViolation */
-            delete v; // NOPMD ApexCRUDViolation - isDeletable() checked above
+            Database.delete(v, true, AccessLevel.USER_MODE);
         } catch (DmlException dmlE) {
             throw DocGenService.ahe(dmlE, 'Error deleting version. ' + dmlE.getDmlMessage(0));
         } catch (Exception e) {
@@ -2588,8 +2575,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     Base_Object_API__c
                 FROM DocGen_Template_Version__c
                 WHERE Id = :versionId
-                WITH SYSTEM_MODE
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+                WITH USER_MODE
                 LIMIT 1
             ];
             DocGen_Template_Version__c version = actVerList[0];
@@ -2600,26 +2586,20 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id
                 FROM DocGen_Template_Version__c
                 WHERE Template__c = :version.Template__c AND Is_Active__c = TRUE
-                WITH SYSTEM_MODE
+                WITH USER_MODE
             ];
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             for (DocGen_Template_Version__c v : others) {
                 v.Is_Active__c = false;
             }
             if (!others.isEmpty()) {
                 /* code-analyzer-suppress ApexFlsViolation */
-                update others; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+                Database.update(others, AccessLevel.USER_MODE);
             }
 
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-
             // 2. Activate this one
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             version.Is_Active__c = true;
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             /* code-analyzer-suppress ApexFlsViolation */
-            update version; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.update(version, AccessLevel.USER_MODE);
 
             // 3. Update Template Record Headline
             DocGen_Template__c template = new DocGen_Template__c(Id = version.Template__c);
@@ -2630,7 +2610,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Base_Object_API__c = version.Base_Object_API__c;
 
             /* code-analyzer-suppress ApexFlsViolation */
-            update template; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.update(template, AccessLevel.USER_MODE);
         } catch (Exception e) {
             throw new DocGenException('Error activating version: ' + e.getMessage());
         }
@@ -5243,16 +5223,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 'PSJwcmVzZXJ2ZSI+UG93ZXJlZCBieSBEb2NHZW48L3c6dD48L3c6cj48L3c6cD4KICAgIDx3OnNlY3RQcj4KICAgICAgPHc6cGdTeiB3Onc9IjEyMjQwIiB3' +
                 'Omg9IjE1ODQwIi8+CiAgICAgIDx3OnBnTWFyIHc6dG9wPSIxNDQwIiB3OnJpZ2h0PSIxNDQwIiB3OmJvdHRvbT0iMTQ0MCIgdzpsZWZ0PSIxNDQwIiB3Omhl' +
                 'YWRlcj0iNzIwIiB3OmZvb3Rlcj0iNzIwIiB3Omd1dHRlcj0iMCIvPgogICAgPC93OnNlY3RQcj4KICA8L3c6Ym9keT4KPC93OmRvY3VtZW50PlBLAQIUAxQA' +
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 'AAAAACk3eFzXeYTquAEAALgBAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQDFAAAAAAAKTd4XCAbhuouAQAALgEAAAsAAAAA' +
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 'AAAAAAAAAIAB6QEAAF9yZWxzLy5yZWxzUEsBAhQDFAAAAAAAKTd4XIwOhdCdAAAAnQAAABwAAAAAAAAAAAAAAIABQAMAAHdvcmQvX3JlbHMvZG9jdW1lbnQu' +
                 'eG1sLnJlbHNQSwECFAMUAAAAAAApN3hcOTom9VYbAABWGwAAEQAAAAAAAAAAAAAAgAEXBAAAd29yZC9kb2N1bWVudC54bWxQSwUGAAAAAAQABAADAQAAnB8A' +
                 'AAAA'
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         );
-
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
         // ---- Create records ----
         List<DocGen_Template__c> templates = new List<DocGen_Template__c>();
@@ -5270,7 +5245,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             );
         }
         /* code-analyzer-suppress ApexFlsViolation */
-        insert templates; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        Database.insert(templates, AccessLevel.USER_MODE);
 
         // Create ContentVersions (DOCX files) linked to templates
         List<ContentVersion> cvs = new List<ContentVersion>();
@@ -5285,16 +5260,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 )
             );
         }
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         SObjectAccessDecision cvsDec = Security.stripInaccessible(AccessType.CREATABLE, cvs);
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         insert cvsDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         for (Integer i = 0; i < cvs.size(); i++) {
             cvs[i].Id = cvsDec.getRecords()[i].Id;
         }
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         // Create active template versions with snapshot headers
         List<DocGen_Template_Version__c> versions = new List<DocGen_Template_Version__c>();
         for (Integer i = 0; i < templates.size(); i++) {
@@ -5312,7 +5283,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             );
         }
         /* code-analyzer-suppress ApexFlsViolation */
-        insert versions; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        Database.insert(versions, AccessLevel.USER_MODE);
 
         // Extract and save template images for PDF rendering — async (12 MB heap).
         for (Integer i = 0; i < versions.size(); i++) {
@@ -5426,7 +5397,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     (SELECT Name, Query_Condition__c, Description__c FROM Saved_Queries__r)
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
             if (templates.isEmpty()) {
@@ -5561,22 +5532,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * @return The new template record ID
      */
     @AuraEnabled
-    // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
     public static Id importTemplate(String jsonData) {
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         try {
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             Map<String, Object> bundle = (Map<String, Object>) JSON.deserializeUntyped(jsonData);
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             Map<String, Object> tmplData = (Map<String, Object>) bundle.get('template');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             if (tmplData == null) {
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 throw new DocGenException('Invalid import file: missing template data.');
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             }
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
             // 1. Create template record
             DocGen_Template__c tmpl = new DocGen_Template__c();
@@ -5609,7 +5571,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             tmpl.Page_Margins__c = (String) tmplData.get('Page_Margins__c');
             tmpl.Custom_Margins__c = (String) tmplData.get('Custom_Margins__c');
             /* code-analyzer-suppress ApexFlsViolation */
-            insert tmpl; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.insert(tmpl, AccessLevel.USER_MODE);
 
             // 1.5. Re-upload inline-image / watermark assets and build the
             // source-org → target-org CV ID map. Done BEFORE the template body
@@ -5657,7 +5619,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     tmpl.Header_Html__c = rewrittenHeader;
                     tmpl.Footer_Html__c = rewrittenFooter;
                     /* code-analyzer-suppress ApexFlsViolation */
-                    update tmpl; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                    Database.update(tmpl, AccessLevel.USER_MODE);
                 }
             }
 
@@ -5668,7 +5630,6 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 ContentVersion cv = new ContentVersion();
                 cv.Title = tmpl.Name;
                 cv.PathOnClient = tmpl.Name + '.' + (String) fileData.get('fileExtension');
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Blob bodyBytes = EncodingUtil.base64Decode((String) fileData.get('base64'));
                 // For HTML templates, rewrite embedded shepherd URLs in the body
                 // bytes BEFORE upload (ContentVersion.VersionData is immutable
@@ -5683,23 +5644,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     }
                 }
                 cv.VersionData = bodyBytes;
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 cv.FirstPublishLocationId = tmpl.Id;
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 SObjectAccessDecision impCvDec = Security.stripInaccessible(
                     AccessType.CREATABLE,
                     new List<ContentVersion>{ cv }
                 );
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 insert impCvDec.getRecords(); // NOPMD ApexCRUDViolation — FLS enforced by stripInaccessible
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 cv.Id = impCvDec.getRecords()[0].Id;
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 cvId = cv.Id;
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             }
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
             // 3. Create active version
             DocGen_Template_Version__c ver = new DocGen_Template_Version__c();
@@ -5724,12 +5677,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 ver.Watermark_Image_CV_Id__c = cvIdMap.get(watermarkOriginalCvId);
             }
             /* code-analyzer-suppress ApexFlsViolation */
-            insert ver; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.insert(ver, AccessLevel.USER_MODE);
 
             // 4. Extract images and pre-decompose — async (12 MB heap).
             DocGenService.enqueueTemplateImageExtraction(tmpl.Id, ver.Id);
-
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
 
             // 5. Create saved queries if present
             List<Object> savedQueries = (List<Object>) bundle.get('savedQueries');
@@ -5745,7 +5696,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     sqs.add(newSq);
                 }
                 /* code-analyzer-suppress ApexFlsViolation */
-                insert sqs; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                Database.insert(sqs, AccessLevel.USER_MODE);
             }
 
             return tmpl.Id;

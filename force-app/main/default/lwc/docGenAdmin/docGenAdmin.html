@@ -59,24 +59,7 @@
                                             >
                                             </lightning-input>
                                             <template if:true={showObjectSuggestions}>
-                                                <ul
-                                                    role="listbox"
-                                                    style="
-                                                        position: absolute;
-                                                        z-index: 20;
-                                                        max-height: 380px;
-                                                        overflow-y: auto;
-                                                        left: 0;
-                                                        right: 0;
-                                                        background: #fff;
-                                                        border: 1px solid #d8dde6;
-                                                        border-radius: 0 0 6px 6px;
-                                                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-                                                        list-style: none;
-                                                        margin: 0;
-                                                        padding: 0;
-                                                    "
-                                                >
+                                                <ul role="listbox" class="slds-is-absolute dg-suggestion-dropdown">
                                                     <template for:each={filteredObjectOptions} for:item="obj">
                                                         <li
                                                             key={obj.value}
@@ -163,8 +146,7 @@
                                                     </lightning-input>
                                                     <template if:true={showProviderPicker}>
                                                         <div
-                                                            class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
-                                                            style="position: absolute; z-index: 100"
+                                                            class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid slds-is-absolute dg-provider-dropdown"
                                                         >
                                                             <ul class="slds-listbox slds-listbox_vertical">
                                                                 <template if:true={providerOptions.length}>
@@ -445,8 +427,7 @@
                                             </lightning-input>
                                             <template if:true={showProviderPicker}>
                                                 <div
-                                                    class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
-                                                    style="position: absolute; z-index: 100"
+                                                    class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid slds-is-absolute dg-provider-dropdown"
                                                 >
                                                     <ul class="slds-listbox slds-listbox_vertical">
                                                         <template if:true={providerOptions.length}>
@@ -581,19 +562,7 @@
                                         </textarea>
                                         <template if:true={showSuggestions}>
                                             <div
-                                                style="
-                                                    position: absolute;
-                                                    z-index: 20;
-                                                    left: 14px;
-                                                    right: 14px;
-                                                    max-height: 200px;
-                                                    overflow-y: auto;
-                                                    background: #fff;
-                                                    border: 1px solid #d8dde6;
-                                                    border-radius: 6px;
-                                                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-                                                    padding: 4px 0;
-                                                "
+                                                class="slds-is-absolute dg-merge-suggestions"
                                                 onmousedown={handleSuggestionMouseDown}
                                             >
                                                 <template for:each={suggestions} for:item="s">
@@ -1571,8 +1540,7 @@
                                                     </lightning-input>
                                                     <template if:true={showProviderPicker}>
                                                         <div
-                                                            class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
-                                                            style="position: absolute; z-index: 100"
+                                                            class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid slds-is-absolute dg-provider-dropdown"
                                                         >
                                                             <ul class="slds-listbox slds-listbox_vertical">
                                                                 <template if:true={providerOptions.length}>
@@ -1712,19 +1680,7 @@
                                                 </textarea>
                                                 <template if:true={showSuggestions}>
                                                     <div
-                                                        style="
-                                                            position: absolute;
-                                                            z-index: 20;
-                                                            left: 14px;
-                                                            right: 14px;
-                                                            max-height: 200px;
-                                                            overflow-y: auto;
-                                                            background: #fff;
-                                                            border: 1px solid #d8dde6;
-                                                            border-radius: 6px;
-                                                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-                                                            padding: 4px 0;
-                                                        "
+                                                        class="slds-is-absolute dg-merge-suggestions"
                                                         onmousedown={handleSuggestionMouseDown}
                                                     >
                                                         <template for:each={suggestions} for:item="s">

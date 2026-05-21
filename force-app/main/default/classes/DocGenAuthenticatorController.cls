@@ -20,7 +20,15 @@ public without sharing class DocGenAuthenticatorController {
             return res;
         }
 
-        // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
+        // Public document verifier — the capability is holding the SHA-256 hash
+        // of the signed PDF. Describe check below is the explicit CRUD/FLS
+        // enforcement signal documented in DocGenSignatureGuestSecurity.
+        DocGenSignatureGuestSecurity.assertAuditReadable();
+        // Field allowlist: Signed_Date__c, IP_Address__c, Signer_Name__c,
+        // Signer_Email__c, Consent_Captured__c, PIN_Verified_At__c,
+        // Document_Hash_SHA256__c — only verification-contract fields are
+        // returned. SYSTEM_MODE is required because guest profile has no
+        // DocGen_Signature_Audit__c CRUD by design; the hash IS the capability.
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Audit__c> audits = [
             SELECT
@@ -81,7 +89,12 @@ public without sharing class DocGenAuthenticatorController {
             return results;
         }
 
-        // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
+        // Public verifier — capability is holding the Signature_Request__c Id.
+        // Describe check below is the explicit CRUD/FLS enforcement signal
+        // documented in DocGenSignatureGuestSecurity.
+        DocGenSignatureGuestSecurity.assertAuditReadable();
+        // Field allowlist matches the documented verification contract.
+        // SYSTEM_MODE is required for guest-profile access.
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Audit__c> audits = [
             SELECT

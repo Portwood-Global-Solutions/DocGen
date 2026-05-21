@@ -69,7 +69,7 @@ public with sharing class DocGenChartImageController {
             SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (templates.isEmpty()) {
@@ -139,7 +139,7 @@ public with sharing class DocGenChartImageController {
             SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (templates.isEmpty()) {
@@ -240,12 +240,9 @@ public with sharing class DocGenChartImageController {
             PathOnClient = 'chart.png',
             VersionData = EncodingUtil.base64Decode(base64Png)
         );
-        // Package-internal transient chart CV; visibility is controlled by
-        // standard ContentVersion sharing. Without this suppression, the
-        // analyzer flags CRUD/FLS checks that don't apply to ContentVersion
-        // (a standard object users always have insert access to).
-        /* code-analyzer-suppress ApexFlsViolation */
-        insert cv; // NOPMD ApexCRUDViolation
+        // Package-internal transient chart CV — USER_MODE enforces calling user's
+        // ContentVersion insert access (standard object users can typically create).
+        Database.insert(cv, AccessLevel.USER_MODE);
         return cv.Id;
     }
 
@@ -284,11 +281,9 @@ public with sharing class DocGenChartImageController {
         if (!docIds.isEmpty()) {
             List<ContentDocument> docs = [SELECT Id FROM ContentDocument WHERE Id IN :docIds WITH USER_MODE];
             if (!docs.isEmpty()) {
-                // Cleanup of transient chart CVs the same caller just created
-                // — the USER_MODE query above already enforces visibility; the
-                // analyzer can't see that as a CRUD check.
-                /* code-analyzer-suppress ApexFlsViolation */
-                delete docs; // NOPMD ApexCRUDViolation
+                // Cleanup of transient chart CVs the same caller just created —
+                // USER_MODE delete enforces calling user's ContentDocument access.
+                Database.delete(docs, true, AccessLevel.USER_MODE);
             }
         }
     }
@@ -329,7 +324,7 @@ public with sharing class DocGenChartImageController {
             SELECT Id
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (vs.isEmpty()) {
@@ -344,7 +339,7 @@ public with sharing class DocGenChartImageController {
             SELECT VersionData
             FROM ContentVersion
             WHERE Title = :xmlTitle AND IsLatest = TRUE
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (cvs.isEmpty() || cvs[0].VersionData == null) {
@@ -365,7 +360,7 @@ public with sharing class DocGenChartImageController {
             SELECT Id, Content_Version_Id__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (vs.isEmpty() || String.isBlank(vs[0].Content_Version_Id__c)) {
@@ -377,7 +372,7 @@ public with sharing class DocGenChartImageController {
             SELECT VersionData
             FROM ContentVersion
             WHERE Id = :sourceCvId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (cvs.isEmpty() || cvs[0].VersionData == null) {

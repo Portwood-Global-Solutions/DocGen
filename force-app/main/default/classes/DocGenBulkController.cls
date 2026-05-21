@@ -21,7 +21,7 @@ public with sharing class DocGenBulkController {
                 Required_Permission_Sets__c,
                 Record_Filter__c
             FROM DocGen_Template__c
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Name ASC
             LIMIT 2000
         ];
@@ -233,7 +233,7 @@ public with sharing class DocGenBulkController {
                 SELECT Query_Config__c, Test_Record_Id__c, Output_Format__c
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 LIMIT 1
             ];
             DocGen_Template__c temp = tempList[0];
@@ -515,7 +515,6 @@ public with sharing class DocGenBulkController {
      * @return The DocGen_Job__c record ID
      */
     @AuraEnabled
-    // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
     public static Id submitJob(
         Id templateId,
         String condition,
@@ -528,22 +527,17 @@ public with sharing class DocGenBulkController {
             Boolean isMergeOnly = (mergeOnly == true);
             Boolean isMergeMode = (mergePdf == true) || isMergeOnly;
 
-            // 1. Create Job Record
+            // 1. Create Job Record — USER_MODE enforces CRUD/FLS against the calling user
             DocGen_Job__c job = new DocGen_Job__c(
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Template__c = templateId,
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Query_Condition__c = condition,
                 Status__c = 'Queued',
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Merge_Only__c = isMergeOnly
             );
             if (String.isNotBlank(jobLabel)) {
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 job.Label__c = jobLabel;
             }
-            /* code-analyzer-suppress ApexFlsViolation */
-            insert job; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.insert(job, AccessLevel.USER_MODE);
 
             // 2. Run Batch — user-configurable batch size (default 1, max 200)
             Integer size = (batchSize != null && batchSize >= 1 && batchSize <= 200) ? batchSize : 1;
@@ -568,7 +562,7 @@ public with sharing class DocGenBulkController {
             SELECT Id, Name, Status__c, Success_Count__c, Error_Count__c, Total_Records__c
             FROM DocGen_Job__c
             WHERE Id = :jobId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
         ];
         return jsRecords[0];
     }
@@ -593,7 +587,7 @@ public with sharing class DocGenBulkController {
                 Template__r.Name,
                 Template__r.Output_Format__c
             FROM DocGen_Job__c
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY CreatedDate DESC
             LIMIT 20
         ];
@@ -612,7 +606,7 @@ public with sharing class DocGenBulkController {
             SELECT Template__c, Template__r.Base_Object_API__c, Template__r.Name, Query_Condition__c, CreatedDate
             FROM DocGen_Job__c
             WHERE Id = :jobId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
         ];
         DocGen_Job__c job = gpRecords[0];
 
@@ -676,7 +670,7 @@ public with sharing class DocGenBulkController {
             SELECT Id, Name, Description__c, Query_Condition__c
             FROM DocGen_Saved_Query__c
             WHERE DocGen_Template__c = :templateId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY CreatedDate DESC
         ];
     }
@@ -692,17 +686,12 @@ public with sharing class DocGenBulkController {
     public static void saveQuery(Id templateId, String label, String description, String condition) {
         try {
             DocGen_Saved_Query__c sq = new DocGen_Saved_Query__c(
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 DocGen_Template__c = templateId,
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Name = label,
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Description__c = description,
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Query_Condition__c = condition
             );
-            /* code-analyzer-suppress ApexFlsViolation */
-            insert sq; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.insert(sq, AccessLevel.USER_MODE);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error saving query.');
         }
@@ -715,11 +704,7 @@ public with sharing class DocGenBulkController {
     @AuraEnabled
     public static void deleteQuery(Id queryId) {
         try {
-            if (!Schema.sObjectType.DocGen_Saved_Query__c.isDeletable()) {
-                throw DocGenService.ahe('Insufficient access.');
-            }
-            /* code-analyzer-suppress ApexFlsViolation */
-            delete new DocGen_Saved_Query__c(Id = queryId);
+            Database.delete(new DocGen_Saved_Query__c(Id = queryId), true, AccessLevel.USER_MODE);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error deleting query.');
         }

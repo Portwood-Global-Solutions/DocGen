@@ -59,7 +59,7 @@ public with sharing class DocGenSignatureSenderController {
                 Record_Filter__c,
                 Base_Object_API__c
             FROM DocGen_Template__c
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Name ASC
         ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
@@ -131,7 +131,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (activeVersions.isEmpty())
@@ -143,7 +143,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Title, VersionData
             FROM ContentVersion
             WHERE Title LIKE :(xmlPrefix + '%')
-            WITH SYSTEM_MODE
+            WITH USER_MODE
         ];
 
         String documentXml = null;
@@ -406,8 +406,6 @@ public with sharing class DocGenSignatureSenderController {
      * No pre-generated DOCX needed — PDF is merged from template at signing time.
      */
     @AuraEnabled
-    // CxSAST: Apex_CRUD_Violation — package-internal custom objects; CRUD controlled by DocGen permission sets
-    // CxSAST: Apex_CRUD_ContentDistribution — ContentDistribution created for signature preview images
     public static List<SignerResult> createTemplateSignerRequest(
         Id templateId,
         String relatedRecordId,
@@ -427,8 +425,6 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     @AuraEnabled
-    // CxSAST: Apex_CRUD_Violation — package-internal custom objects; CRUD controlled by DocGen permission sets
-    // CxSAST: Apex_CRUD_ContentDistribution — ContentDistribution created for signature preview images
     public static List<SignerResult> createTemplateSignerRequestWithTitle(
         Id templateId,
         String relatedRecordId,
@@ -442,7 +438,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Name
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (templates.isEmpty()) {
@@ -456,11 +452,8 @@ public with sharing class DocGenSignatureSenderController {
             signerInputs.add((Map<String, Object>) item);
         }
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         // Create parent request with template reference (no Source_Document_Id__c)
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         req.Template__c = templateId;
         req.Related_Record_Id__c = relatedRecordId;
         req.Status__c = 'Sent';
@@ -470,7 +463,7 @@ public with sharing class DocGenSignatureSenderController {
         }
         // Package-internal object — CRUD controlled by DocGen permission sets
         /* code-analyzer-suppress ApexFlsViolation */
-        insert req; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        Database.insert(req, AccessLevel.USER_MODE);
 
         // Pre-compute everything while we have admin access.
         // Guest users can't query template data or ContentVersions (content sharing).
@@ -486,20 +479,15 @@ public with sharing class DocGenSignatureSenderController {
                 String url = pdfImageMap.get(relId);
                 if (url != null && url.contains('/version/download/')) {
                     String cvId = url.substringAfterLast('/');
-                    // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                     try {
-                        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                         ContentDistribution dist = new ContentDistribution();
-                        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                         dist.Name = 'sig_preview_' + relId;
-                        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                         dist.ContentVersionId = cvId;
-                        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                         dist.PreferencesAllowViewInBrowser = true;
                         dist.PreferencesLinkLatestVersion = false;
                         dist.PreferencesExpires = false;
-                        insert dist; // NOPMD ApexCRUDViolation - ContentDistribution for signature preview
-                        dist = [SELECT ContentDownloadUrl FROM ContentDistribution WHERE Id = :dist.Id]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                        Database.insert(dist, AccessLevel.USER_MODE);
+                        dist = [SELECT ContentDownloadUrl FROM ContentDistribution WHERE Id = :dist.Id WITH USER_MODE];
                         previewImageMap.put(relId, dist.ContentDownloadUrl);
                     } catch (Exception e) {
                         System.debug(
@@ -535,14 +523,13 @@ public with sharing class DocGenSignatureSenderController {
             // Store image map (for Queueable) + preview HTML (for guest VF page) + style maps (for async render)
             Map<String, Object> cachedData = new Map<String, Object>{
                 'imageMap' => pdfImageMap,
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 'previewHtml' => previewHtml,
                 'tableBordersMap' => tableBordersMap,
                 'styleTextAttrsMap' => textAttrsMap
             };
             req.Signature_Data__c = JSON.serialize(cachedData);
             /* code-analyzer-suppress ApexFlsViolation */
-            update req; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.update(req, AccessLevel.USER_MODE);
         } catch (Exception e) {
             System.debug(LoggingLevel.WARN, 'DocGen: Failed to pre-compute signature data: ' + e.getMessage());
         }
@@ -567,7 +554,6 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     @AuraEnabled
-    // CxSAST: Apex_CRUD_Violation — package-internal custom objects; CRUD controlled by DocGen permission sets
     public static List<SignerResult> createPacketSignerRequestWithTitle(
         String templateIdsJson,
         String relatedRecordId,
@@ -594,7 +580,7 @@ public with sharing class DocGenSignatureSenderController {
         // Validate all templates exist
         /* code-analyzer-suppress ApexFlsViolation */
         Map<Id, DocGen_Template__c> templateMap = new Map<Id, DocGen_Template__c>(
-            [SELECT Id, Name FROM DocGen_Template__c WHERE Id IN :templateIds WITH SYSTEM_MODE]
+            [SELECT Id, Name FROM DocGen_Template__c WHERE Id IN :templateIds WITH USER_MODE]
         ); // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
         for (Id tid : templateIds) {
             if (!templateMap.containsKey(tid)) {
@@ -610,7 +596,6 @@ public with sharing class DocGenSignatureSenderController {
         }
 
         // Create parent request with multi-template reference
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
         req.Template__c = templateIds[0]; // Primary template for backward compat
         req.Template_Ids__c = JSON.serialize(templateIds);
@@ -621,7 +606,7 @@ public with sharing class DocGenSignatureSenderController {
             req.Document_Title_Format__c = documentTitleFormat;
         }
         /* code-analyzer-suppress ApexFlsViolation */
-        insert req; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        Database.insert(req, AccessLevel.USER_MODE);
 
         // Pre-compute merged preview for all templates
         try {
@@ -642,15 +627,19 @@ public with sharing class DocGenSignatureSenderController {
                     if (url != null && url.contains('/version/download/')) {
                         String cvId = url.substringAfterLast('/');
                         try {
-                            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                             ContentDistribution dist = new ContentDistribution();
                             dist.Name = 'sig_preview_' + relId;
                             dist.ContentVersionId = cvId;
                             dist.PreferencesAllowViewInBrowser = true;
                             dist.PreferencesLinkLatestVersion = false;
                             dist.PreferencesExpires = false;
-                            insert dist; // NOPMD ApexCRUDViolation
-                            dist = [SELECT ContentDownloadUrl FROM ContentDistribution WHERE Id = :dist.Id]; // NOPMD
+                            Database.insert(dist, AccessLevel.USER_MODE);
+                            dist = [
+                                SELECT ContentDownloadUrl
+                                FROM ContentDistribution
+                                WHERE Id = :dist.Id
+                                WITH USER_MODE
+                            ];
                             previewImageMap.put(relId, dist.ContentDownloadUrl);
                         } catch (Exception e) {
                             System.debug(LoggingLevel.WARN, 'DocGen: Could not create public link for ' + relId);
@@ -692,7 +681,7 @@ public with sharing class DocGenSignatureSenderController {
             };
             req.Signature_Data__c = JSON.serialize(cachedData);
             /* code-analyzer-suppress ApexFlsViolation */
-            update req; // NOPMD ApexCRUDViolation
+            Database.update(req, AccessLevel.USER_MODE);
 
             // Create signers first
             String documentTitle = templateMap.get(templateIds[0]).Name;
@@ -713,7 +702,7 @@ public with sharing class DocGenSignatureSenderController {
                 SELECT Id, Role_Name__c
                 FROM DocGen_Signer__c
                 WHERE Signature_Request__c = :req.Id
-                WITH SYSTEM_MODE
+                WITH USER_MODE
                 ORDER BY Sort_Order__c ASC
             ]; // NOPMD
 
@@ -746,7 +735,7 @@ public with sharing class DocGenSignatureSenderController {
 
             if (!placementRecords.isEmpty()) {
                 /* code-analyzer-suppress ApexFlsViolation */
-                insert placementRecords; // NOPMD
+                Database.insert(placementRecords, AccessLevel.USER_MODE);
             }
 
             return results;
@@ -797,7 +786,6 @@ public with sharing class DocGenSignatureSenderController {
      * signersJson: [{roleName, contactId, signerName, signerEmail}, ...]
      */
     @AuraEnabled
-    // CxSAST: Apex_CRUD_Violation — package-internal custom objects; CRUD controlled by DocGen permission sets
     public static List<SignerResult> createMultiSignerRequest(
         Id contentDocumentId,
         String relatedRecordId,
@@ -808,7 +796,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT LatestPublishedVersionId
             FROM ContentDocument
             WHERE Id = :contentDocumentId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (docs.isEmpty()) {
@@ -823,17 +811,14 @@ public with sharing class DocGenSignatureSenderController {
             signerInputs.add((Map<String, Object>) item);
         }
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-
         // Create parent request
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
         req.Source_Document_Id__c = contentVersionId;
         req.Related_Record_Id__c = relatedRecordId;
         req.Status__c = 'Sent';
         // Package-internal object — CRUD controlled by DocGen permission sets
         /* code-analyzer-suppress ApexFlsViolation */
-        insert req; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        Database.insert(req, AccessLevel.USER_MODE);
 
         String documentTitle = getDocumentTitle(contentVersionId);
         return createSignersAndNotify(req.Id, null, documentTitle, signerInputs);
@@ -843,7 +828,6 @@ public with sharing class DocGenSignatureSenderController {
      * Legacy single-signer request creation (backward compat).
      */
     @AuraEnabled
-    // CxSAST: Apex_CRUD_Violation — package-internal custom objects; CRUD controlled by DocGen permission sets
     public static String createSignatureRequest(
         Id contentDocumentId,
         String relatedRecordId,
@@ -854,7 +838,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT LatestPublishedVersionId
             FROM ContentDocument
             WHERE Id = :contentDocumentId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (docs.isEmpty()) {
@@ -862,23 +846,16 @@ public with sharing class DocGenSignatureSenderController {
         }
         Id contentVersionId = docs[0].LatestPublishedVersionId;
 
-        // CxSAST: Crypto operations for signature token/PIN generation — not hardcoded secrets
         Blob randomBytes = Crypto.generateAesKey(256);
         Blob hash = Crypto.generateDigest(
             'SHA-256',
             Blob.valueOf(EncodingUtil.convertToHex(randomBytes) + signerEmail)
         );
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         String token = EncodingUtil.convertToHex(hash);
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         String signingPageUrl = getSiteBaseUrl() + getSigningPagePath() + '?token=' + token;
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         req.Signer_Name__c = signerName;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         req.Signer_Email__c = signerEmail;
         req.Source_Document_Id__c = contentVersionId;
         req.Related_Record_Id__c = relatedRecordId;
@@ -886,7 +863,7 @@ public with sharing class DocGenSignatureSenderController {
         req.Status__c = 'Sent';
         // Package-internal object — CRUD controlled by DocGen permission sets
         /* code-analyzer-suppress ApexFlsViolation */
-        insert req; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        Database.insert(req, AccessLevel.USER_MODE);
 
         // Send branded signature request email automatically
         String documentTitle = getDocumentTitle(contentVersionId);
@@ -933,7 +910,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT PermissionSet.Name
             FROM PermissionSetAssignment
             WHERE AssigneeId = :UserInfo.getUserId()
-            WITH SYSTEM_MODE
+            WITH USER_MODE
         ]) {
             if (psa.PermissionSet.Name == 'DocGen_Admin') {
                 isAdmin = true;
@@ -949,7 +926,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Signature_Request__c, Signer_Name__c, Signer_Email__c, Secure_Token__c, Status__c
             FROM DocGen_Signer__c
             WHERE Id = :signerId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
         if (signers.isEmpty()) {
@@ -963,7 +940,7 @@ public with sharing class DocGenSignatureSenderController {
         signer.PIN_Verified_At__c = System.now();
         signer.Status__c = 'Viewed';
         /* code-analyzer-suppress ApexFlsViolation */
-        update signer; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        Database.update(signer, AccessLevel.USER_MODE);
 
         // Audit record — capture the bypass for compliance
         try {
@@ -982,7 +959,7 @@ public with sharing class DocGenSignatureSenderController {
                 Consent_Captured__c = true
             );
             /* code-analyzer-suppress ApexFlsViolation */
-            insert audit; // NOPMD ApexCRUDViolation - audit record for compliance trail
+            Database.insert(audit, AccessLevel.USER_MODE);
         } catch (Exception e) {
             // Audit failure shouldn't block the admin's bypass action — log and continue
             System.debug(LoggingLevel.WARN, 'DocGen: In-person audit write failed: ' + e.getMessage());
@@ -1029,7 +1006,7 @@ public with sharing class DocGenSignatureSenderController {
                 )
             FROM DocGen_Signature_Request__c
             WHERE Related_Record_Id__c = :relatedRecordId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY CreatedDate DESC
             LIMIT 20
         ];
@@ -1093,7 +1070,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT LatestPublishedVersionId
             FROM ContentDocument
             WHERE Id = :contentDocumentId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (docs.isEmpty())
@@ -1103,7 +1080,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT VersionData
             FROM ContentVersion
             WHERE Id = :docs[0].LatestPublishedVersionId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         if (cv == null || cv.VersionData == null)
@@ -1182,7 +1159,6 @@ public with sharing class DocGenSignatureSenderController {
                 continue; // No signer assigned for this role
 
             DocGen_Signature_Placement__c plc = new DocGen_Signature_Placement__c();
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             plc.Signer__c = signer.Id;
             plc.Signature_Request__c = requestId;
             plc.Document_Index__c = 0;
@@ -1195,7 +1171,7 @@ public with sharing class DocGenSignatureSenderController {
 
         if (!placementRecords.isEmpty()) {
             /* code-analyzer-suppress ApexFlsViolation */
-            insert placementRecords; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            Database.insert(placementRecords, AccessLevel.USER_MODE);
         }
     }
 
@@ -1230,22 +1206,14 @@ public with sharing class DocGenSignatureSenderController {
             Blob hash = Crypto.generateDigest(
                 'SHA-256',
                 Blob.valueOf(EncodingUtil.convertToHex(randomBytes) + signerEmail + i)
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             );
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             String token = EncodingUtil.convertToHex(hash);
 
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-
             DocGen_Signer__c signer = new DocGen_Signer__c();
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             signer.Signature_Request__c = requestId;
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             signer.Role_Name__c = roleName;
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             signer.Signer_Name__c = signerName;
             signer.Signer_Email__c = signerEmail;
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             signer.Secure_Token__c = token;
             signer.Status__c = 'Pending';
             signer.Sort_Order__c = i + 1;
@@ -1254,7 +1222,6 @@ public with sharing class DocGenSignatureSenderController {
             }
             signerRecords.add(signer);
 
-            // CxSAST: Crypto operations for signature token/PIN generation — not hardcoded secrets
             SignerResult sr = new SignerResult();
             sr.signerName = signerName;
             sr.roleName = roleName;
@@ -1265,7 +1232,7 @@ public with sharing class DocGenSignatureSenderController {
 
         // Package-internal object — CRUD controlled by DocGen permission sets
         /* code-analyzer-suppress ApexFlsViolation */
-        insert signerRecords; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        Database.insert(signerRecords, AccessLevel.USER_MODE);
 
         // 1.49 — back-fill signer record Ids onto the SignerResult DTOs so the LWC
         // can use the "Mark Verified (In-Person)" action without a second SOQL.
@@ -1288,7 +1255,7 @@ public with sharing class DocGenSignatureSenderController {
                     SELECT Signing_Order__c
                     FROM DocGen_Signature_Request__c
                     WHERE Id = :requestId
-                    WITH SYSTEM_MODE
+                    WITH USER_MODE
                     LIMIT 1
                 ]; // NOPMD
                 isSequential = reqCheck.Signing_Order__c == 'Sequential';
@@ -1334,14 +1301,13 @@ public with sharing class DocGenSignatureSenderController {
      * Generates new tokens for security (old links become invalid).
      */
     @AuraEnabled
-    // CxSAST: Apex_CRUD_Violation — package-internal custom objects; CRUD controlled by DocGen permission sets
     public static void resendSignatureRequest(Id requestId) {
         /* code-analyzer-suppress ApexFlsViolation */
         DocGen_Signature_Request__c req = [
             SELECT Id, Status__c, Template__r.Name, Source_Document_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Id = :requestId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
 
@@ -1354,7 +1320,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Signer_Name__c, Signer_Email__c, Role_Name__c, Contact__c, Status__c
             FROM DocGen_Signer__c
             WHERE Signature_Request__c = :requestId AND Status__c != 'Signed'
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             ORDER BY Sort_Order__c ASC
         ];
 
@@ -1372,21 +1338,14 @@ public with sharing class DocGenSignatureSenderController {
 
         for (DocGen_Signer__c s : signers) {
             // Generate new token
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             Blob randomBytes = Crypto.generateAesKey(256);
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             Blob hash = Crypto.generateDigest(
                 'SHA-256',
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 Blob.valueOf(EncodingUtil.convertToHex(randomBytes) + s.Signer_Email__c + System.now())
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             );
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             String newToken = EncodingUtil.convertToHex(hash);
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             s.Secure_Token__c = newToken;
             s.Status__c = 'Pending';
-            // CxSAST: Crypto operations for signature token/PIN generation — not hardcoded secrets
             s.PIN_Hash__c = null;
             s.PIN_Expires_At__c = null;
             s.PIN_Attempts__c = 0;
@@ -1400,16 +1359,15 @@ public with sharing class DocGenSignatureSenderController {
                     s.Role_Name__c,
                     sigUrl,
                     s.Contact__c
-                    // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 )
             );
         }
 
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.update(signers, false, AccessLevel.SYSTEM_MODE);
+        Database.update(signers, false, AccessLevel.USER_MODE);
         req.Status__c = 'Sent';
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.update(req, false, AccessLevel.SYSTEM_MODE);
+        Database.update(req, false, AccessLevel.USER_MODE);
 
         DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle);
     }
@@ -1425,13 +1383,12 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Status__c
             FROM DocGen_Signature_Request__c
             WHERE Id = :requestId
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
 
         if (req.Status__c == 'Signed') {
             throw new AuraHandledException('Cannot cancel a completed signature request.');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         }
         if (req.Status__c == 'Cancelled') {
             throw new AuraHandledException('This request is already cancelled.');
@@ -1439,17 +1396,15 @@ public with sharing class DocGenSignatureSenderController {
 
         req.Status__c = 'Cancelled';
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.update(req, false, AccessLevel.SYSTEM_MODE);
+        Database.update(req, false, AccessLevel.USER_MODE);
 
         // Invalidate all unsigned signers
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Signer__c> unsignedSigners = [
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             SELECT Id, Status__c
             FROM DocGen_Signer__c
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             WHERE Signature_Request__c = :requestId AND Status__c != 'Signed'
-            WITH SYSTEM_MODE
+            WITH USER_MODE
         ];
         for (DocGen_Signer__c s : unsignedSigners) {
             s.Status__c = 'Cancelled';
@@ -1457,7 +1412,7 @@ public with sharing class DocGenSignatureSenderController {
         }
         if (!unsignedSigners.isEmpty()) {
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.update(unsignedSigners, false, AccessLevel.SYSTEM_MODE);
+            Database.update(unsignedSigners, false, AccessLevel.USER_MODE);
         }
     }
 
@@ -1507,13 +1462,13 @@ public with sharing class DocGenSignatureSenderController {
         String siteUrl = settings.Experience_Site_Url__c;
 
         if (String.isBlank(siteUrl)) {
-            List<Site> sites = [SELECT Id FROM Site WHERE Status = 'Active' WITH SYSTEM_MODE LIMIT 1];
+            List<Site> sites = [SELECT Id FROM Site WHERE Status = 'Active' WITH USER_MODE LIMIT 1];
             if (!sites.isEmpty()) {
                 SiteDetail sd = [
                     SELECT SecureUrl
                     FROM SiteDetail
                     WHERE DurableId = :sites[0].Id
-                    WITH SYSTEM_MODE
+                    WITH USER_MODE
                     LIMIT 1
                 ];
                 siteUrl = sd.SecureUrl;

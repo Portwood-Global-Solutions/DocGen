@@ -1,9 +1,9 @@
 {
   "packageDirectories": [
     {
-      "versionName": "1.99.0 — Chart Engine",
-      "versionNumber": "1.99.0.NEXT",
-      "ancestorId": "04tVx000000Si9NIAS",
+      "versionName": "2.0.0 — Security Hardening for AppExchange Resubmission",
+      "versionNumber": "2.0.0.NEXT",
+      "ancestorId": "04tVx000000ZVFRIA4",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",

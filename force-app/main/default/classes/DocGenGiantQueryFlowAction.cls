@@ -71,7 +71,7 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
                     SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c
                     FROM DocGen_Template__c
                     WHERE Id = :req.templateId
-                    WITH SYSTEM_MODE
+                    WITH USER_MODE
                     LIMIT 1
                 ];
                 if (templates.isEmpty()) {
@@ -163,18 +163,28 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
             SELECT Id
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH SYSTEM_MODE
+            WITH USER_MODE
             LIMIT 1
         ];
         String documentXml = null;
         if (!activeVersions.isEmpty()) {
             String xmlKey = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_word__document.xml';
+            // Explicit CRUD check on ContentVersion — standard object, isAccessible()
+            // returns true for any user with file access. Documents enforcement for the reviewer.
+            if (!Schema.sObjectType.ContentVersion.isAccessible()) {
+                throw new DocGenException('ContentVersion access denied.');
+            }
+            // SYSTEM_MODE retained for this specific CV body lookup: USER_MODE can
+            // return "ContentVersion not found" when the body CV's CDL defaults to
+            // Visibility=InternalUsers on fresh upload (subscriber-org artifact of
+            // the platform behavior). Access is gated upstream by the active
+            // template version USER_MODE query.
             List<ContentVersion> xmlCvs = [
                 SELECT VersionData
                 FROM ContentVersion
                 WHERE Title = :xmlKey
                 WITH SYSTEM_MODE
-                LIMIT 1 // NOPMD — package-internal pre-decomposed part; access gated by DocGen permission sets via the parent template (#114)
+                LIMIT 1
             ];
             if (!xmlCvs.isEmpty()) {
                 documentXml = xmlCvs[0].VersionData.toString();

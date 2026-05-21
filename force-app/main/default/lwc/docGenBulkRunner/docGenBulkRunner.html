@@ -35,7 +35,7 @@
                             ></lightning-button-icon>
                         </div>
                         <template if:true={showTemplateDropdown}>
-                            <div class="slds-dropdown slds-dropdown_fluid custom-dropdown">
+                            <div class="slds-dropdown slds-dropdown_fluid slds-is-absolute custom-dropdown">
                                 <ul class="slds-listbox slds-listbox_vertical">
                                     <template for:each={filteredTemplates} for:item="tmpl">
                                         <li key={tmpl.value} class="slds-listbox__item">

@@ -124,10 +124,7 @@
         >
             <p class="slds-text-body_regular slds-text-color_weak">Drag and drop PDF here, or click to browse.</p>
             <input type="file" accept=".pdf" onchange={handleFileSelect} class="slds-assistive-text" id="file-upload" />
-            <label
-                for="file-upload"
-                style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; cursor: pointer"
-            ></label>
+            <label for="file-upload" class="slds-is-absolute dg-drop-overlay"></label>
         </div>
 
         <template if:true={isProcessing}>

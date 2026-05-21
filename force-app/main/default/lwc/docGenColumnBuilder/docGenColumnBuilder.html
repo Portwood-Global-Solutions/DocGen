@@ -45,8 +45,7 @@
                     ></lightning-input>
                     <template if:true={showObjectPicker}>
                         <div
-                            class="slds-dropdown slds-dropdown_length-7 slds-dropdown_fluid"
-                            style="position: absolute; z-index: 100"
+                            class="slds-dropdown slds-dropdown_length-7 slds-dropdown_fluid slds-is-absolute dg-dropdown"
                         >
                             <ul class="slds-listbox slds-listbox_vertical">
                                 <template for:each={filteredObjectOptions} for:item="opt">
@@ -81,8 +80,7 @@
                     ></lightning-input>
                     <template if:true={showProviderPicker}>
                         <div
-                            class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid"
-                            style="position: absolute; z-index: 100"
+                            class="slds-dropdown slds-dropdown_length-5 slds-dropdown_fluid slds-is-absolute dg-dropdown"
                         >
                             <ul class="slds-listbox slds-listbox_vertical">
                                 <template if:true={providerOptions.length}>
