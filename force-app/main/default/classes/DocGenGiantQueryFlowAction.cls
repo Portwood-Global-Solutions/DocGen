@@ -71,7 +71,7 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
                     SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c
                     FROM DocGen_Template__c
                     WHERE Id = :req.templateId
-                    WITH USER_MODE
+                    WITH SYSTEM_MODE
                     LIMIT 1
                 ];
                 if (templates.isEmpty()) {
@@ -163,7 +163,7 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
             SELECT Id
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         String documentXml = null;

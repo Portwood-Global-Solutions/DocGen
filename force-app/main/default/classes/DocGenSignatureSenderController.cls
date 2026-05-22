@@ -59,7 +59,7 @@ public with sharing class DocGenSignatureSenderController {
                 Record_Filter__c,
                 Base_Object_API__c
             FROM DocGen_Template__c
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Name ASC
         ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
@@ -131,7 +131,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         if (activeVersions.isEmpty())
@@ -438,7 +438,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Name
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         if (templates.isEmpty()) {
@@ -580,7 +580,7 @@ public with sharing class DocGenSignatureSenderController {
         // Validate all templates exist
         /* code-analyzer-suppress ApexFlsViolation */
         Map<Id, DocGen_Template__c> templateMap = new Map<Id, DocGen_Template__c>(
-            [SELECT Id, Name FROM DocGen_Template__c WHERE Id IN :templateIds WITH USER_MODE]
+            [SELECT Id, Name FROM DocGen_Template__c WHERE Id IN :templateIds WITH SYSTEM_MODE]
         ); // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
         for (Id tid : templateIds) {
             if (!templateMap.containsKey(tid)) {

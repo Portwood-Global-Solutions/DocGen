@@ -21,7 +21,7 @@ public with sharing class DocGenBulkController {
                 Required_Permission_Sets__c,
                 Record_Filter__c
             FROM DocGen_Template__c
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Name ASC
             LIMIT 2000
         ];
@@ -233,7 +233,7 @@ public with sharing class DocGenBulkController {
                 SELECT Query_Config__c, Test_Record_Id__c, Output_Format__c
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 LIMIT 1
             ];
             DocGen_Template__c temp = tempList[0];
@@ -562,7 +562,7 @@ public with sharing class DocGenBulkController {
             SELECT Id, Name, Status__c, Success_Count__c, Error_Count__c, Total_Records__c
             FROM DocGen_Job__c
             WHERE Id = :jobId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
         ];
         return jsRecords[0];
     }
@@ -587,7 +587,7 @@ public with sharing class DocGenBulkController {
                 Template__r.Name,
                 Template__r.Output_Format__c
             FROM DocGen_Job__c
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY CreatedDate DESC
             LIMIT 20
         ];
@@ -606,7 +606,7 @@ public with sharing class DocGenBulkController {
             SELECT Template__c, Template__r.Base_Object_API__c, Template__r.Name, Query_Condition__c, CreatedDate
             FROM DocGen_Job__c
             WHERE Id = :jobId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
         ];
         DocGen_Job__c job = gpRecords[0];
 
@@ -670,7 +670,7 @@ public with sharing class DocGenBulkController {
             SELECT Id, Name, Description__c, Query_Condition__c
             FROM DocGen_Saved_Query__c
             WHERE DocGen_Template__c = :templateId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY CreatedDate DESC
         ];
     }

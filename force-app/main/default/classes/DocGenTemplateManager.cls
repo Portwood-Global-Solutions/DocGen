@@ -9,12 +9,22 @@ public with sharing class DocGenTemplateManager {
             throw new DocGenException('Template ID is required.');
         }
 
-        // 1. Check for Active Version first
+        // Object-level CRUD gate — caller (generateDocumentData) has already
+        // enforced Template CRUD; this redundant check documents enforcement
+        // at this entry point too.
+        if (!Schema.sObjectType.DocGen_Template_Version__c.isAccessible()) {
+            throw new DocGenException('Insufficient access to template versions.');
+        }
+        // 1. Check for Active Version first — SYSTEM_MODE retained for the
+        // package-internal version metadata (Content_Version_Id__c is the
+        // pointer to the template body CV; USER_MODE strict FLS strips it for
+        // any admin lacking FLS, including in managed-package build orgs).
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVersions = [
             SELECT Content_Version_Id__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
 

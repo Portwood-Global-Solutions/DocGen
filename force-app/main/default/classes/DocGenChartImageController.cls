@@ -69,7 +69,7 @@ public with sharing class DocGenChartImageController {
             SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         if (templates.isEmpty()) {
@@ -139,7 +139,7 @@ public with sharing class DocGenChartImageController {
             SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         if (templates.isEmpty()) {
@@ -324,7 +324,7 @@ public with sharing class DocGenChartImageController {
             SELECT Id
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         if (vs.isEmpty()) {
@@ -360,7 +360,7 @@ public with sharing class DocGenChartImageController {
             SELECT Id, Content_Version_Id__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         if (vs.isEmpty() || String.isBlank(vs[0].Content_Version_Id__c)) {
