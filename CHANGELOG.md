@@ -2,7 +2,7 @@
 
 ## v2.0.0 — AppExchange security re-submission (`04tVx000000ZqBpIAK`, released)
 
-The Salesforce AppExchange security review returned **30 findings** on the v1.99 listing — 4 clickjacking, 26 CRUD/FLS. v2.0.0 closes every one of them, extends the same hardening to code the reviewer didn't flag (so the same patterns can't slip back in), and ships one in-flight bug fix to the verifier. We're resubmitting this package version for re-review.
+The Salesforce AppExchange security review returned **30 findings** against the **v1.56 listing** (`04tal000006i1rNAAQ`) — 4 clickjacking, 26 CRUD/FLS. v2.0.0 closes every one of them, extends the same hardening to code the reviewer didn't flag (so the same patterns can't slip back in), and ships one in-flight bug fix to the verifier. v2.0 also rolls forward ~44 versions of feature work since v1.56 (V3 query trees, chart engine, signature v3 with PIN second factor + multi-signer + guided placements, HTML templates, giant-query batching, and more). We're resubmitting this package version for re-review.
 
 ### CRUD/FLS — explicit `Schema.sObjectType` CRUD gates + SYSTEM_MODE actual op
 
@@ -31,7 +31,7 @@ All `style="position: absolute|fixed"` inline attributes on exposed Lightning We
 
 ### Verifier — multi-signer audit trail now returns ALL signers
 
-A multi-signer document has one audit record per signer, all sharing the same `Document_Hash_SHA256__c` (the hash of the final stamped PDF — written once after all signers complete). The v1.99 `verifyDocument` query had `LIMIT 1`, so dropping a multi-signer PDF on the verifier only showed the first signer in the audit trail.
+A multi-signer document has one audit record per signer, all sharing the same `Document_Hash_SHA256__c` (the hash of the final stamped PDF — written once after all signers complete). The `verifyDocument` query (inherited from earlier signature work) had `LIMIT 1`, so dropping a multi-signer PDF on the verifier only showed the first signer in the audit trail.
 
 `verifyDocument` now returns `List<VerificationResult>` instead of a single result. Removes `LIMIT 1`, adds `ORDER BY Signed_Date__c ASC`, excludes the SYSTEM audit row (consistent with `verifyByRequestId`), and joins `Signer__r.Role_Name__c` so the multi-signer UI can show each signer's role badge. The `docGenAuthenticator` LWC and `DocGenVerify` Visualforce page both route the list into the existing `for:each` rendering that was already used by the `?id=<requestId>` path — so hash-drop and request-id verifier paths now behave identically. Regression test `testVerifyDocument_multipleSignersSameDoc` guards against the `LIMIT 1` from coming back.
 
