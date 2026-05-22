@@ -58,6 +58,8 @@ code-analyzer*.json
 !docs/SurveyChartTemplate-Starter.docx
 # Exception: v1.92 chart-engine showcase template (all 8 styles)
 !docs/ChartEngineShowcase.docx
+# Exception: AppExchange submission bundle PDFs — uploaded to Partner Console for security review
+!docs/appexchange/**/*.pdf
 
 # Python scripts
 *.py
