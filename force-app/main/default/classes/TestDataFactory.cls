@@ -342,34 +342,46 @@ public class TestDataFactory {
 
     /**
      * Assigns the DocGen_Admin permission set to the running test user.
-     * Required for WITH SYSTEM_MODE + stripInaccessible to work during
-     * package version creation tests where FLS isn't granted by default.
+     * Required for USER_MODE SOQL/DML in production code to find FLS access
+     * during test execution — especially in managed-package build scratch
+     * orgs where the org default admin doesn't auto-grant FLS on namespaced
+     * custom fields.
+     *
+     * Throws DocGenException with a diagnostic message if the assignment
+     * fails, so we know loudly rather than silently catching and letting
+     * USER_MODE strip fields downstream.
      */
     public static void assignAdminPermissionSet() {
-        try {
-            List<PermissionSet> ps = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_Admin' LIMIT 1];
-            if (!ps.isEmpty()) {
-                List<PermissionSetAssignment> existing = [
-                    SELECT Id
-                    FROM PermissionSetAssignment
-                    WHERE AssigneeId = :UserInfo.getUserId() AND PermissionSetId = :ps[0].Id
-                    LIMIT 1
-                ];
-                if (existing.isEmpty()) {
-                    // Wrap in System.runAs to isolate setup object DML (PermissionSetAssignment)
-                    // from non-setup DML (Account, Contact, etc.) in @TestSetup methods.
-                    // Without this, fresh packaging orgs throw MIXED_DML_OPERATION.
-                    User currentUser = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
-                    System.runAs(currentUser) {
-                        insert new PermissionSetAssignment(
-                            AssigneeId = UserInfo.getUserId(),
-                            PermissionSetId = ps[0].Id
-                        );
-                    }
-                }
+        // Try the local DeveloperName first; fall back to the namespaced form
+        // in case the package-build context surfaces the permset with the
+        // portwoodglobal__ prefix.
+        List<PermissionSet> ps = [
+            SELECT Id, Name
+            FROM PermissionSet
+            WHERE Name IN ('DocGen_Admin', 'portwoodglobal__DocGen_Admin')
+            LIMIT 1
+        ];
+        if (ps.isEmpty()) {
+            throw new DocGenException(
+                'TestDataFactory: DocGen_Admin permission set not found. ' +
+                'Check that the permset is deployed before test execution.'
+            );
+        }
+        List<PermissionSetAssignment> existing = [
+            SELECT Id
+            FROM PermissionSetAssignment
+            WHERE AssigneeId = :UserInfo.getUserId() AND PermissionSetId = :ps[0].Id
+            LIMIT 1
+        ];
+        if (existing.isEmpty()) {
+            // Wrap in System.runAs to isolate setup-object DML
+            // (PermissionSetAssignment) from non-setup DML (Account, Contact)
+            // in @TestSetup methods. Without this, fresh packaging orgs throw
+            // MIXED_DML_OPERATION.
+            User currentUser = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+            System.runAs(currentUser) {
+                insert new PermissionSetAssignment(AssigneeId = UserInfo.getUserId(), PermissionSetId = ps[0].Id);
             }
-        } catch (Exception e) {
-            // Non-fatal — tests may still pass if running as admin
         }
     }
 }

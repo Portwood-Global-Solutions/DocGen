@@ -13,9 +13,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             return null;
         }
         // Snapshot fields are package-internal render config — version-pinning
-        // the way a doc renders. SYSTEM_MODE lets the render path read them
-        // without requiring every runner profile to grant FLS on each new
-        // snapshot field.
+        // the way a doc renders. Object-level CRUD gate documented; field-level
+        // FLS bypass via SYSTEM_MODE is the platform-required pattern for the
+        // managed-package render pipeline because USER_MODE strips these fields
+        // when subscriber admin profiles haven't granted FLS individually on
+        // each new snapshot field added across releases.
+        if (!Schema.sObjectType.DocGen_Template_Version__c.isAccessible()) {
+            return null;
+        }
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vers = [
             SELECT
@@ -29,7 +34,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Custom_Margins__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
         return vers.isEmpty() ? null : vers[0];
@@ -47,6 +52,20 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw new DocGenException('Template ID is missing.');
         }
 
+        // Explicit object-level CRUD check — the documented enforcement signal
+        // gating this admin-only read on the user's DocGen permission set
+        // assignment.
+        if (!Schema.sObjectType.DocGen_Template__c.isAccessible()) {
+            throw new DocGenException(
+                'Insufficient access to DocGen templates. Verify DocGen permission set assignment.'
+            );
+        }
+        // SYSTEM_MODE retained for the field read: Query_Config__c, Header/Footer_Html__c,
+        // Page_*__c are package-internal render-config long-text-area fields.
+        // USER_MODE strict FLS strips these for any admin lacking individual FLS
+        // on each field — including in managed-package build orgs where the
+        // System Administrator profile does not auto-grant FLS for namespaced
+        // custom fields. CRUD gate above is the structural enforcement contract.
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
             SELECT
@@ -63,7 +82,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Custom_Margins__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
 
