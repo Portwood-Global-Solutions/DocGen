@@ -62,6 +62,20 @@ If your fix touches `processXml`, do not add `VersionData` to the PDF-path SOQL 
 - Staging org for release validation: `portwood-staging` — must be created with `--no-namespace` so source-deploy lands in the default namespace and the e2e scripts' bare class/field references compile. Assign `DocGen_Admin` permset to the running user immediately after deploy or field-level security blocks the e2e scripts.
 - Dev scratch: `docgen-designer`
 
+### Package version descriptions must be CONSUMER-friendly
+
+The `versionDescription` field in `sfdx-project.json` (and what shows up in the AppExchange listing + install dialog) is read by **end users / customers** evaluating the package, not by engineers. Write it like marketing copy, not engineering notes. The `versionName` ("v2.1.0 — Per-Field FLS Guards (DocGenFlsGuard)") is internal-facing; the `versionDescription` is customer-facing.
+
+**Bad** (engineering jargon — what shipped in v2.1.0-1):
+
+> v2.1.0 adds DocGenFlsGuard — per-field Schema.SObjectField.getDescribe().isAccessible/isCreateable/isUpdateable() checks at every admin DML and WITH SYSTEM_MODE SOQL site (243 guard call sites across 19 controllers). Implements the AppExchange v1.56 review's stated finding-resolution: 'enforce CRUD checks on the object and FLS checks on the fields...'
+
+**Good** (consumer-friendly):
+
+> Portwood DocGen generates PDFs and Word documents from any Salesforce record. v2.1 strengthens permission enforcement so users only see and modify the fields their permission set grants. 100% native Salesforce — no external services or callouts. Free for all users.
+
+The detailed engineering-language belongs in `CHANGELOG.md` and `SECURITY_REVIEW_RESPONSE_v2.md`, not in the package metadata customers see at install time.
+
 ## Release validation checklist
 
 All three checks MUST pass before release. No exceptions.

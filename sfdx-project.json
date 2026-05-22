@@ -7,7 +7,7 @@
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
-      "versionDescription": "v2.1.0 adds DocGenFlsGuard \u2014 per-field Schema.SObjectField.getDescribe().isAccessible/isCreateable/isUpdateable() checks at every admin DML and WITH SYSTEM_MODE SOQL site (243 guard call sites across 19 controllers). Implements the AppExchange v1.56 review's stated finding-resolution: 'enforce CRUD checks on the object and FLS checks on the fields before performing any DML operation' \u2014 both halves now executed in code. Packaged as v2.1.0 because patch versioning is disabled on the namespace (see Partner Community case for v2.0.x patch enablement)."
+      "versionDescription": "Portwood DocGen is a native Salesforce document generation engine. Build Word and PDF documents from any Salesforce record using merge tags in your own templates. Includes a visual query builder, bulk generation, multi-object support, electronic signatures, and Flow integration \u2014 all without leaving Salesforce. v2.1 strengthens per-field permission enforcement so users only see and modify the fields their permission set allows."
     }
   ],
   "name": "Portwood DocGen",
