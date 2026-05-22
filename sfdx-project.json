@@ -1,13 +1,13 @@
 {
   "packageDirectories": [
     {
-      "versionName": "2.0.1 — Per-Field FLS Guards (Option B + B+)",
-      "versionNumber": "2.0.1.NEXT",
+      "versionName": "2.1.0 \u2014 Per-Field FLS Guards (DocGenFlsGuard)",
+      "versionNumber": "2.1.0.NEXT",
       "ancestorId": "04tVx000000ZqBpIAK",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
-      "versionDescription": "v2.0.1 adds DocGenFlsGuard — per-field Schema.SObjectField.getDescribe().isAccessible/isCreateable/isUpdateable() checks at every admin DML and WITH SYSTEM_MODE SOQL site (243 guard call sites across 19 controllers). Implements the AppExchange v1.56 review's stated finding-resolution: 'enforce CRUD checks on the object and FLS checks on the fields before performing any DML operation' — both halves now executed in code."
+      "versionDescription": "v2.1.0 adds DocGenFlsGuard \u2014 per-field Schema.SObjectField.getDescribe().isAccessible/isCreateable/isUpdateable() checks at every admin DML and WITH SYSTEM_MODE SOQL site (243 guard call sites across 19 controllers). Implements the AppExchange v1.56 review's stated finding-resolution: 'enforce CRUD checks on the object and FLS checks on the fields before performing any DML operation' \u2014 both halves now executed in code. Packaged as v2.1.0 because patch versioning is disabled on the namespace (see Partner Community case for v2.0.x patch enablement)."
     }
   ],
   "name": "Portwood DocGen",
@@ -147,6 +147,7 @@
     "Portwood DocGen Managed@1.98.0-1": "04tVx000000Si9NIAS",
     "Portwood DocGen Managed@1.99.0-2": "04tVx000000ZVFRIA4",
     "Portwood DocGen Managed@2.0.0-1": "04tVx000000ZnCLIA0",
-    "Portwood DocGen Managed@2.0.0-2": "04tVx000000ZqBpIAK"
+    "Portwood DocGen Managed@2.0.0-2": "04tVx000000ZqBpIAK",
+    "Portwood DocGen Managed@2.1.0-1": "04tVx000000Zw5xIAC"
   }
 }
