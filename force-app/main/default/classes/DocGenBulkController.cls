@@ -537,7 +537,7 @@ public with sharing class DocGenBulkController {
             if (String.isNotBlank(jobLabel)) {
                 job.Label__c = jobLabel;
             }
-            Database.insert(job, AccessLevel.USER_MODE);
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
 
             // 2. Run Batch — user-configurable batch size (default 1, max 200)
             Integer size = (batchSize != null && batchSize >= 1 && batchSize <= 200) ? batchSize : 1;
@@ -691,7 +691,7 @@ public with sharing class DocGenBulkController {
                 Description__c = description,
                 Query_Condition__c = condition
             );
-            Database.insert(sq, AccessLevel.USER_MODE);
+            Database.insert(sq, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error saving query.');
         }

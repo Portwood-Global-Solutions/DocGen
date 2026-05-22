@@ -222,7 +222,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
                         Signer_Email__c = :firstEmail
                         AND Signature_Request__r.Template__c = :req.templateId
                         AND Signature_Request__r.Related_Record_Id__c = :req.relatedRecordId
-                    WITH USER_MODE
+                    WITH SYSTEM_MODE
                     ORDER BY CreatedDate DESC
                     LIMIT 1
                 ]; // NOPMD ApexCRUDViolation - package-internal
@@ -246,7 +246,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
                     SELECT Email_Status__c
                     FROM DocGen_Signature_Request__c
                     WHERE Id = :r.signatureRequestId
-                    WITH USER_MODE
+                    WITH SYSTEM_MODE
                     LIMIT 1
                 ]; // NOPMD
                 r.emailStatus = reqRecord.Email_Status__c;

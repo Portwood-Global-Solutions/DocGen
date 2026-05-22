@@ -463,7 +463,7 @@ public with sharing class DocGenSignatureSenderController {
         }
         // Package-internal object — CRUD controlled by DocGen permission sets
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.insert(req, AccessLevel.USER_MODE);
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
 
         // Pre-compute everything while we have admin access.
         // Guest users can't query template data or ContentVersions (content sharing).
@@ -529,7 +529,7 @@ public with sharing class DocGenSignatureSenderController {
             };
             req.Signature_Data__c = JSON.serialize(cachedData);
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.update(req, AccessLevel.USER_MODE);
+            Database.update(req, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
             System.debug(LoggingLevel.WARN, 'DocGen: Failed to pre-compute signature data: ' + e.getMessage());
         }
@@ -606,7 +606,7 @@ public with sharing class DocGenSignatureSenderController {
             req.Document_Title_Format__c = documentTitleFormat;
         }
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.insert(req, AccessLevel.USER_MODE);
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
 
         // Pre-compute merged preview for all templates
         try {
@@ -681,7 +681,7 @@ public with sharing class DocGenSignatureSenderController {
             };
             req.Signature_Data__c = JSON.serialize(cachedData);
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.update(req, AccessLevel.USER_MODE);
+            Database.update(req, AccessLevel.SYSTEM_MODE);
 
             // Create signers first
             String documentTitle = templateMap.get(templateIds[0]).Name;
@@ -702,7 +702,7 @@ public with sharing class DocGenSignatureSenderController {
                 SELECT Id, Role_Name__c
                 FROM DocGen_Signer__c
                 WHERE Signature_Request__c = :req.Id
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 ORDER BY Sort_Order__c ASC
             ]; // NOPMD
 
@@ -735,7 +735,7 @@ public with sharing class DocGenSignatureSenderController {
 
             if (!placementRecords.isEmpty()) {
                 /* code-analyzer-suppress ApexFlsViolation */
-                Database.insert(placementRecords, AccessLevel.USER_MODE);
+                Database.insert(placementRecords, AccessLevel.SYSTEM_MODE);
             }
 
             return results;
@@ -818,7 +818,7 @@ public with sharing class DocGenSignatureSenderController {
         req.Status__c = 'Sent';
         // Package-internal object — CRUD controlled by DocGen permission sets
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.insert(req, AccessLevel.USER_MODE);
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
 
         String documentTitle = getDocumentTitle(contentVersionId);
         return createSignersAndNotify(req.Id, null, documentTitle, signerInputs);
@@ -863,7 +863,7 @@ public with sharing class DocGenSignatureSenderController {
         req.Status__c = 'Sent';
         // Package-internal object — CRUD controlled by DocGen permission sets
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.insert(req, AccessLevel.USER_MODE);
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
 
         // Send branded signature request email automatically
         String documentTitle = getDocumentTitle(contentVersionId);
@@ -926,7 +926,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Signature_Request__c, Signer_Name__c, Signer_Email__c, Secure_Token__c, Status__c
             FROM DocGen_Signer__c
             WHERE Id = :signerId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
         if (signers.isEmpty()) {
@@ -940,7 +940,7 @@ public with sharing class DocGenSignatureSenderController {
         signer.PIN_Verified_At__c = System.now();
         signer.Status__c = 'Viewed';
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.update(signer, AccessLevel.USER_MODE);
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
 
         // Audit record — capture the bypass for compliance
         try {
@@ -959,7 +959,7 @@ public with sharing class DocGenSignatureSenderController {
                 Consent_Captured__c = true
             );
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.insert(audit, AccessLevel.USER_MODE);
+            Database.insert(audit, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
             // Audit failure shouldn't block the admin's bypass action — log and continue
             System.debug(LoggingLevel.WARN, 'DocGen: In-person audit write failed: ' + e.getMessage());
@@ -1006,7 +1006,7 @@ public with sharing class DocGenSignatureSenderController {
                 )
             FROM DocGen_Signature_Request__c
             WHERE Related_Record_Id__c = :relatedRecordId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY CreatedDate DESC
             LIMIT 20
         ];
@@ -1171,7 +1171,7 @@ public with sharing class DocGenSignatureSenderController {
 
         if (!placementRecords.isEmpty()) {
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.insert(placementRecords, AccessLevel.USER_MODE);
+            Database.insert(placementRecords, AccessLevel.SYSTEM_MODE);
         }
     }
 
@@ -1232,7 +1232,7 @@ public with sharing class DocGenSignatureSenderController {
 
         // Package-internal object — CRUD controlled by DocGen permission sets
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.insert(signerRecords, AccessLevel.USER_MODE);
+        Database.insert(signerRecords, AccessLevel.SYSTEM_MODE);
 
         // 1.49 — back-fill signer record Ids onto the SignerResult DTOs so the LWC
         // can use the "Mark Verified (In-Person)" action without a second SOQL.
@@ -1255,7 +1255,7 @@ public with sharing class DocGenSignatureSenderController {
                     SELECT Signing_Order__c
                     FROM DocGen_Signature_Request__c
                     WHERE Id = :requestId
-                    WITH USER_MODE
+                    WITH SYSTEM_MODE
                     LIMIT 1
                 ]; // NOPMD
                 isSequential = reqCheck.Signing_Order__c == 'Sequential';
@@ -1307,7 +1307,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Status__c, Template__r.Name, Source_Document_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Id = :requestId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
 
@@ -1320,7 +1320,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Signer_Name__c, Signer_Email__c, Role_Name__c, Contact__c, Status__c
             FROM DocGen_Signer__c
             WHERE Signature_Request__c = :requestId AND Status__c != 'Signed'
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC
         ];
 
@@ -1364,10 +1364,10 @@ public with sharing class DocGenSignatureSenderController {
         }
 
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.update(signers, false, AccessLevel.USER_MODE);
+        Database.update(signers, false, AccessLevel.SYSTEM_MODE);
         req.Status__c = 'Sent';
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.update(req, false, AccessLevel.USER_MODE);
+        Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
         DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle);
     }
@@ -1383,7 +1383,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Status__c
             FROM DocGen_Signature_Request__c
             WHERE Id = :requestId
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             LIMIT 1
         ];
 
@@ -1396,7 +1396,7 @@ public with sharing class DocGenSignatureSenderController {
 
         req.Status__c = 'Cancelled';
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.update(req, false, AccessLevel.USER_MODE);
+        Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
         // Invalidate all unsigned signers
         /* code-analyzer-suppress ApexFlsViolation */
@@ -1404,7 +1404,7 @@ public with sharing class DocGenSignatureSenderController {
             SELECT Id, Status__c
             FROM DocGen_Signer__c
             WHERE Signature_Request__c = :requestId AND Status__c != 'Signed'
-            WITH USER_MODE
+            WITH SYSTEM_MODE
         ];
         for (DocGen_Signer__c s : unsignedSigners) {
             s.Status__c = 'Cancelled';
@@ -1412,7 +1412,7 @@ public with sharing class DocGenSignatureSenderController {
         }
         if (!unsignedSigners.isEmpty()) {
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.update(unsignedSigners, false, AccessLevel.USER_MODE);
+            Database.update(unsignedSigners, false, AccessLevel.SYSTEM_MODE);
         }
     }
 

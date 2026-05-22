@@ -60,7 +60,7 @@ public with sharing class DocGenSetupController {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Experience_Site_Url__c = experienceSiteUrl;
         // Package-internal object — CRUD controlled by DocGen permission sets
-        Database.upsert(settings, AccessLevel.USER_MODE);
+        Database.upsert(settings, AccessLevel.SYSTEM_MODE);
     }
 
     /**
@@ -292,7 +292,7 @@ public with sharing class DocGenSetupController {
         settings.Signature_Email_Footer_Text__c = footerText;
         settings.Company_Name__c = companyName;
         settings.Signature_OWA_Id__c = owaId;
-        Database.upsert(settings, AccessLevel.USER_MODE);
+        Database.upsert(settings, AccessLevel.SYSTEM_MODE);
     }
 
     /**
@@ -311,7 +311,7 @@ public with sharing class DocGenSetupController {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Signature_Reminder_Enabled__c = enabled;
         settings.Signature_Reminder_Hours__c = hours != null && hours > 0 ? hours : 24;
-        Database.upsert(settings, AccessLevel.USER_MODE);
+        Database.upsert(settings, AccessLevel.SYSTEM_MODE);
 
         // Auto-schedule or abort the reminder job
         String jobName = 'DocGen Signature Reminders';

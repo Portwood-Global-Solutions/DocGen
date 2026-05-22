@@ -990,7 +990,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 )
             );
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.insert(job, AccessLevel.USER_MODE);
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
 
             // Launch batch — shell PDF generation happens in start() with fresh heap
             DocGenGiantQueryBatch batch = new DocGenGiantQueryBatch(
@@ -1290,7 +1290,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Parent_Record_Id__c = String.valueOf(recordId)
             );
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.insert(job, AccessLevel.USER_MODE);
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
 
             // Ensure relationshipName is in the config (V1 scout doesn't include it)
             childNodeConfig.put('relationshipName', giantRelationship);
@@ -2163,12 +2163,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     }
                     if (!otherDefaults.isEmpty()) {
                         /* code-analyzer-suppress ApexFlsViolation */
-                        Database.update(otherDefaults, AccessLevel.USER_MODE);
+                        Database.update(otherDefaults, AccessLevel.SYSTEM_MODE);
                     }
                 }
             }
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.update(template, AccessLevel.USER_MODE);
+            Database.update(template, AccessLevel.SYSTEM_MODE);
 
             // 2. Create Version if requested
             if (createVersion == true) {
@@ -2193,7 +2193,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 }
                 if (!activeVersions.isEmpty()) {
                     /* code-analyzer-suppress ApexFlsViolation */
-                    Database.update(activeVersions, AccessLevel.USER_MODE);
+                    Database.update(activeVersions, AccessLevel.SYSTEM_MODE);
                 }
 
                 // Use specific ContentVersion ID if provided (from upload event),
@@ -2252,7 +2252,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 }
 
                 /* code-analyzer-suppress ApexFlsViolation */
-                Database.insert(version, AccessLevel.USER_MODE);
+                Database.insert(version, AccessLevel.SYSTEM_MODE);
 
                 // Decompose DOCX/PPTX into per-image and per-XML ContentVersions for
                 // heap-light PDF rendering. Runs in a Queueable (12 MB async heap)
@@ -2623,13 +2623,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             }
             if (!others.isEmpty()) {
                 /* code-analyzer-suppress ApexFlsViolation */
-                Database.update(others, AccessLevel.USER_MODE);
+                Database.update(others, AccessLevel.SYSTEM_MODE);
             }
 
             // 2. Activate this one
             version.Is_Active__c = true;
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.update(version, AccessLevel.USER_MODE);
+            Database.update(version, AccessLevel.SYSTEM_MODE);
 
             // 3. Update Template Record Headline
             DocGen_Template__c template = new DocGen_Template__c(Id = version.Template__c);
@@ -2640,7 +2640,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Base_Object_API__c = version.Base_Object_API__c;
 
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.update(template, AccessLevel.USER_MODE);
+            Database.update(template, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
             throw new DocGenException('Error activating version: ' + e.getMessage());
         }
@@ -5275,7 +5275,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             );
         }
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.insert(templates, AccessLevel.USER_MODE);
+        Database.insert(templates, AccessLevel.SYSTEM_MODE);
 
         // Create ContentVersions (DOCX files) linked to templates
         List<ContentVersion> cvs = new List<ContentVersion>();
@@ -5313,7 +5313,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             );
         }
         /* code-analyzer-suppress ApexFlsViolation */
-        Database.insert(versions, AccessLevel.USER_MODE);
+        Database.insert(versions, AccessLevel.SYSTEM_MODE);
 
         // Extract and save template images for PDF rendering — async (12 MB heap).
         for (Integer i = 0; i < versions.size(); i++) {
@@ -5707,7 +5707,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 ver.Watermark_Image_CV_Id__c = cvIdMap.get(watermarkOriginalCvId);
             }
             /* code-analyzer-suppress ApexFlsViolation */
-            Database.insert(ver, AccessLevel.USER_MODE);
+            Database.insert(ver, AccessLevel.SYSTEM_MODE);
 
             // 4. Extract images and pre-decompose — async (12 MB heap).
             DocGenService.enqueueTemplateImageExtraction(tmpl.Id, ver.Id);
@@ -5726,7 +5726,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     sqs.add(newSq);
                 }
                 /* code-analyzer-suppress ApexFlsViolation */
-                Database.insert(sqs, AccessLevel.USER_MODE);
+                Database.insert(sqs, AccessLevel.SYSTEM_MODE);
             }
 
             return tmpl.Id;
