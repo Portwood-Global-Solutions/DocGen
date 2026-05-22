@@ -702,9 +702,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             FirstPublishLocationId = versionId
         );
         Database.insert(cv, AccessLevel.USER_MODE);
-        // Persist the CV ID on the template version so the renderer knows about it
+        // Persist the CV ID on the template version so the renderer knows about it.
+        // SYSTEM_MODE on the namespaced custom-field update — Schema check above
+        // gates access; USER_MODE strict-FLS strips Watermark_Image_CV_Id__c when
+        // subscriber/build-org admin profile FLS isn't propagated from permset.
+        if (!Schema.sObjectType.DocGen_Template_Version__c.isUpdateable()) {
+            throw DocGenService.ahe('Insufficient access to update template versions.');
+        }
         DocGen_Template_Version__c v = new DocGen_Template_Version__c(Id = versionId, Watermark_Image_CV_Id__c = cv.Id);
-        Database.update(v, AccessLevel.USER_MODE);
+        Database.update(v, AccessLevel.SYSTEM_MODE);
         return cv.Id;
     }
 
@@ -737,8 +743,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (ownerCheck.isEmpty()) {
             throw DocGenService.ahe('Template version not found or access denied.');
         }
+        if (!Schema.sObjectType.DocGen_Template_Version__c.isUpdateable()) {
+            throw DocGenService.ahe('Insufficient access to update template versions.');
+        }
         DocGen_Template_Version__c v = new DocGen_Template_Version__c(Id = versionId, Watermark_Image_CV_Id__c = null);
-        Database.update(v, AccessLevel.USER_MODE);
+        Database.update(v, AccessLevel.SYSTEM_MODE);
     }
 
     @AuraEnabled
