@@ -896,12 +896,19 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 // DOCX/PPTX: pre-decomposed XML avoids ZIP decompression heap cost
                 if (!activeVersions.isEmpty()) {
                     String xmlKey = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_word__document.xml';
+                    // SYSTEM_MODE retained per #114: USER_MODE can return
+                    // "ContentVersion not found" on fresh-upload CVs whose CDL
+                    // defaults to Visibility=InternalUsers. CV access is gated
+                    // upstream by the active version USER_MODE query.
+                    if (!Schema.sObjectType.ContentVersion.isAccessible()) {
+                        throw new DocGenException('ContentVersion access denied.');
+                    }
                     List<ContentVersion> xmlCvs = [
                         SELECT VersionData
                         FROM ContentVersion
                         WHERE Title = :xmlKey
-                        WITH USER_MODE
-                        LIMIT 1 // NOPMD — package-internal pre-decomposed part; access gated by DocGen permission sets via the parent template (#114)
+                        WITH SYSTEM_MODE
+                        LIMIT 1
                     ];
                     if (!xmlCvs.isEmpty()) {
                         documentXml = xmlCvs[0].VersionData.toString();
@@ -1230,12 +1237,16 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             } else {
                 if (!activeVersions.isEmpty()) {
                     String xmlKey = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_word__document.xml';
+                    // SYSTEM_MODE retained per #114 — same fresh-upload CDL caveat as above.
+                    if (!Schema.sObjectType.ContentVersion.isAccessible()) {
+                        throw new DocGenException('ContentVersion access denied.');
+                    }
                     List<ContentVersion> xmlCvs = [
                         SELECT VersionData
                         FROM ContentVersion
                         WHERE Title = :xmlKey
-                        WITH USER_MODE
-                        LIMIT 1 // NOPMD — package-internal pre-decomposed part; access gated by DocGen permission sets via the parent template (#114)
+                        WITH SYSTEM_MODE
+                        LIMIT 1
                     ];
                     if (!xmlCvs.isEmpty()) {
                         documentXml = xmlCvs[0].VersionData.toString();

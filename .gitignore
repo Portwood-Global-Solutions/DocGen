@@ -74,3 +74,12 @@ code-analyzer*.json
 
 # Claude Code local state
 .claude/
+
+# Playwright MCP cache
+.playwright-mcp/
+
+# Local screenshots
+runner-after-*.png
+
+# Confidential security reports — keep local only
+Security Report*.html

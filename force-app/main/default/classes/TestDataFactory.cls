@@ -81,7 +81,11 @@ public class TestDataFactory {
             Query_Config__c = v3Config,
             Test_Record_Id__c = acc.Id
         );
-        insert tpl;
+        // SYSTEM_MODE for test data setup — bypasses FLS strip on package-namespaced
+        // custom fields (Query_Config__c, etc.) in package-build orgs where the test
+        // user's permission cache hasn't refreshed after permset assignment in same
+        // transaction.
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
 
         // 5. Template Version (active)
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
@@ -91,7 +95,7 @@ public class TestDataFactory {
             Type__c = 'Word',
             Base_Object_API__c = 'Account'
         );
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
     }
 
     /**
@@ -104,7 +108,7 @@ public class TestDataFactory {
         DocGen_Template_Version__c ver = getTestTemplateVersion();
         ContentVersion cv = createValidDocxFile(tpl.Id, buildSimpleDocXml());
         ver.Content_Version_Id__c = cv.Id;
-        update ver;
+        Database.update(ver, AccessLevel.SYSTEM_MODE);
         return cv;
     }
 
@@ -167,7 +171,7 @@ public class TestDataFactory {
     public static DocGen_Job__c createTestJob() {
         DocGen_Template__c tpl = getTestTemplate();
         DocGen_Job__c job = new DocGen_Job__c(Template__c = tpl.Id, Status__c = 'Queued', Label__c = 'Test Job');
-        insert job;
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         return job;
     }
 
