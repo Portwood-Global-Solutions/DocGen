@@ -1,0 +1,782 @@
+{
+    "runDir": "/Users/davemoudy/Desktop/Projects/DocGen/",
+    "violationCounts": {
+        "total": 38,
+        "sev1": 0,
+        "sev2": 0,
+        "sev3": 38,
+        "sev4": 0,
+        "sev5": 0
+    },
+    "versions": {
+        "code-analyzer": "0.45.0",
+        "retire-js": "0.33.0",
+        "regex": "0.34.0",
+        "eslint": "0.41.0",
+        "flow": "0.35.0",
+        "pmd": "0.39.0",
+        "sfge": "0.19.0"
+    },
+    "violations": [
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Settings__c/fields/Signature_Email_Brand_Color__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 12,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Email_Brand_Color__c is a potential auth token in the object: DocGen_Settings__c with public visibility",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Settings__c/fields/Signature_Email_Footer_Text__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 10,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Email_Footer_Text__c is a potential auth token in the object: DocGen_Settings__c with public visibility",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Settings__c/fields/Signature_Email_Logo_Url__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 9,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Email_Logo_Url__c is a potential auth token in the object: DocGen_Settings__c with public visibility",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Settings__c/fields/Signature_Email_Message__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 10,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Email_Message__c is a potential auth token in the object: DocGen_Settings__c with public visibility",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Settings__c/fields/Signature_Email_Subject__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 12,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Email_Subject__c is a potential auth token in the object: DocGen_Settings__c with public visibility",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Settings__c/fields/Signature_OWA_Id__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 12,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_OWA_Id__c is a potential auth token in the object: DocGen_Settings__c with public visibility",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Settings__c/fields/Signature_Reminder_Enabled__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 8,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Reminder_Enabled__c is a potential auth token in the object: DocGen_Settings__c with public visibility",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Settings__c/fields/Signature_Reminder_Hours__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 12,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Reminder_Hours__c is a potential auth token in the object: DocGen_Settings__c with public visibility",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Audit__c/fields/Document_Hash_SHA256__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 11,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Document_Hash_SHA256__c is a potential auth token in a custom object: DocGen_Signature_Audit__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Audit__c/fields/Signature_Request__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 12,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Request__c is a potential auth token in a custom object: DocGen_Signature_Audit__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Audit__c/fields/Signed_Date__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 8,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signed_Date__c is a potential auth token in a custom object: DocGen_Signature_Audit__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Audit__c/fields/Signer_Email__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 11,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signer_Email__c is a potential auth token in a custom object: DocGen_Signature_Audit__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Audit__c/fields/Signer_Name__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 12,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signer_Name__c is a potential auth token in a custom object: DocGen_Signature_Audit__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Audit__c/fields/Signer__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 13,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signer__c is a potential auth token in a custom object: DocGen_Signature_Audit__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Placement__c/fields/Signature_Request__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 12,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Request__c is a potential auth token in a custom object: DocGen_Signature_Placement__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Placement__c/fields/Signed_At__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 8,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signed_At__c is a potential auth token in a custom object: DocGen_Signature_Placement__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Placement__c/fields/Signed_Value__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 10,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signed_Value__c is a potential auth token in a custom object: DocGen_Signature_Placement__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Placement__c/fields/Signer__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 13,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signer__c is a potential auth token in a custom object: DocGen_Signature_Placement__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Request__c/fields/Secure_Token__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 12,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Secure_Token__c is a potential auth token in a custom object: DocGen_Signature_Request__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Request__c/fields/Signature_Data__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 10,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Data__c is a potential auth token in a custom object: DocGen_Signature_Request__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Request__c/fields/Signer_Email__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 10,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signer_Email__c is a potential auth token in a custom object: DocGen_Signature_Request__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Request__c/fields/Signer_Name__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 11,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signer_Name__c is a potential auth token in a custom object: DocGen_Signature_Request__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signature_Request__c/fields/Signing_Order__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 17,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signing_Order__c is a potential auth token in a custom object: DocGen_Signature_Request__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signer__c/fields/PIN_Hash__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 11,
+                    "endColumn": 14
+                }
+            ],
+            "message": "PIN_Hash__c is a potential auth token in a custom object: DocGen_Signer__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signer__c/fields/Secure_Token__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 11,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Secure_Token__c is a potential auth token in a custom object: DocGen_Signer__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signer__c/fields/Signature_Data__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 11,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Data__c is a potential auth token in a custom object: DocGen_Signer__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signer__c/fields/Signature_Request__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 13,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signature_Request__c is a potential auth token in a custom object: DocGen_Signer__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signer__c/fields/Signer_Email__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 9,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signer_Email__c is a potential auth token in a custom object: DocGen_Signer__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "ProtectSensitiveData",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "XML"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/objects/DocGen_Signer__c/fields/Signer_Name__c.field-meta.xml",
+                    "startLine": 1,
+                    "startColumn": 1,
+                    "endLine": 10,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Signer_Name__c is a potential auth token in a custom object: DocGen_Signer__c",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#protectsensitivedata"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 53,
+                    "startColumn": 44,
+                    "endLine": 57,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 65,
+                    "startColumn": 44,
+                    "endLine": 69,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 79,
+                    "startColumn": 45,
+                    "endLine": 83,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 93,
+                    "startColumn": 44,
+                    "endLine": 97,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 105,
+                    "startColumn": 44,
+                    "endLine": 109,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 118,
+                    "startColumn": 45,
+                    "endLine": 122,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 127,
+                    "startColumn": 45,
+                    "endLine": 131,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 136,
+                    "startColumn": 45,
+                    "endLine": 140,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        },
+        {
+            "rule": "AvoidLwcBubblesComposedTrue",
+            "engine": "pmd",
+            "severity": 3,
+            "tags": ["AppExchange", "Security", "JavaScript"],
+            "primaryLocationIndex": 0,
+            "locations": [
+                {
+                    "file": "force-app/main/default/lwc/docGenTreeNode/docGenTreeNode.js",
+                    "startLine": 145,
+                    "startColumn": 45,
+                    "endLine": 149,
+                    "endColumn": 14
+                }
+            ],
+            "message": "Avoid setting both Lightning Web component bubbles and composed=true at the same time.",
+            "resources": [
+                "https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/rules-pmd-appexchange.html#avoidlwcbubblescomposedtrue"
+            ]
+        }
+    ]
+}
