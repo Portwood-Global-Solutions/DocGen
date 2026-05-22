@@ -13,7 +13,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 [![Security](https://img.shields.io/badge/Code_Analyzer-0_Critical%2C_0_High-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
 
-> **v2.0.0 — AppExchange security re-submission in flight.** The Salesforce AppExchange security review returned 30 findings on the v1.99 listing (4 clickjacking, 26 CRUD/FLS). v2.0.0 closes every one of them as far as we can tell, extends the same hardening to code the reviewer didn't flag, and ships a related verifier bug fix for multi-signer documents. The package version below is the one we've submitted for re-review — install URL works today, AppExchange listing will refresh after re-review clears. See [CHANGELOG.md](CHANGELOG.md#v200--appexchange-security-re-submission-04tvx000000zqbpiak-released) and [SECURITY_REVIEW_RESPONSE_v2.md](SECURITY_REVIEW_RESPONSE_v2.md) for the per-finding map.
+> **v2.0.0 — AppExchange security re-submission in flight.** The Salesforce AppExchange security review returned 30 findings on the v1.56 listing (4 clickjacking, 26 CRUD/FLS). v2.0.0 closes every one of them as far as we can tell, extends the same hardening to code the reviewer didn't flag, and ships a related verifier bug fix for multi-signer documents. The package version below is the one we've submitted for re-review — install URL works today, AppExchange listing will refresh after re-review clears. See [CHANGELOG.md](CHANGELOG.md#v200--appexchange-security-re-submission-04tvx000000zqbpiak-released) and [SECURITY_REVIEW_RESPONSE_v2.md](SECURITY_REVIEW_RESPONSE_v2.md) for the per-finding map.
 
 ---
 
