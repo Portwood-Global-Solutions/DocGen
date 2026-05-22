@@ -4,24 +4,26 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/changelog)
 
-[![Version](https://img.shields.io/badge/version-1.99.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
-[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1435%2F1435_passing-brightgreen)](#code-quality)
-[![Coverage](https://img.shields.io/badge/Coverage-75%25-brightgreen)](#code-quality)
+[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1436%2F1436_passing-brightgreen)](#code-quality)
+[![Coverage](https://img.shields.io/badge/Coverage-76%25-brightgreen)](#code-quality)
 [![Security](https://img.shields.io/badge/Code_Analyzer-0_Critical%2C_0_High-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
+
+> **v2.0.0 — AppExchange security re-submission in flight.** The Salesforce AppExchange security review returned 30 findings on the v1.99 listing (4 clickjacking, 26 CRUD/FLS). v2.0.0 closes every one of them as far as we can tell, extends the same hardening to code the reviewer didn't flag, and ships a related verifier bug fix for multi-signer documents. The package version below is the one we've submitted for re-review — install URL works today, AppExchange listing will refresh after re-review clears. See [CHANGELOG.md](CHANGELOG.md#v200--appexchange-security-re-submission-04tvx000000zqbpiak-released) and [SECURITY_REVIEW_RESPONSE_v2.md](SECURITY_REVIEW_RESPONSE_v2.md) for the per-finding map.
 
 ---
 
 ## Install
 
 ```bash
-sf package install --package 04tVx000000ZVFRIA4 --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000ZqBpIAK --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZVFRIA4) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZVFRIA4)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZqBpIAK) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZqBpIAK)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
