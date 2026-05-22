@@ -350,13 +350,13 @@ private class DocGenImageTagTests {
             Type__c = 'Word',
             Output_Format__c = 'PDF'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Job__c job = new DocGen_Job__c(
             Status__c = 'In Progress',
             Template__c = tpl.Id,
             Parent_Record_Id__c = a.Id
         );
-        insert job;
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         DocGenGiantQueryAssembler asm = new DocGenGiantQueryAssembler(job.Id, tpl.Id, a.Id, 'Contacts');
 
         String html = 'Logo: {%Image:1} / Second: {%Image:2:150} / Missing: {%Image:99}';
@@ -384,13 +384,13 @@ private class DocGenImageTagTests {
             Type__c = 'Word',
             Output_Format__c = 'PDF'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Job__c job = new DocGen_Job__c(
             Status__c = 'In Progress',
             Template__c = tpl.Id,
             Parent_Record_Id__c = a.Id
         );
-        insert job;
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         DocGenGiantQueryAssembler asm = new DocGenGiantQueryAssembler(job.Id, tpl.Id, a.Id, 'Contacts');
 
         String resolved = asm.resolveParentImageTags('Header: {%Image:1} End');
@@ -406,13 +406,13 @@ private class DocGenImageTagTests {
             Type__c = 'Word',
             Output_Format__c = 'PDF'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Job__c job = new DocGen_Job__c(
             Status__c = 'In Progress',
             Template__c = tpl.Id,
             Parent_Record_Id__c = a.Id
         );
-        insert job;
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         DocGenGiantQueryAssembler asm = new DocGenGiantQueryAssembler(job.Id, tpl.Id, a.Id, 'Contacts');
 
         String original = 'plain html <b>no tags</b>';
@@ -432,13 +432,13 @@ private class DocGenImageTagTests {
             Type__c = 'Word',
             Output_Format__c = 'PDF'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Job__c job = new DocGen_Job__c(
             Status__c = 'In Progress',
             Template__c = tpl.Id,
             Parent_Record_Id__c = a.Id
         );
-        insert job;
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         DocGenGiantQueryAssembler asm = new DocGenGiantQueryAssembler(job.Id, tpl.Id, a.Id, 'Contacts');
 
         String r1 = asm.resolveParentImageTags('{%Image:1:200x100}');

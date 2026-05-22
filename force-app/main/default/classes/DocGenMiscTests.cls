@@ -605,8 +605,7 @@ private class DocGenMiscTests {
         // Update template query config to include Website
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, AccountSource, Website';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -627,8 +626,7 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Document_Title_Format__c = 'Doc_{Name}_{AccountSource}';
         tpl.Query_Config__c = 'Name, AccountSource';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -790,8 +788,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Output_Format__c = 'PDF';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -811,8 +808,7 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
         tpl.Base_Object_API__c = 'Account';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         // Add a contact to the account
         Account acc = TestDataFactory.getTestAccount();
         insert new Contact(FirstName = 'Loop', LastName = 'Tester', AccountId = acc.Id);
@@ -837,8 +833,7 @@ private class DocGenMiscTests {
         // Section inside a <w:tr> — exercises table row expansion code
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
         insert new Contact(FirstName = 'Row', LastName = 'Expand', AccountId = acc.Id);
 
@@ -863,8 +858,7 @@ private class DocGenMiscTests {
         // Owner.Name uses dotted path — exercises resolveValue with nested map
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Owner.Name';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -902,8 +896,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -926,8 +919,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -946,8 +938,7 @@ private class DocGenMiscTests {
         // PowerPoint template — exercises the ppt/slides branch
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'PowerPoint';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry(
             '[Content_Types].xml',
@@ -1003,8 +994,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Document_Title_Format__c = null;
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -1300,8 +1290,7 @@ private class DocGenMiscTests {
     static void testGeneratePdfBlobThrowsForPowerPoint() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'PowerPoint';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry(
             '[Content_Types].xml',
@@ -1359,8 +1348,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Document_Title_Format__c = 'PDF_{Name}';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -1382,8 +1370,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1411,8 +1398,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Output_Format__c = 'PDF';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -1428,8 +1414,7 @@ private class DocGenMiscTests {
     static void testGenerateDocumentSavesPptx() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'PowerPoint';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry(
             '[Content_Types].xml',
@@ -1495,8 +1480,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1515,8 +1499,7 @@ private class DocGenMiscTests {
         // Section where key resolves to null — produces empty output for section
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1541,8 +1524,7 @@ private class DocGenMiscTests {
         // {CreatedDate:MM/dd/yyyy} — exercises DateTime format path in processXml
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, CreatedDate';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1591,8 +1573,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1621,8 +1602,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1646,8 +1626,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1670,8 +1649,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1695,8 +1673,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1731,8 +1708,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1763,8 +1739,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1792,8 +1767,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1817,8 +1791,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -1996,8 +1969,7 @@ private class DocGenMiscTests {
         // {Owner.Manager.Name} — deeply nested, Manager is null
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Owner.Name';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2028,8 +2000,7 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Document_Title_Format__c = 'Doc-{Name}-{MissingField}-{AccountSource}';
         tpl.Query_Config__c = 'Name, AccountSource';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -2050,8 +2021,7 @@ private class DocGenMiscTests {
     static void testProcessDocumentTableRowExpansionMultipleRows() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
         insert new List<Contact>{
             new Contact(FirstName = 'Alice', LastName = 'Smith', AccountId = acc.Id),
@@ -2086,8 +2056,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description, AccountSource';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2110,8 +2079,7 @@ private class DocGenMiscTests {
         // {#Contacts} before TR, {/Contacts} after TR — exercises trClosesBefore path
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, (SELECT FirstName FROM Contacts)';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
         insert new Contact(FirstName = 'Multi', LastName = 'Row', AccountId = acc.Id);
 
@@ -2143,8 +2111,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry(
             '[Content_Types].xml',
@@ -2215,8 +2182,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description, Website';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2238,8 +2204,7 @@ private class DocGenMiscTests {
     static void testProcessDocumentMultipleSlides() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'PowerPoint';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry(
             '[Content_Types].xml',
@@ -2313,8 +2278,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Document_Title_Format__c = null;
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -2337,8 +2301,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2361,8 +2324,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2397,8 +2359,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2426,8 +2387,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2482,8 +2442,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Output_Format__c = 'PDF';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -2576,8 +2535,7 @@ private class DocGenMiscTests {
             Type__c = 'Word',
             Base_Object_API__c = 'Account'
         );
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
         Test.stopTest();
@@ -2599,8 +2557,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2622,8 +2579,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2649,8 +2605,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2676,8 +2631,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -2699,8 +2653,7 @@ private class DocGenMiscTests {
     static void testProcessDocumentPowerPointImageTagSkipped() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'PowerPoint';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry(
             '[Content_Types].xml',
@@ -2737,8 +2690,7 @@ private class DocGenMiscTests {
         acc.Description = 'data:image/png;base64,' + EncodingUtil.base64Encode(Blob.valueOf('IMG'));
         update acc;
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
         Test.stopTest();
@@ -2755,8 +2707,7 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'PowerPoint';
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
         acc.Description = '<p>Paragraph <b>bold</b></p>';
         update acc;
@@ -2831,8 +2782,7 @@ private class DocGenMiscTests {
     static void testProcessDocumentWithDateTimeAlternateFormat() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, CreatedDate';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -4127,8 +4077,7 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'Excel';
         tpl.Query_Config__c = 'Name, AccountSource';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String sharedStringsXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="3">' +
@@ -4305,8 +4254,7 @@ private class DocGenMiscTests {
     static void testRenderPreviewHtmlThrowsForPowerPoint() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'PowerPoint';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry(
             '[Content_Types].xml',
@@ -4964,8 +4912,7 @@ private class DocGenMiscTests {
     static void testProcessDocumentAsHtmlWithImageMapThrowsForPowerPoint() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'PowerPoint';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Compression.ZipWriter zw = new Compression.ZipWriter();
         zw.addEntry(
             '[Content_Types].xml',
@@ -5066,7 +5013,7 @@ private class DocGenMiscTests {
         Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Output_Format__c = 'PDF';
-        update tpl;
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
 
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
@@ -5076,8 +5023,7 @@ private class DocGenMiscTests {
             Type__c = 'Word',
             Base_Object_API__c = 'Account'
         );
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         // extractAndSaveTemplateImages saves pre-decomposed XML CVs and image CVs
         DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
 
@@ -5149,8 +5095,7 @@ private class DocGenMiscTests {
             Type__c = 'Word',
             Base_Object_API__c = 'Account'
         );
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
 
         Account acc = TestDataFactory.getTestAccount();
@@ -5231,8 +5176,7 @@ private class DocGenMiscTests {
             Type__c = 'Word',
             Base_Object_API__c = 'Account'
         );
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
         Test.stopTest();
@@ -5255,8 +5199,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -5353,8 +5296,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -5728,8 +5670,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -5754,8 +5695,7 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'Excel';
         tpl.Query_Config__c = 'Name';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String sharedStringsXml =
             '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
             '<si><t>{Name}</t></si></sst>';
@@ -5825,8 +5765,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -5856,8 +5795,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -5920,8 +5858,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Output_Format__c = 'PDF';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Map<String, Object> preloadedData = new Map<String, Object>{ 'Name' => 'PDF Cached Name' };
@@ -6033,8 +5970,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Output_Format__c = 'PDF';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -6057,8 +5993,7 @@ private class DocGenMiscTests {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'Excel';
         tpl.Query_Config__c = 'Name, AccountSource';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String sharedStringsXml =
             '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
             '<si><t>{Name}</t></si><si><t>{AccountSource}</t></si></sst>';
@@ -6126,8 +6061,7 @@ private class DocGenMiscTests {
 
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Query_Config__c = 'Name, Description';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -6394,8 +6328,7 @@ private class DocGenMiscTests {
                 Template__c = tpl.Id,
                 Label__c = 'Stitch Start Test'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create mock fragment CVs
             List<ContentVersion> fragments = new List<ContentVersion>();
             for (Integer i = 0; i < 5; i++) {
@@ -6443,8 +6376,7 @@ private class DocGenMiscTests {
                 Template__c = tpl.Id,
                 Label__c = 'Stitch No Fragments'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // No fragment CVs created — empty scenario
             Test.startTest();
             DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
@@ -6478,8 +6410,7 @@ private class DocGenMiscTests {
                 Template__c = tpl.Id,
                 Label__c = 'Compat Ctor Test'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             // Use the backward-compatible 7-argument constructor
             DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
@@ -6508,8 +6439,7 @@ private class DocGenMiscTests {
                 Template__c = tpl.Id,
                 Label__c = 'Single Part Test'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create exactly 1 fragment — will produce 1 part, triggering single-part finish path
             ContentVersion frag = new ContentVersion(
                 Title = 'docgen_giant_' + job.Id + '_00000',
@@ -6551,8 +6481,7 @@ private class DocGenMiscTests {
                 Template__c = tpl.Id,
                 Label__c = 'Multi Part Test'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create more fragments than FRAGMENTS_PER_PDF (3) to force multiple groups/parts
             List<ContentVersion> fragments = new List<ContentVersion>();
             for (Integer i = 0; i < 7; i++) {
@@ -6594,8 +6523,7 @@ private class DocGenMiscTests {
         System.runAs(u) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             DocGen_Job__c job = new DocGen_Job__c(Template__c = tpl.Id, Status__c = 'Stitching');
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenGiantQueryStitchJob.DocGenGiantQueryStitchFinalizer finalizer = new DocGenGiantQueryStitchJob.DocGenGiantQueryStitchFinalizer(
                 job.Id
@@ -6772,8 +6700,7 @@ private class DocGenMiscTests {
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             String docXml =
                 '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
                 '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -6852,8 +6779,7 @@ private class DocGenMiscTests {
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             String docXml =
                 '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
                 '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -6936,8 +6862,7 @@ private class DocGenMiscTests {
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             String docXml =
                 '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
                 '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -7010,8 +6935,7 @@ private class DocGenMiscTests {
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             String docXml =
                 '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
                 '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -7114,8 +7038,7 @@ private class DocGenMiscTests {
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             String docXml =
                 '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
                 '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -7258,8 +7181,7 @@ private class DocGenMiscTests {
         System.runAs(u) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             DocGen_Job__c job = new DocGen_Job__c(Template__c = tpl.Id, Status__c = 'Merging');
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenMergeJob.DocGenMergeJobFinalizer finalizer = new DocGenMergeJob.DocGenMergeJobFinalizer(job.Id);
             System.assertNotEquals(null, finalizer, 'Finalizer should be creatable');
@@ -7279,8 +7201,7 @@ private class DocGenMiscTests {
                 Success_Count__c = 0,
                 Total_Records__c = 0
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // No snippets created — empty scenario
             Test.startTest();
             DocGenMergeJob mergeJob = new DocGenMergeJob(job.Id);
@@ -7304,8 +7225,7 @@ private class DocGenMiscTests {
                 Success_Count__c = 3,
                 Total_Records__c = 3
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create HTML snippet CVs
             List<ContentVersion> snippets = new List<ContentVersion>();
             for (Integer i = 0; i < 3; i++) {
@@ -7379,8 +7299,7 @@ private class DocGenMiscTests {
                 Status__c = 'Queued',
                 Query_Condition__c = 'Name != null -- comment'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             try {
                 DocGenBatch batch = new DocGenBatch(job.Id);
@@ -7404,8 +7323,7 @@ private class DocGenMiscTests {
                 Status__c = 'Queued',
                 Query_Condition__c = 'Name IN (SELECT Name FROM Account)'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             try {
                 DocGenBatch batch = new DocGenBatch(job.Id);
@@ -7429,8 +7347,7 @@ private class DocGenMiscTests {
                 Status__c = 'Queued',
                 Query_Condition__c = 'Name = \'DocGen Test Account\''
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             // mergeOnly=true — should only generate HTML snippets, no individual PDFs
             DocGenBatch batch = new DocGenBatch(job.Id, false, true);
@@ -7458,8 +7375,7 @@ private class DocGenMiscTests {
                 Status__c = 'Queued',
                 Query_Condition__c = 'Name = \'DocGen Test Account\''
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             // Two-arg constructor with mergeMode=true
             DocGenBatch batch = new DocGenBatch(job.Id, true);
@@ -7557,8 +7473,7 @@ private class DocGenMiscTests {
                 Output_Format__c = 'PDF',
                 Test_Record_Id__c = acc.Id
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             // Need a valid DOCX file for heap estimation
             String docXml =
                 '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -7668,8 +7583,7 @@ private class DocGenMiscTests {
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 1, false);
             Test.stopTest();
@@ -7724,8 +7638,7 @@ private class DocGenMiscTests {
                 Type__c = 'Word',
                 Output_Format__c = 'PDF'
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(tpl.Id, 10, 1, false);
             Test.stopTest();
@@ -8065,8 +7978,7 @@ private class DocGenMiscTests {
             Type__c = 'Word',
             Output_Format__c = 'PDF'
         );
-        insert tpl;
-
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         Account acc = TestDataFactory.getTestAccount();
 
         Test.startTest();
@@ -8271,8 +8183,7 @@ private class DocGenMiscTests {
             Label__c = 'Test Assembler',
             Parent_Record_Id__c = String.valueOf(acc.Id)
         );
-        insert job;
-
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
         assembler.execute(null);
@@ -8293,8 +8204,7 @@ private class DocGenMiscTests {
             Label__c = 'Test Assembler Frags',
             Parent_Record_Id__c = String.valueOf(acc.Id)
         );
-        insert job;
-
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         // Create a fragment ContentVersion
         String fragTitle = 'docgen_giant_' + job.Id + '_0001';
         ContentVersion fragCv = new ContentVersion(
@@ -8818,8 +8728,7 @@ private class DocGenMiscTests {
             Type__c = 'Word',
             Base_Object_API__c = 'Account'
         );
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         // Exercises mapHeaderFooterTypes (via combineXmlWithHeadersFooters indirectly
         // through the extractor) + logImageOverflowWarnings on the oversized banner.
@@ -8911,8 +8820,7 @@ private class DocGenMiscTests {
             Type__c = 'Word',
             Base_Object_API__c = 'Account'
         );
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
         Test.stopTest();

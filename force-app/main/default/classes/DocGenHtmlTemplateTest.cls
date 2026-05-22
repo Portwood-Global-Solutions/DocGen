@@ -188,8 +188,7 @@ private class DocGenHtmlTemplateTest {
             Content_Version_Id__c = zipCv.Id,
             Is_Active__c = true
         );
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenService.extractAndSaveHtmlTemplateAssets(tmpl.Id, ver.Id);
         Test.stopTest();

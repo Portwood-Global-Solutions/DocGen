@@ -851,7 +851,7 @@ private class DocGenControllerTests {
         System.runAs(u) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Output_Format__c = 'PDF';
-            update tpl;
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
 
             Compression.ZipWriter zw = new Compression.ZipWriter();
@@ -1146,8 +1146,7 @@ private class DocGenControllerTests {
         System.runAs(u) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Query_Config__c = 'Name, Description';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
             // Set Description to contain HTML with an img tag using refid (simulates rich text)
             acc.Description = '<p>See image: <img src="https://example.com/servlet/rtaImage?eid=001&refid=0EM000000000001" alt="test"/></p>';
@@ -1216,8 +1215,7 @@ private class DocGenControllerTests {
         System.runAs(u) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Query_Config__c = 'Name, Description';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
             // Set Description with servlet URL (without refid) to exercise resolveServletImageUrls
             acc.Description = '<p><img src="https://myorg.salesforce.com/servlet/rtaImage?eid=001ABC&feoid=00N000&refid=" alt="img"/></p>';
@@ -1282,8 +1280,7 @@ private class DocGenControllerTests {
         System.runAs(u) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Query_Config__c = 'Name, Description';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
             acc.Description = '<p><img src="https://myorg.salesforce.com/sfc/servlet.shepherd/version/download/069ABC" alt="img"/></p>';
             update acc;
@@ -1346,8 +1343,7 @@ private class DocGenControllerTests {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Output_Format__c = 'PDF';
             tpl.Document_Title_Format__c = 'Invoice_{Name}';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
 
             Compression.ZipWriter zw = new Compression.ZipWriter();
@@ -1406,8 +1402,7 @@ private class DocGenControllerTests {
         System.runAs(u) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Query_Config__c = 'Name, (SELECT LastName FROM Contacts)';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
             insert new Contact(FirstName = 'Test', LastName = 'Child', AccountId = acc.Id);
 
@@ -3244,8 +3239,7 @@ private class DocGenControllerTests {
 
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts)';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Map<String, Object> result = DocGenController.scoutChildCounts(acc.Id, tpl.Id);
             Test.stopTest();
@@ -3275,8 +3269,7 @@ private class DocGenControllerTests {
                 '{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],"parentNode":null,"lookupField":null,"relationshipName":null},' +
                 '{"id":"n1","object":"Contact","fields":["FirstName","LastName"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Contacts"}' +
                 ']}';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Map<String, Object> result = DocGenController.scoutChildCounts(acc.Id, tpl.Id);
             Test.stopTest();
@@ -3311,8 +3304,7 @@ private class DocGenControllerTests {
                 '{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],"parentNode":null,"lookupField":null,"relationshipName":null},' +
                 '{"id":"n1","object":"Contact","fields":["FirstName","LastName"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Contacts"}' +
                 ']}';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Map<String, Object> result = DocGenController.scoutChildCounts(acc.Id, tpl.Id);
             Test.stopTest();
@@ -3343,8 +3335,7 @@ private class DocGenControllerTests {
                 '{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],"parentNode":null,"lookupField":null,"relationshipName":null},' +
                 '{"id":"n1","object":"Contact","fields":["FirstName","LastName"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Contacts"}' +
                 ']}';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Map<String, Object> result = DocGenController.scoutChildCounts(acc.Id, tpl.Id);
             Test.stopTest();
@@ -3629,8 +3620,7 @@ private class DocGenControllerTests {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Query_Config__c = 'Name, AccountSource';
             tpl.Output_Format__c = 'PDF';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
 
             // Attach a valid DOCX so generation can work
@@ -3692,8 +3682,7 @@ private class DocGenControllerTests {
                 '{"id":"n1","object":"Contact","fields":["FirstName","LastName"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Contacts"}' +
                 ']}';
             tpl.Output_Format__c = 'PDF';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
             insert new Contact(FirstName = 'Giant', LastName = 'Test', AccountId = acc.Id);
 
@@ -3785,8 +3774,7 @@ private class DocGenControllerTests {
                 Success_Count__c = 5,
                 Total_Records__c = 10
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Map<String, Object> result = DocGenController.getGiantQueryJobStatus(job.Id);
             Test.stopTest();
@@ -3828,8 +3816,7 @@ private class DocGenControllerTests {
                 Template__c = tpl.Id,
                 Label__c = 'Fragment Test'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Map<String, Object> result = DocGenController.getGiantQueryFragments(job.Id);
             Test.stopTest();
@@ -3850,8 +3837,7 @@ private class DocGenControllerTests {
                 Template__c = tpl.Id,
                 Label__c = 'Fragment Data Test'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create fragment CVs matching the naming convention
             String prefix = 'docgen_giant_' + job.Id + '_';
             ContentVersion cv1 = new ContentVersion(
@@ -3886,8 +3872,7 @@ private class DocGenControllerTests {
                 Template__c = tpl.Id,
                 Label__c = 'Cleanup Test'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             String prefix = 'docgen_giant_' + job.Id + '_';
             ContentVersion cv1 = new ContentVersion(
                 Title = prefix + '001',
@@ -3916,8 +3901,7 @@ private class DocGenControllerTests {
                 Template__c = tpl.Id,
                 Label__c = 'No Fragments'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             // Should not throw even when there are no fragments to clean up
             DocGenController.cleanupGiantQueryFragments(job.Id);
@@ -3996,8 +3980,7 @@ private class DocGenControllerTests {
                 Category__c = 'Test',
                 Query_Config__c = 'Name'
             );
-            insert ver;
-
+            Database.insert(ver, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             String jsonResult = DocGenController.exportTemplate(tpl.Id);
             Test.stopTest();
@@ -4829,8 +4812,7 @@ private class DocGenControllerTests {
                 Query_Config__c = 'Name, (SELECT FirstName, LastName FROM Contacts WHERE LastName != null ORDER BY LastName LIMIT 100)',
                 Type__c = 'Word'
             );
-            insert tpl;
-
+            Database.insert(tpl, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Map<String, Object> result = DocGenController.scoutChildCounts(acc.Id, tpl.Id);
             Test.stopTest();
@@ -5651,7 +5633,7 @@ private class DocGenControllerTests {
         System.runAs(admin) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Type__c = 'HTML';
-            update tpl;
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             String pngB64 = EncodingUtil.base64Encode(Blob.valueOf('PNG'));
 
             Test.startTest();
@@ -5666,7 +5648,7 @@ private class DocGenControllerTests {
     static void testSaveHtmlTemplateImage_unauthorizedAccessDenied() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'HTML';
-        update tpl;
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Id targetId = tpl.Id;
         String pngB64 = EncodingUtil.base64Encode(Blob.valueOf('PNG'));
 
@@ -5690,8 +5672,7 @@ private class DocGenControllerTests {
         System.runAs(admin) {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             tpl.Type__c = 'HTML';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Map<String, Object> r = DocGenController.saveHtmlTemplateBody(
                 tpl.Id,
@@ -5708,7 +5689,7 @@ private class DocGenControllerTests {
     static void testSaveHtmlTemplateBody_unauthorizedAccessDenied() {
         DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
         tpl.Type__c = 'HTML';
-        update tpl;
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Id targetId = tpl.Id;
 
         User low = buildLowPrivUser();

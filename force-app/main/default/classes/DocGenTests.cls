@@ -25,8 +25,7 @@ private class DocGenTests {
             DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
             // Use V1 config for this legacy test
             tpl.Query_Config__c = 'Name, AccountSource';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             Account acc = TestDataFactory.getTestAccount();
 
             Test.startTest();

@@ -30,8 +30,7 @@ private class DocGenSignatureTests {
             Secure_Token__c = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Multi Signer One',
@@ -41,7 +40,7 @@ private class DocGenSignatureTests {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
     }
 
     // =========================================================================
@@ -139,8 +138,7 @@ private class DocGenSignatureTests {
     static void testValidateToken_alreadySigned() {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5'
@@ -202,8 +200,7 @@ private class DocGenSignatureTests {
         signer.PIN_Hash__c = pinHash;
         signer.PIN_Expires_At__c = System.now().addMinutes(10);
         signer.PIN_Attempts__c = 0;
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.verifyPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -225,8 +222,7 @@ private class DocGenSignatureTests {
         signer.PIN_Hash__c = pinHash;
         signer.PIN_Expires_At__c = System.now().addMinutes(10);
         signer.PIN_Attempts__c = 0;
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.verifyPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -246,8 +242,7 @@ private class DocGenSignatureTests {
         signer.PIN_Hash__c = pinHash;
         signer.PIN_Expires_At__c = System.now().addMinutes(-1); // expired
         signer.PIN_Attempts__c = 0;
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.verifyPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -263,8 +258,7 @@ private class DocGenSignatureTests {
     static void testVerifyPin_lockedOut() {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Attempts__c = 3;
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.verifyPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -286,8 +280,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
         signer.Status__c = 'Viewed';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SaveSignatureResult result = DocGenSignatureController.saveSignature(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -327,8 +320,7 @@ private class DocGenSignatureTests {
     static void testSaveSignature_noConsent() {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureController.saveSignature(
@@ -367,8 +359,7 @@ private class DocGenSignatureTests {
     static void testSaveSignature_blankName() {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureController.saveSignature(
@@ -469,8 +460,7 @@ private class DocGenSignatureTests {
             Document_Hash_SHA256__c = hash,
             IP_Address__c = '1.2.3.4'
         );
-        insert audit;
-
+        Database.insert(audit, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenAuthenticatorController.VerificationResult res = DocGenAuthenticatorController.verifyDocument(hash);
         Test.stopTest();
@@ -721,8 +711,7 @@ private class DocGenSignatureTests {
     static void testResendSignatureRequest() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Sent';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureSenderController.resendSignatureRequest(req.Id);
         Test.stopTest();
@@ -755,8 +744,7 @@ private class DocGenSignatureTests {
     static void testCancelAlreadySigned() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureSenderController.cancelSignatureRequest(req.Id);
@@ -771,8 +759,7 @@ private class DocGenSignatureTests {
     static void testResendAlreadySigned() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureSenderController.resendSignatureRequest(req.Id);
@@ -924,8 +911,7 @@ private class DocGenSignatureTests {
     static void testValidateToken_cancelledRequest() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Cancelled';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         // The signer's parent request is cancelled
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
@@ -940,8 +926,7 @@ private class DocGenSignatureTests {
     static void testSendPin_lockedOut() {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Attempts__c = 3;
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.sendPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -1108,8 +1093,7 @@ private class DocGenSignatureTests {
             Consent_Captured__c = true,
             PIN_Verified_At__c = System.now()
         );
-        insert audit;
-
+        Database.insert(audit, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyByRequestId(
             req.Id
@@ -1143,8 +1127,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Test Name';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         // In test context, this returns a test PDF blob
         Blob pdf = DocGenSignatureController.convertSignatureRequestToPdf(req.Id);
@@ -1179,8 +1162,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Queueable Test';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.SignaturePdfQueueable q = new DocGenSignatureService.SignaturePdfQueueable(req.Id);
         q.execute(null);
@@ -1194,8 +1176,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Template Queueable Test';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.TemplateSignaturePdfQueueable q = new DocGenSignatureService.TemplateSignaturePdfQueueable(
             req.Id
@@ -1214,13 +1195,11 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Title Format Test';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         // Set a title-format that uses a token resolvable against the Account
         // related record (created by getTestRequest helper).
         req.Document_Title_Format__c = '{Name} Master Agreement';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.TemplateSignaturePdfQueueable q = new DocGenSignatureService.TemplateSignaturePdfQueueable(
             req.Id
@@ -1241,11 +1220,9 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'No Title Format';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         req.Document_Title_Format__c = null;
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         new DocGenSignatureService.TemplateSignaturePdfQueueable(req.Id).execute(null);
         Test.stopTest();
@@ -1345,8 +1322,7 @@ private class DocGenSignatureTests {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         DocGen_Signature_Request__c req = getTestRequest();
         req.Related_Record_Id__c = acc.Id;
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         List<Map<String, Object>> results = DocGenSignatureSenderController.getPendingSignatureRequests(acc.Id);
         Test.stopTest();
@@ -1415,15 +1391,13 @@ private class DocGenSignatureTests {
             Status__c = 'Sent',
             Secure_Token__c = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         // Cache preview HTML in Signature_Data__c
         Map<String, Object> cachedData = new Map<String, Object>{
             'previewHtml' => '<html><body><p>Cached Preview</p></body></html>'
         };
         req.Signature_Data__c = JSON.serialize(cachedData);
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         // Create a signer that points to this request
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
@@ -1433,8 +1407,7 @@ private class DocGenSignatureTests {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.fetchDocumentData(
             'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
@@ -1460,8 +1433,7 @@ private class DocGenSignatureTests {
             Status__c = 'Sent',
             Secure_Token__c = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'NoCache Tester',
@@ -1470,8 +1442,7 @@ private class DocGenSignatureTests {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.fetchDocumentData(
             'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
@@ -1503,8 +1474,7 @@ private class DocGenSignatureTests {
             Secure_Token__c = '1111111111111111111111111111111111111111111111111111111111111111',
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.fetchDocumentData(
             '1111111111111111111111111111111111111111111111111111111111111111'
@@ -1521,13 +1491,11 @@ private class DocGenSignatureTests {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
         req.Secure_Token__c = '2222222222222222222222222222222222222222222222222222222222222222';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         // Remove signer token so it falls through to legacy path
         DocGen_Signer__c signer = getTestSigner();
         signer.Secure_Token__c = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             '2222222222222222222222222222222222222222222222222222222222222222'
@@ -1543,12 +1511,10 @@ private class DocGenSignatureTests {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Cancelled';
         req.Secure_Token__c = '3333333333333333333333333333333333333333333333333333333333333333';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = getTestSigner();
         signer.Secure_Token__c = 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             '3333333333333333333333333333333333333333333333333333333333333333'
@@ -1574,12 +1540,10 @@ private class DocGenSignatureTests {
         req.Source_Document_Id__c = cv.Id;
         req.Status__c = 'Sent';
         req.Secure_Token__c = '4444444444444444444444444444444444444444444444444444444444444444';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = getTestSigner();
         signer.Secure_Token__c = 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             '4444444444444444444444444444444444444444444444444444444444444444'
@@ -1609,8 +1573,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
         signer.Status__c = 'Viewed';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SaveSignatureResult result = DocGenSignatureController.saveSignature(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -1636,8 +1599,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Stamp Test';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             Map<String, String> result = DocGenSignatureController.stampAndReturnSource(
@@ -1657,13 +1619,11 @@ private class DocGenSignatureTests {
         // Use a token that only matches a request (not a signer) to exercise stampLegacySignerAndSavePdf
         DocGen_Signer__c signer = getTestSigner();
         signer.Secure_Token__c = 'aaaa111111111111111111111111111111111111111111111111111111111111';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Viewed';
         req.Signature_Data__c = 'Legacy Stamp Name';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureController.stampAndReturnSource(
@@ -1692,8 +1652,7 @@ private class DocGenSignatureTests {
     static void testSaveLegacySignature_signedRequest() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureController.saveLegacySignature(
@@ -1730,8 +1689,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
         signer.Status__c = 'Signed';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureController.saveSignature(
@@ -1784,8 +1742,7 @@ private class DocGenSignatureTests {
         DocGen_Signature_Request__c req = getTestRequest();
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         List<DocGen_Signer__c> signerList = [
             SELECT Signer_Name__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
             FROM DocGen_Signer__c
@@ -1854,8 +1811,7 @@ private class DocGenSignatureTests {
         // Mark request as signed — should silently return
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.handleSignatureSubmission(
             'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
@@ -1872,8 +1828,7 @@ private class DocGenSignatureTests {
     static void testHandleSignatureSubmission_cancelledRequest() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Cancelled';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.handleSignatureSubmission(
             'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
@@ -1985,8 +1940,7 @@ private class DocGenSignatureTests {
         insert tmpl;
 
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tmpl.Id, Is_Active__c = true);
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         List<String> roles = DocGenSignatureSenderController.getTemplateSignatureRoles(tmpl.Id);
         Test.stopTest();
@@ -1999,8 +1953,7 @@ private class DocGenSignatureTests {
     static void testCancelAlreadyCancelled() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Cancelled';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureSenderController.cancelSignatureRequest(req.Id);
@@ -2057,8 +2010,7 @@ private class DocGenSignatureTests {
         signer.PIN_Hash__c = pinHash;
         signer.PIN_Expires_At__c = System.now().addMinutes(10);
         signer.PIN_Attempts__c = 2; // One more attempt to trigger lockout
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.verifyPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -2121,7 +2073,7 @@ private class DocGenSignatureTests {
             Secure_Token__c = 'aaaa222222222222222222222222222222222222222222222222222222222222',
             Status__c = 'Sent'
         );
-        insert req;
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         // We can't backdate CreatedDate, but we exercise the path anyway.
         // The token won't be expired, so it should succeed.
         Test.startTest();
@@ -2141,8 +2093,7 @@ private class DocGenSignatureTests {
         signer.PIN_Verified_At__c = System.now();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Already Done';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureController.saveSignature(
@@ -2171,8 +2122,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Template Stamp Signer',
@@ -2182,8 +2132,7 @@ private class DocGenSignatureTests {
             Signature_Data__c = 'Template Stamp Name',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             Map<String, String> result = DocGenSignatureController.stampAndReturnSource(
@@ -2215,8 +2164,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Source Doc Signer',
@@ -2226,8 +2174,7 @@ private class DocGenSignatureTests {
             Signature_Data__c = 'Source Doc Name',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             Map<String, String> result = DocGenSignatureController.stampAndReturnSource(
@@ -2249,8 +2196,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'No Source Signer',
@@ -2259,8 +2205,7 @@ private class DocGenSignatureTests {
             Status__c = 'Signed',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             Map<String, String> result = DocGenSignatureController.stampAndReturnSource(
@@ -2279,8 +2224,7 @@ private class DocGenSignatureTests {
     static void testSaveLegacySignature_cancelledRequest() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Cancelled';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureController.saveLegacySignature(
@@ -2330,13 +2274,11 @@ private class DocGenSignatureTests {
         // Parent request is signed — signer token should be invalid
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         // Reset signer to not already signed so we hit the parent check
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Pending';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5'
@@ -2351,12 +2293,10 @@ private class DocGenSignatureTests {
     static void testValidateSignerToken_parentRequestCancelled() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Cancelled';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Pending';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5'
@@ -2379,8 +2319,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Template Validator',
@@ -2389,8 +2328,7 @@ private class DocGenSignatureTests {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             'aabb444444444444444444444444444444444444444444444444444444444444'
@@ -2418,8 +2356,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'SourceDoc Validator',
@@ -2428,8 +2365,7 @@ private class DocGenSignatureTests {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             'aabb555555555555555555555555555555555555555555555555555555555555'
@@ -2448,8 +2384,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'NoDoc Validator',
@@ -2458,8 +2393,7 @@ private class DocGenSignatureTests {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             'aabb666666666666666666666666666666666666666666666666666666666666'
@@ -2478,8 +2412,7 @@ private class DocGenSignatureTests {
         signer.PIN_Hash__c = pinHash;
         signer.PIN_Expires_At__c = System.now().addMinutes(10);
         signer.PIN_Attempts__c = 0; // First wrong attempt: 2 remaining
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.verifyPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -2499,8 +2432,7 @@ private class DocGenSignatureTests {
         signer.PIN_Hash__c = pinHash;
         signer.PIN_Expires_At__c = System.now().addMinutes(10);
         signer.PIN_Attempts__c = null;
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.verifyPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -2535,8 +2467,7 @@ private class DocGenSignatureTests {
         // Cannot truly expire in test, but exercise with valid data to ensure code path runs
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Attempts__c = 0;
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.sendPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -2588,8 +2519,7 @@ private class DocGenSignatureTests {
             Secure_Token__c = 'aabb777777777777777777777777777777777777777777777777777777777777',
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.fetchDocumentData(
             'aabb777777777777777777777777777777777777777777777777777777777777'
@@ -2613,8 +2543,7 @@ private class DocGenSignatureTests {
             Secure_Token__c = 'aabb888888888888888888888888888888888888888888888888888888888888',
             Signature_Data__c = 'NOT VALID JSON'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'BadCache Tester',
@@ -2623,8 +2552,7 @@ private class DocGenSignatureTests {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.fetchDocumentData(
             'aabb999999999999999999999999999999999999999999999999999999999999'
@@ -2654,8 +2582,7 @@ private class DocGenSignatureTests {
             Secure_Token__c = 'ccaa111111111111111111111111111111111111111111111111111111111111',
             Signature_Data__c = JSON.serialize(cachedData)
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'EmptyCache Tester',
@@ -2664,8 +2591,7 @@ private class DocGenSignatureTests {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.fetchDocumentData(
             'ccaa222222222222222222222222222222222222222222222222222222222222'
@@ -2835,8 +2761,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Role_Name__c = null; // No role — blank role path
         signer.PIN_Verified_At__c = null; // No PIN verification
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         List<DocGen_Signer__c> signerList = [
             SELECT Signer_Name__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
             FROM DocGen_Signer__c
@@ -2927,8 +2852,7 @@ private class DocGenSignatureTests {
     static void testResendSignatureRequest_cancelled() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Cancelled';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureSenderController.resendSignatureRequest(req.Id);
@@ -2943,12 +2867,10 @@ private class DocGenSignatureTests {
     static void testResendSignatureRequest_allSignersSigned() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'In Progress';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureSenderController.resendSignatureRequest(req.Id);
@@ -2971,8 +2893,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Resend Signer',
@@ -2985,8 +2906,7 @@ private class DocGenSignatureTests {
             PIN_Attempts__c = 1,
             PIN_Verified_At__c = System.now()
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureSenderController.resendSignatureRequest(req.Id);
         Test.stopTest();
@@ -3019,8 +2939,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Resend Doc Signer',
@@ -3029,8 +2948,7 @@ private class DocGenSignatureTests {
             Status__c = 'Viewed',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureSenderController.resendSignatureRequest(req.Id);
         Test.stopTest();
@@ -3151,8 +3069,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signedSigner = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Signed One',
@@ -3207,8 +3124,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.SignaturePdfQueueable q = new DocGenSignatureService.SignaturePdfQueueable(req.Id);
         q.execute(null);
@@ -3223,8 +3139,7 @@ private class DocGenSignatureTests {
             Source_Document_Id__c = '068000000000001AAA',
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'NoRelated Signer',
@@ -3234,8 +3149,7 @@ private class DocGenSignatureTests {
             Signature_Data__c = 'No Related Name',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.SignaturePdfQueueable q = new DocGenSignatureService.SignaturePdfQueueable(req.Id);
         q.execute(null);
@@ -3263,8 +3177,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'NoTmpl Signer',
@@ -3274,8 +3187,7 @@ private class DocGenSignatureTests {
             Signature_Data__c = 'NoTmpl Name',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.TemplateSignaturePdfQueueable q = new DocGenSignatureService.TemplateSignaturePdfQueueable(
             req.Id
@@ -3306,8 +3218,7 @@ private class DocGenSignatureTests {
             Template__c = tmpl.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'NoRel Tmpl Signer',
@@ -3317,8 +3228,7 @@ private class DocGenSignatureTests {
             Signature_Data__c = 'NoRel Name',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.TemplateSignaturePdfQueueable q = new DocGenSignatureService.TemplateSignaturePdfQueueable(
             req.Id
@@ -3340,8 +3250,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Audit Signer',
@@ -3351,16 +3260,14 @@ private class DocGenSignatureTests {
             Signature_Data__c = 'Audit Name',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         // Create audit record without hash
         DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Audit Signer',
             Signed_Date__c = System.now()
         );
-        insert audit;
-
+        Database.insert(audit, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.TemplateSignaturePdfQueueable q = new DocGenSignatureService.TemplateSignaturePdfQueueable(
             req.Id
@@ -3379,8 +3286,7 @@ private class DocGenSignatureTests {
             Related_Record_Id__c = acc.Id,
             Status__c = 'In Progress'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Audit PDF Signer',
@@ -3390,15 +3296,13 @@ private class DocGenSignatureTests {
             Signature_Data__c = 'Audit PDF Name',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Audit PDF Signer',
             Signed_Date__c = System.now()
         );
-        insert audit;
-
+        Database.insert(audit, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.SignaturePdfQueueable q = new DocGenSignatureService.SignaturePdfQueueable(req.Id);
         q.execute(null);
@@ -3412,8 +3316,7 @@ private class DocGenSignatureTests {
         // which generates a test PDF and calls DocGenController.saveGeneratedDocument
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Sent'; // Not signed/cancelled
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.handleSignatureSubmission(
             'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
@@ -3445,8 +3348,7 @@ private class DocGenSignatureTests {
     static void testHandleSignatureSubmission_alreadySignedReturns() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         // Should return silently (not throw) when request is already signed
         DocGenSignatureService.handleSignatureSubmission(
@@ -3461,8 +3363,7 @@ private class DocGenSignatureTests {
     static void testHandleSignatureSubmission_cancelledReturns() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Cancelled';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.handleSignatureSubmission(
             'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
@@ -3477,8 +3378,7 @@ private class DocGenSignatureTests {
         DocGen_Signature_Request__c req = getTestRequest();
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         List<DocGen_Signer__c> signers = [
             SELECT Signer_Name__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
             FROM DocGen_Signer__c
@@ -3573,8 +3473,7 @@ private class DocGenSignatureTests {
     static void testSaveLegacySignature_signedStatus() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
             DocGenSignatureController.saveLegacySignature(
@@ -3595,8 +3494,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
         signer.Status__c = 'Viewed';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         // Token is valid, PIN verified, consent given — this should succeed
         DocGenSignatureController.SaveSignatureResult result = DocGenSignatureController.saveSignature(
@@ -3616,13 +3514,11 @@ private class DocGenSignatureTests {
         // When parent request is Signed, signer token should be invalid
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Signed';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         // Reset signer status so the signer-level check passes but parent check fails
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Pending';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5'
@@ -3642,8 +3538,7 @@ private class DocGenSignatureTests {
     static void testSendPin_blankEmailAddress() {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Attempts__c = 0;
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         Map<String, Object> result = DocGenSignatureController.sendPin(
             'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5',
@@ -3852,8 +3747,7 @@ private class DocGenSignatureTests {
                 Tag_Text__c = '{@Signature_Signer:3:Date}'
             )
         );
-        insert placements;
-
+        Database.insert(placements, AccessLevel.SYSTEM_MODE);
         String xml = '<w:t>{@Signature_Signer:1:Full}</w:t><w:t>{@Signature_Signer:2:Initials}</w:t><w:t>{@Signature_Signer:3:Date}</w:t>';
 
         Test.startTest();
@@ -3949,8 +3843,7 @@ private class DocGenSignatureTests {
 
         // Set PIN verified so signing is allowed
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         DocGen_Signature_Placement__c plc = new DocGen_Signature_Placement__c(
             Signer__c = signer.Id,
             Signature_Request__c = req.Id,
@@ -3982,8 +3875,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         DocGen_Signature_Request__c req = getTestRequest();
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         DocGen_Signature_Placement__c plc = new DocGen_Signature_Placement__c(
             Signer__c = signer.Id,
             Signature_Request__c = req.Id,
@@ -4038,8 +3930,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         DocGen_Signature_Request__c req = getTestRequest();
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         DocGen_Signature_Placement__c plc = new DocGen_Signature_Placement__c(
             Signer__c = signer.Id,
             Signature_Request__c = req.Id,
@@ -4127,7 +4018,7 @@ private class DocGenSignatureTests {
         // the decline handler clears them — otherwise the cached preview leaks the typed
         // name back to anyone refreshing the signing link after decline.
         signer.Signature_Data__c = 'Pre-decline typed name';
-        update signer;
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         DocGen_Signature_Request__c parentReqSeed = new DocGen_Signature_Request__c(
             Id = signer.Signature_Request__c,
             Signature_Data__c = '{"previewHtml":"<html>Electronically signed by ...</html>"}'
@@ -4204,8 +4095,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Test Name';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         String signerToken = [SELECT Secure_Token__c FROM DocGen_Signer__c WHERE Id = :signer.Id].Secure_Token__c;
         Map<String, Object> result = DocGenSignatureController.declineSignature(signerToken, 'reason', null, null);
         System.assertEquals(false, result.get('success'));
@@ -4554,8 +4444,7 @@ private class DocGenSignatureTests {
             WHERE Id = :signer.Signature_Request__c
         ];
         req.Status__c = 'Sent';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         // Override threshold to future so all signers qualify (CreatedDate < threshold)
         DocGenSignatureReminderSchedulable.testThresholdOverride = System.now().addDays(1);
 
@@ -4623,8 +4512,7 @@ private class DocGenSignatureTests {
     static void testSignPlacement_wrongSigner() {
         DocGen_Signer__c signer = getTestSigner();
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         // Create placement for a DIFFERENT signer (simulate cross-signer attack)
         String signerToken = [SELECT Secure_Token__c FROM DocGen_Signer__c WHERE Id = :signer.Id].Secure_Token__c;
 
@@ -4680,8 +4568,7 @@ private class DocGenSignatureTests {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Test Name';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGen_Signature_PDF__e evt = new DocGen_Signature_PDF__e();
         evt.Request_Id__c = req.Id;
@@ -4737,13 +4624,11 @@ private class DocGenSignatureTests {
     static void testPlatformEventTrigger_declinedSigner() {
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Declined';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Declined';
         signer.Decline_Reason__c = 'Test decline';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGen_Signature_PDF__e evt = new DocGen_Signature_PDF__e();
         evt.Request_Id__c = req.Id;
@@ -4775,8 +4660,7 @@ private class DocGenSignatureTests {
             Consent_Captured__c = true,
             Signed_Date__c = System.now()
         );
-        insert audit;
-
+        Database.insert(audit, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         String html = DocGenSignatureService.buildVerificationBlockHtml(req.Id, new List<DocGen_Signer__c>{ signer });
         Test.stopTest();
@@ -4962,8 +4846,7 @@ private class DocGenSignatureTests {
 
         // signPlacement enforces PIN_Verified_At__c; simulate a verified session.
         signer.PIN_Verified_At__c = System.now();
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
 
         // Sign placement #1 (full signature)
@@ -5083,8 +4966,7 @@ private class DocGenSignatureTests {
         // Scenario: 2 signers, 1 signed + 1 pending = fires "signer completed" notification
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'In Progress';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer1 = getTestSigner();
         signer1.Status__c = 'Signed';
         signer1.Signature_Data__c = 'Signer One';
@@ -5118,8 +5000,7 @@ private class DocGenSignatureTests {
         // Link to template from TestDataFactory
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         req.Template__c = tpl.Id;
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer1 = getTestSigner();
         signer1.Status__c = 'Signed';
         signer1.Signature_Data__c = 'First Signer';
@@ -5154,13 +5035,11 @@ private class DocGenSignatureTests {
         // Scenario: Request declined, signer declined → fires decline notification
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'Declined';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Declined';
         signer.Decline_Reason__c = 'Test decline reason';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGen_Signature_PDF__e evt = new DocGen_Signature_PDF__e();
         evt.Request_Id__c = req.Id;
@@ -5176,13 +5055,11 @@ private class DocGenSignatureTests {
         req.Status__c = 'In Progress';
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         req.Template__c = tpl.Id;
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
         signer.Signature_Data__c = 'Complete Signer';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGen_Signature_PDF__e evt = new DocGen_Signature_PDF__e();
         evt.Request_Id__c = req.Id;
@@ -5196,8 +5073,7 @@ private class DocGenSignatureTests {
         // Scenario: 1 signed + 1 viewed (not pending) = remaining still > 0
         DocGen_Signature_Request__c req = getTestRequest();
         req.Status__c = 'In Progress';
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer1 = getTestSigner();
         signer1.Status__c = 'Signed';
         signer1.Signature_Data__c = 'Done';
@@ -5331,8 +5207,7 @@ private class DocGenSignatureTests {
     static void testMarkSignerVerifiedInPerson_alreadySignedThrows() {
         DocGen_Signer__c signer = getTestSigner();
         signer.Status__c = 'Signed';
-        update signer;
-
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
         Boolean threw = false;
         Test.startTest();
         try {
@@ -5394,8 +5269,7 @@ private class DocGenSignatureTests {
             LIMIT 1
         ];
         req.Source_Document_Id__c = srcId;
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Map<String, String> result = DocGenSignatureController.getImageBase64(signer.Secure_Token__c, srcId);
         System.assertEquals(null, result.get('error'), 'Source doc CV should be authorized');
         System.assertNotEquals(null, result.get('base64'), 'Should return base64 for the request source doc');
@@ -5432,8 +5306,7 @@ private class DocGenSignatureTests {
             LIMIT 1
         ];
         req.Template__c = tmpl.Id;
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Map<String, String> result = DocGenSignatureController.getImageBase64(signer.Secure_Token__c, tmplImgId);
         System.assertEquals(
             null,
@@ -5463,8 +5336,7 @@ private class DocGenSignatureTests {
             Template__c = otherTmpl.Id,
             Is_Active__c = false
         );
-        insert otherVer;
-
+        Database.insert(otherVer, AccessLevel.SYSTEM_MODE);
         Id foreignVersionId = otherVer.Id;
         String foreignTitle = 'docgen_tmpl_img_' + foreignVersionId + '_rId1';
         ContentVersion foreignTmplImg = new ContentVersion(
@@ -5490,8 +5362,7 @@ private class DocGenSignatureTests {
             LIMIT 1
         ];
         req.Template__c = tmpl.Id;
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Map<String, String> result = DocGenSignatureController.getImageBase64(signer.Secure_Token__c, foreignCvId);
         System.assertEquals(
             'Image not authorized for this signing session',
@@ -5549,8 +5420,7 @@ private class DocGenSignatureTests {
             LIMIT 1
         ];
         req.Source_Document_Id__c = srcId;
-        update req;
-
+        Database.update(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureController.fetchDocumentData(signer.Secure_Token__c);
         Test.stopTest();

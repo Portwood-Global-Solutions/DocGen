@@ -42,8 +42,7 @@ private class DocGenGiantQueryTest {
             Type__c = 'Word',
             Output_Format__c = 'PDF'
         );
-        insert tpl;
-
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         // Create a valid DOCX file and link to template
         ContentVersion docxCv = TestDataFactory.createValidDocxFile(tpl.Id, TestDataFactory.buildSimpleDocXml());
 
@@ -56,8 +55,7 @@ private class DocGenGiantQueryTest {
             Type__c = 'Word',
             Base_Object_API__c = 'Account'
         );
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         // Create Account with Contacts
         Account acc = new Account(Name = 'Giant Query Test Account');
         insert acc;
@@ -231,8 +229,7 @@ private class DocGenGiantQueryTest {
                 Label__c = 'Test Giant Query',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Build child node config
             Map<String, Object> childNodeConfig = new Map<String, Object>{
                 'object' => 'Contact',
@@ -282,8 +279,7 @@ private class DocGenGiantQueryTest {
                 Parent_Record_Id__c = String.valueOf(acc.Id),
                 Total_Records__c = 10
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create mock fragment CVs (simulating what the batch would produce)
             List<ContentVersion> fragments = new List<ContentVersion>();
             for (Integer i = 0; i < 3; i++) {
@@ -373,8 +369,7 @@ private class DocGenGiantQueryTest {
                 Label__c = 'Invalid Object Test',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Map<String, Object> badConfig = new Map<String, Object>{
                 'object' => 'NonExistentObject__c',
                 'lookupField' => 'AccountId',
@@ -459,7 +454,7 @@ private class DocGenGiantQueryTest {
                 Label__c = 'WHERE Test',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Map<String, Object> childNodeConfig = new Map<String, Object>{
                 'object' => 'Contact',
                 'lookupField' => 'AccountId',
@@ -497,7 +492,7 @@ private class DocGenGiantQueryTest {
                 Template__c = tpl.Id,
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Map<String, Object> badConfig = new Map<String, Object>{
                 'object' => 'Contact',
                 'lookupField' => 'AccountId',
@@ -614,7 +609,7 @@ private class DocGenGiantQueryTest {
         ];
         ContentVersion cv = TestDataFactory.createValidDocxFile(tpl.Id, TestDataFactory.buildSimpleDocXml());
         ver.Content_Version_Id__c = cv.Id;
-        update ver;
+        Database.update(ver, AccessLevel.SYSTEM_MODE);
         return cv;
     }
 
@@ -636,8 +631,7 @@ private class DocGenGiantQueryTest {
                 Label__c = 'Test Giant Query Sorted',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Build child node config WITH orderBy — triggers pre-sorted Id path
             Map<String, Object> childNodeConfig = new Map<String, Object>{
                 'object' => 'Contact',
@@ -682,8 +676,7 @@ private class DocGenGiantQueryTest {
                 Label__c = 'Injection Test',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Attempt injection via ORDER BY clause
             Map<String, Object> badConfig = new Map<String, Object>{
                 'object' => 'Contact',
@@ -721,8 +714,7 @@ private class DocGenGiantQueryTest {
                 Label__c = 'DML Keyword Test',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Map<String, Object> badConfig = new Map<String, Object>{
                 'object' => 'Contact',
                 'lookupField' => 'AccountId',
@@ -975,8 +967,7 @@ private class DocGenGiantQueryTest {
                 Status__c = 'Harvesting',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
 
             String html = '<html><body>Total contacts: {COUNT:Contacts}</body></html>';
@@ -1033,15 +1024,13 @@ private class DocGenGiantQueryTest {
                 }
             );
             tpl.Query_Config__c = v3Config;
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = tpl.Id,
                 Status__c = 'Harvesting',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
 
             String html = '<html><body>Sum: {SUM:Contacts.MailingLatitude} Count: {COUNT:Contacts}</body></html>';
@@ -1070,8 +1059,7 @@ private class DocGenGiantQueryTest {
 
             // V1 flat config (legacy format — does NOT start with '{')
             tpl.Query_Config__c = 'Name, (SELECT FirstName, MailingLatitude FROM Contacts)';
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             List<Contact> contacts = [SELECT Id FROM Contact WHERE AccountId = :acc.Id];
             for (Contact c : contacts) {
                 c.MailingLatitude = 5.0;
@@ -1084,8 +1072,7 @@ private class DocGenGiantQueryTest {
                 Status__c = 'Harvesting',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Use the new 7-arg constructor (the batch uses this path in production)
             DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(
                 job.Id,
@@ -1150,8 +1137,7 @@ private class DocGenGiantQueryTest {
                 }
             );
             tpl.Query_Config__c = v3Config;
-            update tpl;
-
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
             // Set numeric field so aggregates have something to crunch
             List<Contact> contacts = [SELECT Id FROM Contact WHERE AccountId = :acc.Id];
             for (Contact c : contacts) {
@@ -1165,8 +1151,7 @@ private class DocGenGiantQueryTest {
                 Status__c = 'Harvesting',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
 
             String html =
@@ -1215,8 +1200,7 @@ private class DocGenGiantQueryTest {
                 Status__c = 'Harvesting',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Use a minimal HTML template via pre-baked CV. Parent tags sit in the header.
             DocGen_Template_Version__c ver = [
                 SELECT Id
@@ -1298,8 +1282,7 @@ private class DocGenGiantQueryTest {
                 Status__c = 'Harvesting',
                 Parent_Record_Id__c = String.valueOf(acc.Id)
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
 
             // Tag references a different relationship — should pass through untouched
@@ -1387,8 +1370,7 @@ private class DocGenGiantQueryTest {
         Account acc = [SELECT Id, Name FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
         tpl.Document_Title_Format__c = 'XXXX-premium-{Name}';
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         String title = DocGenService.computeDocTitle(tpl.Id, acc.Id);
         Test.stopTest();
@@ -1405,8 +1387,7 @@ private class DocGenGiantQueryTest {
         Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
         tpl.Document_Title_Format__c = null;
-        update tpl;
-
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         String title = DocGenService.computeDocTitle(tpl.Id, acc.Id);
         Test.stopTest();

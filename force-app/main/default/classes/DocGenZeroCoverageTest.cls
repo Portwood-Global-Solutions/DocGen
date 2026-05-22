@@ -63,8 +63,7 @@ private class DocGenZeroCoverageTest {
     @IsTest
     static void buildVerificationBlockHtmlRendersSignerCertificate() {
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(Status__c = 'Sent');
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         List<DocGen_Signer__c> signers = new List<DocGen_Signer__c>{
             new DocGen_Signer__c(
                 Signature_Request__c = req.Id,
@@ -83,8 +82,7 @@ private class DocGenZeroCoverageTest {
                 Sort_Order__c = 2
             )
         };
-        insert signers;
-
+        Database.insert(signers, AccessLevel.SYSTEM_MODE);
         // Insert one audit row so the audit-query branch is exercised
         insert new DocGen_Signature_Audit__c(
             Signature_Request__c = req.Id,
@@ -109,7 +107,7 @@ private class DocGenZeroCoverageTest {
     @IsTest
     static void stampSignaturesInXmlReplacesPlacementTags() {
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(Status__c = 'Sent');
-        insert req;
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Carol Test',
@@ -118,8 +116,7 @@ private class DocGenZeroCoverageTest {
             Status__c = 'Signed',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         DateTime signedAt = DateTime.newInstance(2026, 4, 29, 12, 0, 0);
 
         // Cover all four Placement_Type__c branches in buildPlacementText
@@ -161,8 +158,7 @@ private class DocGenZeroCoverageTest {
                 Sequence_Order__c = 4
             )
         };
-        insert placements;
-
+        Database.insert(placements, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<w:document><w:body><w:p>' +
             '{@Signature_Buyer:1:Full} | {@Signature_Buyer:1:Initials} | {@Signature_Buyer:1:Date} | {@Signature_Buyer:1:DatePick}' +
@@ -204,8 +200,7 @@ private class DocGenZeroCoverageTest {
             Total_Records__c = 2,
             Success_Count__c = 2
         );
-        insert job;
-
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         String snippetA = '<html><head><style>.a{color:red}</style></head><body><div class="a">Record A body</div></body></html>';
         String snippetB = '<html><head><style>.b{color:blue}</style></head><body><div class="b">Record B body</div></body></html>';
         insert new List<ContentVersion>{
@@ -249,8 +244,7 @@ private class DocGenZeroCoverageTest {
             Total_Records__c = 0,
             Success_Count__c = 0
         );
-        insert job;
-
+        Database.insert(job, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         System.enqueueJob(new DocGenMergeJob(job.Id));
         Test.stopTest();
@@ -312,8 +306,7 @@ private class DocGenZeroCoverageTest {
             Related_Record_Id__c = acct.Id,
             Secure_Token__c = token
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenSignatureService.handleSignatureSubmission(token, 'Tester Signature');
         Test.stopTest();
@@ -329,7 +322,7 @@ private class DocGenZeroCoverageTest {
             Status__c = 'Signed', // already signed → method should return without changes
             Secure_Token__c = token
         );
-        insert req;
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGenSignatureService.handleSignatureSubmission(token, 'late');
         DocGen_Signature_Request__c after = [SELECT Status__c FROM DocGen_Signature_Request__c WHERE Id = :req.Id];
         System.assertEquals('Signed', after.Status__c, 'Already-signed request should remain Signed');
@@ -392,8 +385,7 @@ private class DocGenZeroCoverageTest {
             Signer_Email__c = 'q@example.com',
             Signature_Data__c = 'Quick Test'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Quick Test',
@@ -403,8 +395,7 @@ private class DocGenZeroCoverageTest {
             Status__c = 'Signed',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         // Early-return branch: insert a sacrificial request, capture its Id, then delete it.
         // Querying it from the queueable will return empty list and the method returns early.
         DocGen_Signature_Request__c phantom = new DocGen_Signature_Request__c(Status__c = 'Sent');
@@ -440,8 +431,7 @@ private class DocGenZeroCoverageTest {
             Signer_Name__c = 'Tmpl Test',
             Signer_Email__c = 't@example.com'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signature_Request__c phantom = new DocGen_Signature_Request__c(Status__c = 'Sent');
         insert phantom;
         Id phantomId = phantom.Id;
@@ -522,7 +512,7 @@ private class DocGenZeroCoverageTest {
     @IsTest
     static void stampSignaturesInXmlSkipsUnsignedAndBlankPlacements() {
         DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(Status__c = 'Sent');
-        insert req;
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
             Signer_Name__c = 'Dave Test',
@@ -531,8 +521,7 @@ private class DocGenZeroCoverageTest {
             Status__c = 'Pending',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         List<DocGen_Signature_Placement__c> placements = new List<DocGen_Signature_Placement__c>{
             new DocGen_Signature_Placement__c(
                 Signer__c = signer.Id,
@@ -551,8 +540,7 @@ private class DocGenZeroCoverageTest {
                 Sequence_Order__c = 2
             )
         };
-        insert placements;
-
+        Database.insert(placements, AccessLevel.SYSTEM_MODE);
         String docXml = '<w:t>{@Signature_Buyer:1:Full}</w:t>';
         DocGenSignatureService.StampResult result = DocGenSignatureService.stampSignaturesInXml(
             docXml,

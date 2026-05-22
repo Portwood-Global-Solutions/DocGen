@@ -17,12 +17,10 @@ public with sharing class DocGenBulkControllerTest {
             Output_Format__c = 'PDF',
             Query_Config__c = '{"v":3,"root":"Account","nodes":[{"id":"n0","object":"Account","fields":["Name"],"parentNode":null,"lookupField":null,"relationshipName":null}]}'
         );
-        insert temp;
-
+        Database.insert(temp, AccessLevel.SYSTEM_MODE);
         // Create a Template Version
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = temp.Id, Is_Active__c = true);
-        insert ver;
-
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         // Attach a valid minimal DOCX file (Minimal valid ZIP structure with document.xml)
         String dummyDocx = 'UEsDBBQAAAAIAAAAIQDp74EAAAABAAAADwAAAHdvcmQvZG9jdW1lbnQueG1sPz94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9InllcyI/Pgo8dzpkb2N1bWVudCB4bWxuczp3PSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvd29yZG1vY2Vzc2luZ21sLzIwMDYvbWFpbiI+PHc6Ym9keT48dzpwPjx3OnI+PHc6dD5UZXN0PC93OnQ+PC93OnI+PC93OnA+PC93OmJvZHk+PC93OmRvY3VtZW50PlBLAQIUABQAAAAIAAAAIQDp74EAAAABAAAADwAAAAAAAAAAAAAAAABAAAAAd29yZC9kb2N1bWVudC54bWxQSwUGAAAAAAEAAQA9AAAARwAAAAAA';
         ContentVersion cv = new ContentVersion(
@@ -37,8 +35,7 @@ public with sharing class DocGenBulkControllerTest {
         insert new ContentDocumentLink(LinkedEntityId = ver.Id, ContentDocumentId = docId, ShareType = 'V');
 
         ver.Content_Version_Id__c = cv.Id;
-        update ver;
-
+        Database.update(ver, AccessLevel.SYSTEM_MODE);
         // Create pre-decomposed XML ContentVersion so the PDF merge path works
         String docXml =
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -89,8 +86,7 @@ public with sharing class DocGenBulkControllerTest {
     static void testEstimateHeapUsageNoTestId() {
         DocGen_Template__c temp = [SELECT Id FROM DocGen_Template__c LIMIT 1];
         temp.Test_Record_Id__c = null;
-        update temp;
-
+        Database.update(temp, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         DocGenBulkController.HeapEstimate estimate = DocGenBulkController.estimateHeapUsage(temp.Id, 10);
         Test.stopTest();

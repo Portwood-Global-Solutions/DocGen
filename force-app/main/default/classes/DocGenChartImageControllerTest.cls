@@ -183,9 +183,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -230,9 +230,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<w:document>' +
             '<w:body>' +
@@ -268,7 +268,7 @@ private class DocGenChartImageControllerTest {
             Base_Object_API__c = 'Account',
             Type__c = 'Word'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         List<DocGenChartImageController.ChartImageRequest> reqs = DocGenChartImageController.prepareChartImages(
             tpl.Id,
             acc.Id
@@ -289,9 +289,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         ContentVersion xmlCv = new ContentVersion(
             Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
             PathOnClient = 'document.xml',
@@ -320,9 +320,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         ContentVersion xmlCv = new ContentVersion(
             Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
             PathOnClient = 'document.xml',
@@ -351,9 +351,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         ContentVersion xmlCv = new ContentVersion(
             Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
             PathOnClient = 'document.xml',
@@ -400,7 +400,7 @@ private class DocGenChartImageControllerTest {
             Base_Object_API__c = 'Account',
             Type__c = 'HTML'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         Map<String, String> out = DocGenChartImageController.prepareChartImagesServerSide(tpl.Id, acc.Id);
         System.assertNotEquals(null, out, 'Should return empty map, not null.');
         System.assertEquals(0, out.size(), 'HTML templates produce no chart CVs.');
@@ -415,7 +415,7 @@ private class DocGenChartImageControllerTest {
             Base_Object_API__c = 'Account',
             Type__c = 'Word'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         Map<String, String> out = DocGenChartImageController.prepareChartImagesServerSide(tpl.Id, acc.Id);
         System.assertEquals(0, out.size());
     }
@@ -435,9 +435,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<?xml version="1.0" encoding="UTF-8"?>' +
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -488,9 +488,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         String docXml =
             '<w:document>' +
             '<w:body>' +
@@ -520,9 +520,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         ContentVersion xmlCv = new ContentVersion(
             Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
             PathOnClient = 'document.xml',
@@ -550,9 +550,9 @@ private class DocGenChartImageControllerTest {
             Type__c = 'Word',
             Query_Config__c = 'Name'
         );
-        insert tpl;
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
-        insert ver;
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
         ContentVersion xmlCv = new ContentVersion(
             Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
             PathOnClient = 'document.xml',
@@ -581,8 +581,7 @@ private class DocGenChartImageControllerTest {
             Base_Object_API__c = 'Account',
             Type__c = 'HTML'
         );
-        insert tpl;
-
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
         List<DocGenChartImageController.ChartImageRequest> reqs = DocGenChartImageController.prepareChartImages(
             tpl.Id,
             acc.Id

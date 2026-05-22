@@ -19,8 +19,7 @@ private class DocGenAuthenticatorControllerTest {
             Secure_Token__c = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
             Status__c = 'Sent'
         );
-        insert req;
-
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
         // Signer record (audit FK)
         DocGen_Signer__c signer = new DocGen_Signer__c(
             Signature_Request__c = req.Id,
@@ -31,8 +30,7 @@ private class DocGenAuthenticatorControllerTest {
             Status__c = 'Signed',
             Sort_Order__c = 1
         );
-        insert signer;
-
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
         // The audit row that both endpoints will find
         DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c(
             Signature_Request__c = req.Id,
@@ -45,7 +43,7 @@ private class DocGenAuthenticatorControllerTest {
             PIN_Verified_At__c = Datetime.now(),
             Document_Hash_SHA256__c = VALID_HASH
         );
-        insert audit;
+        Database.insert(audit, AccessLevel.SYSTEM_MODE);
     }
 
     private static DocGen_Signature_Request__c getRequest() {

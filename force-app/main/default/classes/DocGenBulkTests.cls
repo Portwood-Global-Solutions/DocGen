@@ -154,8 +154,7 @@ private class DocGenBulkTests {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             DocGen_Job__c job = new DocGen_Job__c(Template__c = t.Id, Status__c = 'Queued');
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGen_Job__c status = DocGenBulkController.getJobStatus(job.Id);
             Test.stopTest();
@@ -195,8 +194,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'DocGen Test Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);
@@ -222,8 +220,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name != null /* comment */',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Boolean caught = false;
             try {
@@ -255,8 +252,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name != null -- comment',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Boolean caught = false;
             try {
@@ -327,8 +323,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name LIKE \'V3 Acct%\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 3);
@@ -374,8 +369,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'Batch Success Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);
@@ -426,8 +420,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name LIKE \'BulkAcct%\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             // mergeMode=true, mergeOnly=false
             DocGenBatch batch = new DocGenBatch(job.Id, true, false);
@@ -472,8 +465,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'MergeOnly Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             // mergeOnly=true implies mergeMode=true
             DocGenBatch batch = new DocGenBatch(job.Id, false, true);
@@ -502,8 +494,7 @@ private class DocGenBulkTests {
         System.runAs(u) {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
             DocGen_Job__c job = new DocGen_Job__c(Template__c = t.Id, Status__c = 'Queued');
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Test.stopTest();
@@ -519,8 +510,7 @@ private class DocGenBulkTests {
         System.runAs(u) {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
             DocGen_Job__c job = new DocGen_Job__c(Template__c = t.Id, Status__c = 'Queued');
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id, true);
             Test.stopTest();
@@ -547,8 +537,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'DocGen Test Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);
@@ -579,8 +568,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'DocGen Test Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);
@@ -629,8 +617,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'Cache Cleanup Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);
@@ -677,8 +664,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'DocGen Test Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);
@@ -747,8 +733,7 @@ private class DocGenBulkTests {
                     )
                 );
             }
-            insert jobs;
-
+            Database.insert(jobs, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             List<DocGen_Job__c> recentJobs = DocGenBulkController.getRecentJobs();
             Test.stopTest();
@@ -780,8 +765,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'DocGen Test Account\'',
                 Status__c = 'Completed'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create a fake PDF ContentVersion linked to the Account
             ContentVersion cv = new ContentVersion(
                 Title = 'Generated PDF',
@@ -819,8 +803,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'No Such Account XYZ\'',
                 Status__c = 'Completed'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             List<Map<String, String>> pdfs = DocGenBulkController.getJobGeneratedPdfs(job.Id);
             Test.stopTest();
@@ -962,8 +945,7 @@ private class DocGenBulkTests {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             DocGen_Job__c job = new DocGen_Job__c(Template__c = t.Id, Query_Condition__c = null, Status__c = 'Queued');
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 200);
@@ -991,8 +973,7 @@ private class DocGenBulkTests {
             insert t;
 
             DocGen_Job__c job = new DocGen_Job__c(Template__c = t.Id, Status__c = 'Queued');
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             Boolean caught = false;
             try {
@@ -1119,8 +1100,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'LazyLoad Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);
@@ -1164,8 +1144,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'Notify Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);
@@ -1305,8 +1284,7 @@ private class DocGenBulkTests {
                 Success_Count__c = 2,
                 Total_Records__c = 2
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create HTML snippet ContentVersions manually
             String html1 = '<html><body><p>Page One</p></body></html>';
             String html2 = '<html><body><p>Page Two</p></body></html>';
@@ -1349,8 +1327,7 @@ private class DocGenBulkTests {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             DocGen_Job__c job = new DocGen_Job__c(Template__c = t.Id, Status__c = 'Merging', Success_Count__c = 0);
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenMergeJob mergeJob = new DocGenMergeJob(job.Id);
             System.enqueueJob(mergeJob);
@@ -1372,8 +1349,7 @@ private class DocGenBulkTests {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             DocGen_Job__c job = new DocGen_Job__c(Template__c = t.Id, Status__c = 'Merging', Success_Count__c = 1);
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             // Create a snippet with invalid HTML that might cause issues
             ContentVersion cv = new ContentVersion(
                 Title = 'docgen_merge_' + job.Id + '_00000',
@@ -1427,8 +1403,7 @@ private class DocGenBulkTests {
                 Query_Condition__c = 'Name = \'PartialFail Account\'',
                 Status__c = 'Queued'
             );
-            insert job;
-
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
             Test.startTest();
             DocGenBatch batch = new DocGenBatch(job.Id);
             Database.executeBatch(batch, 1);

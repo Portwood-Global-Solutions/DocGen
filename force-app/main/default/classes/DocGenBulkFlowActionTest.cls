@@ -9,8 +9,7 @@ private class DocGenBulkFlowActionTest {
             Base_Object_API__c = 'Account',
             Type__c = 'Word'
         );
-        insert temp;
-
+        Database.insert(temp, AccessLevel.SYSTEM_MODE);
         insert new Account(Name = 'Test Account 1', Website = 'https://test1.com');
         insert new Account(Name = 'Test Account 2', Website = 'https://test2.com');
     }
