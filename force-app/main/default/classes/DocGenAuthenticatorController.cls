@@ -9,15 +9,13 @@ public without sharing class DocGenAuthenticatorController {
      */
     @AuraEnabled
     @RemoteAction
-    public static VerificationResult verifyDocument(String fileHash) {
-        VerificationResult res = new VerificationResult();
+    public static List<VerificationResult> verifyDocument(String fileHash) {
+        List<VerificationResult> results = new List<VerificationResult>();
 
         // Strict input validation: must be a 64-char hex string (SHA-256 digest).
-        // Reject early with empty result if the input is malformed — never reach SOQL.
+        // Reject early with empty list if the input is malformed — never reach SOQL.
         if (String.isBlank(fileHash) || fileHash.length() != 64 || !SHA256_HEX.matcher(fileHash).matches()) {
-            res.isValid = false;
-            res.message = 'Document could not be verified. It may have been modified after signing or was not signed through this system.';
-            return res;
+            return results;
         }
 
         // Public document verifier — the capability is holding the SHA-256 hash
@@ -26,9 +24,15 @@ public without sharing class DocGenAuthenticatorController {
         DocGenSignatureGuestSecurity.assertAuditReadable();
         // Field allowlist: Signed_Date__c, IP_Address__c, Signer_Name__c,
         // Signer_Email__c, Consent_Captured__c, PIN_Verified_At__c,
-        // Document_Hash_SHA256__c — only verification-contract fields are
-        // returned. SYSTEM_MODE is required because guest profile has no
-        // DocGen_Signature_Audit__c CRUD by design; the hash IS the capability.
+        // Document_Hash_SHA256__c, Signer__r.Role_Name__c — only verification-
+        // contract fields are returned. SYSTEM_MODE is required because guest
+        // profile has no DocGen_Signature_Audit__c CRUD by design; the hash
+        // IS the capability.
+        //
+        // No LIMIT: a multi-signer document has one audit record per signer,
+        // all sharing the same Document_Hash_SHA256__c (the hash of the
+        // final stamped PDF). The verifier returns every signer for the
+        // complete audit trail of the document.
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Audit__c> audits = [
             SELECT
@@ -39,29 +43,29 @@ public without sharing class DocGenAuthenticatorController {
                 Signer_Email__c,
                 Consent_Captured__c,
                 PIN_Verified_At__c,
-                Document_Hash_SHA256__c
+                Document_Hash_SHA256__c,
+                Signer__r.Role_Name__c
             FROM DocGen_Signature_Audit__c
-            WHERE Document_Hash_SHA256__c = :fileHash
+            WHERE Document_Hash_SHA256__c = :fileHash AND Signer_Name__c != 'SYSTEM'
             WITH SYSTEM_MODE
-            LIMIT 1
+            ORDER BY Signed_Date__c ASC
         ];
 
-        if (!audits.isEmpty()) {
-            DocGen_Signature_Audit__c audit = audits[0];
+        for (DocGen_Signature_Audit__c audit : audits) {
+            VerificationResult res = new VerificationResult();
             res.isValid = true;
             res.signerName = audit.Signer_Name__c;
             res.signerEmail = audit.Signer_Email__c;
+            res.roleName = audit.Signer__r != null ? audit.Signer__r.Role_Name__c : null;
             res.signedDate = audit.Signed_Date__c;
             res.ipAddress = audit.IP_Address__c;
             res.documentHash = audit.Document_Hash_SHA256__c;
             res.consentCaptured = audit.Consent_Captured__c;
             res.pinVerifiedAt = audit.PIN_Verified_At__c;
             res.message = 'Authentic Document Verified';
-        } else {
-            res.isValid = false;
-            res.message = 'Document could not be verified. It may have been modified after signing or was not signed through this system.';
+            results.add(res);
         }
-        return res;
+        return results;
     }
 
     /**

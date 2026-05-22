@@ -439,12 +439,12 @@ private class DocGenSignatureTests {
     @isTest
     static void testVerifyDocument_notFound() {
         Test.startTest();
-        DocGenAuthenticatorController.VerificationResult res = DocGenAuthenticatorController.verifyDocument(
+        List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyDocument(
             '0000000000000000000000000000000000000000000000000000000000000000'
         );
         Test.stopTest();
 
-        System.assertEquals(false, res.isValid);
+        System.assertEquals(0, results.size(), 'No audit should match the unmatched hash');
     }
 
     @isTest
@@ -462,11 +462,14 @@ private class DocGenSignatureTests {
         );
         Database.insert(audit, AccessLevel.SYSTEM_MODE);
         Test.startTest();
-        DocGenAuthenticatorController.VerificationResult res = DocGenAuthenticatorController.verifyDocument(hash);
+        List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyDocument(
+            hash
+        );
         Test.stopTest();
 
-        System.assertEquals(true, res.isValid);
-        System.assertEquals('Test', res.signerName);
+        System.assertEquals(1, results.size(), 'Single-signer audit should be returned');
+        System.assertEquals(true, results[0].isValid);
+        System.assertEquals('Test', results[0].signerName);
     }
 
     // =========================================================================

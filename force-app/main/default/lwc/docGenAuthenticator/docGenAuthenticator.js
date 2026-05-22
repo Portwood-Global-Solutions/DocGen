@@ -69,6 +69,7 @@ export default class DocGenAuthenticator extends LightningElement {
 
     async processFile(file) {
         this.result = undefined;
+        this.requestResults = undefined;
         this.isProcessing = true;
 
         try {
@@ -77,7 +78,18 @@ export default class DocGenAuthenticator extends LightningElement {
             const hashArray = Array.from(new Uint8Array(hashBuffer));
             const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
-            this.result = await verifyDocument({ fileHash: hashHex });
+            // verifyDocument now returns a list — one entry per signer of the
+            // matched document (multi-signer docs share the same SHA-256 hash).
+            const audits = await verifyDocument({ fileHash: hashHex });
+            if (audits && audits.length > 0) {
+                this.requestResults = audits;
+            } else {
+                this.result = {
+                    isValid: false,
+                    message:
+                        'Document could not be verified. It may have been modified after signing or was not signed through this system.'
+                };
+            }
         } catch (error) {
             this.result = {
                 isValid: false,

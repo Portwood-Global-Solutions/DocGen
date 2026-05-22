@@ -57,10 +57,14 @@ private class DocGenAuthenticatorControllerTest {
     @isTest
     static void testVerifyDocument_validHash() {
         Test.startTest();
-        DocGenAuthenticatorController.VerificationResult res = DocGenAuthenticatorController.verifyDocument(VALID_HASH);
+        List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyDocument(
+            VALID_HASH
+        );
         Test.stopTest();
 
-        System.assertEquals(true, res.isValid, 'Valid hash should match the inserted audit');
+        System.assertEquals(1, results.size(), 'Valid hash should match the inserted audit');
+        DocGenAuthenticatorController.VerificationResult res = results[0];
+        System.assertEquals(true, res.isValid, 'Audit row should be marked valid');
         System.assertEquals('Auth Signer', res.signerName);
         System.assertEquals('auth-signer@test.com', res.signerEmail);
         System.assertEquals(VALID_HASH, res.documentHash);
@@ -71,44 +75,92 @@ private class DocGenAuthenticatorControllerTest {
 
     @isTest
     static void testVerifyDocument_invalidFormat() {
-        // 65 chars (too long) — must NOT reach SOQL, must return invalid
+        // Malformed inputs MUST NOT reach SOQL — verifyDocument returns an empty
+        // list. The Document Verifier UI treats an empty list as "not verified".
         String tooLong = VALID_HASH + '0';
-        DocGenAuthenticatorController.VerificationResult r1 = DocGenAuthenticatorController.verifyDocument(tooLong);
-        System.assertEquals(false, r1.isValid, '65-char input must be rejected');
-        System.assertEquals(null, r1.signerName, 'No data should leak on invalid input');
+        System.assertEquals(
+            0,
+            DocGenAuthenticatorController.verifyDocument(tooLong).size(),
+            '65-char input must be rejected'
+        );
+        System.assertEquals(0, DocGenAuthenticatorController.verifyDocument('').size(), 'Empty input must be rejected');
+        System.assertEquals(
+            0,
+            DocGenAuthenticatorController.verifyDocument(null).size(),
+            'Null input must be rejected'
+        );
 
-        // 0-char input
-        DocGenAuthenticatorController.VerificationResult r2 = DocGenAuthenticatorController.verifyDocument('');
-        System.assertEquals(false, r2.isValid, 'Empty input must be rejected');
-        System.assertEquals(null, r2.signerName);
-
-        // null input
-        DocGenAuthenticatorController.VerificationResult r3 = DocGenAuthenticatorController.verifyDocument(null);
-        System.assertEquals(false, r3.isValid, 'Null input must be rejected');
-
-        // 64 chars but contains non-hex characters
         String nonHex = 'g3f1c2b4d5e6f7081a2b3c4d5e6f70819a0b1c2d3e4f50617283940a1b2c3d4!';
-        DocGenAuthenticatorController.VerificationResult r4 = DocGenAuthenticatorController.verifyDocument(nonHex);
-        System.assertEquals(false, r4.isValid, 'Non-hex chars must be rejected');
-        System.assertEquals(null, r4.signerName);
+        System.assertEquals(
+            0,
+            DocGenAuthenticatorController.verifyDocument(nonHex).size(),
+            'Non-hex chars must be rejected'
+        );
 
-        // 63 chars (one short)
         String tooShort = VALID_HASH.substring(0, 63);
-        DocGenAuthenticatorController.VerificationResult r5 = DocGenAuthenticatorController.verifyDocument(tooShort);
-        System.assertEquals(false, r5.isValid, '63-char input must be rejected');
+        System.assertEquals(
+            0,
+            DocGenAuthenticatorController.verifyDocument(tooShort).size(),
+            '63-char input must be rejected'
+        );
     }
 
     @isTest
     static void testVerifyDocument_notFound() {
-        // Well-formed 64-hex but no matching audit
+        // Well-formed 64-hex but no matching audit — returns empty list.
         String unmatched = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
         Test.startTest();
-        DocGenAuthenticatorController.VerificationResult res = DocGenAuthenticatorController.verifyDocument(unmatched);
+        List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyDocument(
+            unmatched
+        );
         Test.stopTest();
 
-        System.assertEquals(false, res.isValid, 'Valid format but no match should be invalid');
-        System.assertEquals(null, res.signerName);
-        System.assert(res.message.contains('could not be verified'), 'Should return not-verified message');
+        System.assertEquals(0, results.size(), 'Valid format but no match should return empty');
+    }
+
+    @isTest
+    static void testVerifyDocument_multipleSignersSameDoc() {
+        // A multi-signer document has one audit per signer, all sharing the
+        // same Document_Hash_SHA256__c (the hash of the final stamped PDF).
+        // verifyDocument MUST return every signer for the complete audit
+        // trail — regression guard against the v1.99 LIMIT 1 bug where only
+        // the first signer was returned.
+        DocGen_Signature_Request__c req = getRequest();
+
+        DocGen_Signer__c signer2 = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Second Signer',
+            Signer_Email__c = 'signer2@test.com',
+            Role_Name__c = 'Seller',
+            Secure_Token__c = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            Status__c = 'Signed',
+            Sort_Order__c = 2
+        );
+        Database.insert(signer2, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Signature_Audit__c audit2 = new DocGen_Signature_Audit__c(
+            Signature_Request__c = req.Id,
+            Signer__c = signer2.Id,
+            Signer_Name__c = 'Second Signer',
+            Signer_Email__c = 'signer2@test.com',
+            Signed_Date__c = Datetime.now().addMinutes(2),
+            IP_Address__c = '198.51.100.99',
+            Consent_Captured__c = true,
+            Document_Hash_SHA256__c = VALID_HASH
+        );
+        Database.insert(audit2, AccessLevel.SYSTEM_MODE);
+
+        Test.startTest();
+        List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyDocument(
+            VALID_HASH
+        );
+        Test.stopTest();
+
+        System.assertEquals(2, results.size(), 'Both signers of the multi-signer doc must be returned');
+        // ORDER BY Signed_Date__c ASC — original audit was at now(), second at now()+2 min
+        System.assertEquals('Auth Signer', results[0].signerName, 'First signer (earliest signed) returned first');
+        System.assertEquals('Second Signer', results[1].signerName);
+        System.assertEquals('Seller', results[1].roleName, 'roleName populated from Signer__r.Role_Name__c');
     }
 
     // =========================================================================
