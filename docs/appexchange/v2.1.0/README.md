@@ -24,13 +24,13 @@ Future submissions: add more `Listing_*.md` files in this folder as new Partner 
 
 These are the longer attachments. The reviewer reads these for context behind the form-field responses.
 
-| File                                        | Purpose                                                                                                                    |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `DocGen_Solution_Architecture_and_Usage.md` | Security-focused architecture, threat model, sharing model, controls matrix, encryption                                    |
-| `DocGen_Architecture_and_Usage.md`          | Feature/component inventory and usage walkthroughs (the broader product doc)                                               |
-| `DocGen_Platform_Technology.md`             | Detailed Salesforce platform technology inventory (longer-form companion to `Listing_Platform_Technology.md`)              |
-| `DocGen_Code_Analyzer_Report.md`            | `sf code-analyzer` (Security + AppExchange rule selectors) run results, finding-by-finding disposition                     |
-| `DocGen_False_Positive_Report.md`           | Checkmarx CxSAST false-positive disposition with the v2.1.0 DocGenFlsGuard per-field describe-check + SYSTEM_MODE rebuttal |
+| File                               | Purpose                                                                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `DocGen_Security_Architecture.md`  | Security-focused architecture, threat model, sharing model, controls matrix, encryption                                    |
+| `DocGen_Architecture_and_Usage.md` | Feature/component inventory and usage walkthroughs (the broader product doc)                                               |
+| `DocGen_Platform_Technology.md`    | Detailed Salesforce platform technology inventory (longer-form companion to `Listing_Platform_Technology.md`)              |
+| `DocGen_Code_Analyzer_Report.md`   | `sf code-analyzer` (Security + AppExchange rule selectors) run results, finding-by-finding disposition                     |
+| `DocGen_False_Positive_Report.md`  | Checkmarx CxSAST false-positive disposition with the v2.1.0 DocGenFlsGuard per-field describe-check + SYSTEM_MODE rebuttal |
 
 ### Per-finding rebuttal (in this folder)
 

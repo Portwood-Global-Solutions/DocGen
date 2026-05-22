@@ -20,7 +20,7 @@ Salesforce Code Analyzer (Security + AppExchange rule selectors): 0 Critical / 0
 
 Attached documentation (see Upload Documentation page):
 
-- DocGen_Solution_Architecture_and_Usage — security-focused architecture, threat model, sharing model, controls matrix
+- DocGen_Security_Architecture — security-focused architecture, threat model, sharing model, controls matrix
 - DocGen_Architecture_and_Usage — feature/component inventory and usage walkthroughs
 - DocGen_Platform_Technology — Salesforce platform technology inventory (this answers the "If your solution contains Salesforce Platform technology" follow-up question)
 - DocGen_Code_Analyzer_Report — sf code-analyzer run results with finding dispositions
@@ -37,7 +37,7 @@ Attached documentation (see Upload Documentation page):
 ## Related forms
 
 - For the **"If your solution contains Salesforce Platform technology"** follow-up, attach `DocGen_Platform_Technology.md` from this folder. That doc is the detailed Apex / LWC / VF / object / permset / external-tech inventory.
-- For the **"What is the security architecture?"** style follow-ups, attach `DocGen_Solution_Architecture_and_Usage.md`.
+- For the **"What is the security architecture?"** style follow-ups, attach `DocGen_Security_Architecture.md`.
 
 ---
 

@@ -324,7 +324,7 @@ The v2.1.0 scan on 2026-05-22 meets this gate: **0 Critical / 0 High / 0 Moderat
 
 ## Cross-References
 
-- `DocGen_Solution_Architecture_and_Usage.md` (this folder) — the security-review architecture doc.
+- `DocGen_Security_Architecture.md` (this folder) — the security-review architecture doc.
 - `DocGen_Architecture_and_Usage.md` (this folder) — the architecture and usage companion.
 - `DocGen_False_Positive_Report.md` (this folder) — the Checkmarx CxSAST false-positive report with v2.0 hybrid-pattern rationalizations.
 - `DocGen_Platform_Technology.md` (this folder) — Salesforce platform tech inventory.

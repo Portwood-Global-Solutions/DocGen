@@ -1,4 +1,4 @@
-# DocGen — Solution Architecture and Usage Guide
+# DocGen — Security Architecture
 
 ## AppExchange Security Review Documentation
 

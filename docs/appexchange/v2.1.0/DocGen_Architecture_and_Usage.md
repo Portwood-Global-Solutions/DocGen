@@ -13,7 +13,7 @@
 - **Sandbox:** https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000Zw5xIAC
 - **CLI:** `sf package install --package 04tVx000000Zw5xIAC --wait 10 --target-org <your-org>`
 
-> Companion to `DocGen_Solution_Architecture_and_Usage.md`, which focuses on AppExchange security review. This document describes _what_ the solution is, _how it is put together_, and _how a customer uses it_ day to day.
+> Companion to `DocGen_Security_Architecture.md`, which focuses on AppExchange security review. This document describes _what_ the solution is, _how it is put together_, and _how a customer uses it_ day to day.
 
 ---
 
@@ -248,7 +248,7 @@ For queries that would exceed single-transaction SOQL limits, `DocGenGiantQueryA
 
 ### 4.4 Signatures v3 Flow
 
-See `DocGen_Solution_Architecture_and_Usage.md` §2.4 for the security-focused version. In summary:
+See `DocGen_Security_Architecture.md` §2.4 for the security-focused version. In summary:
 
 1. Admin creates a signature request from a record page (`docGenSignatureSender`). v3 supports **sequential or parallel** signing order and **per-tag guided placements** via `DocGen_Signature_Placement__c` records (one per signature tag, so the signer is walked through the document tag-by-tag instead of seeing all tags at once).
 2. Each signer gets a unique token + branded email. Admins can elect **PIN bypass / in-person signing** when capturing signatures face-to-face.
@@ -547,7 +547,7 @@ v2.0/v2.1.0 also rolls forward all feature work since v1.56 (~45 versions): V3 q
 
 ## 14. Related Documentation
 
-- `DocGen_Solution_Architecture_and_Usage.md` — security-review companion (data flows, threat model, sharing model, controls).
+- `DocGen_Security_Architecture.md` — security-review companion (data flows, threat model, sharing model, controls).
 - `SECURITY.md` — disclosure policy and design principles.
 - `docs/code-analysis/violations.md` — Code Analyzer output.
 - `CLAUDE.md` — engineering invariants for anyone modifying the codebase.

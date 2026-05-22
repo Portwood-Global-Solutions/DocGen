@@ -258,7 +258,7 @@ Plus one in-flight bug fix during the v2.0 pass: `DocGenAuthenticatorController.
 
 ## 12. Related Documentation
 
-- `DocGen_Solution_Architecture_and_Usage.md` (this folder) — security-focused architecture, threat model, sharing model, controls matrix.
+- `DocGen_Security_Architecture.md` (this folder) — security-focused architecture, threat model, sharing model, controls matrix.
 - `DocGen_Architecture_and_Usage.md` (this folder) — feature/component inventory and usage walkthroughs.
 - `DocGen_False_Positive_Report.md` (this folder) — per-category disposition of the analyzer findings.
 - `DocGen_Code_Analyzer_Report.md` (this folder) — Salesforce Code Analyzer run results.
