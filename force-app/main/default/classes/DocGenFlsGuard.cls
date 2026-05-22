@@ -68,7 +68,7 @@ public with sharing class DocGenFlsGuard {
         }
         Map<String, Schema.SObjectField> fields = sor.fields.getMap();
         for (String fieldName : allowedFields) {
-            Schema.SObjectField f = fields.get(fieldName.toLowerCase());
+            Schema.SObjectField f = resolveField(fields, fieldName);
             if (f == null) {
                 throw new DocGenException(
                     'Internal error: field ' + sor.getName() + '.' + fieldName + ' not found in describe.'
@@ -111,7 +111,7 @@ public with sharing class DocGenFlsGuard {
         }
         Map<String, Schema.SObjectField> fields = sor.fields.getMap();
         for (String fieldName : allowedFields) {
-            Schema.SObjectField f = fields.get(fieldName.toLowerCase());
+            Schema.SObjectField f = resolveField(fields, fieldName);
             if (f == null) {
                 throw new DocGenException(
                     'Internal error: field ' + sor.getName() + '.' + fieldName + ' not found in describe.'
@@ -145,6 +145,38 @@ public with sharing class DocGenFlsGuard {
             return;
         }
         assertUpdateable(records[0], allowedFields);
+    }
+
+    /**
+     * Field-map lookup that handles both unnamespaced (`query_config__c`)
+     * and namespaced (`portwoodglobal__query_config__c`) key formats.
+     * Scratch orgs deployed `--no-namespace` produce bare keys; the
+     * package-build context produces keys with the namespace prefix
+     * applied. Returning null is the "not found" signal; callers throw.
+     */
+    private static Schema.SObjectField resolveField(Map<String, Schema.SObjectField> fields, String fieldName) {
+        if (fieldName == null) {
+            return null;
+        }
+        String lower = fieldName.toLowerCase();
+        Schema.SObjectField f = fields.get(lower);
+        if (f != null) {
+            return f;
+        }
+        // Try with the package namespace prefix — package-build / managed-install context.
+        f = fields.get('portwoodglobal__' + lower);
+        if (f != null) {
+            return f;
+        }
+        // Final fallback: scan field descriptors by local name. This handles
+        // the corner case where the caller passed the namespaced name and
+        // we're running unnamespaced, OR if the namespace ever changes.
+        for (Schema.SObjectField sf : fields.values()) {
+            if (sf.getDescribe().getLocalName().toLowerCase() == lower) {
+                return sf;
+            }
+        }
+        return null;
     }
 
     /**
@@ -183,7 +215,7 @@ public with sharing class DocGenFlsGuard {
         }
         Map<String, Schema.SObjectField> fields = sor.fields.getMap();
         for (String fieldName : readFields) {
-            Schema.SObjectField f = fields.get(fieldName.toLowerCase());
+            Schema.SObjectField f = resolveField(fields, fieldName);
             if (f == null) {
                 throw new DocGenException(
                     'Internal error: field ' + sor.getName() + '.' + fieldName + ' not found in describe.'

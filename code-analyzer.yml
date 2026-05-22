@@ -3,9 +3,9 @@
 # Run command:
 #   sf code-analyzer run --workspace "force-app/" --rule-selector "Security" --rule-selector "AppExchange" --view table
 #
-# Expected result (v2.0.1+): 0 Critical / 0 High / 0 Moderate / 0 Low / 0 Info.
+# Expected result (v2.1.0+): 0 Critical / 0 High / 0 Moderate / 0 Low / 0 Info.
 #
-# v2.0.1 disables two PMD rules that emit only documented false positives
+# v2.1.0 disables two PMD rules that emit only documented false positives
 # on this codebase. See "Disabled rules" section below for the full audit
 # trail of each disable + the structural reason the underlying pattern is
 # safe (so a future engineer adding a NEW field or LWC with similar shape
@@ -61,7 +61,7 @@
 #
 # ─── Source-level inline suppressions (informational) ────────────────────
 #
-# Per the v2.0.1 hybrid Schema-CRUD-gate + per-field-FLS-guard +
+# Per the v2.1.0 hybrid Schema-CRUD-gate + per-field-FLS-guard +
 # SYSTEM_MODE pattern, the source contains 200+ `code-analyzer-suppress
 # ApexFlsViolation` markers immediately before each `Database.<op>(...,
 # AccessLevel.SYSTEM_MODE)` and each `WITH SYSTEM_MODE` SOQL. Each
