@@ -94,9 +94,21 @@ public without sharing class DocGenSignatureService {
         String siteUrl = settings.Experience_Site_Url__c;
         if (String.isBlank(siteUrl)) {
             try {
+                // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+                // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+                // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+                // the SELECT lists; throws DocGenException with the offending field name
+                // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+                // package-build @TestSetup FLS-propagation issue documented in
+                // DocGenFlsGuard.cls.
+                DocGenFlsGuard.assertAccessible(Site.sObjectType, new Set<String>{ 'Status' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 List<Site> sites = [SELECT Id FROM Site WHERE Status = 'Active' WITH SYSTEM_MODE LIMIT 1];
                 if (!sites.isEmpty()) {
+                    DocGenFlsGuard.assertAccessible(
+                        SiteDetail.sObjectType,
+                        new Set<String>{ 'SecureUrl', 'DurableId' }
+                    );
                     /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                     SiteDetail sd = [
                         SELECT SecureUrl
@@ -120,6 +132,17 @@ public without sharing class DocGenSignatureService {
         // Query audit records for IP addresses and timestamps
         Map<Id, DocGen_Signature_Audit__c> signerAuditMap = new Map<Id, DocGen_Signature_Audit__c>();
         try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Audit__c.sObjectType,
+                new Set<String>{
+                    'Signer__c',
+                    'IP_Address__c',
+                    'User_Agent__c',
+                    'Signed_Date__c',
+                    'Consent_Captured__c',
+                    'Signature_Request__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Audit__c> audits = [
                 SELECT Signer__c, IP_Address__c, User_Agent__c, Signed_Date__c, Consent_Captured__c
@@ -332,6 +355,7 @@ public without sharing class DocGenSignatureService {
      * Falls back to legacy {@Signature} for single signer with blank role.
      */
     public static Blob stampAllSignaturesToBlob(Id sourceCvId, List<SignerData> signers) {
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData', 'Title' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         ContentVersion cv = [
             SELECT Id, VersionData, Title
@@ -398,6 +422,7 @@ public without sharing class DocGenSignatureService {
      * Stamps a single typed-name signature into a DOCX and saves to DB.
      */
     public static Id stampSignature(Id sourceCvId, String typedName, String requestNumber, String relatedRecordId) {
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         ContentVersion source = [SELECT Title FROM ContentVersion WHERE Id = :sourceCvId WITH SYSTEM_MODE LIMIT 1];
         List<SignerData> signers = new List<SignerData>{ new SignerData(null, typedName) };
@@ -416,6 +441,7 @@ public without sharing class DocGenSignatureService {
         insert cvDecision.getRecords();
         Id savedCvId = cvDecision.getRecords()[0].Id;
 
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'ContentDocumentId' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Id newDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :savedCvId WITH SYSTEM_MODE]
         .ContentDocumentId;
@@ -446,6 +472,18 @@ public without sharing class DocGenSignatureService {
             throw new SignatureException('Invalid security token format.');
         }
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Source_Document_Id__c',
+                'Related_Record_Id__c',
+                'CreatedDate',
+                'Secure_Token__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Request__c> requests = [
             SELECT
@@ -481,6 +519,7 @@ public without sharing class DocGenSignatureService {
         if (Test.isRunningTest()) {
             try {
                 Blob pdfBlob = Blob.toPdf('<html><body><p>Test PDF - Signed Document</p></body></html>');
+                DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 List<ContentVersion> sources = [
                     SELECT Title
@@ -523,6 +562,10 @@ public without sharing class DocGenSignatureService {
         }
 
         public void execute(QueueableContext ctx) {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'Source_Document_Id__c', 'Related_Record_Id__c', 'Template__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Request__c> requests = [
                 SELECT Id, Source_Document_Id__c, Related_Record_Id__c, Template__c
@@ -539,6 +582,19 @@ public without sharing class DocGenSignatureService {
 
             try {
                 // Get signature data from signers
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Signer__c.sObjectType,
+                    new Set<String>{
+                        'Role_Name__c',
+                        'Signature_Data__c',
+                        'Signer_Name__c',
+                        'Signer_Email__c',
+                        'Contact__c',
+                        'Signature_Request__c',
+                        'Status__c',
+                        'Sort_Order__c'
+                    }
+                );
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 List<DocGen_Signer__c> signers = [
                     SELECT Id, Role_Name__c, Signature_Data__c, Signer_Name__c, Signer_Email__c, Contact__c
@@ -582,6 +638,11 @@ public without sharing class DocGenSignatureService {
                             imgCv.PathOnClient = 'docgen_sig_img_' + relId + '.' + ext;
                             imgCv.VersionData = EncodingUtil.base64Decode(base64Val);
                             imgCv.FirstPublishLocationId = requestId;
+                            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+                            DocGenFlsGuard.assertCreateable(
+                                imgCv,
+                                new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'FirstPublishLocationId' }
+                            );
                             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                             Database.insert(new List<ContentVersion>{ imgCv }, false, AccessLevel.SYSTEM_MODE);
                             imageUrlMap.put(relId, '/sfc/servlet.shepherd/version/download/' + imgCv.Id);
@@ -593,6 +654,7 @@ public without sharing class DocGenSignatureService {
                 }
 
                 // Save PDF to related record
+                DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 ContentVersion source = [
                     SELECT Title
@@ -609,12 +671,21 @@ public without sharing class DocGenSignatureService {
                     pdfCv.PathOnClient = fileName + '.pdf';
                     pdfCv.VersionData = pdfBlob;
                     pdfCv.FirstPublishLocationId = req.Related_Record_Id__c;
+                    // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+                    DocGenFlsGuard.assertCreateable(
+                        pdfCv,
+                        new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'FirstPublishLocationId' }
+                    );
                     /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                     Database.insert(new List<ContentVersion>{ pdfCv }, false, AccessLevel.SYSTEM_MODE);
                 }
 
                 // Update document hash on existing audit records
                 String pdfHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', pdfBlob));
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Signature_Audit__c.sObjectType,
+                    new Set<String>{ 'Signature_Request__c', 'Document_Hash_SHA256__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 List<DocGen_Signature_Audit__c> audits = [
                     SELECT Id
@@ -627,6 +698,8 @@ public without sharing class DocGenSignatureService {
                     a.Document_Hash_SHA256__c = pdfHash;
                 }
                 if (!audits.isEmpty()) {
+                    // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                    DocGenFlsGuard.assertUpdateable(audits, new Set<String>{ 'Document_Hash_SHA256__c' });
                     /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                     Database.update(audits, false, AccessLevel.SYSTEM_MODE);
                 }
@@ -634,6 +707,8 @@ public without sharing class DocGenSignatureService {
                 // Mark request as signed
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 req.Status__c = 'Signed';
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
@@ -647,10 +722,17 @@ public without sharing class DocGenSignatureService {
                 errAudit.Signer_Name__c = 'SYSTEM';
                 errAudit.Error_Message__c = errMsg;
                 errAudit.Signed_Date__c = System.now();
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+                DocGenFlsGuard.assertCreateable(
+                    errAudit,
+                    new Set<String>{ 'Signature_Request__c', 'Signer_Name__c', 'Error_Message__c', 'Signed_Date__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.insert(new List<DocGen_Signature_Audit__c>{ errAudit }, false, AccessLevel.SYSTEM_MODE);
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 req.Status__c = 'Viewed';
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.update(req, false, AccessLevel.SYSTEM_MODE);
             }
@@ -658,6 +740,10 @@ public without sharing class DocGenSignatureService {
 
         private void cleanupTempImages(Id reqId) {
             try {
+                DocGenFlsGuard.assertAccessible(
+                    ContentDocumentLink.sObjectType,
+                    new Set<String>{ 'ContentDocumentId', 'LinkedEntityId' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 List<ContentDocumentLink> tempCdls = [
                     SELECT ContentDocumentId
@@ -694,6 +780,10 @@ public without sharing class DocGenSignatureService {
         }
 
         public void execute(QueueableContext ctx) {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'Template__c', 'Template_Ids__c', 'Related_Record_Id__c', 'Document_Title_Format__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Request__c> requests = [
                 SELECT Id, Template__c, Template_Ids__c, Related_Record_Id__c, Document_Title_Format__c
@@ -718,6 +808,7 @@ public without sharing class DocGenSignatureService {
                     pdfBlob = renderTemplateSignaturePdf(requestId, req.Template__c, req.Related_Record_Id__c);
                 }
 
+                DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 List<DocGen_Template__c> templates = [
                     SELECT Name
@@ -757,12 +848,21 @@ public without sharing class DocGenSignatureService {
                     pdfCv.PathOnClient = fileName + '.pdf';
                     pdfCv.VersionData = pdfBlob;
                     pdfCv.FirstPublishLocationId = req.Related_Record_Id__c;
+                    // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+                    DocGenFlsGuard.assertCreateable(
+                        pdfCv,
+                        new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'FirstPublishLocationId' }
+                    );
                     /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                     Database.insert(new List<ContentVersion>{ pdfCv }, false, AccessLevel.SYSTEM_MODE);
                 }
 
                 // Update document hash on existing audit records
                 String pdfHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', pdfBlob));
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Signature_Audit__c.sObjectType,
+                    new Set<String>{ 'Signature_Request__c', 'Document_Hash_SHA256__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 List<DocGen_Signature_Audit__c> audits = [
                     SELECT Id
@@ -775,6 +875,8 @@ public without sharing class DocGenSignatureService {
                     a.Document_Hash_SHA256__c = pdfHash;
                 }
                 if (!audits.isEmpty()) {
+                    // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                    DocGenFlsGuard.assertUpdateable(audits, new Set<String>{ 'Document_Hash_SHA256__c' });
                     /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                     Database.update(audits, false, AccessLevel.SYSTEM_MODE);
                 }
@@ -784,6 +886,8 @@ public without sharing class DocGenSignatureService {
                 req.Status__c = 'Signed';
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 req.Signature_Data__c = null;
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c', 'Signature_Data__c' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.update(req, false, AccessLevel.SYSTEM_MODE);
             } catch (Exception e) {
@@ -794,10 +898,17 @@ public without sharing class DocGenSignatureService {
                 errAudit.Signer_Name__c = 'SYSTEM';
                 errAudit.Error_Message__c = errMsg;
                 errAudit.Signed_Date__c = System.now();
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+                DocGenFlsGuard.assertCreateable(
+                    errAudit,
+                    new Set<String>{ 'Signature_Request__c', 'Signer_Name__c', 'Error_Message__c', 'Signed_Date__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.insert(new List<DocGen_Signature_Audit__c>{ errAudit }, false, AccessLevel.SYSTEM_MODE);
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 req.Status__c = 'Viewed';
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.update(req, false, AccessLevel.SYSTEM_MODE);
             }
@@ -815,6 +926,10 @@ public without sharing class DocGenSignatureService {
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
 
             // Use pre-computed image map from request creation
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'Signature_Data__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             DocGen_Signature_Request__c reqData = [
                 SELECT Signature_Data__c
@@ -867,6 +982,16 @@ public without sharing class DocGenSignatureService {
             }
 
             // Get signer typed names
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signer__c.sObjectType,
+                new Set<String>{
+                    'Role_Name__c',
+                    'Signature_Data__c',
+                    'Signature_Request__c',
+                    'Status__c',
+                    'Sort_Order__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signer__c> signers = [
                 SELECT Id, Role_Name__c, Signature_Data__c
@@ -883,6 +1008,20 @@ public without sharing class DocGenSignatureService {
             }
 
             // Query placements for stamping
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Placement__c.sObjectType,
+                new Set<String>{
+                    'Signer__c',
+                    'Placement_Type__c',
+                    'Sequence_Order__c',
+                    'Signed_Value__c',
+                    'Status__c',
+                    'Signed_At__c',
+                    'Tag_Text__c',
+                    'Document_Index__c',
+                    'Signature_Request__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Placement__c> placements = [
                 SELECT
@@ -913,6 +1052,18 @@ public without sharing class DocGenSignatureService {
             String html = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
 
             // Append verification certificate block before closing body
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signer__c.sObjectType,
+                new Set<String>{
+                    'Signer_Name__c',
+                    'Signer_Email__c',
+                    'Role_Name__c',
+                    'PIN_Verified_At__c',
+                    'Signature_Request__c',
+                    'Status__c',
+                    'Sort_Order__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signer__c> fullSigners = [
                 SELECT Signer_Name__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
@@ -938,12 +1089,27 @@ public without sharing class DocGenSignatureService {
                 templateIds.add((Id) o);
 
             // Query template names for document headers
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Map<Id, DocGen_Template__c> templateMap = new Map<Id, DocGen_Template__c>(
                 [SELECT Id, Name FROM DocGen_Template__c WHERE Id IN :templateIds WITH SYSTEM_MODE]
             ); // NOPMD
 
             // Query all placements for this request
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Placement__c.sObjectType,
+                new Set<String>{
+                    'Signer__c',
+                    'Placement_Type__c',
+                    'Sequence_Order__c',
+                    'Signed_Value__c',
+                    'Status__c',
+                    'Signed_At__c',
+                    'Tag_Text__c',
+                    'Document_Index__c',
+                    'Signature_Request__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Placement__c> allPlacements = [
                 SELECT
@@ -963,6 +1129,16 @@ public without sharing class DocGenSignatureService {
             ]; // NOPMD
 
             // Query signers for placement stamping (roles + typed names)
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signer__c.sObjectType,
+                new Set<String>{
+                    'Role_Name__c',
+                    'Signature_Data__c',
+                    'Signature_Request__c',
+                    'Status__c',
+                    'Sort_Order__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signer__c> signers = [
                 SELECT Id, Role_Name__c, Signature_Data__c
@@ -983,6 +1159,10 @@ public without sharing class DocGenSignatureService {
             }
 
             // Get cached image map
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'Signature_Data__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             DocGen_Signature_Request__c reqData = [
                 SELECT Signature_Data__c
@@ -1045,6 +1225,18 @@ public without sharing class DocGenSignatureService {
             String fullHtml = String.join(htmlParts, '');
 
             // Append verification block
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signer__c.sObjectType,
+                new Set<String>{
+                    'Signer_Name__c',
+                    'Signer_Email__c',
+                    'Role_Name__c',
+                    'PIN_Verified_At__c',
+                    'Signature_Request__c',
+                    'Status__c',
+                    'Sort_Order__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signer__c> fullSigners = [
                 SELECT Signer_Name__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c

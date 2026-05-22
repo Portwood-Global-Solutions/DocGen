@@ -51,6 +51,15 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
     public Iterable<String> start(Database.BatchableContext bc) {
         update new DocGen_Job__c(Id = jobId, Status__c = 'Stitching'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
 
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
+        /* code-analyzer-suppress ApexFlsViolation */
         DocGen_Template__c tmpl = [SELECT Name FROM DocGen_Template__c WHERE Id = :templateId WITH SYSTEM_MODE LIMIT 1];
         this.templateName = tmpl.Name;
 

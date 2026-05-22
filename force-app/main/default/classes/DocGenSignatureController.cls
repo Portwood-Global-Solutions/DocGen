@@ -129,6 +129,27 @@ public without sharing class DocGenSignatureController {
 
         // Try multi-signer path first — SYSTEM_MODE required for guest profile
         // (granting guests DocGen_Signer__c CRUD would be the actual vulnerability).
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Role_Name__c',
+                'Sort_Order__c',
+                'CreatedDate',
+                'PIN_Verified_At__c',
+                'Signature_Request__c',
+                'Secure_Token__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT
@@ -162,6 +183,17 @@ public without sharing class DocGenSignatureController {
         }
 
         // Legacy fallback: single-signer on DocGen_Signature_Request__c
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Source_Document_Id__c',
+                'Related_Record_Id__c',
+                'CreatedDate',
+                'Secure_Token__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Request__c> requests = [
             SELECT Id, Status__c, Signer_Name__c, Source_Document_Id__c, Related_Record_Id__c, CreatedDate
@@ -205,6 +237,10 @@ public without sharing class DocGenSignatureController {
         // See DocGenSignatureGuestSecurity for the documented security model.
         DocGenSignatureGuestSecurity.assertSignerWritableFields(token);
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Signer_Email__c', 'PIN_Attempts__c', 'Status__c', 'CreatedDate', 'Secure_Token__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT Id, Signer_Email__c, PIN_Attempts__c, Status__c, CreatedDate
@@ -257,6 +293,13 @@ public without sharing class DocGenSignatureController {
         // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         signer.PIN_Expires_At__c = System.now().addMinutes(PIN_EXPIRATION_MINUTES);
         signer.PIN_Attempts__c = 0; // Reset attempts on new PIN
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        // Complements DocGenSignatureGuestSecurity.assert*(token) object-level
+        // CRUD checks at the entry point with per-field describe enforcement.
+        DocGenFlsGuard.assertUpdateable(
+            signer,
+            new Set<String>{ 'PIN_Hash__c', 'PIN_Expires_At__c', 'PIN_Attempts__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(signer, false, AccessLevel.SYSTEM_MODE);
 
@@ -298,6 +341,10 @@ public without sharing class DocGenSignatureController {
         // PIN_Verified_At__c, Status__c). See DocGenSignatureGuestSecurity.
         DocGenSignatureGuestSecurity.assertSignerWritableFields(token);
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'PIN_Hash__c', 'PIN_Expires_At__c', 'PIN_Attempts__c', 'Status__c', 'Secure_Token__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT Id, PIN_Hash__c, PIN_Expires_At__c, PIN_Attempts__c, Status__c
@@ -343,6 +390,8 @@ public without sharing class DocGenSignatureController {
             // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
             // Increment failed attempts
             signer.PIN_Attempts__c = (signer.PIN_Attempts__c == null ? 0 : signer.PIN_Attempts__c) + 1;
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            DocGenFlsGuard.assertUpdateable(signer, new Set<String>{ 'PIN_Attempts__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(signer, false, AccessLevel.SYSTEM_MODE);
 
@@ -376,6 +425,11 @@ public without sharing class DocGenSignatureController {
         if (signer.Status__c == 'Pending') {
             signer.Status__c = 'Viewed';
         }
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(
+            signer,
+            new Set<String>{ 'PIN_Verified_At__c', 'PIN_Hash__c', 'PIN_Expires_At__c', 'PIN_Attempts__c', 'Status__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(signer, false, AccessLevel.SYSTEM_MODE);
 
@@ -471,6 +525,8 @@ public without sharing class DocGenSignatureController {
         // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         if (signer.Status__c == 'Pending') {
             signer.Status__c = 'Viewed';
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            DocGenFlsGuard.assertUpdateable(signer, new Set<String>{ 'Status__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(signer, false, AccessLevel.SYSTEM_MODE);
         }
@@ -485,6 +541,10 @@ public without sharing class DocGenSignatureController {
 
         // Count total and signed signers
         // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Status__c', 'Signature_Request__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> allSigners = [
             SELECT Status__c
@@ -507,6 +567,7 @@ public without sharing class DocGenSignatureController {
         } else {
             Id sourceDocId = parentReq.Source_Document_Id__c;
             // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<ContentVersion> cvs = [
                 SELECT Id, Title
@@ -542,6 +603,8 @@ public without sharing class DocGenSignatureController {
         // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         if (req.Status__c == 'Sent') {
             req.Status__c = 'Viewed';
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(req, false, AccessLevel.SYSTEM_MODE);
         }
@@ -553,6 +616,7 @@ public without sharing class DocGenSignatureController {
         res.signedCount = 0;
 
         // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<ContentVersion> cvs = [
             SELECT Id, Title
@@ -573,6 +637,10 @@ public without sharing class DocGenSignatureController {
 
     // CxSAST: Apex_CRUD_ContentDistribution — SYSTEM_MODE required for guest user context; ContentDistribution created for signature document preview
     private static String getOrCreatePublicLink(ContentVersion cv) {
+        DocGenFlsGuard.assertAccessible(
+            ContentDistribution.sObjectType,
+            new Set<String>{ 'DistributionPublicUrl', 'ContentVersionId' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<ContentDistribution> dists = [
             SELECT DistributionPublicUrl
@@ -596,10 +664,26 @@ public without sharing class DocGenSignatureController {
         cd.PreferencesNotifyOnVisit = false;
         cd.PreferencesAllowOriginalDownload = false;
         cd.PreferencesAllowPDFDownload = false;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            cd,
+            new Set<String>{
+                'Name',
+                'ContentVersionId',
+                'PreferencesAllowViewInBrowser',
+                'PreferencesLinkLatestVersion',
+                'PreferencesExpires',
+                'ExpiryDate',
+                'PreferencesNotifyOnVisit',
+                'PreferencesAllowOriginalDownload',
+                'PreferencesAllowPDFDownload'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(new List<ContentDistribution>{ cd }, false, AccessLevel.SYSTEM_MODE);
         // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
         cd = new ContentDistribution(Id = cd.Id);
+        DocGenFlsGuard.assertAccessible(ContentDistribution.sObjectType, new Set<String>{ 'DistributionPublicUrl' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         cd = [SELECT DistributionPublicUrl FROM ContentDistribution WHERE Id = :cd.Id WITH SYSTEM_MODE LIMIT 1];
         return cd.DistributionPublicUrl;
@@ -623,6 +707,10 @@ public without sharing class DocGenSignatureController {
         DocGenSignatureGuestSecurity.assertSignerReadable(token);
 
         // Try multi-signer path
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Decline_Reason__c', 'LastModifiedDate', 'Signature_Request__c', 'Secure_Token__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT
@@ -657,6 +745,17 @@ public without sharing class DocGenSignatureController {
         } else {
             // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
             // Legacy fallback
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{
+                    'Source_Document_Id__c',
+                    'Related_Record_Id__c',
+                    'Template__c',
+                    'Status__c',
+                    'LastModifiedDate',
+                    'Secure_Token__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Request__c> requests = [
                 SELECT Id, Source_Document_Id__c, Related_Record_Id__c, Template__c, Status__c, LastModifiedDate
@@ -690,6 +789,10 @@ public without sharing class DocGenSignatureController {
         if (templateId != null && requestId != null) {
             // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
             // Try cached preview first
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'Signature_Data__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Request__c> reqs = [
                 SELECT Signature_Data__c
@@ -742,6 +845,7 @@ public without sharing class DocGenSignatureController {
         // Legacy: convert source DOCX to HTML
         // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
         if (sourceDocId != null) {
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<ContentVersion> cvs = [
                 SELECT VersionData
@@ -842,6 +946,21 @@ public without sharing class DocGenSignatureController {
         DocGenSignatureGuestSecurity.assertSignerWritableFields(token);
         DocGenSignatureGuestSecurity.assertAuditCreateable(token);
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Signature_Request__c',
+                'Role_Name__c',
+                'Contact__c',
+                'CreatedDate',
+                'PIN_Verified_At__c',
+                'Consent_Captured__c',
+                'Secure_Token__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT
@@ -883,6 +1002,11 @@ public without sharing class DocGenSignatureController {
         signer.Signature_Data__c = typedName;
         signer.Status__c = 'Signed';
         signer.Consent_Captured__c = true;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(
+            signer,
+            new Set<String>{ 'Signature_Data__c', 'Status__c', 'Consent_Captured__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(signer, false, AccessLevel.SYSTEM_MODE);
 
@@ -899,10 +1023,30 @@ public without sharing class DocGenSignatureController {
         audit.Consent_Captured__c = true;
         audit.PIN_Verified_At__c = signer.PIN_Verified_At__c;
         // Document hash is set later when PDF is generated
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            audit,
+            new Set<String>{
+                'Signature_Request__c',
+                'Signer__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Contact__c',
+                'Signed_Date__c',
+                'IP_Address__c',
+                'User_Agent__c',
+                'Consent_Captured__c',
+                'PIN_Verified_At__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(new List<DocGen_Signature_Audit__c>{ audit }, false, AccessLevel.SYSTEM_MODE);
 
         // Check if all signers are now complete
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Status__c', 'Signature_Request__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> allSigners = [
             SELECT Status__c
@@ -924,6 +1068,8 @@ public without sharing class DocGenSignatureController {
         // Update parent request status
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
         parentReq.Status__c = 'In Progress';
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(parentReq, new Set<String>{ 'Status__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 
@@ -962,6 +1108,10 @@ public without sharing class DocGenSignatureController {
         DocGenSignatureGuestSecurity.assertRequestWritableFields(token);
         DocGenSignatureGuestSecurity.assertAuditCreateable(token);
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Signature_Request__c', 'Secure_Token__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signerList = [
             SELECT
@@ -1006,6 +1156,7 @@ public without sharing class DocGenSignatureController {
                 docTitle = triggerSigner.Signature_Request__r.Template__r.Name;
                 // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
             } else if (sourceDocId != null) {
+                DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 ContentVersion sourceDoc = [
                     SELECT Title
@@ -1037,6 +1188,10 @@ public without sharing class DocGenSignatureController {
         }
         // Guest CRUD/FLS gate — write allowlist on DocGen_Signature_Request__c.
         DocGenSignatureGuestSecurity.assertRequestWritableFields(token);
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{ 'Status__c', 'Secure_Token__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Request__c> requests = [
             SELECT Id, Status__c
@@ -1052,11 +1207,24 @@ public without sharing class DocGenSignatureController {
         }
         requests[0].Signature_Data__c = typedName;
         requests[0].Status__c = 'Viewed';
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(requests[0], new Set<String>{ 'Signature_Data__c', 'Status__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(requests[0], false, AccessLevel.SYSTEM_MODE);
     }
 
     private static Map<String, String> stampLegacySignerAndSavePdf(String token) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Source_Document_Id__c',
+                'Related_Record_Id__c',
+                'Secure_Token__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Request__c> requests = [
             SELECT Id, Status__c, Signer_Name__c, Signer_Email__c, Source_Document_Id__c, Related_Record_Id__c
@@ -1078,6 +1246,7 @@ public without sharing class DocGenSignatureController {
 
             // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
 
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             ContentVersion sourceDoc = [
                 SELECT Title
@@ -1097,6 +1266,8 @@ public without sharing class DocGenSignatureController {
             // Update request status and clear signature data
             req.Status__c = 'Signed';
             req.Signature_Data__c = null;
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c', 'Signature_Data__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
@@ -1110,6 +1281,19 @@ public without sharing class DocGenSignatureController {
             audit.Document_Hash_SHA256__c = pdfHash;
             audit.IP_Address__c = 'Server-Side';
             audit.User_Agent__c = 'VF renderAs=pdf - Server-Side PDF Generation';
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+            DocGenFlsGuard.assertCreateable(
+                audit,
+                new Set<String>{
+                    'Signature_Request__c',
+                    'Signer_Name__c',
+                    'Signer_Email__c',
+                    'Signed_Date__c',
+                    'Document_Hash_SHA256__c',
+                    'IP_Address__c',
+                    'User_Agent__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.insert(new List<DocGen_Signature_Audit__c>{ audit }, false, AccessLevel.SYSTEM_MODE);
 
@@ -1131,9 +1315,15 @@ public without sharing class DocGenSignatureController {
         cv.PathOnClient = fileName + (extension.startsWith('.') ? extension : '.' + extension);
         cv.VersionData = EncodingUtil.base64Decode(base64Data);
         cv.IsMajorVersion = true;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            cv,
+            new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'IsMajorVersion' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(new List<ContentVersion>{ cv }, false, AccessLevel.SYSTEM_MODE);
 
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'ContentDocumentId' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Id contentDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id WITH SYSTEM_MODE]
         .ContentDocumentId;
@@ -1143,6 +1333,11 @@ public without sharing class DocGenSignatureController {
         cdl.LinkedEntityId = recordId;
         cdl.ShareType = 'V';
         cdl.Visibility = 'AllUsers';
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            cdl,
+            new Set<String>{ 'ContentDocumentId', 'LinkedEntityId', 'ShareType', 'Visibility' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(new List<ContentDocumentLink>{ cdl }, false, AccessLevel.SYSTEM_MODE);
 
@@ -1171,6 +1366,10 @@ public without sharing class DocGenSignatureController {
 
         // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{ 'Source_Document_Id__c', 'Template__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Request__c> requests = [
             SELECT Source_Document_Id__c, Template__c
@@ -1190,6 +1389,10 @@ public without sharing class DocGenSignatureController {
 
         // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
         // Get typed-name signatures from signers
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Role_Name__c', 'Signature_Data__c', 'Signature_Request__c', 'Status__c', 'Sort_Order__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT Id, Role_Name__c, Signature_Data__c
@@ -1227,6 +1430,7 @@ public without sharing class DocGenSignatureController {
         if (imagesByRelId != null && activeVersionId != null) {
             String titlePrefix = 'docgen_tmpl_img_' + activeVersionId + '_';
             String titleLike = titlePrefix + '%';
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'CreatedDate' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<ContentVersion> allTmplCvs = [
                 SELECT Id, Title
@@ -1333,6 +1537,10 @@ public without sharing class DocGenSignatureController {
         if (String.isBlank(batchKey))
             return;
         try {
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'ContentDocumentId', 'Title' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<ContentVersion> tempCvs = [
                 SELECT ContentDocumentId
@@ -1383,6 +1591,19 @@ public without sharing class DocGenSignatureController {
         DocGenSignatureGuestSecurity.assertRequestWritableFields(token);
         DocGenSignatureGuestSecurity.assertAuditCreateable(token);
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Signature_Request__c',
+                'Role_Name__c',
+                'Contact__c',
+                'CreatedDate',
+                'Secure_Token__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT
@@ -1430,6 +1651,11 @@ public without sharing class DocGenSignatureController {
         // Issue #91: clear the typed-name cache so a refresh of the signing link doesn't
         // re-stamp the preview with what the signer typed before declining.
         signer.Signature_Data__c = null;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(
+            signer,
+            new Set<String>{ 'Status__c', 'Decline_Reason__c', 'Signature_Data__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(signer, false, AccessLevel.SYSTEM_MODE);
 
@@ -1439,6 +1665,8 @@ public without sharing class DocGenSignatureController {
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
         parentReq.Status__c = 'Declined';
         parentReq.Signature_Data__c = null;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(parentReq, new Set<String>{ 'Status__c', 'Signature_Data__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 
@@ -1453,6 +1681,21 @@ public without sharing class DocGenSignatureController {
         audit.IP_Address__c = resolveClientIp(ipAddress);
         audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
         audit.Consent_Captured__c = false;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            audit,
+            new Set<String>{
+                'Signature_Request__c',
+                'Signer__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Contact__c',
+                'Signed_Date__c',
+                'IP_Address__c',
+                'User_Agent__c',
+                'Consent_Captured__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(new List<DocGen_Signature_Audit__c>{ audit }, false, AccessLevel.SYSTEM_MODE);
 
@@ -1492,6 +1735,10 @@ public without sharing class DocGenSignatureController {
         DocGenSignatureGuestSecurity.assertSignerReadable(token);
         DocGenSignatureGuestSecurity.assertPlacementWritableFields(token);
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Signature_Request__c', 'CreatedDate', 'PIN_Verified_At__c', 'Secure_Token__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT Id, Signature_Request__c, CreatedDate, PIN_Verified_At__c
@@ -1510,6 +1757,20 @@ public without sharing class DocGenSignatureController {
             throw new AuraHandledException('This signature link has expired.');
         }
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Placement__c.sObjectType,
+            new Set<String>{
+                'Sequence_Order__c',
+                'Placement_Type__c',
+                'Status__c',
+                'Signed_Value__c',
+                'Signed_At__c',
+                'Section_Context__c',
+                'Tag_Text__c',
+                'Document_Index__c',
+                'Signer__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Placement__c> placements = [
             SELECT
@@ -1560,6 +1821,10 @@ public without sharing class DocGenSignatureController {
         // (Status__c, Signed_At__c, Signed_Value__c).
         DocGenSignatureGuestSecurity.assertPlacementWritableFields(token);
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'CreatedDate', 'PIN_Verified_At__c', 'Status__c', 'Secure_Token__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT Id, CreatedDate, PIN_Verified_At__c, Status__c
@@ -1582,6 +1847,10 @@ public without sharing class DocGenSignatureController {
         }
 
         // Verify the placement belongs to this signer
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Placement__c.sObjectType,
+            new Set<String>{ 'Signer__c', 'Status__c', 'Placement_Type__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Placement__c> plcs = [
             SELECT Id, Signer__c, Status__c, Placement_Type__c
@@ -1613,6 +1882,8 @@ public without sharing class DocGenSignatureController {
 
         plc.Status__c = 'Signed';
         plc.Signed_At__c = System.now();
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(plc, new Set<String>{ 'Signed_Value__c', 'Status__c', 'Signed_At__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(plc, false, AccessLevel.SYSTEM_MODE);
 
@@ -1647,6 +1918,10 @@ public without sharing class DocGenSignatureController {
         // further restricts which CVs this token can resolve.
         DocGenSignatureGuestSecurity.assertSignerReadable(token);
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'CreatedDate', 'Signature_Request__c', 'Secure_Token__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT
@@ -1687,6 +1962,10 @@ public without sharing class DocGenSignatureController {
         }
 
         try {
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'VersionData', 'FileExtension' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             ContentVersion cv = [
                 SELECT VersionData, FileExtension
@@ -1723,6 +2002,10 @@ public without sharing class DocGenSignatureController {
         if (templateId == null) {
             return null;
         }
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Template_Version__c> versions = [
             SELECT Id
@@ -1755,6 +2038,7 @@ public without sharing class DocGenSignatureController {
         allowedTitlePrefixes.add('docgen_html_img_' + templateId + '_');
 
         // Build a single-shot SOQL with multiple LIKE clauses
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<ContentVersion> cvs = [
             SELECT Id, Title

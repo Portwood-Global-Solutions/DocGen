@@ -5,6 +5,29 @@ public with sharing class DocGenBulkController {
      */
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getBulkTemplates() {
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{
+                'Name',
+                'Base_Object_API__c',
+                'Description__c',
+                'Output_Format__c',
+                'Query_Config__c',
+                'Test_Record_Id__c',
+                'Category__c',
+                'Sort_Order__c',
+                'Lock_Output_Format__c',
+                'Required_Permission_Sets__c',
+                'Record_Filter__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> all = [
             SELECT
@@ -228,6 +251,10 @@ public with sharing class DocGenBulkController {
         Boolean isMerge = (mergePdf == true);
 
         try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template__c.sObjectType,
+                new Set<String>{ 'Query_Config__c', 'Test_Record_Id__c', 'Output_Format__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> tempList = [
                 SELECT Query_Config__c, Test_Record_Id__c, Output_Format__c
@@ -527,7 +554,7 @@ public with sharing class DocGenBulkController {
             Boolean isMergeOnly = (mergeOnly == true);
             Boolean isMergeMode = (mergePdf == true) || isMergeOnly;
 
-            // 1. Create Job Record — USER_MODE enforces CRUD/FLS against the calling user
+            // 1. Create Job Record
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = templateId,
                 Query_Condition__c = condition,
@@ -537,6 +564,18 @@ public with sharing class DocGenBulkController {
             if (String.isNotBlank(jobLabel)) {
                 job.Label__c = jobLabel;
             }
+            // v2.0.1 — per-field FLS enforcement (the "FLS Create" finding category
+            // from the v1.56 Checkmarx review). DocGenFlsGuard.assertCreateable
+            // calls Schema.SObjectField.getDescribe().isCreateable() on every
+            // field the DML writes; throws DocGenException with the offending
+            // field name before any DML is attempted. SYSTEM_MODE on the DML
+            // sidesteps the package-build @TestSetup FLS-propagation issue
+            // documented in DocGenFlsGuard.cls.
+            DocGenFlsGuard.assertCreateable(
+                job,
+                new Set<String>{ 'Template__c', 'Query_Condition__c', 'Status__c', 'Merge_Only__c', 'Label__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(job, AccessLevel.SYSTEM_MODE);
 
             // 2. Run Batch — user-configurable batch size (default 1, max 200)
@@ -557,6 +596,10 @@ public with sharing class DocGenBulkController {
      */
     @AuraEnabled
     public static DocGen_Job__c getJobStatus(Id jobId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Job__c.sObjectType,
+            new Set<String>{ 'Name', 'Status__c', 'Success_Count__c', 'Error_Count__c', 'Total_Records__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Job__c> jsRecords = [
             SELECT Id, Name, Status__c, Success_Count__c, Error_Count__c, Total_Records__c
@@ -573,6 +616,19 @@ public with sharing class DocGenBulkController {
      */
     @AuraEnabled
     public static List<DocGen_Job__c> getRecentJobs() {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Job__c.sObjectType,
+            new Set<String>{
+                'Name',
+                'Label__c',
+                'Status__c',
+                'Success_Count__c',
+                'Error_Count__c',
+                'Total_Records__c',
+                'CreatedDate',
+                'Template__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         return [
             SELECT
@@ -601,6 +657,10 @@ public with sharing class DocGenBulkController {
      */
     @AuraEnabled
     public static List<Map<String, String>> getJobGeneratedPdfs(Id jobId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Job__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Query_Condition__c', 'CreatedDate' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Job__c> gpRecords = [
             SELECT Template__c, Template__r.Base_Object_API__c, Template__r.Name, Query_Condition__c, CreatedDate
@@ -665,6 +725,10 @@ public with sharing class DocGenBulkController {
      */
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Saved_Query__c> getSavedQueries(Id templateId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Saved_Query__c.sObjectType,
+            new Set<String>{ 'Name', 'Description__c', 'Query_Condition__c', 'DocGen_Template__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         return [
             SELECT Id, Name, Description__c, Query_Condition__c
@@ -691,6 +755,11 @@ public with sharing class DocGenBulkController {
                 Description__c = description,
                 Query_Condition__c = condition
             );
+            DocGenFlsGuard.assertCreateable(
+                sq,
+                new Set<String>{ 'DocGen_Template__c', 'Name', 'Description__c', 'Query_Condition__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(sq, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error saving query.');

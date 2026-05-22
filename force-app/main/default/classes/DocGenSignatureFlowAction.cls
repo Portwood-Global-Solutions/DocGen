@@ -214,6 +214,17 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
             // Find the request ID
             if (!signerResults.isEmpty()) {
                 String firstEmail = (String) signerInputs[0].get('signerEmail');
+                // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+                // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+                // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+                // the SELECT lists; throws DocGenException with the offending field name
+                // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+                // package-build @TestSetup FLS-propagation issue documented in
+                // DocGenFlsGuard.cls.
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Signer__c.sObjectType,
+                    new Set<String>{ 'Signature_Request__c', 'Signer_Email__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation */
                 List<DocGen_Signer__c> createdSigners = [
                     SELECT Signature_Request__c
@@ -241,6 +252,10 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
             // Read email status
             if (r.signatureRequestId != null) {
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Signature_Request__c.sObjectType,
+                    new Set<String>{ 'Email_Status__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation */
                 DocGen_Signature_Request__c reqRecord = [
                     SELECT Email_Status__c

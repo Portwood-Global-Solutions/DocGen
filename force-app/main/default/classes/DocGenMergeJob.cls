@@ -44,6 +44,11 @@ public with sharing class DocGenMergeJob implements Queueable {
             }
 
             // Get job + template details (template type drives the merge strategy)
+            // v2.0.1 — per-field FLS enforcement on SOQL reads (see DocGenFlsGuard).
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Job__c.sObjectType,
+                new Set<String>{ 'Label__c', 'Name', 'Success_Count__c', 'Total_Records__c', 'Template__c' }
+            );
             DocGen_Job__c job = [
                 SELECT Label__c, Name, CreatedById, Success_Count__c, Total_Records__c, Template__r.Type__c
                 FROM DocGen_Job__c
@@ -140,6 +145,9 @@ public with sharing class DocGenMergeJob implements Queueable {
     private void sendCompletionNotification(DocGen_Job__c job, String fileName, Integer pageCount) {
         try {
             // Look up the custom notification type
+            // v2.0.1 — per-field FLS enforcement on SOQL reads (see DocGenFlsGuard).
+            // Only Id selected — empty allowlist enforces object-level access only.
+            DocGenFlsGuard.assertAccessible(CustomNotificationType.sObjectType, new Set<String>());
             List<CustomNotificationType> types = [
                 SELECT Id
                 FROM CustomNotificationType

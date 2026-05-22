@@ -202,6 +202,18 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
     private String buildHtmlTemplate() {
         // Route HTML-type templates to their own path — simpler, no DOCX-specific
         // column-CSS extraction or <w:tblGrid> parsing.
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Type__c', 'Header_Html__c', 'Footer_Html__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> tpls = [
             SELECT Type__c, Header_Html__c, Footer_Html__c
             FROM DocGen_Template__c
@@ -214,6 +226,11 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             // editing the template doesn't retroactively rewrite earlier versions.
             String headerHtml = tpls[0].Header_Html__c;
             String footerHtml = tpls[0].Footer_Html__c;
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Header_Html__c', 'Footer_Html__c', 'Template__c', 'Is_Active__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> snap = [
                 SELECT Header_Html__c, Footer_Html__c
                 FROM DocGen_Template_Version__c
@@ -232,6 +249,11 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             return buildHtmlTemplateForHtmlType(headerHtml, footerHtml);
         }
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vers = [
             SELECT Id
             FROM DocGen_Template_Version__c
@@ -340,6 +362,11 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
      * the DOCX path emits: a full HTML doc with {ROWS} ready for row injection.
      */
     private String buildHtmlTemplateForHtmlType(String headerHtml, String footerHtml) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Content_Version_Id__c', 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vers = [
             SELECT Id, Content_Version_Id__c
             FROM DocGen_Template_Version__c
@@ -351,6 +378,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             throw new DocGenException('HTML template has no active version body.');
         }
         Id bodyCvId = (Id) vers[0].Content_Version_Id__c;
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> cvs = [
             SELECT VersionData
             FROM ContentVersion
@@ -440,6 +469,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
     private String buildHeaderRowFromConfig() {
         try {
             // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Query_Config__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> tpls = [
                 SELECT Query_Config__c
                 FROM DocGen_Template__c
@@ -529,6 +560,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
      */
     private String resolveParentMergeTags(String html) {
         try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Base_Object_API__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> tpls = [
                 SELECT Base_Object_API__c
                 FROM DocGen_Template__c
@@ -836,6 +869,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
 
         if (String.isBlank(childObj) || String.isBlank(lookupFld)) {
             try {
+                DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Query_Config__c' });
+                /* code-analyzer-suppress ApexFlsViolation */
                 List<DocGen_Template__c> tpls = [
                     SELECT Query_Config__c
                     FROM DocGen_Template__c
@@ -1036,6 +1071,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
 
         if (String.isBlank(childObj) || String.isBlank(lookupFld)) {
             try {
+                DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Query_Config__c' });
+                /* code-analyzer-suppress ApexFlsViolation */
                 List<DocGen_Template__c> tpls = [
                     SELECT Query_Config__c
                     FROM DocGen_Template__c

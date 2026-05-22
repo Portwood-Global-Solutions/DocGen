@@ -23,6 +23,18 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return;
         }
         try {
+            // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+            // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+            // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+            // the SELECT lists; throws DocGenException with the offending field name
+            // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+            // package-build @TestSetup FLS-propagation issue documented in
+            // DocGenFlsGuard.cls.
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Watermark_Image_CV_Id__c', 'Template__c', 'Is_Active__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> vs = [
                 SELECT Watermark_Image_CV_Id__c
                 FROM DocGen_Template_Version__c
@@ -89,6 +101,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     private without sharing class PreDecompXmlLoader {
         public List<ContentVersion> loadByTitlePrefix(String titlePrefix) {
             String likePattern = titlePrefix + '%';
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'Title', 'VersionData', 'IsLatest' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             return [
                 SELECT Id, Title, VersionData
                 FROM ContentVersion
@@ -638,6 +655,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             cachedXmlParts = new Map<String, String>();
             cachedPreDecompAvailable = false;
 
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Template__c', 'Is_Active__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> activeVersions = [
                 SELECT Id
                 FROM DocGen_Template_Version__c
@@ -886,6 +908,10 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 'Invalid output format override: ' + outputFormatOverride + '. Expected PDF, Word, PowerPoint, or HTML.'
             );
         }
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Lock_Output_Format__c', 'Type__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> tpls = [
             SELECT Lock_Output_Format__c, Type__c
@@ -1174,6 +1200,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      */
     public static Map<String, Object> extractGiantQueryFragmentConfig(Id templateId, String giantRelationshipName) {
         // Load only document.xml and styles.xml from pre-decomposed parts
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVersions = [
             SELECT Id
             FROM DocGen_Template_Version__c
@@ -1192,6 +1223,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String rawDocumentXml = null;
         String capturedStylesXml = null;
 
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> xmlCvs = [
             SELECT Title, VersionData
             FROM ContentVersion
@@ -1297,6 +1330,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
         // Get parent-only record data (strip all children from config)
         // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Base_Object_API__c', 'Query_Config__c', 'Type__c', 'Document_Title_Format__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
             SELECT Base_Object_API__c, Query_Config__c, Type__c, Document_Title_Format__c
             FROM DocGen_Template__c
@@ -1345,6 +1383,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         mr.mediaPath = 'word/media/';
 
         // Load pre-decomposed XML parts
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVersions = [
             SELECT Id
             FROM DocGen_Template_Version__c
@@ -1359,6 +1402,10 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // returned empty in that context, which is why the signed PDF path lost table-style
         // borders for guest-triggered signatures (#28). Template access is already gated by
         // DocGen permission sets; reading the pre-decomposed artifacts in system mode is safe.
+        DocGenFlsGuard.assertAccessible(
+            ContentVersion.sObjectType,
+            new Set<String>{ 'Title', 'VersionData', 'IsLatest' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> xmlCvs = [
             SELECT Title, VersionData
@@ -1497,6 +1544,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * @param versionId The DocGen_Template_Version__c record ID to link images to
      */
     public static void extractAndSaveTemplateImages(Id templateId, Id versionId) {
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
             SELECT Type__c
             FROM DocGen_Template__c
@@ -1523,6 +1572,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // string in heap on top of the ~9 MB Blob, blowing past even the 12 MB
         // async heap on real-world templates).
         Id sourceCvId = null;
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Content_Version_Id__c', 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVers = [
             SELECT Content_Version_Id__c
             FROM DocGen_Template_Version__c
@@ -1534,6 +1588,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             sourceCvId = (Id) activeVers[0].Content_Version_Id__c;
         }
         if (sourceCvId == null) {
+            DocGenFlsGuard.assertAccessible(
+                ContentDocumentLink.sObjectType,
+                new Set<String>{ 'ContentDocumentId', 'LinkedEntityId' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             List<ContentDocumentLink> links = [
                 SELECT ContentDocument.LatestPublishedVersionId
                 FROM ContentDocumentLink
@@ -1549,6 +1608,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (sourceCvId == null) {
             return;
         }
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> cvs = [
             SELECT VersionData
             FROM ContentVersion
@@ -1820,6 +1881,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         Map<String, String> pdfImages = new Map<String, String>();
 
         // 1. Template-embedded images: committed CVs linked to active version
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVersions = [
             SELECT Id
             FROM DocGen_Template_Version__c
@@ -1845,6 +1911,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 versionDocIds.add(cdl.ContentDocumentId);
             }
             if (!versionDocIds.isEmpty()) {
+                DocGenFlsGuard.assertAccessible(
+                    ContentVersion.sObjectType,
+                    new Set<String>{ 'Title', 'ContentDocumentId', 'IsLatest' }
+                );
+                /* code-analyzer-suppress ApexFlsViolation */
                 List<ContentVersion> tmplCvs = [
                     SELECT Id, Title
                     FROM ContentVersion
@@ -6754,6 +6825,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return null;
         }
         try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template__c.sObjectType,
+                new Set<String>{ 'Document_Title_Format__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> tpls = [
                 SELECT Document_Title_Format__c
                 FROM DocGen_Template__c
@@ -6767,6 +6843,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // v1.97 — prefer the active version's snapshot of Document_Title_Format__c
             // so restoring an older version restores its filename pattern too.
             String fmt = tpls[0].Document_Title_Format__c;
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Document_Title_Format__c', 'Template__c', 'Is_Active__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> snap = [
                 SELECT Document_Title_Format__c
                 FROM DocGen_Template_Version__c
@@ -7285,6 +7366,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * For single .html uploads there is nothing to extract — the method returns.
      */
     public static void extractAndSaveHtmlTemplateAssets(Id templateId, Id versionId) {
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
             SELECT Type__c
             FROM DocGen_Template__c
@@ -7296,6 +7379,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return;
         }
 
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Content_Version_Id__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vers = [
             SELECT Id, Content_Version_Id__c
             FROM DocGen_Template_Version__c
@@ -7308,6 +7396,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
         Id sourceCvId = (Id) vers[0].Content_Version_Id__c;
 
+        DocGenFlsGuard.assertAccessible(
+            ContentVersion.sObjectType,
+            new Set<String>{ 'VersionData', 'FileExtension', 'Title' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> cvs = [
             SELECT VersionData, FileExtension, Title
             FROM ContentVersion
@@ -7384,6 +7477,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             for (ContentVersion icv : imageCvs) {
                 reloadIds.add(icv.Id);
             }
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>());
+            /* code-analyzer-suppress ApexFlsViolation */
             Map<Id, ContentVersion> byId = new Map<Id, ContentVersion>(
                 [SELECT Id FROM ContentVersion WHERE Id IN :reloadIds WITH SYSTEM_MODE]
             );

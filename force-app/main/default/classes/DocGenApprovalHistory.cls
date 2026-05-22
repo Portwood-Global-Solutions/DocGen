@@ -50,6 +50,17 @@ public with sharing class DocGenApprovalHistory {
             return new Map<String, Object>{ 'records' => rows, 'totalSize' => 0 };
         }
         try {
+            // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+            // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+            // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+            // the SELECT lists; throws DocGenException with the offending field name
+            // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+            // package-build @TestSetup FLS-propagation issue documented in
+            // DocGenFlsGuard.cls.
+            DocGenFlsGuard.assertAccessible(
+                ProcessInstance.sObjectType,
+                new Set<String>{ 'Status', 'CreatedDate', 'SubmittedById', 'TargetObjectId' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<ProcessInstance> instances = [
                 SELECT

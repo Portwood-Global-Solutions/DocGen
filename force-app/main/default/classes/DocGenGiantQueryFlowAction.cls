@@ -67,6 +67,18 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
             res.isGiantQuery = false;
             try {
                 // Load template
+                // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+                // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+                // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+                // the SELECT lists; throws DocGenException with the offending field name
+                // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+                // package-build @TestSetup FLS-propagation issue documented in
+                // DocGenFlsGuard.cls.
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Template__c.sObjectType,
+                    new Set<String>{ 'Base_Object_API__c', 'Query_Config__c', 'Type__c', 'Output_Format__c' }
+                );
+                /* code-analyzer-suppress ApexFlsViolation */
                 List<DocGen_Template__c> templates = [
                     SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c
                     FROM DocGen_Template__c
@@ -159,6 +171,11 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
         Map<String, Object> childNodeConfig
     ) {
         // Get document XML from pre-decomposed parts
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVersions = [
             SELECT Id
             FROM DocGen_Template_Version__c
@@ -179,6 +196,8 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
             // Visibility=InternalUsers on fresh upload (subscriber-org artifact of
             // the platform behavior). Access is gated upstream by the active
             // template version USER_MODE query.
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData', 'Title' });
+            /* code-analyzer-suppress ApexFlsViolation */
             List<ContentVersion> xmlCvs = [
                 SELECT VersionData
                 FROM ContentVersion

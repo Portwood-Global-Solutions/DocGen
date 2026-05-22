@@ -64,6 +64,17 @@ public with sharing class DocGenChartImageController {
         // DocGenController (managed-package metadata; the FLS gate on the
         // chart's TARGET object data lives downstream in
         // DocGenDataRetriever.getRecordData and the bucket-resolver SOQL).
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Type__c', 'Base_Object_API__c', 'Query_Config__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
             SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
@@ -134,6 +145,10 @@ public with sharing class DocGenChartImageController {
         // and the rest of DocGenController. The actual FLS gate on the
         // chart's TARGET-object data lives downstream in
         // DocGenDataRetriever.getRecordData and the bucket-resolver SOQL.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Type__c', 'Base_Object_API__c', 'Query_Config__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
             SELECT Id, Type__c, Base_Object_API__c, Query_Config__c
@@ -319,6 +334,10 @@ public with sharing class DocGenChartImageController {
     // =====================================================================
 
     private static String loadActiveWordBody(Id templateId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vs = [
             SELECT Id
@@ -355,6 +374,10 @@ public with sharing class DocGenChartImageController {
      * sees the same body text the merge engine processes.
      */
     private static String loadActiveHtmlBody(Id templateId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c', 'Content_Version_Id__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vs = [
             SELECT Id, Content_Version_Id__c

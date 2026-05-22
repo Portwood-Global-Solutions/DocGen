@@ -311,6 +311,14 @@ public with sharing class DocGenSignatureEmailService {
      */
     private static void sendSenderNotification(Id requestId, String subject, String bodyHtml) {
         try {
+            // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+            // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+            // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+            // the SELECT lists; throws DocGenException with the offending field name
+            // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+            // package-build @TestSetup FLS-propagation issue documented in
+            // DocGenFlsGuard.cls.
+            DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'CreatedById' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             DocGen_Signature_Request__c req = [
                 SELECT CreatedById
@@ -320,6 +328,7 @@ public with sharing class DocGenSignatureEmailService {
                 LIMIT 1
             ]; // NOPMD
 
+            DocGenFlsGuard.assertAccessible(User.sObjectType, new Set<String>{ 'Email' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             User sender = [SELECT Email FROM User WHERE Id = :req.CreatedById WITH SYSTEM_MODE LIMIT 1]; // NOPMD
             if (String.isBlank(sender.Email))
@@ -376,6 +385,8 @@ public with sharing class DocGenSignatureEmailService {
         try {
             DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(Id = requestId);
             req.Email_Status__c = status.left(1000);
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Email_Status__c' });
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(req, false, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {

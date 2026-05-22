@@ -33,6 +33,26 @@ public without sharing class DocGenAuthenticatorController {
         // all sharing the same Document_Hash_SHA256__c (the hash of the
         // final stamped PDF). The verifier returns every signer for the
         // complete audit trail of the document.
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Audit__c.sObjectType,
+            new Set<String>{
+                'Signed_Date__c',
+                'IP_Address__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Consent_Captured__c',
+                'PIN_Verified_At__c',
+                'Document_Hash_SHA256__c',
+                'Signer__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Audit__c> audits = [
             SELECT
@@ -97,6 +117,26 @@ public without sharing class DocGenAuthenticatorController {
         // Describe check below is the explicit CRUD/FLS enforcement signal
         // documented in DocGenSignatureGuestSecurity.
         DocGenSignatureGuestSecurity.assertAuditReadable();
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Audit__c.sObjectType,
+            new Set<String>{
+                'Signed_Date__c',
+                'IP_Address__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Consent_Captured__c',
+                'PIN_Verified_At__c',
+                'Document_Hash_SHA256__c',
+                'Signer__c'
+            }
+        );
         // Field allowlist matches the documented verification contract.
         // SYSTEM_MODE is required for guest-profile access.
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */

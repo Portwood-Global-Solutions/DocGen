@@ -1,13 +1,13 @@
 {
   "packageDirectories": [
     {
-      "versionName": "2.0.0 — Security Hardening for AppExchange Resubmission",
-      "versionNumber": "2.0.0.NEXT",
-      "ancestorId": "04tVx000000ZVFRIA4",
+      "versionName": "2.0.1 — Per-Field FLS Guards (Option B + B+)",
+      "versionNumber": "2.0.1.NEXT",
+      "ancestorId": "04tVx000000ZqBpIAK",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen is a native Salesforce document generation engine. Build Word and PDF documents from any Salesforce record using merge tags in your own templates. Includes a visual query builder, bulk generation, multi-object support, and Flow integration — all without leaving Salesforce."
+      "versionDescription": "v2.0.1 adds DocGenFlsGuard — per-field Schema.SObjectField.getDescribe().isAccessible/isCreateable/isUpdateable() checks at every admin DML and WITH SYSTEM_MODE SOQL site (243 guard call sites across 19 controllers). Implements the AppExchange v1.56 review's stated finding-resolution: 'enforce CRUD checks on the object and FLS checks on the fields before performing any DML operation' — both halves now executed in code."
     }
   ],
   "name": "Portwood DocGen",

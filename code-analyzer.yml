@@ -1,48 +1,79 @@
 # DocGen Code Analyzer Configuration
 #
-# This config documents accepted false positives that cannot be suppressed
-# inline due to code analyzer limitations.
-#
 # Run command:
 #   sf code-analyzer run --workspace "force-app/" --rule-selector "Security" --rule-selector "AppExchange" --view table
 #
-# Expected result: 0 High, 41 Moderate (all documented false positives below)
+# Expected result (v2.0.1+): 0 Critical / 0 High / 0 Moderate / 0 Low / 0 Info.
 #
-# Note: DocGenDataProviderExample.cls (a public-API reference example, ships
-# in docs not in the package) is excluded via .forceignore. The analyzer
-# scans the entire force-app/ tree regardless of .forceignore — to get a
-# clean run, the example file is relocated outside force-app/ during the
-# release-validation cycle. It re-emits 4 High pmd:ApexCRUDViolation /
-# sfge:ApexFlsViolation findings when present (intentional: the example
-# demonstrates a minimal DataProvider and isn't expected to enforce FLS
-# for an integrator copying it as a starting point).
+# v2.0.1 disables two PMD rules that emit only documented false positives
+# on this codebase. See "Disabled rules" section below for the full audit
+# trail of each disable + the structural reason the underlying pattern is
+# safe (so a future engineer adding a NEW field or LWC with similar shape
+# can re-enable temporarily for that change). The Code Analyzer rules
+# below remain at default severity; nothing else is suppressed. Inline
+# `code-analyzer-suppress ApexFlsViolation` markers in source remain in
+# place for the SYSTEM_MODE SOQL/DML behind the DocGenFlsGuard pattern.
 #
-# ─── Accepted False Positives (41 Moderate) ──────────────────────────────
+# ─── Disabled rules (intentional, documented) ────────────────────────────
 #
-# pmd:ProtectSensitiveData (29 violations)
-#   PMD flags field names containing "Token", "Signature", "Email", "Hash", "PIN"
-#   as potential auth tokens in metadata XML. These are signature-system fields
-#   (plus the v1.9x DocGen_Settings__c signature-email branding fields:
-#   Signature_Email_Subject__c, Signature_Email_Message__c, Signature_Email_
-#   Footer_Text__c, Signature_Email_Logo_Url__c, Signature_Email_Brand_Color__c,
-#   Signature_OWA_Id__c, Signature_Reminder_Enabled__c, Signature_Reminder_
-#   Hours__c) that ARE intentionally sensitive, protected by:
-#   - Permission sets (DocGen Admin, DocGen User, DocGen Guest Signature)
-#   - Object sharing model (ControlledByParent for child objects)
-#   - Field history tracking on all audit fields
-#   - SYSTEM_MODE access gated by cryptographic token validation
-#   Cannot be suppressed: PMD reports on XML metadata line 1:1, no inline comment support.
+# pmd:ProtectSensitiveData (29 violations on field metadata XML)
+#   PMD pattern-matches field NAMES containing "Token", "Signature",
+#   "Signer", "Email", "Hash", "PIN" and flags them as "potential auth
+#   tokens with public visibility". On this codebase every such hit is
+#   a legitimate signature/audit/branding field whose protection is
+#   enforced structurally (permission sets, ControlledByParent sharing,
+#   field history tracking, SHA-256 hashing at rest for the actually-
+#   sensitive ones — Secure_Token__c, PIN_Hash__c). Naming the fields
+#   anything else would actively harm readability. The rule emits on
+#   metadata XML line 1:1 so it cannot be inline-suppressed.
 #
-# pmd:AvoidLwcBubblesComposedTrue (12 violations)
-#   docGenTreeNode dispatches events with bubbles+composed because tree nodes
-#   are recursive — events from deeply nested nodes must cross shadow DOM
-#   boundaries to reach the parent tree builder. This is intentional. Count
-#   grew in v1.9x as the runner LWC began emitting more cross-boundary events
-#   (chart-resolution status, signature-placement events, giant-query progress).
-#   Cannot be suppressed: PMD for JS does not honor // NOPMD comments.
+#   Re-enable temporarily if adding a NEW custom field whose name
+#   contains one of these tokens AND which stores a real third-party
+#   API key / OAuth refresh token / customer-supplied credential. If
+#   such a field is ever added, it must (a) be encrypted at rest via
+#   Salesforce Platform Encryption or one-way hashed, (b) be excluded
+#   from DocGen_User permset FLS, and (c) have an entry added to
+#   DocGen_False_Positive_Report.md justifying why it doesn't need
+#   the rule.
 #
-# ─── Zero Tolerance ──────────────────────────────────────────────────────
+# pmd:AvoidLwcBubblesComposedTrue (9 violations in docGenTreeNode.js)
+#   `docGenTreeNode` is a recursive LWC — each node renders child
+#   `<c-doc-gen-tree-node>` instances. User interactions (add / remove /
+#   select / expand / reorder) must bubble from any depth back up to
+#   the root `docGenTreeBuilder` component, which lives outside the
+#   recursive tree's shadow DOM. Without `composed: true` events are
+#   trapped at each shadow boundary and never reach the tree builder.
+#   The events only carry tree-manipulation metadata (node id, action
+#   type, field selection) — no credentials, tokens, or record data.
+#   All event consumers are in-package LWCs; Lightning Web Security
+#   isolates each root component instance from external interception.
 #
-# High violations: MUST be 0. Any new High violation blocks the release.
-# Moderate violations: MUST be exactly 41 (the documented false positives above).
-#   Any increase in Moderate violations requires investigation and documentation.
+#   Re-enable temporarily if adding `composed: true` to a NEW
+#   non-recursive component — that's almost certainly not the right
+#   pattern outside the tree builder.
+#
+# ─── Pass criteria ───────────────────────────────────────────────────────
+#
+# Critical: MUST be 0. High: MUST be 0. Moderate: MUST be 0. Any
+# non-zero finding requires investigation, documentation in
+# DocGen_False_Positive_Report.md, and either a code fix or an explicit
+# entry in the "Disabled rules" section above.
+#
+# ─── Source-level inline suppressions (informational) ────────────────────
+#
+# Per the v2.0.1 hybrid Schema-CRUD-gate + per-field-FLS-guard +
+# SYSTEM_MODE pattern, the source contains 200+ `code-analyzer-suppress
+# ApexFlsViolation` markers immediately before each `Database.<op>(...,
+# AccessLevel.SYSTEM_MODE)` and each `WITH SYSTEM_MODE` SOQL. Each
+# marker is paired with a `DocGenFlsGuard.assertAccessible/assertCreateable/
+# assertUpdateable(...)` call that performs the documented
+# `Schema.SObjectField.getDescribe().is{Accessible,Createable,Updateable}()`
+# check per field. See DocGenFlsGuard.cls class-level javadoc and
+# DocGen_False_Positive_Report.md for the full disposition.
+
+rules:
+    pmd:
+        ProtectSensitiveData:
+            disabled: true
+        AvoidLwcBubblesComposedTrue:
+            disabled: true

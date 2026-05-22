@@ -21,6 +21,28 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (!Schema.sObjectType.DocGen_Template_Version__c.isAccessible()) {
             return null;
         }
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{
+                'Output_Format__c',
+                'Header_Html__c',
+                'Footer_Html__c',
+                'Document_Title_Format__c',
+                'Page_Orientation__c',
+                'Page_Size__c',
+                'Page_Margins__c',
+                'Custom_Margins__c',
+                'Template__c',
+                'Is_Active__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> vers = [
             SELECT
@@ -66,6 +88,22 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // on each field — including in managed-package build orgs where the
         // System Administrator profile does not auto-grant FLS for namespaced
         // custom fields. CRUD gate above is the structural enforcement contract.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{
+                'Base_Object_API__c',
+                'Query_Config__c',
+                'Type__c',
+                'Output_Format__c',
+                'Document_Title_Format__c',
+                'Header_Html__c',
+                'Footer_Html__c',
+                'Page_Orientation__c',
+                'Page_Size__c',
+                'Page_Margins__c',
+                'Custom_Margins__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
             SELECT
@@ -176,6 +214,22 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
         // Cache template metadata + file content on first call
         if (cachedTemplateId != templateId || cachedTemplateEnvelope == null) {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template__c.sObjectType,
+                new Set<String>{
+                    'Base_Object_API__c',
+                    'Query_Config__c',
+                    'Type__c',
+                    'Output_Format__c',
+                    'Document_Title_Format__c',
+                    'Header_Html__c',
+                    'Footer_Html__c',
+                    'Page_Orientation__c',
+                    'Page_Size__c',
+                    'Page_Margins__c',
+                    'Custom_Margins__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> templates = [
                 SELECT
@@ -681,6 +735,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // a clean denial.
         List<DocGen_Template_Version__c> ownerCheck;
         try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template_Version__c.sObjectType, new Set<String>{ 'Template__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
             ownerCheck = [
                 SELECT Id, Template__c
                 FROM DocGen_Template_Version__c
@@ -689,6 +745,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 LIMIT 1
             ];
         } catch (QueryException qe) {
+            throw DocGenService.ahe('Template version not found or access denied.');
+        } catch (DocGenException fe) {
             throw DocGenService.ahe('Template version not found or access denied.');
         }
         if (ownerCheck.isEmpty()) {
@@ -710,6 +768,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe('Insufficient access to update template versions.');
         }
         DocGen_Template_Version__c v = new DocGen_Template_Version__c(Id = versionId, Watermark_Image_CV_Id__c = cv.Id);
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(v, new Set<String>{ 'Watermark_Image_CV_Id__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
         Database.update(v, AccessLevel.SYSTEM_MODE);
         return cv.Id;
     }
@@ -730,6 +791,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // any version's watermark by Id.
         List<DocGen_Template_Version__c> ownerCheck;
         try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template_Version__c.sObjectType, new Set<String>());
+            /* code-analyzer-suppress ApexFlsViolation */
             ownerCheck = [
                 SELECT Id
                 FROM DocGen_Template_Version__c
@@ -739,6 +802,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ];
         } catch (QueryException qe) {
             throw DocGenService.ahe('Template version not found or access denied.');
+        } catch (DocGenException fe) {
+            throw DocGenService.ahe('Template version not found or access denied.');
         }
         if (ownerCheck.isEmpty()) {
             throw DocGenService.ahe('Template version not found or access denied.');
@@ -747,6 +812,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe('Insufficient access to update template versions.');
         }
         DocGen_Template_Version__c v = new DocGen_Template_Version__c(Id = versionId, Watermark_Image_CV_Id__c = null);
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.assertUpdateable(v, new Set<String>{ 'Watermark_Image_CV_Id__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
         Database.update(v, AccessLevel.SYSTEM_MODE);
     }
 
@@ -807,6 +875,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             }
 
             // Get template config
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template__c.sObjectType,
+                new Set<String>{ 'Base_Object_API__c', 'Query_Config__c', 'Type__c', 'Output_Format__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> templates = [
                 SELECT Base_Object_API__c, Query_Config__c, Type__c, Output_Format__c
@@ -888,6 +960,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             // Load the template body: for DOCX use pre-decomposed word/document.xml
             // (or zip fallback); for HTML the active version's Content_Version_Id__c
             // IS already the rewritten HTML body (with /sfc/ URLs for images).
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Content_Version_Id__c', 'Template__c', 'Is_Active__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> activeVersions = [
                 SELECT Id, Content_Version_Id__c
@@ -931,6 +1007,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     if (!Schema.sObjectType.ContentVersion.isAccessible()) {
                         throw new DocGenException('ContentVersion access denied.');
                     }
+                    DocGenFlsGuard.assertAccessible(
+                        ContentVersion.sObjectType,
+                        new Set<String>{ 'VersionData', 'Title' }
+                    );
+                    /* code-analyzer-suppress ApexFlsViolation */
                     List<ContentVersion> xmlCvs = [
                         SELECT VersionData
                         FROM ContentVersion
@@ -998,6 +1079,17 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     }
                 )
             );
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+            DocGenFlsGuard.assertCreateable(
+                job,
+                new Set<String>{
+                    'Status__c',
+                    'Template__c',
+                    'Label__c',
+                    'Parent_Record_Id__c',
+                    'Giant_Query_Config__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(job, AccessLevel.SYSTEM_MODE);
 
@@ -1033,6 +1125,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled
     public static Map<String, Object> getGiantQueryJobStatus(Id jobId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Job__c.sObjectType,
+            new Set<String>{ 'Status__c', 'Success_Count__c', 'Total_Records__c', 'Label__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Job__c> jobs = [
             SELECT Status__c, Success_Count__c, Total_Records__c, Label__c
@@ -1082,6 +1178,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         Id finalCvId = null;
         Id templateId = null;
         Id parentRecordId = null;
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Job__c.sObjectType,
+            new Set<String>{ 'Merged_PDF_CV__c', 'Template__c', 'Parent_Record_Id__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Job__c> jobs = [
             SELECT Merged_PDF_CV__c, Template__c, Parent_Record_Id__c
             FROM DocGen_Job__c
@@ -1222,6 +1323,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
             // Load template body: DOCX uses pre-decomposed word/document.xml;
             // HTML uses the active version's Content_Version_Id__c directly.
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> tplForType = [
                 SELECT Type__c
@@ -1232,6 +1334,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ];
             String templateType = tplForType.isEmpty() ? 'Word' : tplForType[0].Type__c;
 
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Content_Version_Id__c', 'Template__c', 'Is_Active__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> activeVersions = [
                 SELECT Id, Content_Version_Id__c
@@ -1269,6 +1375,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     if (!Schema.sObjectType.ContentVersion.isAccessible()) {
                         throw new DocGenException('ContentVersion access denied.');
                     }
+                    DocGenFlsGuard.assertAccessible(
+                        ContentVersion.sObjectType,
+                        new Set<String>{ 'VersionData', 'Title' }
+                    );
+                    /* code-analyzer-suppress ApexFlsViolation */
                     List<ContentVersion> xmlCvs = [
                         SELECT VersionData
                         FROM ContentVersion
@@ -1297,6 +1408,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Template__c = templateId,
                 Label__c = 'Giant Query PDF',
                 Parent_Record_Id__c = String.valueOf(recordId)
+            );
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+            DocGenFlsGuard.assertCreateable(
+                job,
+                new Set<String>{ 'Status__c', 'Template__c', 'Label__c', 'Parent_Record_Id__c' }
             );
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(job, AccessLevel.SYSTEM_MODE);
@@ -1357,6 +1473,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (recordId == null || templateId == null) {
             return result;
         }
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Query_Config__c', 'Base_Object_API__c', 'Output_Format__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
             SELECT Query_Config__c, Base_Object_API__c, Output_Format__c
@@ -1780,7 +1900,6 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * Shared filter implementation for getTemplatesForObject and getTemplatesForObjectAndRecord.
      */
     private static List<DocGen_Template__c> getTemplatesForObjectInternal(String objectApiName, String recordId) {
-        /* code-analyzer-suppress ApexFlsViolation */
         // Inactive templates are filtered out of the runner picker (issue #85).
         // Admin views call getAllTemplates() which doesn't filter, so admins can
         // still see and toggle inactive templates. Uses `!= FALSE` to treat both
@@ -1788,6 +1907,26 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // platform indexing quirk on newly-added Checkbox fields that doubles
         // some rows into both buckets; `!= FALSE` matches the same semantic set
         // without the duplication.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{
+                'Name',
+                'Description__c',
+                'Type__c',
+                'Output_Format__c',
+                'Is_Active__c',
+                'Is_Default__c',
+                'Query_Config__c',
+                'Category__c',
+                'Sort_Order__c',
+                'Lock_Output_Format__c',
+                'Specific_Record_Ids__c',
+                'Required_Permission_Sets__c',
+                'Record_Filter__c',
+                'Base_Object_API__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> all = [
             SELECT
                 Id,
@@ -2043,6 +2182,33 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getAllTemplates() {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{
+                'Name',
+                'Description__c',
+                'Type__c',
+                'Base_Object_API__c',
+                'Category__c',
+                'Query_Config__c',
+                'Test_Record_Id__c',
+                'Output_Format__c',
+                'Document_Title_Format__c',
+                'Is_Active__c',
+                'Is_Default__c',
+                'Sort_Order__c',
+                'Lock_Output_Format__c',
+                'Specific_Record_Ids__c',
+                'Required_Permission_Sets__c',
+                'Record_Filter__c',
+                'Header_Html__c',
+                'Footer_Html__c',
+                'Page_Orientation__c',
+                'Page_Size__c',
+                'Page_Margins__c',
+                'Custom_Margins__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         return [
             SELECT
@@ -2160,6 +2326,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 template.Is_Default__c = isDefault;
                 if (isDefault == true && template.Base_Object_API__c != null) {
                     String baseObj = (String) fields.get('Base_Object_API__c');
+                    DocGenFlsGuard.assertAccessible(
+                        DocGen_Template__c.sObjectType,
+                        new Set<String>{ 'Base_Object_API__c', 'Is_Default__c' }
+                    );
                     /* code-analyzer-suppress ApexFlsViolation */
                     List<DocGen_Template__c> otherDefaults = [
                         SELECT Id
@@ -2171,11 +2341,45 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         other.Is_Default__c = false;
                     }
                     if (!otherDefaults.isEmpty()) {
+                        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                        DocGenFlsGuard.assertUpdateable(otherDefaults, new Set<String>{ 'Is_Default__c' });
                         /* code-analyzer-suppress ApexFlsViolation */
                         Database.update(otherDefaults, AccessLevel.SYSTEM_MODE);
                     }
                 }
             }
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            // Allowlist unions every field the conditional setters above could
+            // write — DocGenFlsGuard tolerates fields that were never assigned
+            // (the SObject just won't carry them in the DML), and ensures the
+            // describe check covers any field this method could possibly write.
+            DocGenFlsGuard.assertUpdateable(
+                template,
+                new Set<String>{
+                    'Name',
+                    'Category__c',
+                    'Type__c',
+                    'Base_Object_API__c',
+                    'Description__c',
+                    'Query_Config__c',
+                    'Test_Record_Id__c',
+                    'Document_Title_Format__c',
+                    'Output_Format__c',
+                    'Sort_Order__c',
+                    'Lock_Output_Format__c',
+                    'Specific_Record_Ids__c',
+                    'Required_Permission_Sets__c',
+                    'Record_Filter__c',
+                    'Header_Html__c',
+                    'Footer_Html__c',
+                    'Page_Orientation__c',
+                    'Page_Size__c',
+                    'Page_Margins__c',
+                    'Custom_Margins__c',
+                    'Is_Active__c',
+                    'Is_Default__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(template, AccessLevel.SYSTEM_MODE);
 
@@ -2186,6 +2390,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 // without that, querying for "active" versions AFTER deactivation
                 // returns an empty list and the watermark silently gets dropped on
                 // every Save as New Version. That's the bug Nathan hit in 1.65.
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Template_Version__c.sObjectType,
+                    new Set<String>{ 'Watermark_Image_CV_Id__c', 'Template__c', 'Is_Active__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation */
                 List<DocGen_Template_Version__c> activeVersions = [
                     SELECT Id, Watermark_Image_CV_Id__c
@@ -2201,6 +2409,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     av.Is_Active__c = false;
                 }
                 if (!activeVersions.isEmpty()) {
+                    // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                    DocGenFlsGuard.assertUpdateable(activeVersions, new Set<String>{ 'Is_Active__c' });
                     /* code-analyzer-suppress ApexFlsViolation */
                     Database.update(activeVersions, AccessLevel.SYSTEM_MODE);
                 }
@@ -2260,6 +2470,29 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     version.Watermark_Image_CV_Id__c = priorWatermarkCvId;
                 }
 
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+                DocGenFlsGuard.assertCreateable(
+                    version,
+                    new Set<String>{
+                        'Template__c',
+                        'Query_Config__c',
+                        'Content_Version_Id__c',
+                        'Is_Active__c',
+                        'Category__c',
+                        'Description__c',
+                        'Type__c',
+                        'Base_Object_API__c',
+                        'Page_Orientation__c',
+                        'Page_Size__c',
+                        'Page_Margins__c',
+                        'Custom_Margins__c',
+                        'Output_Format__c',
+                        'Header_Html__c',
+                        'Footer_Html__c',
+                        'Document_Title_Format__c',
+                        'Watermark_Image_CV_Id__c'
+                    }
+                );
                 /* code-analyzer-suppress ApexFlsViolation */
                 Database.insert(version, AccessLevel.SYSTEM_MODE);
 
@@ -2313,6 +2546,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // the same row (no second query needed).
         List<DocGen_Template__c> tpls;
         try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
             tpls = [
                 SELECT Id, Type__c
                 FROM DocGen_Template__c
@@ -2321,6 +2556,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 LIMIT 1
             ];
         } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
         if (tpls.isEmpty()) {
@@ -2374,6 +2611,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         // this template before we attach a body CV to it.
         List<DocGen_Template__c> tpls;
         try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
             tpls = [
                 SELECT Id, Type__c
                 FROM DocGen_Template__c
@@ -2382,6 +2621,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 LIMIT 1
             ];
         } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
         if (tpls.isEmpty()) {
@@ -2489,6 +2730,23 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled
     public static List<DocGen_Template_Version__c> getTemplateVersions(Id templateId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{
+                'Name',
+                'CreatedDate',
+                'CreatedById',
+                'Query_Config__c',
+                'Content_Version_Id__c',
+                'Category__c',
+                'Description__c',
+                'Type__c',
+                'Base_Object_API__c',
+                'Is_Active__c',
+                'Watermark_Image_CV_Id__c',
+                'Template__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         return [
             SELECT
@@ -2528,6 +2786,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (!Schema.sObjectType.DocGen_Template_Version__c.isDeletable()) {
                 throw DocGenService.ahe('Insufficient access.');
             }
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Name', 'Is_Active__c', 'Content_Version_Id__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> versions = [
                 SELECT Id, Name, Is_Active__c, Content_Version_Id__c
@@ -2602,6 +2864,18 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     @AuraEnabled
     public static void activateVersion(Id versionId) {
         try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{
+                    'Template__c',
+                    'Query_Config__c',
+                    'Content_Version_Id__c',
+                    'Category__c',
+                    'Description__c',
+                    'Type__c',
+                    'Base_Object_API__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> actVerList = [
                 SELECT
@@ -2620,6 +2894,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             DocGen_Template_Version__c version = actVerList[0];
 
             // 1. Deactivate others
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Template__c', 'Is_Active__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template_Version__c> others = [
                 SELECT Id
@@ -2631,12 +2909,16 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 v.Is_Active__c = false;
             }
             if (!others.isEmpty()) {
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+                DocGenFlsGuard.assertUpdateable(others, new Set<String>{ 'Is_Active__c' });
                 /* code-analyzer-suppress ApexFlsViolation */
                 Database.update(others, AccessLevel.SYSTEM_MODE);
             }
 
             // 2. Activate this one
             version.Is_Active__c = true;
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            DocGenFlsGuard.assertUpdateable(version, new Set<String>{ 'Is_Active__c' });
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(version, AccessLevel.SYSTEM_MODE);
 
@@ -2648,6 +2930,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Type__c = version.Type__c;
             template.Base_Object_API__c = version.Base_Object_API__c;
 
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            DocGenFlsGuard.assertUpdateable(
+                template,
+                new Set<String>{ 'Query_Config__c', 'Category__c', 'Description__c', 'Type__c', 'Base_Object_API__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(template, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
@@ -5283,6 +5570,19 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 )
             );
         }
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            templates,
+            new Set<String>{
+                'Name',
+                'Base_Object_API__c',
+                'Type__c',
+                'Output_Format__c',
+                'Query_Config__c',
+                'Category__c',
+                'Description__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         Database.insert(templates, AccessLevel.SYSTEM_MODE);
 
@@ -5321,6 +5621,20 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 )
             );
         }
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            versions,
+            new Set<String>{
+                'Template__c',
+                'Content_Version_Id__c',
+                'Is_Active__c',
+                'Query_Config__c',
+                'Category__c',
+                'Description__c',
+                'Type__c',
+                'Base_Object_API__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         Database.insert(versions, AccessLevel.SYSTEM_MODE);
 
@@ -5389,6 +5703,33 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     @AuraEnabled
     public static String exportTemplate(Id templateId) {
         try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template__c.sObjectType,
+                new Set<String>{
+                    'Name',
+                    'Base_Object_API__c',
+                    'Type__c',
+                    'Output_Format__c',
+                    'Category__c',
+                    'Description__c',
+                    'Query_Config__c',
+                    'Document_Title_Format__c',
+                    'Is_Default__c',
+                    'Is_Active__c',
+                    'Header_Html__c',
+                    'Footer_Html__c',
+                    'Test_Record_Id__c',
+                    'Sort_Order__c',
+                    'Lock_Output_Format__c',
+                    'Specific_Record_Ids__c',
+                    'Required_Permission_Sets__c',
+                    'Record_Filter__c',
+                    'Page_Orientation__c',
+                    'Page_Size__c',
+                    'Page_Margins__c',
+                    'Custom_Margins__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> templates = [
                 SELECT
@@ -5715,6 +6056,25 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (String.isNotBlank(watermarkOriginalCvId) && cvIdMap.containsKey(watermarkOriginalCvId)) {
                 ver.Watermark_Image_CV_Id__c = cvIdMap.get(watermarkOriginalCvId);
             }
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+            DocGenFlsGuard.assertCreateable(
+                ver,
+                new Set<String>{
+                    'Template__c',
+                    'Is_Active__c',
+                    'Content_Version_Id__c',
+                    'Query_Config__c',
+                    'Category__c',
+                    'Description__c',
+                    'Type__c',
+                    'Base_Object_API__c',
+                    'Page_Orientation__c',
+                    'Page_Size__c',
+                    'Page_Margins__c',
+                    'Custom_Margins__c',
+                    'Watermark_Image_CV_Id__c'
+                }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(ver, AccessLevel.SYSTEM_MODE);
 
@@ -5734,6 +6094,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     newSq.Description__c = (String) sq.get('Description__c');
                     sqs.add(newSq);
                 }
+                // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+                DocGenFlsGuard.assertCreateable(
+                    sqs,
+                    new Set<String>{ 'DocGen_Template__c', 'Name', 'Query_Condition__c', 'Description__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation */
                 Database.insert(sqs, AccessLevel.SYSTEM_MODE);
             }

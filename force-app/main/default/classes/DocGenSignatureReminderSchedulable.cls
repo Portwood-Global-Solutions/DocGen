@@ -28,6 +28,27 @@ public with sharing class DocGenSignatureReminderSchedulable implements Schedula
             : System.now().addHours(-reminderHours);
 
         // Find pending signers created before the threshold who haven't been reminded yet
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Role_Name__c',
+                'Secure_Token__c',
+                'Contact__c',
+                'Reminder_Sent_At__c',
+                'CreatedDate',
+                'Signature_Request__c',
+                'Status__c'
+            }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> pendingSigners = [
             SELECT
@@ -89,6 +110,8 @@ public with sharing class DocGenSignatureReminderSchedulable implements Schedula
                 'Reminder: Document awaiting your signature'
             );
 
+            // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+            DocGenFlsGuard.assertUpdateable(pendingSigners, new Set<String>{ 'Reminder_Sent_At__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(pendingSigners, false, AccessLevel.SYSTEM_MODE);
         }

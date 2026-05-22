@@ -19,6 +19,17 @@ public with sharing class DocGenTemplateManager {
         // package-internal version metadata (Content_Version_Id__c is the
         // pointer to the template body CV; USER_MODE strict FLS strips it for
         // any admin lacking FLS, including in managed-package build orgs).
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Content_Version_Id__c', 'Template__c', 'Is_Active__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVersions = [
             SELECT Content_Version_Id__c
@@ -76,6 +87,11 @@ public with sharing class DocGenTemplateManager {
         // USER_MODE on this specific query can return "ContentVersion not found"
         // when the body CV's CDL defaults to Visibility=InternalUsers on fresh
         // upload (subscriber-org artifact of the platform behavior).
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (see DocGenFlsGuard).
+        DocGenFlsGuard.assertAccessible(
+            ContentVersion.sObjectType,
+            new Set<String>{ 'VersionData', 'Title', 'FileExtension' }
+        );
         List<ContentVersion> cvs = [
             SELECT VersionData, Title, FileExtension
             FROM ContentVersion

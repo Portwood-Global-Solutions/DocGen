@@ -60,6 +60,13 @@ public with sharing class DocGenSetupController {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Experience_Site_Url__c = experienceSiteUrl;
         // Package-internal object — CRUD controlled by DocGen permission sets
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create"/"FLS Update").
+        // upsert is checked against both create + update FLS because the
+        // operation can do either depending on whether the hierarchy
+        // custom settings record already exists.
+        DocGenFlsGuard.assertCreateable(settings, new Set<String>{ 'Experience_Site_Url__c' });
+        DocGenFlsGuard.assertUpdateable(settings, new Set<String>{ 'Experience_Site_Url__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
         Database.upsert(settings, AccessLevel.SYSTEM_MODE);
     }
 
@@ -292,6 +299,19 @@ public with sharing class DocGenSetupController {
         settings.Signature_Email_Footer_Text__c = footerText;
         settings.Company_Name__c = companyName;
         settings.Signature_OWA_Id__c = owaId;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create"/"FLS Update").
+        Set<String> sigSettingsFields = new Set<String>{
+            'Signature_Email_Brand_Color__c',
+            'Signature_Email_Logo_Url__c',
+            'Signature_Email_Subject__c',
+            'Signature_Email_Message__c',
+            'Signature_Email_Footer_Text__c',
+            'Company_Name__c',
+            'Signature_OWA_Id__c'
+        };
+        DocGenFlsGuard.assertCreateable(settings, sigSettingsFields);
+        DocGenFlsGuard.assertUpdateable(settings, sigSettingsFields);
+        /* code-analyzer-suppress ApexFlsViolation */
         Database.upsert(settings, AccessLevel.SYSTEM_MODE);
     }
 
@@ -311,6 +331,11 @@ public with sharing class DocGenSetupController {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Signature_Reminder_Enabled__c = enabled;
         settings.Signature_Reminder_Hours__c = hours != null && hours > 0 ? hours : 24;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create"/"FLS Update").
+        Set<String> reminderFields = new Set<String>{ 'Signature_Reminder_Enabled__c', 'Signature_Reminder_Hours__c' };
+        DocGenFlsGuard.assertCreateable(settings, reminderFields);
+        DocGenFlsGuard.assertUpdateable(settings, reminderFields);
+        /* code-analyzer-suppress ApexFlsViolation */
         Database.upsert(settings, AccessLevel.SYSTEM_MODE);
 
         // Auto-schedule or abort the reminder job

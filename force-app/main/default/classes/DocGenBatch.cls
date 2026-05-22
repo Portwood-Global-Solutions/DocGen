@@ -44,6 +44,18 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         this.jobId = jobId;
         this.mergeMode = mergeMode || (mergeOnly == true);
         this.mergeOnly = (mergeOnly == true);
+        // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
+        // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
+        // calls Schema.SObjectField.getDescribe().isAccessible() on every field
+        // the SELECT lists; throws DocGenException with the offending field name
+        // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
+        // package-build @TestSetup FLS-propagation issue documented in
+        // DocGenFlsGuard.cls.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Job__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Query_Condition__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
         DocGen_Job__c job = [
             SELECT Template__c, Template__r.Base_Object_API__c, Template__r.Query_Config__c, Query_Condition__c
             FROM DocGen_Job__c
@@ -370,6 +382,8 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
 
     private void sendJobNotification(String status) {
         try {
+            DocGenFlsGuard.assertAccessible(CustomNotificationType.sObjectType, new Set<String>());
+            /* code-analyzer-suppress ApexFlsViolation */
             List<CustomNotificationType> types = [
                 SELECT Id
                 FROM CustomNotificationType
@@ -381,6 +395,11 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
                 return;
             }
 
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Job__c.sObjectType,
+                new Set<String>{ 'CreatedById', 'Label__c', 'Name' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             DocGen_Job__c job = [
                 SELECT CreatedById, Label__c, Name
                 FROM DocGen_Job__c
