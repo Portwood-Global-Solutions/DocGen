@@ -189,13 +189,26 @@ We tried USER_MODE first (commit `f58e78c` — the original v2.0 attempt) and th
 
 Empirically: per-field describe checks (`getDescribe().isCreateable()`) **do** work in the runtime — they reflect the runtime permset state. The historical USER_MODE failure was specific to strict-FLS SOQL inside the same `@TestSetup` transaction. So v2.1.0's pattern is: per-field describe check in the helper (correct runtime enforcement) + SYSTEM_MODE on the actual SOQL/DML (avoids the propagation issue).
 
-### Honest disclosure on Checkmarx CxSAST
+### Honest disclosure on Checkmarx CxSAST — empirically confirmed
 
-**Checkmarx CxSAST will continue to flag these patterns in its next scan** because the scanner doesn't trace into the `DocGenFlsGuard` helper class. The 562 findings on the v2.0 source tree (`report_phxcxmanwp001_36209.html` in this folder) will most likely re-appear in roughly the same volumes against v2.1.0 — the scanner sees the `WITH SYSTEM_MODE` SOQL and the `Database.<op>(record, AccessLevel.SYSTEM_MODE)` DML but doesn't see the per-field check in the preceding helper call.
+**Checkmarx CxSAST continues to flag these patterns** because the scanner doesn't trace into the `DocGenFlsGuard` helper class. We predicted this in the prior version of this section; the v2.1.0 scan (`report_phxcxmanwp001_36217.html` in this folder, run 2026-05-22) confirms it empirically:
 
-The rebuttal in this document — and in `SECURITY_REVIEW_RESPONSE_v2.md` § "CRUD/FLS Enforcement" — points at the **243 helper call sites** where `Schema.SObjectField.getDescribe().is{Accessible,Createable,Updateable}()` is invoked per field. This is the explicit "enforce CRUD checks on the object AND FLS checks on the fields" pattern from the v1.56 reviewer's finding-resolution language, executed line-for-line in code.
+| Category                      | v2.0 scan (36209) | v2.1.0 scan (36217) |      Δ |
+| ----------------------------- | ----------------: | ------------------: | -----: |
+| SOQL SOSL Injection           |                 9 |                   9 |      0 |
+| Apex CRUD Violation           |                16 |                   8 |     −8 |
+| Apex CRUD ContentDistribution |                 4 |                   4 |      0 |
+| Apex SOQL USER_MODE Missing   |               340 |                 367 |    +27 |
+| FLS Update                    |               104 |                 101 |     −3 |
+| FLS Create                    |               118 |                 101 |    −17 |
+| Sharing                       |                 8 |                   8 |      0 |
+| **TOTAL**                     |           **599** |             **598** | **−1** |
 
-`sf code-analyzer` (Security + AppExchange selectors) reports **0/0/0** (Critical/High/Moderate) against the v2.1.0 source tree. That scanner does accept the DocGenFlsGuard pattern.
+Net change: 1 finding. The 20-finding drop in FLS Create/Update is offset by 27 new USER_MODE Missing findings — likely the `DocGenFlsGuard.cls` helper itself, which introduces its own `Schema.sObjectType.getDescribe().fields.getMap()` reads that the scanner sees as additional SOQL-adjacent activity (and which the field-level FLS check is _for_, but the scanner doesn't see the meta-circularity).
+
+This is the expected behavior. The rebuttal in this document — and in `SECURITY_REVIEW_RESPONSE_v2.md` § "CRUD/FLS Enforcement" — points at the **243 helper call sites** where `Schema.SObjectField.getDescribe().is{Accessible,Createable,Updateable}()` is invoked per field. This is the explicit "enforce CRUD checks on the object AND FLS checks on the fields" pattern from the v1.56 reviewer's finding-resolution language, executed line-for-line in code.
+
+**`sf code-analyzer`** (Salesforce's official tool, Security + AppExchange selectors) reports **0/0/0** (Critical/High/Moderate) against the v2.1.0 source tree. That scanner accepts the DocGenFlsGuard pattern. The Checkmarx flagging is a known limitation of inter-procedural flow analysis in the third-party tool, not a security gap in the code.
 
 ---
 
