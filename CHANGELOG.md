@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.3.0 — Guest-aware FLS reads (verifier + signing read paths)
+## v2.3.0 — Guest-aware FLS reads (`04tVx000000ZxDJIA0`, build `2.3.0-1`, promoted 2026-05-23)
 
 Hotfix completing the v2.2.0 fix. v2.2.0 added `DocGenFlsGuard.guestAssertCreateable / guestAssertUpdateable / guestAssertAccessible` and swapped the 18 admin-context **write** guards in `DocGenSignatureController.cls` to the guest variants. But the **read** guards (`DocGenFlsGuard.assertAccessible`) were left as admin variants — and those throw the same way on guest context, just with the per-field FLS describe verdict on the SOQL select-list. Customers hit:
 
