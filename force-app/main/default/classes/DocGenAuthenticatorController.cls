@@ -40,7 +40,7 @@ public without sharing class DocGenAuthenticatorController {
         // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
         // package-build @TestSetup FLS-propagation issue documented in
         // DocGenFlsGuard.cls.
-        DocGenFlsGuard.assertAccessible(
+        DocGenFlsGuard.guestAssertAccessible(
             DocGen_Signature_Audit__c.sObjectType,
             new Set<String>{
                 'Signed_Date__c',
@@ -124,7 +124,7 @@ public without sharing class DocGenAuthenticatorController {
         // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
         // package-build @TestSetup FLS-propagation issue documented in
         // DocGenFlsGuard.cls.
-        DocGenFlsGuard.assertAccessible(
+        DocGenFlsGuard.guestAssertAccessible(
             DocGen_Signature_Audit__c.sObjectType,
             new Set<String>{
                 'Signed_Date__c',
