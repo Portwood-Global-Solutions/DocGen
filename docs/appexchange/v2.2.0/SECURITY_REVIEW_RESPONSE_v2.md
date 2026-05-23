@@ -3,7 +3,7 @@
 **Submitter:** Portwood Global Solutions
 **Package:** Portwood DocGen Managed (namespace `portwoodglobal`)
 **Prior listing version (reviewed):** v1.56.0 (`04tal000006i1rNAAQ`)
-**This submission version:** v2.2.0 (package ID listed in `sfdx-project.json` `packageAliases` under `Portwood DocGen Managed@2.2.0-1`)
+**This submission version:** v2.2.0 (`04tVx000000ZxBhIAK`, build `2.2.0-2`), promoted 2026-05-23
 **Prior submission:** v2.1.0 (`04tVx000000Zw5xIAC`, promoted 2026-05-22)
 **Previous report:** "Security Report for Portwood DocGen Managed- app record for SR"
 **Response date:** 2026-05-23

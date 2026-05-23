@@ -1,13 +1,13 @@
 {
   "packageDirectories": [
     {
-      "versionName": "2.2.0 \u2014 Guest-Aware FLS Guards (signature flow fix)",
+      "versionName": "2.2.0 — Guest-Aware FLS Guards (signature flow fix)",
       "versionNumber": "2.2.0.NEXT",
       "ancestorId": "04tVx000000Zw5xIAC",
       "path": "force-app",
       "default": true,
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen is a native Salesforce document generation engine. Build Word and PDF documents from any Salesforce record using merge tags in your own templates. Includes a visual query builder, bulk generation, multi-object support, electronic signatures, and Flow integration \u2014 all without leaving Salesforce. v2.2 restores the electronic signature workflow for external recipients signing via email links."
+      "versionDescription": "Portwood DocGen is a native Salesforce document generation engine. Build Word and PDF documents from any Salesforce record using merge tags in your own templates. Includes a visual query builder, bulk generation, multi-object support, electronic signatures, and Flow integration — all without leaving Salesforce. v2.2 restores the electronic signature workflow for external recipients signing via email links."
     }
   ],
   "name": "Portwood DocGen",
@@ -148,6 +148,7 @@
     "Portwood DocGen Managed@1.99.0-2": "04tVx000000ZVFRIA4",
     "Portwood DocGen Managed@2.0.0-1": "04tVx000000ZnCLIA0",
     "Portwood DocGen Managed@2.0.0-2": "04tVx000000ZqBpIAK",
-    "Portwood DocGen Managed@2.1.0-1": "04tVx000000Zw5xIAC"
+    "Portwood DocGen Managed@2.1.0-1": "04tVx000000Zw5xIAC",
+    "Portwood DocGen Managed@2.2.0-2": "04tVx000000ZxBhIAK"
   }
 }

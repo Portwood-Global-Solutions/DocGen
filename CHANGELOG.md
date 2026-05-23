@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.2.0 — Guest-aware FLS guards (signature workflow fix)
+## v2.2.0 — Guest-aware FLS guards (`04tVx000000ZxBhIAK`, build `2.2.0-2`, promoted 2026-05-23)
 
 Hotfix for a v2.1.0 regression. The per-field FLS guards added in v2.1.0 (`DocGenFlsGuard.assertUpdateable` / `assertCreateable`) hard-throw `DocGenException("Insufficient access to update/create <object>. Verify DocGen permission set assignment.")` whenever the running user lacks object-level `isUpdateable()` / `isCreateable()`. The guest signing flow intentionally grants **read-only** access on `DocGen_Signer__c`, `DocGen_Signature_Request__c`, `DocGen_Signature_Placement__c`, and `DocGen_Signature_Audit__c` in the `DocGen_Guest_Signature` permset — the write capability for guest signers is the `Secure_Token__c`-bound SOQL lookup paired with `AccessLevel.SYSTEM_MODE` DML, not perm-set Edit. v2.1.0's admin-context guards broke every guest write path in production: sendPin, verifyPin, validateSignerToken (the "Viewed" status flip), saveSignature, saveLegacySignature, declineSignature, signPlacement, plus the audit-create and ContentVersion/ContentDistribution paths. Customers hit the failure as `Failed to save: Insufficient access to update portwoodglobal__DocGen_Signature_Placement__c. Verify DocGen permission set assignment.` when clicking a signing link from email and attempting to sign.
 

@@ -3,10 +3,11 @@
 Everything needed to submit Portwood DocGen Managed v2.2.0 to the Salesforce AppExchange Partner Console for security review. Every form field's response and every attached document is in this folder — no hunting through the codebase.
 
 **Submission target:** Salesforce AppExchange — security review for Portwood DocGen Managed
-**Package version:** v2.2.0 (package ID added to `sfdx-project.json` `packageAliases` after `sf package version create` completes)
+**Package version:** v2.2.0 (`04tVx000000ZxBhIAK`, build `2.2.0-2`), promoted 2026-05-23
 **Reviewed baseline:** v1.56.0 (`04tal000006i1rNAAQ`) — the AppExchange security review returned 30 findings against this version
 **Prior submission:** v2.1.0 (`04tVx000000Zw5xIAC`) — see `../v2.1.0/` for the v2.1.0 bundle
 **Test install org:** `AppExchange Security Review Dev Org` (`dave.2a1209f2e79c@agentforce.com`)
+**Install URL:** https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZxBhIAK
 
 ---
 
@@ -69,7 +70,7 @@ The security model the reviewer evaluated in v2.0/v2.1.0 — token-bound capabil
 ## Submission checklist
 
 1. Log in to Partner Console → My Listings → Portwood DocGen → start security review re-submission (or update the in-flight v2.1.0 submission with the v2.2.0 package version).
-2. **Package version:** enter the v2.2.0 package ID (added to `sfdx-project.json` `packageAliases` after `sf package version create` completes — search for `2.2.0-1`).
+2. **Package version:** enter `04tVx000000ZxBhIAK` (`Portwood DocGen Managed@2.2.0-2`).
 3. **Describe Your Solution:** paste contents of `Listing_Describe_Solution.md` (the section under `## Paste-ready text`).
 4. **Salesforce Platform technology:** paste contents of `Listing_Platform_Technology.md` (the section under `## Paste-ready text`), or attach the longer `DocGen_Platform_Technology.md` if the field accepts attachments.
 5. **Upload Documentation page:** attach all 5 supporting documents from this folder + `SECURITY_REVIEW_RESPONSE_v2.md` from this folder.
