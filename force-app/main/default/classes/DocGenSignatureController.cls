@@ -296,7 +296,7 @@ public without sharing class DocGenSignatureController {
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
         // Complements DocGenSignatureGuestSecurity.assert*(token) object-level
         // CRUD checks at the entry point with per-field describe enforcement.
-        DocGenFlsGuard.assertUpdateable(
+        DocGenFlsGuard.guestAssertUpdateable(
             signer,
             new Set<String>{ 'PIN_Hash__c', 'PIN_Expires_At__c', 'PIN_Attempts__c' }
         );
@@ -391,7 +391,7 @@ public without sharing class DocGenSignatureController {
             // Increment failed attempts
             signer.PIN_Attempts__c = (signer.PIN_Attempts__c == null ? 0 : signer.PIN_Attempts__c) + 1;
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-            DocGenFlsGuard.assertUpdateable(signer, new Set<String>{ 'PIN_Attempts__c' });
+            DocGenFlsGuard.guestAssertUpdateable(signer, new Set<String>{ 'PIN_Attempts__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(signer, false, AccessLevel.SYSTEM_MODE);
 
@@ -426,7 +426,7 @@ public without sharing class DocGenSignatureController {
             signer.Status__c = 'Viewed';
         }
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(
+        DocGenFlsGuard.guestAssertUpdateable(
             signer,
             new Set<String>{ 'PIN_Verified_At__c', 'PIN_Hash__c', 'PIN_Expires_At__c', 'PIN_Attempts__c', 'Status__c' }
         );
@@ -526,7 +526,7 @@ public without sharing class DocGenSignatureController {
         if (signer.Status__c == 'Pending') {
             signer.Status__c = 'Viewed';
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-            DocGenFlsGuard.assertUpdateable(signer, new Set<String>{ 'Status__c' });
+            DocGenFlsGuard.guestAssertUpdateable(signer, new Set<String>{ 'Status__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(signer, false, AccessLevel.SYSTEM_MODE);
         }
@@ -604,7 +604,7 @@ public without sharing class DocGenSignatureController {
         if (req.Status__c == 'Sent') {
             req.Status__c = 'Viewed';
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-            DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c' });
+            DocGenFlsGuard.guestAssertUpdateable(req, new Set<String>{ 'Status__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(req, false, AccessLevel.SYSTEM_MODE);
         }
@@ -665,7 +665,7 @@ public without sharing class DocGenSignatureController {
         cd.PreferencesAllowOriginalDownload = false;
         cd.PreferencesAllowPDFDownload = false;
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
-        DocGenFlsGuard.assertCreateable(
+        DocGenFlsGuard.guestAssertCreateable(
             cd,
             new Set<String>{
                 'Name',
@@ -1003,7 +1003,7 @@ public without sharing class DocGenSignatureController {
         signer.Status__c = 'Signed';
         signer.Consent_Captured__c = true;
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(
+        DocGenFlsGuard.guestAssertUpdateable(
             signer,
             new Set<String>{ 'Signature_Data__c', 'Status__c', 'Consent_Captured__c' }
         );
@@ -1024,7 +1024,7 @@ public without sharing class DocGenSignatureController {
         audit.PIN_Verified_At__c = signer.PIN_Verified_At__c;
         // Document hash is set later when PDF is generated
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
-        DocGenFlsGuard.assertCreateable(
+        DocGenFlsGuard.guestAssertCreateable(
             audit,
             new Set<String>{
                 'Signature_Request__c',
@@ -1069,7 +1069,7 @@ public without sharing class DocGenSignatureController {
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
         parentReq.Status__c = 'In Progress';
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(parentReq, new Set<String>{ 'Status__c' });
+        DocGenFlsGuard.guestAssertUpdateable(parentReq, new Set<String>{ 'Status__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 
@@ -1208,7 +1208,7 @@ public without sharing class DocGenSignatureController {
         requests[0].Signature_Data__c = typedName;
         requests[0].Status__c = 'Viewed';
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(requests[0], new Set<String>{ 'Signature_Data__c', 'Status__c' });
+        DocGenFlsGuard.guestAssertUpdateable(requests[0], new Set<String>{ 'Signature_Data__c', 'Status__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(requests[0], false, AccessLevel.SYSTEM_MODE);
     }
@@ -1267,7 +1267,7 @@ public without sharing class DocGenSignatureController {
             req.Status__c = 'Signed';
             req.Signature_Data__c = null;
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-            DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c', 'Signature_Data__c' });
+            DocGenFlsGuard.guestAssertUpdateable(req, new Set<String>{ 'Status__c', 'Signature_Data__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
@@ -1282,7 +1282,7 @@ public without sharing class DocGenSignatureController {
             audit.IP_Address__c = 'Server-Side';
             audit.User_Agent__c = 'VF renderAs=pdf - Server-Side PDF Generation';
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
-            DocGenFlsGuard.assertCreateable(
+            DocGenFlsGuard.guestAssertCreateable(
                 audit,
                 new Set<String>{
                     'Signature_Request__c',
@@ -1316,7 +1316,7 @@ public without sharing class DocGenSignatureController {
         cv.VersionData = EncodingUtil.base64Decode(base64Data);
         cv.IsMajorVersion = true;
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
-        DocGenFlsGuard.assertCreateable(
+        DocGenFlsGuard.guestAssertCreateable(
             cv,
             new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'IsMajorVersion' }
         );
@@ -1334,7 +1334,7 @@ public without sharing class DocGenSignatureController {
         cdl.ShareType = 'V';
         cdl.Visibility = 'AllUsers';
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
-        DocGenFlsGuard.assertCreateable(
+        DocGenFlsGuard.guestAssertCreateable(
             cdl,
             new Set<String>{ 'ContentDocumentId', 'LinkedEntityId', 'ShareType', 'Visibility' }
         );
@@ -1652,7 +1652,7 @@ public without sharing class DocGenSignatureController {
         // re-stamp the preview with what the signer typed before declining.
         signer.Signature_Data__c = null;
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(
+        DocGenFlsGuard.guestAssertUpdateable(
             signer,
             new Set<String>{ 'Status__c', 'Decline_Reason__c', 'Signature_Data__c' }
         );
@@ -1666,7 +1666,7 @@ public without sharing class DocGenSignatureController {
         parentReq.Status__c = 'Declined';
         parentReq.Signature_Data__c = null;
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(parentReq, new Set<String>{ 'Status__c', 'Signature_Data__c' });
+        DocGenFlsGuard.guestAssertUpdateable(parentReq, new Set<String>{ 'Status__c', 'Signature_Data__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 
@@ -1682,7 +1682,7 @@ public without sharing class DocGenSignatureController {
         audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
         audit.Consent_Captured__c = false;
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
-        DocGenFlsGuard.assertCreateable(
+        DocGenFlsGuard.guestAssertCreateable(
             audit,
             new Set<String>{
                 'Signature_Request__c',
@@ -1883,7 +1883,7 @@ public without sharing class DocGenSignatureController {
         plc.Status__c = 'Signed';
         plc.Signed_At__c = System.now();
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(plc, new Set<String>{ 'Signed_Value__c', 'Status__c', 'Signed_At__c' });
+        DocGenFlsGuard.guestAssertUpdateable(plc, new Set<String>{ 'Signed_Value__c', 'Status__c', 'Signed_At__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(plc, false, AccessLevel.SYSTEM_MODE);
 

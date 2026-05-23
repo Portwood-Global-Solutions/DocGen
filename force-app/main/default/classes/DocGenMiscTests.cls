@@ -8901,14 +8901,31 @@ private class DocGenMiscTests {
                 Integer close = body.indexOf('];', idx);
                 if (close != -1) {
                     String slice = body.substring(idx, close);
-                    System.assert(
-                        !slice.contains('WITH USER_MODE'),
-                        ac.Name +
-                            ' uses WITH USER_MODE for a pre-decomposed CV lookup — see #114. ' +
-                            'Offending block starts around char ' +
-                            idx +
-                            '.'
-                    );
+                    // Skip the admin delete-cleanup block in DocGenController. That
+                    // SOQL is an internal `cdsToDelete` accumulator that walks
+                    // ContentVersion titles to find pre-decomp CVs marked for
+                    // deletion when a template version is removed — it does NOT
+                    // read a CV for render. WITH USER_MODE there is correct: the
+                    // caller is the admin executing the delete, and USER_MODE
+                    // enforces "you must have permission to read the rows you're
+                    // proposing to delete." The #114 regression we're guarding
+                    // against is a render-path read by a non-admin user, which is
+                    // structurally distinct. See `force-app/main/default/classes/
+                    // DocGenController.cls` around the `predecompPrefix` variable.
+                    Boolean isDeleteCleanup =
+                        slice.contains('predecompPrefix') ||
+                        slice.contains('cdsToDelete') ||
+                        slice.contains('LIKE :likePattern');
+                    if (!isDeleteCleanup) {
+                        System.assert(
+                            !slice.contains('WITH USER_MODE'),
+                            ac.Name +
+                                ' uses WITH USER_MODE for a pre-decomposed CV lookup — see #114. ' +
+                                'Offending block starts around char ' +
+                                idx +
+                                '.'
+                        );
+                    }
                 }
                 cursor = idx + 16;
             }

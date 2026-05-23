@@ -1,0 +1,21 @@
+{
+    "runDir": "/Users/davemoudy/Desktop/Projects/DocGen/",
+    "violationCounts": {
+        "total": 0,
+        "sev1": 0,
+        "sev2": 0,
+        "sev3": 0,
+        "sev4": 0,
+        "sev5": 0
+    },
+    "versions": {
+        "code-analyzer": "0.45.0",
+        "retire-js": "0.33.0",
+        "regex": "0.34.0",
+        "eslint": "0.41.0",
+        "flow": "0.35.0",
+        "pmd": "0.39.0",
+        "sfge": "0.19.0"
+    },
+    "violations": []
+}
