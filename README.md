@@ -442,7 +442,13 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v1.97.0 | **Latest (Released)**                   | `04tVx000000ZVFRIA4` |
+| v2.3.0  | **Latest (Released)**                   | `04tVx000000ZxDJIA0` |
+| v2.2.0  | Previous                                | `04tVx000000ZxBhIAK` |
+| v2.1.0  | Previous                                | `04tVx000000Zw5xIAC` |
+| v2.0.0  | Previous                                | `04tVx000000ZqBpIAK` |
+| v1.99.0 | Previous                                | `04tVx000000ZVFRIA4` |
+| v1.98.0 | Previous                                | `04tVx000000Si9NIAS` |
+| v1.97.0 | Previous                                | `04tVx000000SFovIAG` |
 | v1.96.0 | Previous                                | `04tVx000000SFH3IAO` |
 | v1.95.0 | Previous                                | `04tVx000000SFDpIAO` |
 | v1.94.0 | Previous                                | `04tVx000000SExhIAG` |
