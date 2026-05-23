@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/changelog)
 
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -13,17 +13,17 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 [![Security](https://img.shields.io/badge/Code_Analyzer-0%2F0%2F0-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
 
-> **v2.1.0 — AppExchange security re-submission ready.** Adds `DocGenFlsGuard` per-field FLS checks at every admin DML and `WITH SYSTEM_MODE` SOQL site (243 guard call sites across 19 controllers). Implements both halves of the AppExchange v1.56 review's finding-resolution language ("enforce CRUD checks on the object AND FLS checks on the fields"). `sf code-analyzer`: clean 0/0/0. See [CHANGELOG.md](CHANGELOG.md#v210--per-field-fls-guards-04tvx000000zw5xiac-released) and [docs/appexchange/v2.1.0/](docs/appexchange/v2.1.0/) for the full submission bundle.
+> **v2.3.0 — Guest-aware FLS for the signature flow.** Completes the v2.2 hotfix: `DocGenFlsGuard.guestAssertCreateable / guestAssertUpdateable / guestAssertAccessible` variants applied to all 54 guest-context DML and SOQL sites (18 writes + 36 reads) across `DocGenSignatureController.cls` and `DocGenAuthenticatorController.cls`. Restores the electronic-signature flow for external recipients clicking signing links from email. `sf code-analyzer`: clean 0 violations. See [CHANGELOG.md](CHANGELOG.md#v230--guest-aware-fls-reads-04tvx000000zxdjia0-build-230-1-promoted-2026-05-23) and [docs/appexchange/v2.3.0/](docs/appexchange/v2.3.0/) for the full submission bundle.
 
 ---
 
 ## Install
 
 ```bash
-sf package install --package 04tVx000000Zw5xIAC --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000ZxDJIA0 --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000Zw5xIAC) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000Zw5xIAC)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZxDJIA0) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZxDJIA0)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
