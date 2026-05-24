@@ -13,8 +13,6 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 [![Security](https://img.shields.io/badge/Code_Analyzer-0%2F0%2F0-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
 
-> **v2.3.0 — Guest-aware FLS for the signature flow.** Completes the v2.2 hotfix: `DocGenFlsGuard.guestAssertCreateable / guestAssertUpdateable / guestAssertAccessible` variants applied to all 54 guest-context DML and SOQL sites (18 writes + 36 reads) across `DocGenSignatureController.cls` and `DocGenAuthenticatorController.cls`. Restores the electronic-signature flow for external recipients clicking signing links from email. `sf code-analyzer`: clean 0 violations. See [CHANGELOG.md](CHANGELOG.md#v230--guest-aware-fls-reads-04tvx000000zxdjia0-build-230-1-promoted-2026-05-23) and [docs/appexchange/v2.3.0/](docs/appexchange/v2.3.0/) for the full submission bundle.
-
 ---
 
 ## Install
