@@ -2848,246 +2848,303 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
             Integer tagClose = xml.indexOf('}', cursor);
             if (tagClose == -1) {
+                String snippet = xml.substring(cursor, Math.min(cursor + 80, len));
+                String lineInfo = currentTemplateType == 'HTML'
+                    ? ' (line ' + (xml.substring(0, cursor).countMatches('\n') + 1) + ')'
+                    : '';
                 throw new DocGenException(
-                    'Malformed merge tag: missing closing "}" near position ' +
-                        cursor +
-                        '. Check for an unclosed tag in the template.'
+                    'Malformed merge tag: missing closing "}"' +
+                        lineInfo +
+                        ' near "' +
+                        snippet +
+                        '". Check for an unclosed tag in the template.'
                 );
             }
 
             String rawTag = xml.substring(cursor + 1, tagClose);
             String tagContent = rawTag.trim();
+            // Tag start offset, captured before any branch reassigns `cursor`,
+            // so error enrichment can report the tag's location (issue #115).
+            Integer tagStartPos = nextTag;
 
-            // Preserve {@Signature_*} tags — handled by the signature service after merge
-            if (tagContent.startsWith('@')) {
-                output += '{' + rawTag + '}';
-                cursor = tagClose + 1;
-                continue;
-            }
+            try {
+                // Preserve {@Signature_*} tags — handled by the signature service after merge
+                if (tagContent.startsWith('@')) {
+                    output += '{' + rawTag + '}';
+                    cursor = tagClose + 1;
+                    continue;
+                }
 
-            // Preserve {PageNumber} and {TotalPages} — resolved by the HTML-to-PDF
-            // wrap layer via @page CSS counter() rules. Flying Saucer can only
-            // resolve counter(page)/counter(pages) inside @page context, so the
-            // tokens have to survive processXml intact for wrapHtmlForPdf to see.
-            if ('PageNumber'.equalsIgnoreCase(tagContent) || 'TotalPages'.equalsIgnoreCase(tagContent)) {
-                output += '{' + rawTag + '}';
-                cursor = tagClose + 1;
-                continue;
-            }
+                // Preserve {PageNumber} and {TotalPages} — resolved by the HTML-to-PDF
+                // wrap layer via @page CSS counter() rules. Flying Saucer can only
+                // resolve counter(page)/counter(pages) inside @page context, so the
+                // tokens have to survive processXml intact for wrapHtmlForPdf to see.
+                if ('PageNumber'.equalsIgnoreCase(tagContent) || 'TotalPages'.equalsIgnoreCase(tagContent)) {
+                    output += '{' + rawTag + '}';
+                    cursor = tagClose + 1;
+                    continue;
+                }
 
-            // Strip Salesforce-style {!Field} prefix — treat {!X} the same as {X}
-            if (tagContent.startsWith('!')) {
-                tagContent = tagContent.substring(1).trim();
-            }
+                // Strip Salesforce-style {!Field} prefix — treat {!X} the same as {X}
+                if (tagContent.startsWith('!')) {
+                    tagContent = tagContent.substring(1).trim();
+                }
 
-            if (tagContent.startsWith('#')) {
-                String key = tagContent.substring(1).trim();
-                // For {#IF ...} expressions, the closing tag is {/IF} not {/IF expression}
-                String balanceKey = (key.startsWith('IF ') || key.startsWith('if ')) ? 'IF' : key;
-                Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, balanceKey);
-                if (sectionEnd == -1) {
-                    throw new DocGenException(
-                        'Malformed loop tag: missing closing "{/' + balanceKey + '}" for "{#' + key + '}".'
-                    );
-                } else {
-                    // Default: Content between tags
-                    Integer contentStart = tagClose + 1;
-                    Integer contentEnd = sectionEnd;
-                    String innerXml = xml.substring(contentStart, contentEnd);
+                if (tagContent.startsWith('#')) {
+                    String key = tagContent.substring(1).trim();
+                    // For {#IF ...} expressions, the closing tag is {/IF} not {/IF expression}
+                    String balanceKey = (key.startsWith('IF ') || key.startsWith('if ')) ? 'IF' : key;
+                    Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, balanceKey);
+                    if (sectionEnd == -1) {
+                        String snippet = xml.substring(Math.max(0, tagStartPos - 40), Math.min(len, tagStartPos + 40));
+                        String lineInfo = currentTemplateType == 'HTML'
+                            ? ' (line ' + (xml.substring(0, tagStartPos).countMatches('\n') + 1) + ')'
+                            : '';
+                        throw new DocGenException(
+                            'Malformed loop tag: missing closing "{/' +
+                                balanceKey +
+                                '}" for "{#' +
+                                key +
+                                '}"' +
+                                lineInfo +
+                                ' opened near "' +
+                                snippet +
+                                '".'
+                        );
+                    } else {
+                        // Default: Content between tags
+                        Integer contentStart = tagClose + 1;
+                        Integer contentEnd = sectionEnd;
+                        String innerXml = xml.substring(contentStart, contentEnd);
 
-                    // Smart container expansion: repeat the nearest parent container when possible.
-                    // Candidate containers:
-                    // 1) Table row (<w:tr>...</w:tr>)
-                    // 2) Numbered/bulleted paragraph (nearest <w:p> containing <w:numPr>)
-                    //
-                    // {#IF ...} is a conditional, NOT a loop — it must NEVER trigger container
-                    // expansion. If we backtrack the output to drop the parent row's opening
-                    // tags expecting to re-emit them, and then the IF evaluates false with no
-                    // {:else}, we emit nothing while the closing </w:tr> downstream remains —
-                    // producing unmatched markup that PDF silently truncates and Word refuses
-                    // to open as a corrupted DOCX. (Issue #53)
-                    Integer closeTagEnd = xml.indexOf('}', sectionEnd);
-                    Integer chosenContainerStart = -1;
-                    Integer chosenContainerEnd = -1;
-                    Boolean isIfConditional = key.startsWith('IF ') || key.startsWith('if ');
+                        // Smart container expansion: repeat the nearest parent container when possible.
+                        // Candidate containers:
+                        // 1) Table row (<w:tr>...</w:tr>)
+                        // 2) Numbered/bulleted paragraph (nearest <w:p> containing <w:numPr>)
+                        //
+                        // {#IF ...} is a conditional, NOT a loop — it must NEVER trigger container
+                        // expansion. If we backtrack the output to drop the parent row's opening
+                        // tags expecting to re-emit them, and then the IF evaluates false with no
+                        // {:else}, we emit nothing while the closing </w:tr> downstream remains —
+                        // producing unmatched markup that PDF silently truncates and Word refuses
+                        // to open as a corrupted DOCX. (Issue #53)
+                        Integer closeTagEnd = xml.indexOf('}', sectionEnd);
+                        Integer chosenContainerStart = -1;
+                        Integer chosenContainerEnd = -1;
+                        Boolean isIfConditional = key.startsWith('IF ') || key.startsWith('if ');
 
-                    // Candidate: row container (skipped for {#IF ...} conditionals — issue #53).
-                    // Sibling guard: if the row already contains another section opener/closer
-                    // *outside* this section's span, the current section is not the row's
-                    // iteration driver — skip expansion. Without this, multiple sibling
-                    // `{#A}…{/A} … {#B}…{/B}` sections inside one row would each grab the
-                    // whole row, dropping the siblings' content (truthy path renders only
-                    // the first section's trueBranch and advances past `</w:tr>`).
-                    Integer rowContainerStart = isIfConditional ? -1 : lastIndexOfTagStart(xml, 'w:tr', cursor);
-                    if (rowContainerStart != -1) {
-                        Integer rowContainerEnd = xml.indexOf('</w:tr>', rowContainerStart);
-                        Boolean rowClosedBeforeCursor = xml.substring(rowContainerStart, cursor).contains('</w:tr>');
-                        if (!rowClosedBeforeCursor && rowContainerEnd != -1 && rowContainerEnd > closeTagEnd) {
-                            Integer rowFullEnd = rowContainerEnd + 7; // </w:tr>
-                            String rowBefore = xml.substring(rowContainerStart, cursor);
-                            String rowAfter = xml.substring(closeTagEnd + 1, rowFullEnd);
-                            Boolean rowHasSibling =
-                                rowBefore.contains('{#') ||
-                                rowBefore.contains('{^') ||
-                                rowBefore.contains('{/') ||
-                                rowAfter.contains('{#') ||
-                                rowAfter.contains('{^') ||
-                                rowAfter.contains('{/');
-                            if (!rowHasSibling) {
-                                chosenContainerStart = rowContainerStart;
-                                chosenContainerEnd = rowFullEnd;
+                        // Candidate: row container (skipped for {#IF ...} conditionals — issue #53).
+                        // Sibling guard: if the row already contains another section opener/closer
+                        // *outside* this section's span, the current section is not the row's
+                        // iteration driver — skip expansion. Without this, multiple sibling
+                        // `{#A}…{/A} … {#B}…{/B}` sections inside one row would each grab the
+                        // whole row, dropping the siblings' content (truthy path renders only
+                        // the first section's trueBranch and advances past `</w:tr>`).
+                        Integer rowContainerStart = isIfConditional ? -1 : lastIndexOfTagStart(xml, 'w:tr', cursor);
+                        if (rowContainerStart != -1) {
+                            Integer rowContainerEnd = xml.indexOf('</w:tr>', rowContainerStart);
+                            Boolean rowClosedBeforeCursor = xml.substring(rowContainerStart, cursor)
+                                .contains('</w:tr>');
+                            if (!rowClosedBeforeCursor && rowContainerEnd != -1 && rowContainerEnd > closeTagEnd) {
+                                Integer rowFullEnd = rowContainerEnd + 7; // </w:tr>
+                                String rowBefore = xml.substring(rowContainerStart, cursor);
+                                String rowAfter = xml.substring(closeTagEnd + 1, rowFullEnd);
+                                Boolean rowHasSibling =
+                                    rowBefore.contains('{#') ||
+                                    rowBefore.contains('{^') ||
+                                    rowBefore.contains('{/') ||
+                                    rowAfter.contains('{#') ||
+                                    rowAfter.contains('{^') ||
+                                    rowAfter.contains('{/');
+                                if (!rowHasSibling) {
+                                    chosenContainerStart = rowContainerStart;
+                                    chosenContainerEnd = rowFullEnd;
+                                }
                             }
                         }
-                    }
 
-                    // Candidate: list paragraph container (w:p with w:numPr) — skipped for IF.
-                    // Same sibling guard as rows: only expand when this section is the sole
-                    // tagged region in the paragraph. Otherwise sibling sections sharing the
-                    // paragraph (e.g. Ben's checkbox doc: `{#A}☒{:else}☐{/A} label {#B}…`)
-                    // would each grab the whole paragraph and drop everything after their
-                    // own `{/}` closing tag.
-                    Integer numPropsStart = isIfConditional ? -1 : xml.lastIndexOf('<w:numPr', cursor);
-                    if (numPropsStart != -1) {
-                        Integer paragraphStart = lastIndexOfTagStart(xml, 'w:p', cursor);
-                        if (paragraphStart != -1 && paragraphStart <= numPropsStart) {
-                            Integer paragraphEndStart = xml.indexOf('</w:p>', paragraphStart);
-                            Boolean paragraphClosedBeforeCursor = xml.substring(paragraphStart, cursor)
-                                .contains('</w:p>');
-                            if (
-                                !paragraphClosedBeforeCursor &&
-                                paragraphEndStart != -1 &&
-                                paragraphEndStart > closeTagEnd &&
-                                numPropsStart < paragraphEndStart
-                            ) {
-                                Integer paragraphContainerEnd = paragraphEndStart + 6; // </w:p>
-                                String paraBefore = xml.substring(paragraphStart, cursor);
-                                String paraAfter = xml.substring(closeTagEnd + 1, paragraphContainerEnd);
-                                Boolean paraHasSibling =
-                                    paraBefore.contains('{#') ||
-                                    paraBefore.contains('{^') ||
-                                    paraBefore.contains('{/') ||
-                                    paraAfter.contains('{#') ||
-                                    paraAfter.contains('{^') ||
-                                    paraAfter.contains('{/');
-                                if (!paraHasSibling) {
-                                    // Prefer the closest valid parent.
-                                    if (chosenContainerStart == -1 || paragraphStart > chosenContainerStart) {
-                                        chosenContainerStart = paragraphStart;
-                                        chosenContainerEnd = paragraphContainerEnd;
+                        // Candidate: list paragraph container (w:p with w:numPr) — skipped for IF.
+                        // Same sibling guard as rows: only expand when this section is the sole
+                        // tagged region in the paragraph. Otherwise sibling sections sharing the
+                        // paragraph (e.g. Ben's checkbox doc: `{#A}☒{:else}☐{/A} label {#B}…`)
+                        // would each grab the whole paragraph and drop everything after their
+                        // own `{/}` closing tag.
+                        Integer numPropsStart = isIfConditional ? -1 : xml.lastIndexOf('<w:numPr', cursor);
+                        if (numPropsStart != -1) {
+                            Integer paragraphStart = lastIndexOfTagStart(xml, 'w:p', cursor);
+                            if (paragraphStart != -1 && paragraphStart <= numPropsStart) {
+                                Integer paragraphEndStart = xml.indexOf('</w:p>', paragraphStart);
+                                Boolean paragraphClosedBeforeCursor = xml.substring(paragraphStart, cursor)
+                                    .contains('</w:p>');
+                                if (
+                                    !paragraphClosedBeforeCursor &&
+                                    paragraphEndStart != -1 &&
+                                    paragraphEndStart > closeTagEnd &&
+                                    numPropsStart < paragraphEndStart
+                                ) {
+                                    Integer paragraphContainerEnd = paragraphEndStart + 6; // </w:p>
+                                    String paraBefore = xml.substring(paragraphStart, cursor);
+                                    String paraAfter = xml.substring(closeTagEnd + 1, paragraphContainerEnd);
+                                    Boolean paraHasSibling =
+                                        paraBefore.contains('{#') ||
+                                        paraBefore.contains('{^') ||
+                                        paraBefore.contains('{/') ||
+                                        paraAfter.contains('{#') ||
+                                        paraAfter.contains('{^') ||
+                                        paraAfter.contains('{/');
+                                    if (!paraHasSibling) {
+                                        // Prefer the closest valid parent.
+                                        if (chosenContainerStart == -1 || paragraphStart > chosenContainerStart) {
+                                            chosenContainerStart = paragraphStart;
+                                            chosenContainerEnd = paragraphContainerEnd;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // HTML template type (v1.61+): mirror the DOCX auto-expand behavior
-                    // for <tr> rows and <li> list items. Only considered when the merge
-                    // engine is running in HTML context — leaves DOCX paths untouched.
-                    if (currentTemplateType == 'HTML' && !isIfConditional) {
-                        // Candidate: HTML <tr> row
-                        Integer htmlTrStart = lastIndexOfTagStart(xml, 'tr', cursor);
-                        if (htmlTrStart != -1) {
-                            Integer htmlTrEnd = xml.indexOf('</tr>', htmlTrStart);
-                            Boolean trClosedBeforeCursor = xml.substring(htmlTrStart, cursor).contains('</tr>');
-                            if (!trClosedBeforeCursor && htmlTrEnd != -1 && htmlTrEnd > closeTagEnd) {
-                                if (chosenContainerStart == -1 || htmlTrStart > chosenContainerStart) {
-                                    chosenContainerStart = htmlTrStart;
-                                    chosenContainerEnd = htmlTrEnd + 5; // </tr>
+                        // HTML template type (v1.61+): mirror the DOCX auto-expand behavior
+                        // for <tr> rows and <li> list items. Only considered when the merge
+                        // engine is running in HTML context — leaves DOCX paths untouched.
+                        if (currentTemplateType == 'HTML' && !isIfConditional) {
+                            // Candidate: HTML <tr> row
+                            Integer htmlTrStart = lastIndexOfTagStart(xml, 'tr', cursor);
+                            if (htmlTrStart != -1) {
+                                Integer htmlTrEnd = xml.indexOf('</tr>', htmlTrStart);
+                                Boolean trClosedBeforeCursor = xml.substring(htmlTrStart, cursor).contains('</tr>');
+                                if (!trClosedBeforeCursor && htmlTrEnd != -1 && htmlTrEnd > closeTagEnd) {
+                                    if (chosenContainerStart == -1 || htmlTrStart > chosenContainerStart) {
+                                        chosenContainerStart = htmlTrStart;
+                                        chosenContainerEnd = htmlTrEnd + 5; // </tr>
+                                    }
+                                }
+                            }
+
+                            // Candidate: HTML <li> list item
+                            Integer htmlLiStart = lastIndexOfTagStart(xml, 'li', cursor);
+                            if (htmlLiStart != -1) {
+                                Integer htmlLiEnd = xml.indexOf('</li>', htmlLiStart);
+                                Boolean liClosedBeforeCursor = xml.substring(htmlLiStart, cursor).contains('</li>');
+                                if (!liClosedBeforeCursor && htmlLiEnd != -1 && htmlLiEnd > closeTagEnd) {
+                                    if (chosenContainerStart == -1 || htmlLiStart > chosenContainerStart) {
+                                        chosenContainerStart = htmlLiStart;
+                                        chosenContainerEnd = htmlLiEnd + 5; // </li>
+                                    }
                                 }
                             }
                         }
 
-                        // Candidate: HTML <li> list item
-                        Integer htmlLiStart = lastIndexOfTagStart(xml, 'li', cursor);
-                        if (htmlLiStart != -1) {
-                            Integer htmlLiEnd = xml.indexOf('</li>', htmlLiStart);
-                            Boolean liClosedBeforeCursor = xml.substring(htmlLiStart, cursor).contains('</li>');
-                            if (!liClosedBeforeCursor && htmlLiEnd != -1 && htmlLiEnd > closeTagEnd) {
-                                if (chosenContainerStart == -1 || htmlLiStart > chosenContainerStart) {
-                                    chosenContainerStart = htmlLiStart;
-                                    chosenContainerEnd = htmlLiEnd + 5; // </li>
+                        if (chosenContainerStart != -1 && chosenContainerEnd != -1) {
+                            contentStart = chosenContainerStart;
+                            contentEnd = chosenContainerEnd;
+                            innerXml = xml.substring(contentStart, contentEnd);
+
+                            String startTagFull = '{' + rawTag + '}';
+                            innerXml = innerXml.replace(startTagFull, '');
+
+                            String endTagFull = xml.substring(sectionEnd, closeTagEnd + 1);
+                            innerXml = innerXml.replace(endTagFull, '');
+
+                            // Backtrack output to remove already-emitted prefix for chosen container.
+                            Integer overlap = cursor - contentStart;
+                            if (overlap > 0) {
+                                Integer outputLength = output.length();
+                                if (overlap > outputLength) {
+                                    throw new DocGenException(
+                                        'Template loop parsing error for "{#' +
+                                            key +
+                                            '}": internal overlap (' +
+                                            overlap +
+                                            ') exceeds output length (' +
+                                            outputLength +
+                                            '). ' +
+                                            'This usually indicates malformed or mismatched loop tags (missing "{/' +
+                                            key +
+                                            '}").'
+                                    );
                                 }
+                                output = output.substring(0, outputLength - overlap);
                             }
+                            cursor = contentEnd;
+                        } else {
+                            // Fallback behavior: keep default content-only repetition.
+                            cursor = closeTagEnd + 1;
                         }
-                    }
 
-                    if (chosenContainerStart != -1 && chosenContainerEnd != -1) {
-                        contentStart = chosenContainerStart;
-                        contentEnd = chosenContainerEnd;
-                        innerXml = xml.substring(contentStart, contentEnd);
+                        // Split on {:else} if present. Issue #68: scan must
+                        // ignore {:else} inside any nested section opener so
+                        // an inner {#IF}{:else}{/IF} does not get split open
+                        // by the outer scope.
+                        String trueBranch = innerXml;
+                        String elseBranch = null;
+                        Integer elsePos = findElseAtDepthZero(innerXml);
+                        if (elsePos != -1) {
+                            trueBranch = innerXml.substring(0, elsePos);
+                            elseBranch = innerXml.substring(elsePos + 7); // 7 = '{:else}'.length()
+                        }
 
-                        String startTagFull = '{' + rawTag + '}';
-                        innerXml = innerXml.replace(startTagFull, '');
-
-                        String endTagFull = xml.substring(sectionEnd, closeTagEnd + 1);
-                        innerXml = innerXml.replace(endTagFull, '');
-
-                        // Backtrack output to remove already-emitted prefix for chosen container.
-                        Integer overlap = cursor - contentStart;
-                        if (overlap > 0) {
-                            Integer outputLength = output.length();
-                            if (overlap > outputLength) {
-                                throw new DocGenException(
-                                    'Template loop parsing error for "{#' +
-                                        key +
-                                        '}": internal overlap (' +
-                                        overlap +
-                                        ') exceeds output length (' +
-                                        outputLength +
-                                        '). ' +
-                                        'This usually indicates malformed or mismatched loop tags (missing "{/' +
-                                        key +
-                                        '}").'
-                                );
+                        // Check for {#IF Field op Value} comparison conditional
+                        if (key.startsWith('IF ') || key.startsWith('if ')) {
+                            Boolean ifResult = evaluateIfExpression(key.substring(3).trim(), data);
+                            if (ifResult) {
+                                output += processXml(trueBranch, data);
+                            } else if (elseBranch != null) {
+                                output += processXml(elseBranch, data);
                             }
-                            output = output.substring(0, outputLength - overlap);
+                            cursor = (closeTagEnd != -1 ? closeTagEnd + 1 : sectionEnd);
+                            continue;
                         }
-                        cursor = contentEnd;
-                    } else {
-                        // Fallback behavior: keep default content-only repetition.
-                        cursor = closeTagEnd + 1;
-                    }
 
-                    // Split on {:else} if present. Issue #68: scan must
-                    // ignore {:else} inside any nested section opener so
-                    // an inner {#IF}{:else}{/IF} does not get split open
-                    // by the outer scope.
-                    String trueBranch = innerXml;
-                    String elseBranch = null;
-                    Integer elsePos = findElseAtDepthZero(innerXml);
-                    if (elsePos != -1) {
-                        trueBranch = innerXml.substring(0, elsePos);
-                        elseBranch = innerXml.substring(elsePos + 7); // 7 = '{:else}'.length()
-                    }
-
-                    // Check for {#IF Field op Value} comparison conditional
-                    if (key.startsWith('IF ') || key.startsWith('if ')) {
-                        Boolean ifResult = evaluateIfExpression(key.substring(3).trim(), data);
-                        if (ifResult) {
-                            output += processXml(trueBranch, data);
-                        } else if (elseBranch != null) {
-                            output += processXml(elseBranch, data);
-                        }
-                        cursor = (closeTagEnd != -1 ? closeTagEnd + 1 : sectionEnd);
-                        continue;
-                    }
-
-                    // Process Data
-                    Object val = resolveValue(data, key);
-                    String sectionResult = '';
-                    Boolean isTruthy = false;
-                    if (val instanceof Boolean && (Boolean) val) {
-                        isTruthy = true;
-                        sectionResult = processXml(trueBranch, data);
-                    } else if (val instanceof Map<String, Object>) {
-                        isTruthy = true;
-                        Map<String, Object> mapVal = (Map<String, Object>) val;
-                        if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
-                            List<Object> records = (List<Object>) mapVal.get('records');
-                            // Pre-fetch attached images for all iteration records if the loop body uses {%Image:N}
-                            if (loopBodyHasImageTag(trueBranch) && !records.isEmpty()) {
-                                Set<Id> loopIds = new Set<Id>();
+                        // Process Data
+                        Object val = resolveValue(data, key);
+                        String sectionResult = '';
+                        Boolean isTruthy = false;
+                        if (val instanceof Boolean && (Boolean) val) {
+                            isTruthy = true;
+                            sectionResult = processXml(trueBranch, data);
+                        } else if (val instanceof Map<String, Object>) {
+                            isTruthy = true;
+                            Map<String, Object> mapVal = (Map<String, Object>) val;
+                            if (mapVal.containsKey('records') && mapVal.get('records') instanceof List<Object>) {
+                                List<Object> records = (List<Object>) mapVal.get('records');
+                                // Pre-fetch attached images for all iteration records if the loop body uses {%Image:N}
+                                if (loopBodyHasImageTag(trueBranch) && !records.isEmpty()) {
+                                    Set<Id> loopIds = new Set<Id>();
+                                    for (Object item : records) {
+                                        if (item instanceof Map<String, Object>) {
+                                            Object idVal = ((Map<String, Object>) item).get('Id');
+                                            if (idVal != null) {
+                                                try {
+                                                    loopIds.add(Id.valueOf(String.valueOf(idVal)));
+                                                } catch (Exception e) {
+                                                }
+                                            }
+                                        }
+                                    }
+                                    prefetchImagesForIds(loopIds);
+                                }
+                                Integer iterCount = 0;
                                 for (Object item : records) {
+                                    if (item instanceof Map<String, Object>) {
+                                        sectionResult += processXml(trueBranch, (Map<String, Object>) item);
+                                    }
+                                    iterCount++;
+                                    if (Math.mod(iterCount, HEAP_CHECK_EVERY_N_ITERS) == 0) {
+                                        checkHeapPressure(key);
+                                    }
+                                }
+                            } else {
+                                sectionResult = processXml(trueBranch, mapVal);
+                            }
+                        } else if (val instanceof List<Object>) {
+                            List<Object> listVal = (List<Object>) val;
+                            if (!listVal.isEmpty()) {
+                                isTruthy = true;
+                            }
+                            // Pre-fetch attached images for all iteration records if the loop body uses {%Image:N}
+                            if (loopBodyHasImageTag(trueBranch) && !listVal.isEmpty()) {
+                                Set<Id> loopIds = new Set<Id>();
+                                for (Object item : listVal) {
                                     if (item instanceof Map<String, Object>) {
                                         Object idVal = ((Map<String, Object>) item).get('Id');
                                         if (idVal != null) {
@@ -3101,7 +3158,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                 prefetchImagesForIds(loopIds);
                             }
                             Integer iterCount = 0;
-                            for (Object item : records) {
+                            for (Object item : listVal) {
                                 if (item instanceof Map<String, Object>) {
                                     sectionResult += processXml(trueBranch, (Map<String, Object>) item);
                                 }
@@ -3110,269 +3167,269 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                     checkHeapPressure(key);
                                 }
                             }
-                        } else {
-                            sectionResult = processXml(trueBranch, mapVal);
-                        }
-                    } else if (val instanceof List<Object>) {
-                        List<Object> listVal = (List<Object>) val;
-                        if (!listVal.isEmpty()) {
-                            isTruthy = true;
-                        }
-                        // Pre-fetch attached images for all iteration records if the loop body uses {%Image:N}
-                        if (loopBodyHasImageTag(trueBranch) && !listVal.isEmpty()) {
-                            Set<Id> loopIds = new Set<Id>();
-                            for (Object item : listVal) {
-                                if (item instanceof Map<String, Object>) {
-                                    Object idVal = ((Map<String, Object>) item).get('Id');
-                                    if (idVal != null) {
-                                        try {
-                                            loopIds.add(Id.valueOf(String.valueOf(idVal)));
-                                        } catch (Exception e) {
-                                        }
-                                    }
-                                }
+                        } else if (val instanceof String) {
+                            // Strings: blank/whitespace-only and "visually empty" rich text
+                            // (e.g. <p><br></p>) are treated as falsy. Symmetric with the
+                            // inverse-section path below (issue #48).
+                            if (!isVisuallyBlankRichText((String) val)) {
+                                isTruthy = true;
+                                sectionResult = processXml(trueBranch, data);
                             }
-                            prefetchImagesForIds(loopIds);
-                        }
-                        Integer iterCount = 0;
-                        for (Object item : listVal) {
-                            if (item instanceof Map<String, Object>) {
-                                sectionResult += processXml(trueBranch, (Map<String, Object>) item);
-                            }
-                            iterCount++;
-                            if (Math.mod(iterCount, HEAP_CHECK_EVERY_N_ITERS) == 0) {
-                                checkHeapPressure(key);
-                            }
-                        }
-                    } else if (val instanceof String) {
-                        // Strings: blank/whitespace-only and "visually empty" rich text
-                        // (e.g. <p><br></p>) are treated as falsy. Symmetric with the
-                        // inverse-section path below (issue #48).
-                        if (!isVisuallyBlankRichText((String) val)) {
+                        } else if (val != null && !(val instanceof Boolean)) {
+                            // Non-null, non-boolean, non-list, non-map, non-string value
                             isTruthy = true;
                             sectionResult = processXml(trueBranch, data);
                         }
-                    } else if (val != null && !(val instanceof Boolean)) {
-                        // Non-null, non-boolean, non-list, non-map, non-string value
-                        isTruthy = true;
-                        sectionResult = processXml(trueBranch, data);
+
+                        if (!isTruthy && elseBranch != null) {
+                            sectionResult = processXml(elseBranch, data);
+                        }
+                        output += sectionResult;
+                    }
+                } else if (tagContent.startsWith('^')) {
+                    // Inverse conditional: {^BoolField}content{/BoolField}
+                    // Shows content when field is false, null, blank, or empty list
+                    String key = tagContent.substring(1).trim();
+                    Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
+                    if (sectionEnd == -1) {
+                        String snippet = xml.substring(Math.max(0, tagStartPos - 40), Math.min(len, tagStartPos + 40));
+                        String lineInfo = currentTemplateType == 'HTML'
+                            ? ' (line ' + (xml.substring(0, tagStartPos).countMatches('\n') + 1) + ')'
+                            : '';
+                        throw new DocGenException(
+                            'Malformed inverse tag: missing closing "{/' +
+                                key +
+                                '}" for "{^' +
+                                key +
+                                '}"' +
+                                lineInfo +
+                                ' opened near "' +
+                                snippet +
+                                '".'
+                        );
+                    } else {
+                        Integer contentStart = tagClose + 1;
+                        Integer contentEnd = sectionEnd;
+                        String innerXml = xml.substring(contentStart, contentEnd);
+                        Integer closeTagEnd = xml.indexOf('}', sectionEnd);
+                        // Split on {:else} if present. Same depth-aware scan
+                        // as the truthy path (issue #68).
+                        String inverseTrueBranch = innerXml;
+                        String inverseElseBranch = null;
+                        Integer inverseElsePos = findElseAtDepthZero(innerXml);
+                        if (inverseElsePos != -1) {
+                            inverseTrueBranch = innerXml.substring(0, inverseElsePos);
+                            inverseElseBranch = innerXml.substring(inverseElsePos + 7);
+                        }
+
+                        String sectionResult = '';
+                        Object val = resolveValue(data, key);
+                        Boolean isFalsy =
+                            (val == null) ||
+                            (val instanceof Boolean && !(Boolean) val) ||
+                            (val instanceof String && isVisuallyBlankRichText((String) val)) ||
+                            (val instanceof List<Object> && ((List<Object>) val).isEmpty());
+                        if (isFalsy) {
+                            sectionResult = processXml(inverseTrueBranch, data);
+                        } else if (inverseElseBranch != null) {
+                            sectionResult = processXml(inverseElseBranch, data);
+                        }
+                        output += sectionResult;
+                        cursor = (closeTagEnd != -1 ? closeTagEnd + 1 : sectionEnd);
+                    }
+                } else if (tagContent.startsWith('/')) {
+                    output += '{' + rawTag + '}';
+                    cursor = tagClose + 1;
+                } else if (tagContent.startsWith('%')) {
+                    // Image tag: {%FieldName} or {%FieldName:WxH} or {%Image:N} or {%Image:N:SIZE}
+                    String imageTagSpec = tagContent.substring(1).trim();
+
+                    // Positional record-attached-image tag: {%Image:N} or {%Image:N:SIZE}
+                    // Renders the Nth oldest image (PNG/JPG/GIF/BMP/TIFF/SVG) attached to the current record.
+                    String imageTagHead = imageTagSpec.contains(':')
+                        ? imageTagSpec.substringBefore(':').trim()
+                        : imageTagSpec.trim();
+                    if ('Image'.equalsIgnoreCase(imageTagHead)) {
+                        ImageRenderSpec indexedSpec = resolveImageByIndexTag(imageTagSpec, data);
+                        if (indexedSpec != null && String.isNotBlank(indexedSpec.fieldValue)) {
+                            String imageXml = dispatchImageXml(indexedSpec);
+                            if (imageXml != null) {
+                                output += imageXml;
+                            }
+                        }
+                        cursor = tagClose + 1;
+                        continue;
                     }
 
-                    if (!isTruthy && elseBranch != null) {
-                        sectionResult = processXml(elseBranch, data);
-                    }
-                    output += sectionResult;
-                }
-            } else if (tagContent.startsWith('^')) {
-                // Inverse conditional: {^BoolField}content{/BoolField}
-                // Shows content when field is false, null, blank, or empty list
-                String key = tagContent.substring(1).trim();
-                Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
-                if (sectionEnd == -1) {
-                    throw new DocGenException(
-                        'Malformed inverse tag: missing closing "{/' + key + '}" for "{^' + key + '}".'
-                    );
-                } else {
-                    Integer contentStart = tagClose + 1;
-                    Integer contentEnd = sectionEnd;
-                    String innerXml = xml.substring(contentStart, contentEnd);
-                    Integer closeTagEnd = xml.indexOf('}', sectionEnd);
-                    // Split on {:else} if present. Same depth-aware scan
-                    // as the truthy path (issue #68).
-                    String inverseTrueBranch = innerXml;
-                    String inverseElseBranch = null;
-                    Integer inverseElsePos = findElseAtDepthZero(innerXml);
-                    if (inverseElsePos != -1) {
-                        inverseTrueBranch = innerXml.substring(0, inverseElsePos);
-                        inverseElseBranch = innerXml.substring(inverseElsePos + 7);
-                    }
-
-                    String sectionResult = '';
-                    Object val = resolveValue(data, key);
-                    Boolean isFalsy =
-                        (val == null) ||
-                        (val instanceof Boolean && !(Boolean) val) ||
-                        (val instanceof String && isVisuallyBlankRichText((String) val)) ||
-                        (val instanceof List<Object> && ((List<Object>) val).isEmpty());
-                    if (isFalsy) {
-                        sectionResult = processXml(inverseTrueBranch, data);
-                    } else if (inverseElseBranch != null) {
-                        sectionResult = processXml(inverseElseBranch, data);
-                    }
-                    output += sectionResult;
-                    cursor = (closeTagEnd != -1 ? closeTagEnd + 1 : sectionEnd);
-                }
-            } else if (tagContent.startsWith('/')) {
-                output += '{' + rawTag + '}';
-                cursor = tagClose + 1;
-            } else if (tagContent.startsWith('%')) {
-                // Image tag: {%FieldName} or {%FieldName:WxH} or {%Image:N} or {%Image:N:SIZE}
-                String imageTagSpec = tagContent.substring(1).trim();
-
-                // Positional record-attached-image tag: {%Image:N} or {%Image:N:SIZE}
-                // Renders the Nth oldest image (PNG/JPG/GIF/BMP/TIFF/SVG) attached to the current record.
-                String imageTagHead = imageTagSpec.contains(':')
-                    ? imageTagSpec.substringBefore(':').trim()
-                    : imageTagSpec.trim();
-                if ('Image'.equalsIgnoreCase(imageTagHead)) {
-                    ImageRenderSpec indexedSpec = resolveImageByIndexTag(imageTagSpec, data);
-                    if (indexedSpec != null && String.isNotBlank(indexedSpec.fieldValue)) {
-                        String imageXml = dispatchImageXml(indexedSpec);
+                    ImageRenderSpec imageRenderSpec = parseImageTagSpec(imageTagSpec);
+                    Object val = resolveValue(data, imageRenderSpec.imageField);
+                    if (val != null) {
+                        imageRenderSpec.fieldValue = String.valueOf(val);
+                        String imageXml = dispatchImageXml(imageRenderSpec);
                         if (imageXml != null) {
                             output += imageXml;
                         }
                     }
                     cursor = tagClose + 1;
-                    continue;
-                }
-
-                ImageRenderSpec imageRenderSpec = parseImageTagSpec(imageTagSpec);
-                Object val = resolveValue(data, imageRenderSpec.imageField);
-                if (val != null) {
-                    imageRenderSpec.fieldValue = String.valueOf(val);
-                    String imageXml = dispatchImageXml(imageRenderSpec);
-                    if (imageXml != null) {
-                        output += imageXml;
+                } else if (tagContent.startsWith('*')) {
+                    // Barcode/QR tag: {*Field}, {*Field:qr}, {*Field:qr:200}, {*Field:code128:300x80}
+                    // Outputs a marker that DocGenHtmlRenderer renders as CSS for PDF
+                    String barcodeSpec = tagContent.substring(1).trim();
+                    List<String> bParts = barcodeSpec.split(':');
+                    String barcodeField = bParts[0].trim();
+                    String barcodeType = bParts.size() > 1 ? bParts[1].trim().toLowerCase() : 'code128';
+                    String barcodeSize = bParts.size() > 2 ? bParts[2].trim() : '';
+                    Object val = resolveValue(data, barcodeField);
+                    if (val != null) {
+                        String barcodeValue = String.valueOf(val).escapeXml();
+                        // Marker format: ##BARCODE:type:size:VALUE##
+                        output += '##BARCODE:' + barcodeType + ':' + barcodeSize + ':' + barcodeValue + '##';
                     }
-                }
-                cursor = tagClose + 1;
-            } else if (tagContent.startsWith('*')) {
-                // Barcode/QR tag: {*Field}, {*Field:qr}, {*Field:qr:200}, {*Field:code128:300x80}
-                // Outputs a marker that DocGenHtmlRenderer renders as CSS for PDF
-                String barcodeSpec = tagContent.substring(1).trim();
-                List<String> bParts = barcodeSpec.split(':');
-                String barcodeField = bParts[0].trim();
-                String barcodeType = bParts.size() > 1 ? bParts[1].trim().toLowerCase() : 'code128';
-                String barcodeSize = bParts.size() > 2 ? bParts[2].trim() : '';
-                Object val = resolveValue(data, barcodeField);
-                if (val != null) {
-                    String barcodeValue = String.valueOf(val).escapeXml();
-                    // Marker format: ##BARCODE:type:size:VALUE##
-                    output += '##BARCODE:' + barcodeType + ':' + barcodeSize + ':' + barcodeValue + '##';
-                }
-                cursor = tagClose + 1;
-            } else if (tagContent.contains(':') && isAggregateTag(tagContent)) {
-                // Aggregate tag: {SUM:ChildList.Field}, {COUNT:ChildList}, {AVG:...}, {MIN:...}, {MAX:...}
-                String aggResult = resolveAggregate(tagContent, data);
-                if (aggResult != null) {
-                    output += aggResult.escapeXml();
-                }
-                cursor = tagClose + 1;
-            } else {
-                // Parse optional date format suffix: {FieldName:format}
-                String fieldName = tagContent;
-                String dateFormat = null;
-                if (tagContent.contains(':')) {
-                    Integer colonIdx = tagContent.indexOf(':');
-                    fieldName = tagContent.substring(0, colonIdx).trim();
-                    dateFormat = tagContent.substring(colonIdx + 1).trim();
-                }
-
-                // {Today} and {Now} are built-in special tags — resolve before the
-                // data map so users don't need a formula field. Format suffixes
-                // (:MM/dd/yyyy, :date, :date:de_DE, etc.) work as with any field.
-                // For {Today} we construct the DateTime explicitly from year/month/day
-                // so downstream formatting lands on the same calendar day regardless
-                // of user timezone (DateTime.newInstance(Date, Time) can shift across
-                // midnight when user TZ differs from the scratch default).
-                Object val;
-                String upperField = fieldName.toUpperCase();
-                if (upperField == 'TODAY') {
-                    Date td = Date.today();
-                    val = DateTime.newInstance(td.year(), td.month(), td.day());
-                } else if (upperField == 'NOW') {
-                    val = DateTime.now();
-                } else if (upperField.startsWith('RUNNINGUSER.')) {
-                    // {RunningUser.X} — standard "prepared by" tag (v1.77+). Resolves
-                    // from the executing user's User row. Allowlist enforced in helper.
-                    val = resolveRunningUserField(fieldName.substring('RunningUser.'.length()));
+                    cursor = tagClose + 1;
+                } else if (tagContent.contains(':') && isAggregateTag(tagContent)) {
+                    // Aggregate tag: {SUM:ChildList.Field}, {COUNT:ChildList}, {AVG:...}, {MIN:...}, {MAX:...}
+                    String aggResult = resolveAggregate(tagContent, data);
+                    if (aggResult != null) {
+                        output += aggResult.escapeXml();
+                    }
+                    cursor = tagClose + 1;
                 } else {
-                    val = resolveValue(data, fieldName);
-                }
-                if (val != null) {
-                    String strVal;
-                    // Apply formatting if a format specifier was provided
-                    if (
-                        dateFormat != null &&
-                        dateFormat.toLowerCase().trim().startsWith('date') &&
-                        (val instanceof DateTime || val instanceof Date)
-                    ) {
-                        // {Field:date} → user's locale default | {Field:date:locale} → explicit locale
-                        String dateTrimmed = dateFormat.trim();
-                        String dateLocale = dateTrimmed.contains(':')
-                            ? dateTrimmed.substring(dateTrimmed.indexOf(':') + 1).trim()
-                            : UserInfo.getLocale();
-                        String pattern = getLocaleDatePattern(dateLocale);
-                        DateTime dt = val instanceof DateTime
-                            ? (DateTime) val
-                            : DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
-                        strVal = dt.format(pattern);
-                    } else if (dateFormat != null && val instanceof DateTime) {
-                        strVal = ((DateTime) val).format(dateFormat);
-                    } else if (dateFormat != null && val instanceof Date) {
-                        DateTime dt = DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
-                        strVal = dt.format(dateFormat);
-                    } else if (dateFormat != null && dateFormat.toLowerCase().trim() == 'checkbox') {
-                        // {IsActive:checkbox} → [X] or [ ]
-                        // Uses ASCII representation for universal font compatibility in PDF/DOCX
-                        Boolean checked = val instanceof Boolean
-                            ? (Boolean) val
-                            : String.valueOf(val).equalsIgnoreCase('true');
-                        strVal = checked ? '[X]' : '[ ]';
-                    } else if (dateFormat != null && isNumericFormat(dateFormat)) {
-                        strVal = formatNumber(val, dateFormat);
-                    } else {
-                        strVal = String.valueOf(val);
+                    // Parse optional date format suffix: {FieldName:format}
+                    String fieldName = tagContent;
+                    String dateFormat = null;
+                    if (tagContent.contains(':')) {
+                        Integer colonIdx = tagContent.indexOf(':');
+                        fieldName = tagContent.substring(0, colonIdx).trim();
+                        dateFormat = tagContent.substring(colonIdx + 1).trim();
                     }
-                    // Rich text HTML — convert to DOCX XML preserving formatting, images, and paragraphs
-                    // PowerPoint: strip HTML tags and output plain text (Word XML corrupts PPTX)
-                    if (
-                        strVal.contains('<') &&
-                        strVal.contains('>') &&
-                        (strVal.containsIgnoreCase('<p') ||
-                        strVal.containsIgnoreCase('<div') ||
-                        strVal.containsIgnoreCase('<span') ||
-                        strVal.containsIgnoreCase('<br') ||
-                        strVal.containsIgnoreCase('<img') ||
-                        strVal.containsIgnoreCase('<b>') ||
-                        strVal.containsIgnoreCase('<i>') ||
-                        strVal.containsIgnoreCase('<u>') ||
-                        strVal.containsIgnoreCase('<strong') ||
-                        strVal.containsIgnoreCase('<em') ||
-                        strVal.containsIgnoreCase('<ul') ||
-                        strVal.containsIgnoreCase('<ol') ||
-                        strVal.containsIgnoreCase('<li'))
-                    ) {
-                        if (currentTemplateType == 'PowerPoint') {
-                            // Strip HTML tags for plain text in PPTX
-                            output += strVal.replaceAll('<[^>]+>', ' ').replaceAll('\\s+', ' ').trim().escapeXml();
-                        } else if (currentTemplateType == 'HTML') {
-                            // HTML templates: rich-text is already HTML — pass through and
-                            // rewrite rtaImage URLs so Blob.toPdf can fetch the images.
-                            output += convertRichTextToHtml(strVal);
-                        } else {
-                            output += convertRichTextToDocxXml(strVal);
-                        }
+
+                    // {Today} and {Now} are built-in special tags — resolve before the
+                    // data map so users don't need a formula field. Format suffixes
+                    // (:MM/dd/yyyy, :date, :date:de_DE, etc.) work as with any field.
+                    // For {Today} we construct the DateTime explicitly from year/month/day
+                    // so downstream formatting lands on the same calendar day regardless
+                    // of user timezone (DateTime.newInstance(Date, Time) can shift across
+                    // midnight when user TZ differs from the scratch default).
+                    Object val;
+                    String upperField = fieldName.toUpperCase();
+                    if (upperField == 'TODAY') {
+                        Date td = Date.today();
+                        val = DateTime.newInstance(td.year(), td.month(), td.day());
+                    } else if (upperField == 'NOW') {
+                        val = DateTime.now();
+                    } else if (upperField.startsWith('RUNNINGUSER.')) {
+                        // {RunningUser.X} — standard "prepared by" tag (v1.77+). Resolves
+                        // from the executing user's User row. Allowlist enforced in helper.
+                        val = resolveRunningUserField(fieldName.substring('RunningUser.'.length()));
                     } else {
-                        if (currentTemplateType == 'PowerPoint') {
-                            output += strVal.escapeXml();
-                        } else if (currentTemplateType == 'HTML') {
-                            // HTML templates: escape XML, convert newlines to <br/> so
-                            // textarea/long-text fields preserve line breaks in the PDF.
-                            output += strVal
-                                .replace('\r\n', '\n')
-                                .replace('\r', '\n')
-                                .escapeXml()
-                                .replace('\n', '<br/>');
+                        val = resolveValue(data, fieldName);
+                    }
+                    if (val != null) {
+                        String strVal;
+                        // Apply formatting if a format specifier was provided
+                        if (
+                            dateFormat != null &&
+                            dateFormat.toLowerCase().trim().startsWith('date') &&
+                            (val instanceof DateTime || val instanceof Date)
+                        ) {
+                            // {Field:date} → user's locale default | {Field:date:locale} → explicit locale
+                            String dateTrimmed = dateFormat.trim();
+                            String dateLocale = dateTrimmed.contains(':')
+                                ? dateTrimmed.substring(dateTrimmed.indexOf(':') + 1).trim()
+                                : UserInfo.getLocale();
+                            String pattern = getLocaleDatePattern(dateLocale);
+                            DateTime dt = val instanceof DateTime
+                                ? (DateTime) val
+                                : DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
+                            strVal = dt.format(pattern);
+                        } else if (dateFormat != null && val instanceof DateTime) {
+                            strVal = ((DateTime) val).format(dateFormat);
+                        } else if (dateFormat != null && val instanceof Date) {
+                            DateTime dt = DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
+                            strVal = dt.format(dateFormat);
+                        } else if (dateFormat != null && dateFormat.toLowerCase().trim() == 'checkbox') {
+                            // {IsActive:checkbox} → [X] or [ ]
+                            // Uses ASCII representation for universal font compatibility in PDF/DOCX
+                            Boolean checked = val instanceof Boolean
+                                ? (Boolean) val
+                                : String.valueOf(val).equalsIgnoreCase('true');
+                            strVal = checked ? '[X]' : '[ ]';
+                        } else if (dateFormat != null && isNumericFormat(dateFormat)) {
+                            strVal = formatNumber(val, dateFormat);
                         } else {
-                            // Carry forward run properties (font, size, bold, etc.) so formatting
-                            // is preserved across line breaks in textarea fields (#32)
-                            String rPr = extractCurrentRunProperties(output);
-                            output += convertMultilineToXml(strVal, rPr);
+                            strVal = String.valueOf(val);
+                        }
+                        // Rich text HTML — convert to DOCX XML preserving formatting, images, and paragraphs
+                        // PowerPoint: strip HTML tags and output plain text (Word XML corrupts PPTX)
+                        if (
+                            strVal.contains('<') &&
+                            strVal.contains('>') &&
+                            (strVal.containsIgnoreCase('<p') ||
+                            strVal.containsIgnoreCase('<div') ||
+                            strVal.containsIgnoreCase('<span') ||
+                            strVal.containsIgnoreCase('<br') ||
+                            strVal.containsIgnoreCase('<img') ||
+                            strVal.containsIgnoreCase('<b>') ||
+                            strVal.containsIgnoreCase('<i>') ||
+                            strVal.containsIgnoreCase('<u>') ||
+                            strVal.containsIgnoreCase('<strong') ||
+                            strVal.containsIgnoreCase('<em') ||
+                            strVal.containsIgnoreCase('<ul') ||
+                            strVal.containsIgnoreCase('<ol') ||
+                            strVal.containsIgnoreCase('<li'))
+                        ) {
+                            if (currentTemplateType == 'PowerPoint') {
+                                // Strip HTML tags for plain text in PPTX
+                                output += strVal.replaceAll('<[^>]+>', ' ').replaceAll('\\s+', ' ').trim().escapeXml();
+                            } else if (currentTemplateType == 'HTML') {
+                                // HTML templates: rich-text is already HTML — pass through and
+                                // rewrite rtaImage URLs so Blob.toPdf can fetch the images.
+                                output += convertRichTextToHtml(strVal);
+                            } else {
+                                output += convertRichTextToDocxXml(strVal);
+                            }
+                        } else {
+                            if (currentTemplateType == 'PowerPoint') {
+                                output += strVal.escapeXml();
+                            } else if (currentTemplateType == 'HTML') {
+                                // HTML templates: escape XML, convert newlines to <br/> so
+                                // textarea/long-text fields preserve line breaks in the PDF.
+                                output += strVal
+                                    .replace('\r\n', '\n')
+                                    .replace('\r', '\n')
+                                    .escapeXml()
+                                    .replace('\n', '<br/>');
+                            } else {
+                                // Carry forward run properties (font, size, bold, etc.) so formatting
+                                // is preserved across line breaks in textarea fields (#32)
+                                String rPr = extractCurrentRunProperties(output);
+                                output += convertMultilineToXml(strVal, rPr);
+                            }
                         }
                     }
+                    cursor = tagClose + 1;
                 }
-                cursor = tagClose + 1;
+            } catch (HeapPressureException hpe) {
+                // Control-flow signal, NOT an author error: checkHeapPressure throws
+                // this from inside loop bodies to make DocGenController switch to the
+                // giant-query path. Must propagate untouched — wrapping it as a
+                // DocGenException would defeat the upstream catch (#115 guard).
+                throw hpe;
+            } catch (DocGenException dge) {
+                // Already author-facing (and may be enriched by a nested processXml
+                // frame) — rethrow unchanged so the most specific tag is reported.
+                throw dge;
+            } catch (Exception e) {
+                // Any other failure resolving this tag (e.g. navigating a null
+                // relationship like {Account.Owner.Name}) — name the tag, show a
+                // snippet, and add an HTML line number so authors can find it (#115).
+                String snippet = xml.substring(Math.max(0, tagStartPos - 40), Math.min(len, tagClose + 40));
+                String lineInfo = currentTemplateType == 'HTML'
+                    ? ' (line ' + (xml.substring(0, tagStartPos).countMatches('\n') + 1) + ')'
+                    : '';
+                throw new DocGenException(
+                    'Error resolving tag "{' + rawTag + '}"' + lineInfo + ' near "' + snippet + '": ' + e.getMessage()
+                );
             }
         }
         return output;

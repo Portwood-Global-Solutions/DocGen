@@ -279,6 +279,58 @@ try {
     System.debug('CHART PIPELINE WORD SUBSTITUTION: FAIL — ' + e.getMessage());
 }
 
+// ============================================================
+// #115 — merge errors name the tag + show a snippet
+// ============================================================
+
+// Unclosed loop: message must carry the section name AND a snippet of context
+try {
+    DocGenService.processXmlForTest('<w:t>INTRO {#Items} body of loop</w:t>', new Map<String, Object>());
+    fail++;
+    System.debug('ERR ENRICH UNCLOSED LOOP: FAIL — no exception thrown');
+} catch (Exception e) {
+    String m = e.getMessage();
+    if (m.contains('{#Items}') && m.contains('opened near') && m.contains('INTRO')) {
+        pass++;
+        System.debug('ERR ENRICH UNCLOSED LOOP: PASS');
+    } else {
+        fail++;
+        System.debug('ERR ENRICH UNCLOSED LOOP: FAIL — ' + m);
+    }
+}
+
+// Missing closing brace: message must include a snippet, not just a numeric offset
+try {
+    DocGenService.processXmlForTest('<w:t>before {Account.Name no close</w:t>', new Map<String, Object>());
+    fail++;
+    System.debug('ERR ENRICH MISSING BRACE: FAIL — no exception thrown');
+} catch (Exception e) {
+    String m = e.getMessage();
+    if (m.contains('missing closing') && m.contains('near "') && m.contains('Account.Name')) {
+        pass++;
+        System.debug('ERR ENRICH MISSING BRACE: PASS');
+    } else {
+        fail++;
+        System.debug('ERR ENRICH MISSING BRACE: FAIL — ' + m);
+    }
+}
+
+// Unclosed inverse section: same enrichment as the loop path
+try {
+    DocGenService.processXmlForTest('<w:t>head {^Flag} hidden body</w:t>', new Map<String, Object>());
+    fail++;
+    System.debug('ERR ENRICH UNCLOSED INVERSE: FAIL — no exception thrown');
+} catch (Exception e) {
+    String m = e.getMessage();
+    if (m.contains('{^Flag}') && m.contains('opened near')) {
+        pass++;
+        System.debug('ERR ENRICH UNCLOSED INVERSE: PASS');
+    } else {
+        fail++;
+        System.debug('ERR ENRICH UNCLOSED INVERSE: FAIL — ' + m);
+    }
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX4 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')
