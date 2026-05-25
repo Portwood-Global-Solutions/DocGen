@@ -1,0 +1,10 @@
+{
+    "orgName": "DocGen Package Build",
+    "settings": {
+        "languageSettings": {
+            "enableTranslationWorkbench": true,
+            "enableEndUserLanguages": true,
+            "enablePlatformLanguages": true
+        }
+    }
+}

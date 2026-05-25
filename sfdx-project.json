@@ -1,13 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "2.3.0 — Guest-Aware FLS Reads (verifier + signing read paths)",
-      "versionNumber": "2.3.0.NEXT",
-      "ancestorId": "04tVx000000ZxBhIAK",
+      "versionName": "2.4.0 — Multi-language runner + PowerPoint charts",
+      "versionNumber": "2.4.0.NEXT",
+      "ancestorId": "04tVx000000ZxDJIA0",
       "path": "force-app",
       "default": true,
+      "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen is a native Salesforce document generation engine. Build Word and PDF documents from any Salesforce record using merge tags in your own templates. Includes a visual query builder, bulk generation, multi-object support, electronic signatures, and Flow integration — all without leaving Salesforce. v2.3 completes the v2.2 signature flow fix — guest signers and the public document verifier now work end-to-end."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v2.4 brings the document runner to 10 languages (Spanish, Japanese, Chinese, French, German, Portuguese, Italian, Korean, and Dutch): each user sees the interface in their own Salesforce language automatically. Charts now render natively in PowerPoint output as well, alongside Word, PDF, Excel, and HTML. Template authors also get clearer, location-aware error messages when building templates. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
@@ -150,6 +151,7 @@
     "Portwood DocGen Managed@2.0.0-2": "04tVx000000ZqBpIAK",
     "Portwood DocGen Managed@2.1.0-1": "04tVx000000Zw5xIAC",
     "Portwood DocGen Managed@2.2.0-2": "04tVx000000ZxBhIAK",
-    "Portwood DocGen Managed@2.3.0-1": "04tVx000000ZxDJIA0"
+    "Portwood DocGen Managed@2.3.0-1": "04tVx000000ZxDJIA0",
+    "Portwood DocGen Managed@2.4.0-2": "04tVx000000ZyanIAC"
   }
 }

@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.4.0 — Multi-language runner + PowerPoint charts (`04tVx000000ZyanIAC`, build `2.4.0-2`, promoted 2026-05-25)
+
+Feature release. Brings the document runner UI to 10 languages, fixes PowerPoint chart rendering, and adds location-aware template error messages. 100% native — no external services or callouts.
+
+### Runner internationalization (#95, #126)
+
+The `docGenRunner` UI was hardcoded English. Extracted the user-facing strings into 12 **Custom Labels** (`DocGenRunner_*`) referenced via `@salesforce/label/c.*`, so the interface follows each user's Salesforce Language automatically — no custom picker, no org-wide override. Shipped translations for **10 languages**: Spanish (`es`), Japanese (`ja`), Chinese Simplified/Traditional (`zh_CN`/`zh_TW`), French (`fr`), German (`de`), Portuguese-Brazil (`pt_BR`), Italian (`it`), Korean (`ko`), Dutch (`nl_NL`). Each `translations/<locale>.translation-meta.xml` translates all 12 labels. Adding a language = one more translation file. `docGenBulkRunner` / `docGenAdmin` string extraction is queued as a follow-up.
+
+**Packaging prerequisite:** each language must be enabled under Setup → Translation Language Settings in the build org for the translations to deploy/package. `config/project-scratch-def.json` now sets `enableTranslationWorkbench` / `enableEndUserLanguages` / `enablePlatformLanguages` (#128) so scratch + build orgs accept them.
+
+### PowerPoint charts (#131)
+
+`{Chart:...}` tags in PowerPoint templates rendered as `[Chart: title]` text because `DocGenChartImageController.prepareChartImages` / `prepareChartImagesServerSide` hard-returned empty for any non-Word/HTML type — even though the embed side (`postProcessPowerPointSlides` → `<p:pic>`) was already complete. Un-gated `PowerPoint` and added `loadActivePptxBody()` (concatenates the pre-decomposed `…_ppt__slides__slideN.xml` parts so `findTopLevelChartTags` scans all slides). Verified end-to-end on staging: the Chart Showcase deck embeds charts as real `<p:pic>` PNGs. Known limitation (shared with Word, #130): chart tags whose text is split across runs by character formatting still text-fall-back.
+
+### Template error messages (#115)
+
+`DocGenService.processXml` now enriches the three author-facing merge errors (missing `}`, unclosed loop `{#X}`, unclosed inverse `{^X}`) with the offending tag text, a surrounding snippet, and an HTML source line number, plus a try/catch that names the tag on any resolution failure (e.g. a null relationship walk). `HeapPressureException` is re-thrown ahead of the generic catch so the giant-query fallback signal is preserved.
+
+### Release validation (staging-v240, fresh scratch from the TWB-enabled def)
+
+| Check                     | Result                                   |
+| ------------------------- | ---------------------------------------- |
+| e2e-01 … e2e-08           | all PASS / FAIL 0                        |
+| RunLocalTests             | 1415 methods, 0 failures; org-wide 76%   |
+| `sf code-analyzer` (S+AE) | 0 violations (45 suppressed — known FPs) |
+
+### Customer impact
+
+Spanish/Japanese/Chinese/etc. users now see the runner in their own language. PowerPoint chart templates render real charts instead of placeholder text. Template authors get errors that point to where in the template the problem is.
+
 ## v2.3.0 — Guest-aware FLS reads (`04tVx000000ZxDJIA0`, build `2.3.0-1`, promoted 2026-05-23)
 
 Hotfix completing the v2.2.0 fix. v2.2.0 added `DocGenFlsGuard.guestAssertCreateable / guestAssertUpdateable / guestAssertAccessible` and swapped the 18 admin-context **write** guards in `DocGenSignatureController.cls` to the guest variants. But the **read** guards (`DocGenFlsGuard.assertAccessible`) were left as admin variants — and those throw the same way on guest context, just with the per-field FLS describe verdict on the SOQL select-list. Customers hit:
