@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Translations xmlns="http://soap.sforce.com/2006/04/metadata">
+    <customLabels>
+        <label>為此記錄建立或合併文件。</label>
+        <name>DocGenRunner_Subtitle</name>
+    </customLabels>
+    <customLabels>
+        <label>類別</label>
+        <name>DocGenRunner_Category</name>
+    </customLabels>
+    <customLabels>
+        <label>選擇範本</label>
+        <name>DocGenRunner_SelectTemplate</name>
+    </customLabels>
+    <customLabels>
+        <label>選擇一個範本...</label>
+        <name>DocGenRunner_ChooseTemplate</name>
+    </customLabels>
+    <customLabels>
+        <label>輸出目的地</label>
+        <name>DocGenRunner_OutputDestination</name>
+    </customLabels>
+    <customLabels>
+        <label>建立文件</label>
+        <name>DocGenRunner_CreateDocument</name>
+    </customLabels>
+    <customLabels>
+        <label>文件包</label>
+        <name>DocGenRunner_DocumentPacket</name>
+    </customLabels>
+    <customLabels>
+        <label>合併 PDF</label>
+        <name>DocGenRunner_CombinePdfs</name>
+    </customLabels>
+    <customLabels>
+        <label>建立文件包</label>
+        <name>DocGenRunner_CreatePacket</name>
+    </customLabels>
+    <customLabels>
+        <label>合併 PDF</label>
+        <name>DocGenRunner_CombinePdfsAction</name>
+    </customLabels>
+    <customLabels>
+        <label>下載</label>
+        <name>DocGenRunner_Download</name>
+    </customLabels>
+    <customLabels>
+        <label>儲存至記錄</label>
+        <name>DocGenRunner_SaveToRecord</name>
+    </customLabels>
+</Translations>

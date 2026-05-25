@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Translations xmlns="http://soap.sforce.com/2006/04/metadata">
+    <customLabels>
+        <label>Créez ou combinez des documents pour cet enregistrement.</label>
+        <name>DocGenRunner_Subtitle</name>
+    </customLabels>
+    <customLabels>
+        <label>Catégorie</label>
+        <name>DocGenRunner_Category</name>
+    </customLabels>
+    <customLabels>
+        <label>Sélectionner un modèle</label>
+        <name>DocGenRunner_SelectTemplate</name>
+    </customLabels>
+    <customLabels>
+        <label>Choisissez un modèle...</label>
+        <name>DocGenRunner_ChooseTemplate</name>
+    </customLabels>
+    <customLabels>
+        <label>Destination de sortie</label>
+        <name>DocGenRunner_OutputDestination</name>
+    </customLabels>
+    <customLabels>
+        <label>Créer un document</label>
+        <name>DocGenRunner_CreateDocument</name>
+    </customLabels>
+    <customLabels>
+        <label>Lot de documents</label>
+        <name>DocGenRunner_DocumentPacket</name>
+    </customLabels>
+    <customLabels>
+        <label>Combiner les PDF</label>
+        <name>DocGenRunner_CombinePdfs</name>
+    </customLabels>
+    <customLabels>
+        <label>Créer un lot</label>
+        <name>DocGenRunner_CreatePacket</name>
+    </customLabels>
+    <customLabels>
+        <label>Combiner les PDF</label>
+        <name>DocGenRunner_CombinePdfsAction</name>
+    </customLabels>
+    <customLabels>
+        <label>Télécharger</label>
+        <name>DocGenRunner_Download</name>
+    </customLabels>
+    <customLabels>
+        <label>Enregistrer dans l'enregistrement</label>
+        <name>DocGenRunner_SaveToRecord</name>
+    </customLabels>
+</Translations>
