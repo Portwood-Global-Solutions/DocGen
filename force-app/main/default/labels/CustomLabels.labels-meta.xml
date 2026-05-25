@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomLabels xmlns="http://soap.sforce.com/2006/04/metadata">
+    <labels>
+        <fullName>DocGenRunner_Subtitle</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner header subtitle</shortDescription>
+        <value>Create or combine documents for this record.</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_Category</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner template category label</shortDescription>
+        <value>Category</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_SelectTemplate</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner select-template label</shortDescription>
+        <value>Select Template</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_ChooseTemplate</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner template picker placeholder</shortDescription>
+        <value>Choose a template...</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_OutputDestination</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner output destination label</shortDescription>
+        <value>Output Destination</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_CreateDocument</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner create-document button</shortDescription>
+        <value>Create Document</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_DocumentPacket</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner document-packet mode label</shortDescription>
+        <value>Document Packet</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_CombinePdfs</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner combine-PDFs mode label</shortDescription>
+        <value>Combine PDFs</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_CreatePacket</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner create-packet button</shortDescription>
+        <value>Create Packet</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_CombinePdfsAction</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner combine-PDFs action button</shortDescription>
+        <value>Combine PDFs</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_Download</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner download output option</shortDescription>
+        <value>Download</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_SaveToRecord</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner save-to-record output option</shortDescription>
+        <value>Save to Record</value>
+    </labels>
+</CustomLabels>
