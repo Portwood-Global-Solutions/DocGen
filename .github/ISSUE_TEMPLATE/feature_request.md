@@ -20,3 +20,10 @@ Which formats would this apply to? PDF / DOCX / XLSX / PPTX / All
 
 **Additional context**
 Screenshots, links to related issues, or examples from other tools.
+
+**Priority hint** (optional)
+
+<!--
+Maintainers triage per TRIAGE.md. Enhancements typically land at P2 (planned) or P3 (backlog).
+If this unblocks a customer rollout or has a deadline, mention it here.
+-->

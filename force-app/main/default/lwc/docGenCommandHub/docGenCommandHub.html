@@ -1,6 +1,5 @@
 <template>
     <div class="app-container">
-        
         <!-- Refined Professional Sidebar -->
         <nav class="sidebar">
             <div class="sidebar-header">
@@ -20,6 +19,10 @@
                     <lightning-icon icon-name="utility:layers" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Bulk Generation</span>
                 </button>
+                <button class={signaturesTabClass} onclick={handleShowSignatures}>
+                    <lightning-icon icon-name="utility:edit_form" size="x-small" class="nav-icon"></lightning-icon>
+                    <span>Signatures</span>
+                </button>
                 <button class={helpTabClass} onclick={handleShowHelp}>
                     <lightning-icon icon-name="utility:knowledge_base" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Learning Center</span>
@@ -27,23 +30,19 @@
             </div>
 
             <div class="sidebar-footer">
-                <a href={communityUrl} target="_blank" class="community-link">
-                    <lightning-icon icon-name="utility:people" size="x-small" class="nav-icon"></lightning-icon>
-                    <span>Join Community</span>
+                <a href="https://portwood.dev/community" target="_blank" class="community-link">
+                    <lightning-icon icon-name="utility:comments" size="xx-small" class="nav-icon"></lightning-icon>
+                    Join the Community
                 </a>
-                <div class="footer-note">
-                    Made with <span class="heart">&#10084;&#65039;</span> for you
-                </div>
+                <div class="footer-note">Made with <span class="heart">&#10084;&#65039;</span> for you</div>
             </div>
         </nav>
 
         <!-- Main Workspace Area -->
         <main class="workspace">
-            
             <!-- Dynamic Content Area -->
             <div class="content-panel">
                 <template if:true={isLoaded}>
-                    
                     <!-- TEMPLATES -->
                     <template if:true={isTemplates}>
                         <div class="panel-header">
@@ -66,271 +65,47 @@
                         </div>
                     </template>
 
-                    <!-- HELP / LEARNING CENTER -->
+                    <!-- SIGNATURES -->
+                    <template if:true={isSignatures}>
+                        <div class="panel-header">
+                            <h2>Signature Settings</h2>
+                            <p>Configure email branding, site URL, and signature behavior.</p>
+                        </div>
+                        <div class="panel-body">
+                            <c-doc-gen-signature-settings></c-doc-gen-signature-settings>
+                        </div>
+                    </template>
+
+                    <!-- HELP / LEARNING CENTER — moved to portwood.dev/guide -->
                     <template if:true={isHelp}>
-                        <div class="learning-workspace">
-                            
-                            <!-- Detailed Sidebar (No Emojis) -->
-                            <aside class="learning-sidebar">
-                                <div class="sidebar-section">
-                                    <h3>Getting Started</h3>
-                                    <nav class="learning-nav">
-                                        <a href="#intro" class="nav-item">Introduction</a>
-                                        <a href="#quickstart" class="nav-item">Quick Start</a>
-                                    </nav>
-                                </div>
-
-                                <div class="sidebar-section">
-                                    <h3>User Guide</h3>
-                                    <nav class="learning-nav">
-                                        <a href="#syntax" class="nav-item">Template Syntax</a>
-                                        <a href="#formatting" class="nav-item">Data Formatting</a>
-                                        <a href="#images" class="nav-item">Images & Barcodes</a>
-                                        <a href="#loops" class="nav-item">Loops & Page Breaks</a>
-                                        <a href="#pdfmerge" class="nav-item">PDF Merger</a>
-                                    </nav>
-                                </div>
-
-                                <div class="sidebar-section">
-                                    <h3>Power Users</h3>
-                                    <nav class="learning-nav">
-                                        <a href="#flow" class="nav-item">Flow Automation</a>
-                                        <a href="#bulk-docs" class="nav-item">Bulk Strategies</a>
-                                        <a href="#admin" class="nav-item">Sharing & Versions</a>
-                                        <a href="#limits" class="nav-item">Limits & Workarounds</a>
-                                    </nav>
-                                </div>
-
-                                <div class="sidebar-section">
-                                    <h3>Quick Tags</h3>
-                                    <p class="section-hint">Click to copy.</p>
-                                    <div class="tag-gallery">
-                                        <button class="pill-tag" data-tag="\{Name}" onclick={handleCopyTag}>&#123;Name&#125;</button>
-                                        <button class="pill-tag" data-tag="\{Amount:currency}" onclick={handleCopyTag}>&#123;Amount:currency&#125;</button>
-                                        <button class="pill-tag" data-tag="loop-contacts" onclick={handleCopyTag}>&#123;#List&#125;...&#123;/List&#125;</button>
-                                        <button class="pill-tag" data-tag="\{*Barcode}" onclick={handleCopyTag}>&#123;*Barcode&#125;</button>
-                                    </div>
-                                </div>
-                            </aside>
-
-                            <!-- Right: Content -->
-                            <div class="learning-content">
-                                <section id="intro" class="content-section">
-                                    <div class="content-header">
-                                        <h2>Welcome to DocGen</h2>
-                                        <p>A 100% native document generation engine for Salesforce professionals.</p>
-                                    </div>
-                                    <p>DocGen is designed to bridge the gap between complex Salesforce data and professional document layouts. It lets you use Microsoft Word, Excel, and PowerPoint as your design tools, while DocGen handles the data mapping, bulk generation, and PDF conversion.</p>
-                                </section>
-
-                                <!-- Quick Start -->
-                                <section id="quickstart" class="content-section">
-                                    <h3 class="section-heading">Quick Start Path</h3>
-                                    <div class="step-visual">
-                                        <div class="step-card">
-                                            <div class="num">1</div>
-                                            <strong>Design</strong>
-                                            <p>Create your .docx, .xlsx, or .pptx layout.</p>
-                                        </div>
-                                        <div class="step-card">
-                                            <div class="num">2</div>
-                                            <strong>Map</strong>
-                                            <p>Pick your Salesforce fields in the Template Manager.</p>
-                                        </div>
-                                        <div class="step-card">
-                                            <div class="num">3</div>
-                                            <strong>Run</strong>
-                                            <p>Deploy to a record page and click "Generate".</p>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <!-- Syntax -->
-                                <section id="syntax" class="content-section">
-                                    <h3 class="section-heading">Template Syntax & Logic</h3>
-                                    <p>The DocGen engine parses your files and replaces tags with live data. Most tags are simple field API names wrapped in curly braces.</p>
-                                    
-                                    <div class="card-tip">
-                                        <strong>Smart Table Detection</strong>
-                                        <p>If you place a loop tag (<code>&#123;#List&#125;</code>) inside a table row in Word, DocGen automatically duplicates that entire row for every record in the list.</p>
-                                    </div>
-
-                                    <table class="doc-table">
-                                        <thead>
-                                            <tr><th>Tag Type</th><th>Description</th><th>Example</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr><td><strong>Merge Field</strong></td><td>Pulls from the base record or parent lookup.</td><td><code>&#123;Account.Name&#125;</code></td></tr>
-                                            <tr><td><strong>Child Loop</strong></td><td>Repeats content for every record in a related list.</td><td><code>&#123;#Contacts&#125;...&#123;/Contacts&#125;</code></td></tr>
-                                            <tr><td><strong>Conditional</strong></td><td>Shows content only if a checkbox is checked.</td><td><code>&#123;#IsVIP&#125;Show Me!&#123;/IsVIP&#125;</code></td></tr>
-                                            <tr><td><strong>Aggregates</strong></td><td>Compute totals outside of a loop block.</td><td><code>&#123;SUM:Items.TotalPrice&#125;</code></td></tr>
-                                        </tbody>
-                                    </table>
-                                </section>
-
-                                <!-- Formatting -->
-                                <section id="formatting" class="content-section">
-                                    <h3 class="section-heading">Data Formatting</h3>
-                                    <p>Use the colon (:) syntax to apply professional formatting to dates, numbers, and currencies.</p>
-                                    <div class="format-grid">
-                                        <div class="format-item"><code>&#123;CloseDate:MM/dd/yyyy&#125;</code> <span>03/23/2026</span></div>
-                                        <div class="format-item"><code>&#123;Amount:currency&#125;</code> <span>$50,000.00</span></div>
-                                        <div class="format-item"><code>&#123;Rate:percent&#125;</code> <span>15.5%</span></div>
-                                        <div class="format-item"><code>&#123;Quantity:number&#125;</code> <span>1,234</span></div>
-                                    </div>
-                                </section>
-
-                                <!-- Images & Barcodes (Refined) -->
-                                <section id="images" class="content-section">
-                                    <h3 class="section-heading">Images & Barcodes</h3>
-                                    <p>Insert dynamic images and scannable barcodes directly into your Word-to-PDF workflows.</p>
-                                    
-                                    <div class="card-tip info">
-                                        <strong>Image Tip:</strong> Use a <strong>ContentVersion ID</strong> (starting with 068) in a text field for the most reliable image rendering.
-                                    </div>
-
-                                    <table class="doc-table">
-                                        <thead>
-                                            <tr><th>Feature</th><th>Tag Example</th><th>Result</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td><strong>Images</strong></td>
-                                                <td><code>&#123;%Logo_ID__c:200x60&#125;</code></td>
-                                                <td>Inserts image at specific size.</td>
-                                            </tr>
-                                            <tr>
-                                                <td><strong>Barcodes</strong></td>
-                                                <td><code>&#123;*ProductCode&#125;</code></td>
-                                                <td>Renders a Code 128 barcode.</td>
-                                            </tr>
-                                            <tr>
-                                                <td><strong>QR Codes</strong></td>
-                                                <td><code>&#123;*WebsiteURL:qr:150&#125;</code></td>
-                                                <td>Renders a 150px QR code.</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </section>
-
-                                <!-- Loops & Page Breaks -->
-                                <section id="loops" class="content-section">
-                                    <h3 class="section-heading">Loops & Page Breaks</h3>
-                                    <p>Need a separate page for every child record (like individual invoices)?</p>
-                                    <div class="pro-tip-box">
-                                        <strong>The Page Break Trick:</strong>
-                                        <ol>
-                                            <li>Start your loop: <code>&#123;#Opportunities&#125;</code></li>
-                                            <li>Design your page layout.</li>
-                                            <li>Insert a standard <strong>Word Page Break</strong> (Ctrl+Enter).</li>
-                                            <li>Add your closing tag: <code>&#123;/Opportunities&#125;</code></li>
-                                        </ol>
-                                    </div>
-                                </section>
-
-                                <!-- PDF Merge -->
-                                <section id="pdfmerge" class="content-section">
-                                    <h3 class="section-heading">PDF Merger</h3>
-                                    <p>Combine multiple documents using the built-in PDF engine.</p>
-                                    <ul class="bullet-list">
-                                        <li><strong>Generate & Merge:</strong> Append existing PDFs from the record.</li>
-                                        <li><strong>Document Packets:</strong> Merge multiple templates into one file.</li>
-                                        <li><strong>Related Files:</strong> Combine individual PDFs from child records.</li>
-                                        <li><strong>Bulk Merge:</strong> Merge every generated result from a bulk job.</li>
-                                    </ul>
-                                </section>
-
-                                <!-- Flow -->
-                                <section id="flow" class="content-section">
-                                    <h3 class="section-heading">Automation with Flow</h3>
-                                    <p>Trigger document creation automatically using Flow Actions.</p>
-                                    <div class="flow-card">
-                                        <div class="flow-header">
-                                            <lightning-icon icon-name="standard:flow" size="small" class="slds-var-m-right_x-small"></lightning-icon>
-                                            <strong>DocGenFlowAction</strong>
-                                        </div>
-                                        <p>Generates a single document and returns the File ID.</p>
-                                    </div>
-                                    <div class="flow-card slds-var-m-top_medium">
-                                        <div class="flow-header">
-                                            <lightning-icon icon-name="standard:flow" size="small" class="slds-var-m-right_x-small"></lightning-icon>
-                                            <strong>DocGenBulkFlowAction</strong>
-                                        </div>
-                                        <p>Triggers a bulk background job for multiple records.</p>
-                                    </div>
-                                </section>
-
-                                <!-- Bulk Strategies -->
-                                <section id="bulk-docs" class="content-section">
-                                    <h3 class="section-heading">Bulk Generation Strategies</h3>
-                                    <p>Generate documents for hundreds or thousands of records in one job.</p>
-
-                                    <div class="limit-grid">
-                                        <div class="limit-card info">
-                                            <strong>Batch Size</strong>
-                                            <p>Start with <strong>batch size 1</strong> for complex templates (images, child loops). Increase to 10-50 for simple text-only templates. If jobs fail, reduce the batch size.</p>
-                                        </div>
-                                        <div class="limit-card info">
-                                            <strong>SOQL Filters</strong>
-                                            <p>Use the WHERE clause filter to target specific records. Example: <code>StageName = 'Closed Won' AND CloseDate = THIS_QUARTER</code>.</p>
-                                        </div>
-                                        <div class="limit-card warning">
-                                            <strong>Merge PDFs</strong>
-                                            <p>Check <strong>Merge PDFs</strong> to combine all generated documents into a single file, attached to the Job record. Use <strong>Merge Only</strong> to skip individual files.</p>
-                                        </div>
-                                        <div class="limit-card info">
-                                            <strong>Saved Queries</strong>
-                                            <p>Save frequently used filters per template. Filters from report imports are auto-saved for reuse.</p>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <!-- Sharing & Versions -->
-                                <section id="admin" class="content-section">
-                                    <h3 class="section-heading">Sharing &amp; Template Versions</h3>
-                                    <p>Control who can use templates and manage template history.</p>
-
-                                    <div class="limit-grid">
-                                        <div class="limit-card info">
-                                            <strong>Template Visibility</strong>
-                                            <p>Templates are stored as <strong>DocGen_Template__c</strong> records. Use standard Salesforce sharing rules, profiles, and permission sets to control who can see and use each template.</p>
-                                        </div>
-                                        <div class="limit-card info">
-                                            <strong>Template Versions</strong>
-                                            <p>Each template upload creates a new <strong>ContentVersion</strong>. The most recently uploaded version is always the active one. Previous versions are preserved in Salesforce Files history.</p>
-                                        </div>
-                                        <div class="limit-card warning">
-                                            <strong>Generated Documents</strong>
-                                            <p>Output files are saved as <strong>ContentVersion</strong> records linked to the source record. They follow standard Salesforce file sharing — visible to anyone with access to the record.</p>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <!-- Limits -->
-                                <section id="limits" class="content-section">
-                                    <h3 class="section-heading">Limits & Workarounds</h3>
-                                    <div class="limit-grid">
-                                        <div class="limit-card warning">
-                                            <strong>Heap Size</strong>
-                                            <p>For very large documents, output as <strong>Word (.docx)</strong> to bypass memory limits.</p>
-                                        </div>
-                                        <div class="limit-card info">
-                                            <strong>PDF Fonts</strong>
-                                            <p>Only standard fonts are supported for PDF. Word output preserves custom branding.</p>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <!-- Support Card -->
-                                <div class="about-card">
-                                    <div class="slds-grid slds-grid_vertical-align-center">
-                                        <div class="slds-col slds-grow">
-                                            <h4>About DocGen</h4>
-                                            <p>Free, open-source document generation for Salesforce. 100% native, zero external dependencies.</p>
-                                        </div>
-                                    </div>
-                                </div>
-
+                        <div class="panel-header">
+                            <h2>User Guide</h2>
+                            <p>
+                                The full DocGen User Guide lives on the web — always up to date with the latest release.
+                            </p>
+                        </div>
+                        <div class="panel-body">
+                            <div class="guide-redirect-card">
+                                <h3>Open the DocGen User Guide</h3>
+                                <p>
+                                    Setup walkthroughs, merge-tag syntax, e-signature configuration, PDF features, Flow
+                                    integration, troubleshooting — everything is on the portwood.dev guide site,
+                                    formatted for fast skimming and search.
+                                </p>
+                                <a
+                                    href="https://portwood.dev/guide"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="guide-redirect-button"
+                                >
+                                    Open the User Guide ↗
+                                </a>
+                                <p class="guide-redirect-fineprint">
+                                    Need implementation help or training? Visit
+                                    <a href="https://portwood.dev/support" target="_blank" rel="noopener noreferrer"
+                                        >portwood.dev/support</a
+                                    >.
+                                </p>
                             </div>
                         </div>
                     </template>

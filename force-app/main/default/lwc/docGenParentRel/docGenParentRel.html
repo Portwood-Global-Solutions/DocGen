@@ -1,0 +1,240 @@
+<template>
+    <div style="margin-top: 6px; margin-left: 12px; border-left: 2px solid #e9d5ff; padding-left: 10px">
+        <!-- Header row: chevron toggle + remove × -->
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px">
+            <button
+                type="button"
+                class="bare-button"
+                onclick={handleExpandToggle}
+                aria-expanded={expanded}
+                style="
+                    font-weight: 600;
+                    font-size: 0.78rem;
+                    color: #7c3aed;
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                "
+            >
+                <lightning-icon
+                    icon-name={icon}
+                    size="xx-small"
+                    style="--sds-c-icon-color-foreground-default: #7c3aed"
+                ></lightning-icon>
+                {displayLabel}
+            </button>
+            <span style="color: #aaa; font-family: monospace; font-size: 0.65rem">{chainPath}</span>
+            <button
+                type="button"
+                class="bare-button"
+                onclick={handleRemove}
+                aria-label={removeLabel}
+                style="color: #ccc; font-size: 0.8rem; margin-left: auto"
+                title={removeLabel}
+            >
+                &times;
+            </button>
+        </div>
+
+        <!-- Selected-field pills with chain prefix -->
+        <template if:true={hasSelectedFields}>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px">
+                <template for:each={selectedFields} for:item="pf">
+                    <span
+                        key={pf.key}
+                        style="
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 3px;
+                            background: #f3e8ff;
+                            border: 1px solid #d8c4f0;
+                            padding: 2px 8px;
+                            border-radius: 12px;
+                            font-size: 0.75rem;
+                            white-space: nowrap;
+                        "
+                    >
+                        <span style="color: #7c3aed">{pf.chainPrefix}</span>
+                        <span style="color: #7c3aed">&#8250;</span>
+                        <span style="color: #7c3aed">{pf.displayLabel}</span>
+                        <span style="color: #aaa; font-family: monospace; font-size: 0.65rem">{pf.apiName}</span>
+                        <button
+                            type="button"
+                            class="bare-button"
+                            data-api={pf.apiName}
+                            onclick={handleRemoveSelectedField}
+                            aria-label={pf.removeLabel}
+                            title={pf.removeLabel}
+                            style="color: #999; margin-left: 2px; font-size: 0.7rem"
+                        >
+                            &times;
+                        </button>
+                    </span>
+                </template>
+            </div>
+        </template>
+
+        <!-- Expanded: field picker + nested parent rels -->
+        <template if:true={expanded}>
+            <input
+                type="text"
+                placeholder="Search fields..."
+                aria-label={fieldSearchAriaLabel}
+                value={fieldSearchValue}
+                oninput={handleFieldSearch}
+                style="
+                    width: 100%;
+                    padding: 5px 9px;
+                    border: 1px solid #d8dde6;
+                    border-radius: 6px;
+                    font-size: 0.75rem;
+                    margin-bottom: 4px;
+                "
+            />
+            <div
+                style="
+                    max-height: 160px;
+                    overflow-y: auto;
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 0;
+                "
+            >
+                <template for:each={pickerFields} for:item="ppf">
+                    <label
+                        key={ppf.apiName}
+                        style="
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            padding: 4px 6px;
+                            font-size: 0.78rem;
+                            cursor: pointer;
+                            border-radius: 4px;
+                        "
+                    >
+                        <input
+                            type="checkbox"
+                            checked={ppf.checked}
+                            data-api={ppf.apiName}
+                            onchange={handleFieldToggle}
+                            style="margin: 0; flex-shrink: 0"
+                        />
+                        <span style="overflow: hidden">
+                            <span style="font-weight: 500; color: #181818">{ppf.displayLabel}</span>
+                            <span style="color: #bbb; font-size: 0.65rem; font-family: monospace; margin-left: 4px"
+                                >{ppf.apiName}</span
+                            >
+                        </span>
+                    </label>
+                </template>
+            </div>
+
+            <!-- Active nested parent rels — recursive self-reference -->
+            <template for:each={activeNestedParentRels} for:item="np">
+                <c-doc-gen-parent-rel
+                    key={np.chainPath}
+                    parent-rel={np}
+                    node-path={nodePath}
+                    global-search={globalSearch}
+                    onexpandparent={handleNestedExpand}
+                    onparentfieldtoggle={handleNestedFieldToggle}
+                    onremoveparent={handleNestedRemove}
+                >
+                </c-doc-gen-parent-rel>
+            </template>
+
+            <!-- "+ chain through another lookup" affordance -->
+            <template if:true={canChainDeeper}>
+                <div style="margin-top: 6px">
+                    <button
+                        type="button"
+                        class="bare-button"
+                        onclick={toggleChainPicker}
+                        aria-expanded={showChainPicker}
+                        aria-controls={chainPickerId}
+                        style="
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 3px;
+                            padding: 2px 10px;
+                            border-radius: 12px;
+                            font-size: 0.72rem;
+                            color: #7c3aed;
+                            border: 1px dashed #d8c4f0;
+                            background: #faf5ff;
+                        "
+                    >
+                        + chain through another lookup
+                    </button>
+                </div>
+                <template if:true={showChainPicker}>
+                    <div
+                        id={chainPickerId}
+                        role="group"
+                        aria-label="Chain parent lookup picker"
+                        style="
+                            margin-top: 6px;
+                            border: 1px solid #e5e5e5;
+                            border-radius: 8px;
+                            background: #fafaf9;
+                            padding: 8px;
+                        "
+                    >
+                        <input
+                            type="text"
+                            placeholder="Search parent lookups..."
+                            aria-label="Search parent lookups"
+                            value={chainPickerSearchValue}
+                            oninput={handleChainPickerSearch}
+                            style="
+                                width: 100%;
+                                padding: 6px 10px;
+                                border: 1px solid #d8dde6;
+                                border-radius: 6px;
+                                font-size: 0.8rem;
+                                margin-bottom: 6px;
+                            "
+                        />
+                        <div style="max-height: 180px; overflow-y: auto">
+                            <template for:each={nestedAvailableParentRels} for:item="np">
+                                <button
+                                    key={np.value}
+                                    type="button"
+                                    class="bare-button"
+                                    data-rel={np.value}
+                                    onclick={handlePickNestedParent}
+                                    style="
+                                        display: flex;
+                                        align-items: center;
+                                        gap: 6px;
+                                        padding: 5px 8px;
+                                        font-size: 0.8rem;
+                                        color: #7c3aed;
+                                        border-radius: 4px;
+                                        width: 100%;
+                                    "
+                                >
+                                    <lightning-icon
+                                        icon-name="utility:jump_to_top"
+                                        size="xx-small"
+                                        style="--sds-c-icon-color-foreground-default: #7c3aed"
+                                    ></lightning-icon>
+                                    <span style="font-weight: 500">{np.displayLabel}</span>
+                                    <span style="color: #999; font-size: 0.68rem; font-family: monospace"
+                                        >{np.value}</span
+                                    >
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </template>
+            <template if:false={canChainDeeper}>
+                <div style="margin-top: 6px; font-size: 0.7rem; color: #999; font-style: italic">
+                    Maximum 5-hop parent chain reached.
+                </div>
+            </template>
+        </template>
+    </div>
+</template>

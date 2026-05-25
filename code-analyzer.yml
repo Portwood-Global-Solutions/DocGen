@@ -1,0 +1,79 @@
+# DocGen Code Analyzer Configuration
+#
+# Run command:
+#   sf code-analyzer run --workspace "force-app/" --rule-selector "Security" --rule-selector "AppExchange" --view table
+#
+# Expected result (v2.1.0+): 0 Critical / 0 High / 0 Moderate / 0 Low / 0 Info.
+#
+# v2.1.0 disables two PMD rules that emit only documented false positives
+# on this codebase. See "Disabled rules" section below for the full audit
+# trail of each disable + the structural reason the underlying pattern is
+# safe (so a future engineer adding a NEW field or LWC with similar shape
+# can re-enable temporarily for that change). The Code Analyzer rules
+# below remain at default severity; nothing else is suppressed. Inline
+# `code-analyzer-suppress ApexFlsViolation` markers in source remain in
+# place for the SYSTEM_MODE SOQL/DML behind the DocGenFlsGuard pattern.
+#
+# ─── Disabled rules (intentional, documented) ────────────────────────────
+#
+# pmd:ProtectSensitiveData (29 violations on field metadata XML)
+#   PMD pattern-matches field NAMES containing "Token", "Signature",
+#   "Signer", "Email", "Hash", "PIN" and flags them as "potential auth
+#   tokens with public visibility". On this codebase every such hit is
+#   a legitimate signature/audit/branding field whose protection is
+#   enforced structurally (permission sets, ControlledByParent sharing,
+#   field history tracking, SHA-256 hashing at rest for the actually-
+#   sensitive ones — Secure_Token__c, PIN_Hash__c). Naming the fields
+#   anything else would actively harm readability. The rule emits on
+#   metadata XML line 1:1 so it cannot be inline-suppressed.
+#
+#   Re-enable temporarily if adding a NEW custom field whose name
+#   contains one of these tokens AND which stores a real third-party
+#   API key / OAuth refresh token / customer-supplied credential. If
+#   such a field is ever added, it must (a) be encrypted at rest via
+#   Salesforce Platform Encryption or one-way hashed, (b) be excluded
+#   from DocGen_User permset FLS, and (c) have an entry added to
+#   DocGen_False_Positive_Report.md justifying why it doesn't need
+#   the rule.
+#
+# pmd:AvoidLwcBubblesComposedTrue (9 violations in docGenTreeNode.js)
+#   `docGenTreeNode` is a recursive LWC — each node renders child
+#   `<c-doc-gen-tree-node>` instances. User interactions (add / remove /
+#   select / expand / reorder) must bubble from any depth back up to
+#   the root `docGenTreeBuilder` component, which lives outside the
+#   recursive tree's shadow DOM. Without `composed: true` events are
+#   trapped at each shadow boundary and never reach the tree builder.
+#   The events only carry tree-manipulation metadata (node id, action
+#   type, field selection) — no credentials, tokens, or record data.
+#   All event consumers are in-package LWCs; Lightning Web Security
+#   isolates each root component instance from external interception.
+#
+#   Re-enable temporarily if adding `composed: true` to a NEW
+#   non-recursive component — that's almost certainly not the right
+#   pattern outside the tree builder.
+#
+# ─── Pass criteria ───────────────────────────────────────────────────────
+#
+# Critical: MUST be 0. High: MUST be 0. Moderate: MUST be 0. Any
+# non-zero finding requires investigation, documentation in
+# DocGen_False_Positive_Report.md, and either a code fix or an explicit
+# entry in the "Disabled rules" section above.
+#
+# ─── Source-level inline suppressions (informational) ────────────────────
+#
+# Per the v2.1.0 hybrid Schema-CRUD-gate + per-field-FLS-guard +
+# SYSTEM_MODE pattern, the source contains 200+ `code-analyzer-suppress
+# ApexFlsViolation` markers immediately before each `Database.<op>(...,
+# AccessLevel.SYSTEM_MODE)` and each `WITH SYSTEM_MODE` SOQL. Each
+# marker is paired with a `DocGenFlsGuard.assertAccessible/assertCreateable/
+# assertUpdateable(...)` call that performs the documented
+# `Schema.SObjectField.getDescribe().is{Accessible,Createable,Updateable}()`
+# check per field. See DocGenFlsGuard.cls class-level javadoc and
+# DocGen_False_Positive_Report.md for the full disposition.
+
+rules:
+    pmd:
+        ProtectSensitiveData:
+            disabled: true
+        AvoidLwcBubblesComposedTrue:
+            disabled: true

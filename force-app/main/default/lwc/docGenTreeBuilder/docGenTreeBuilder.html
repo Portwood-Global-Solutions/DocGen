@@ -1,0 +1,65 @@
+<template>
+    <div
+        role="region"
+        aria-label="Query builder"
+        style="border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; font-size: 0.82rem"
+    >
+        <!-- Header bar -->
+        <div style="padding: 8px 14px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; gap: 10px">
+            <h2
+                style="
+                    font-weight: 700;
+                    color: #181818;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    white-space: nowrap;
+                    font-size: inherit;
+                    margin: 0;
+                "
+            >
+                <lightning-icon icon-name="standard:record" size="xx-small"></lightning-icon>
+                {selectedObject}
+            </h2>
+            <lightning-input
+                type="search"
+                label="Search all fields and relationships"
+                placeholder="Search all fields and relationships..."
+                variant="label-hidden"
+                value={globalSearch}
+                onchange={handleGlobalSearch}
+                style="flex: 1"
+            >
+            </lightning-input>
+            <span style="font-size: 0.75rem; color: #706e6b; white-space: nowrap" aria-live="polite"
+                >{selectedCount} fields</span
+            >
+        </div>
+
+        <template if:true={hasRoot}>
+            <div style="padding: 0">
+                <!-- ═══ Render root node ═══ -->
+                <c-doc-gen-tree-node
+                    node-data={rootNodeData}
+                    depth="0"
+                    global-search={globalSearch}
+                    onfieldtoggle={handleNodeFieldToggle}
+                    onparentfieldtoggle={handleNodeParentFieldToggle}
+                    onexpandchild={handleNodeExpandChild}
+                    onexpandparent={handleNodeExpandParent}
+                    onclausechange={handleNodeClauseChange}
+                    onremovechild={handleNodeRemoveChild}
+                    onremoveparent={handleNodeRemoveParent}
+                >
+                </c-doc-gen-tree-node>
+            </div>
+        </template>
+
+        <template if:false={hasRoot}>
+            <div style="padding: 30px; text-align: center; color: #706e6b">
+                <lightning-spinner alternative-text="Loading..." size="small"></lightning-spinner>
+                <p style="margin-top: 8px; font-size: 0.8rem">Loading schema...</p>
+            </div>
+        </template>
+    </div>
+</template>

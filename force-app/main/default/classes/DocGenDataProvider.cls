@@ -45,7 +45,7 @@
  * DocGen will instantiate the class, call getData(), and merge the result
  * into your template using the same {FieldName} tags as SOQL-based templates.
  */
-public interface DocGenDataProvider {
+global interface DocGenDataProvider {
     /**
      * Returns a map of field names to values for the given record.
      * @param recordId The source record ID (may be null for standalone data)

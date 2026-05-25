@@ -3,20 +3,42 @@
  * Supports PDF, DOCX, PPTX, and XLSX output. Full merge tag support
  * including loops, conditionals, images, barcodes, and aggregates.
  */
-global with sharing class DocGenFlowAction {
-
+global with sharing class DocGenFlowAction { // NOPMD AvoidGlobalModifier — global required for @InvocableMethod visibility in subscriber orgs
     global class Request {
         @InvocableVariable(label='Template ID' required=true description='The DocGen Template record ID')
         global Id templateId;
 
-        @InvocableVariable(label='Record ID' required=true description='The source record ID to merge data from')
+        @InvocableVariable(
+            label='Record ID'
+            required=false
+            description='The source record ID to merge data from. Required unless JSON Data is supplied.'
+        )
         global Id recordId;
 
-        @InvocableVariable(label='Save to Record' description='If true, attach the generated file to the source record via ContentDocumentLink. Default: false')
+        @InvocableVariable(
+            label='Save to Record'
+            description='If true, attach the generated file to the source record (Files related list). If false (default), the file is inserted as a standalone ContentVersion and can still be downloaded via the returned Content Document ID / Content Version ID — the source record is not touched.'
+        )
         global Boolean saveToRecord;
 
-        @InvocableVariable(label='Document Title' description='Override the generated file name. Leave blank to use the template default.')
+        @InvocableVariable(
+            label='Document Title'
+            description='Override the generated file name. Leave blank to use the template default.'
+        )
         global String documentTitle;
+
+        @InvocableVariable(
+            label='Output Format Override'
+            description='Optional. Override the template Output Format at runtime. Allowed: PDF, Word, PowerPoint. Word templates can render to PDF or DOCX. PowerPoint templates render only to PPTX. Leave blank to use the template default. Throws if the template has Lock Output Format = true.'
+        )
+        global String outputFormatOverride;
+
+        @InvocableVariable(
+            label='JSON Data'
+            required=false
+            description='Optional. Pre-built merge data as a JSON string — bypasses the SOQL data retrieval entirely. Use this when a Flow has assembled custom data from external APIs, computed values, or cross-object aggregations and wants to render directly without persisting to records first. Shape mirrors the merge engine: {"Name":"Acme","Amount":50000,"Items":{"records":[{"Product":"Widget","Qty":2}]}}. When supplied, this takes precedence over Record ID for data — but Record ID is still used as the file attachment target if Save to Record is true.'
+        )
+        global String jsonData;
     }
 
     global class Response {
@@ -33,46 +55,174 @@ global with sharing class DocGenFlowAction {
         global Boolean success;
     }
 
-    @InvocableMethod(label='Generate Document' description='Generates a document (PDF, DOCX, PPTX, XLSX) from a DocGen template and record. Supports all merge tags including loops, images, barcodes, QR codes, and aggregates.')
+    @InvocableMethod(
+        label='Generate Document'
+        description='Generates a document (PDF, DOCX, PPTX, XLSX) from a DocGen template and record. Supports all merge tags including loops, images, barcodes, QR codes, and aggregates.'
+    )
     global static List<Response> generateDocument(List<Request> requests) {
         List<Response> responses = new List<Response>();
 
-        for (Request req : requests) {
+        // Phase 1: Generate all documents and collect results
+        Map<Integer, Id> docIdsByIndex = new Map<Integer, Id>();
+        for (Integer i = 0; i < requests.size(); i++) {
+            Request req = requests[i];
             Response res = new Response();
             try {
-                Id docId = DocGenService.generateDocument(req.templateId, req.recordId);
+                Boolean useDataMap = String.isNotBlank(req.jsonData);
+                if (!useDataMap && req.recordId == null) {
+                    throw new DocGenException('Either Record ID or JSON Data must be supplied.');
+                }
+
+                Id docId;
+                if (useDataMap) {
+                    // Parse the supplied JSON into the merge engine's expected Map shape.
+                    // JSON.deserializeUntyped returns Map<String,Object> for objects, List<Object>
+                    // for arrays — matches what DocGenDataRetriever's other paths produce.
+                    Object parsed = JSON.deserializeUntyped(req.jsonData);
+                    if (!(parsed instanceof Map<String, Object>)) {
+                        throw new DocGenException(
+                            'JSON Data must deserialize to an object (Map), not an array or scalar.'
+                        );
+                    }
+                    Map<String, Object> dataMap = (Map<String, Object>) parsed;
+
+                    if (req.recordId != null) {
+                        // recordId is the title/context anchor. The actual attachment target is null
+                        // when saveToRecord != true — produces a standalone ContentVersion the Flow
+                        // can hand off via the returned ContentDocumentId (issue #90).
+                        Id fileAttachmentTarget = (req.saveToRecord == true) ? req.recordId : null;
+                        docId = DocGenService.generateAndSaveFromData(
+                            req.templateId,
+                            req.recordId,
+                            dataMap,
+                            req.outputFormatOverride,
+                            req.documentTitle,
+                            fileAttachmentTarget
+                        );
+                    } else {
+                        // No record context — render PDF and insert as a standalone ContentVersion.
+                        // Caller can pick it up via the returned ContentDocumentId / ContentVersionId.
+                        Map<String, Object> result = DocGenService.generatePdfBlobFromData(req.templateId, dataMap);
+                        Blob pdfBlob = (Blob) result.get('blob');
+                        String title = String.isNotBlank(req.documentTitle)
+                            ? req.documentTitle
+                            : (String) result.get('title');
+                        if (String.isBlank(title)) {
+                            title = 'Generated_Document';
+                        }
+                        ContentVersion cv = new ContentVersion();
+                        cv.Title = title;
+                        cv.PathOnClient = title + '.pdf';
+                        cv.VersionData = pdfBlob;
+                        SObjectAccessDecision dec = Security.stripInaccessible(
+                            AccessType.CREATABLE,
+                            new List<ContentVersion>{ cv }
+                        );
+                        insert dec.getRecords(); // NOPMD ApexCRUDViolation - FLS enforced via stripInaccessible
+                        Id newCvId = ((ContentVersion) dec.getRecords()[0]).Id;
+                        ContentVersion saved = [
+                            SELECT Id, ContentDocumentId
+                            FROM ContentVersion
+                            WHERE Id = :newCvId
+                            WITH USER_MODE
+                            LIMIT 1
+                        ];
+                        docId = saved.ContentDocumentId;
+                        res.contentVersionId = saved.Id;
+                    }
+                } else {
+                    // attachmentRecordId is null when saveToRecord != true — keeps the file out of the
+                    // record's Files related list while still using recordId for merge data (issue #90).
+                    Id attachmentRecordId = (req.saveToRecord == true) ? req.recordId : null;
+                    docId = DocGenService.generateDocument(
+                        req.templateId,
+                        req.recordId,
+                        req.outputFormatOverride,
+                        req.documentTitle,
+                        attachmentRecordId
+                    );
+                }
                 res.contentDocumentId = docId;
                 res.success = true;
-
-                // Get the ContentVersion ID for the generated file
-                List<ContentVersion> cvs = [SELECT Id FROM ContentVersion WHERE ContentDocumentId = :docId WITH USER_MODE LIMIT 1];
-                if (!cvs.isEmpty()) {
-                    res.contentVersionId = cvs[0].Id;
-                }
-
-                // Optionally link to the source record (skip if already linked)
-                if (req.saveToRecord == true && docId != null) {
-                    List<ContentDocumentLink> existing = [
-                        SELECT Id FROM ContentDocumentLink
-                        WHERE ContentDocumentId = :docId AND LinkedEntityId = :req.recordId
-                        WITH USER_MODE LIMIT 1
-                    ];
-                    if (existing.isEmpty()) {
-                        ContentDocumentLink link = new ContentDocumentLink(
-                            ContentDocumentId = docId,
-                            LinkedEntityId = req.recordId,
-                            ShareType = 'V',
-                            Visibility = 'AllUsers'
-                        );
-                        SObjectAccessDecision decision = Security.stripInaccessible(AccessType.CREATABLE, new List<SObject>{ link });
-                        insert decision.getRecords(); // NOPMD ApexCRUDViolation - FLS enforced via stripInaccessible
-                    }
-                }
+                docIdsByIndex.put(i, docId);
             } catch (Exception e) {
                 res.errorMessage = e.getMessage();
                 res.success = false;
             }
             responses.add(res);
+        }
+
+        // Phase 2: Bulk query ContentVersion IDs for all generated documents
+        Set<Id> allDocIds = new Set<Id>(docIdsByIndex.values());
+        allDocIds.remove(null);
+        if (!allDocIds.isEmpty()) {
+            Map<Id, Id> cvIdByDocId = new Map<Id, Id>();
+            for (ContentVersion cv : [
+                SELECT Id, ContentDocumentId
+                FROM ContentVersion
+                WHERE ContentDocumentId IN :allDocIds
+                WITH USER_MODE
+            ]) {
+                // Keep only the first CV per document (matching original LIMIT 1 behavior)
+                if (!cvIdByDocId.containsKey(cv.ContentDocumentId)) {
+                    cvIdByDocId.put(cv.ContentDocumentId, cv.Id);
+                }
+            }
+            for (Integer i : docIdsByIndex.keySet()) {
+                Id docId = docIdsByIndex.get(i);
+                if (docId != null && cvIdByDocId.containsKey(docId)) {
+                    responses[i].contentVersionId = cvIdByDocId.get(docId);
+                }
+            }
+        }
+
+        // Phase 3: Bulk link documents to source records where requested
+        // First, collect which doc+record pairs need linking
+        Set<Id> linkDocIds = new Set<Id>();
+        Map<Integer, Id> saveToRecordByIndex = new Map<Integer, Id>();
+        for (Integer i = 0; i < requests.size(); i++) {
+            Request req = requests[i];
+            Id docId = docIdsByIndex.get(i);
+            if (req.saveToRecord == true && docId != null && responses[i].success == true) {
+                linkDocIds.add(docId);
+                saveToRecordByIndex.put(i, req.recordId);
+            }
+        }
+
+        if (!linkDocIds.isEmpty()) {
+            // Bulk query existing links to avoid duplicates
+            Set<String> existingLinkKeys = new Set<String>();
+            for (ContentDocumentLink cdl : [
+                SELECT ContentDocumentId, LinkedEntityId
+                FROM ContentDocumentLink
+                WHERE ContentDocumentId IN :linkDocIds
+                WITH USER_MODE
+            ]) {
+                existingLinkKeys.add(String.valueOf(cdl.ContentDocumentId) + ':' + String.valueOf(cdl.LinkedEntityId));
+            }
+
+            // Build list of new links needed
+            List<ContentDocumentLink> linksToInsert = new List<ContentDocumentLink>();
+            for (Integer i : saveToRecordByIndex.keySet()) {
+                Id docId = docIdsByIndex.get(i);
+                Id recordId = saveToRecordByIndex.get(i);
+                String linkKey = String.valueOf(docId) + ':' + String.valueOf(recordId);
+                if (!existingLinkKeys.contains(linkKey)) {
+                    linksToInsert.add(
+                        new ContentDocumentLink(
+                            ContentDocumentId = docId,
+                            LinkedEntityId = recordId,
+                            ShareType = 'V',
+                            Visibility = 'AllUsers'
+                        )
+                    );
+                }
+            }
+
+            if (!linksToInsert.isEmpty()) {
+                SObjectAccessDecision decision = Security.stripInaccessible(AccessType.CREATABLE, linksToInsert);
+                insert decision.getRecords(); // NOPMD ApexCRUDViolation - FLS enforced via stripInaccessible
+            }
         }
 
         return responses;

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Header_Html__c</fullName>
+    <description
+    >Snapshot of the template's Header HTML at the time this version was created. Read by the render path so per-version header changes don't retroactively affect previously authored versions.</description>
+    <label>Header HTML</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>6</visibleLines>
+</CustomField>

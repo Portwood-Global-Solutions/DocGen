@@ -43,9 +43,8 @@
     margin: var(--slds-g-spacing-6, 2rem) 0;
 }
 
-/* Custom Dropdown */
+/* Custom Dropdown — paired with SLDS slds-is-absolute utility class on the element */
 .custom-dropdown {
-    position: absolute;
     z-index: 100;
     max-height: 250px;
     overflow-y: auto;

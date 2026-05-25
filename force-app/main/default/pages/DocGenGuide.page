@@ -1,0 +1,95 @@
+<apex:page
+    showHeader="false"
+    standardStylesheets="false"
+    sidebar="false"
+    applyHtmlTag="true"
+    applyBodyTag="false"
+    docType="html-5.0"
+    cache="false"
+>
+    <html lang="en">
+        <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>DocGen User Guide — Portwood Global Solutions</title>
+            <meta http-equiv="refresh" content="0; url=https://portwood.dev/guide" />
+            <link rel="canonical" href="https://portwood.dev/guide" />
+            <style>
+                body {
+                    margin: 0;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                    background: #f9fafb;
+                    color: #111827;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    padding: 2rem;
+                }
+                .card {
+                    max-width: 560px;
+                    width: 100%;
+                    padding: 3rem 2rem;
+                    background: #fff;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 12px;
+                    text-align: center;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+                }
+                h1 {
+                    font-size: 1.5rem;
+                    font-weight: 700;
+                    margin: 0 0 0.75rem 0;
+                }
+                p {
+                    margin: 0 0 1.5rem 0;
+                    line-height: 1.55;
+                    color: #4b5563;
+                }
+                a.cta {
+                    display: inline-block;
+                    padding: 0.75rem 2rem;
+                    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+                    color: #fff;
+                    font-weight: 600;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    transition:
+                        transform 0.15s,
+                        box-shadow 0.15s;
+                }
+                a.cta:hover {
+                    transform: translateY(-1px);
+                    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+                }
+                .fineprint {
+                    margin-top: 2rem;
+                    font-size: 0.85rem;
+                    color: #6b7280;
+                }
+                .fineprint a {
+                    color: #047857;
+                    font-weight: 600;
+                    text-decoration: none;
+                }
+                .fineprint a:hover {
+                    text-decoration: underline;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>The DocGen User Guide has moved</h1>
+                <p>
+                    Setup walkthroughs, merge-tag syntax, e-signature configuration, PDF features, Flow integration, and
+                    troubleshooting now live on the web — always up to date with the latest release.
+                </p>
+                <a class="cta" href="https://portwood.dev/guide">Open the User Guide ↗</a>
+                <p class="fineprint">
+                    Need implementation help or training? Visit
+                    <a href="https://portwood.dev/support">portwood.dev/support</a>.
+                </p>
+            </div>
+        </body>
+    </html>
+</apex:page>

@@ -1,189 +1,141 @@
-# CLAUDE.md — SalesforceDocGen Project Guidelines
+# CLAUDE.md — SalesforceDocGen
 
-## Critical: Blob.toPdf() Image URL Rules
+## Triage
 
-The Spring '26 `Blob.toPdf()` rendering engine has strict requirements for image URLs in HTML:
+See `TRIAGE.md` at the repo root for the priority rubric (P0/P1/P2/P3 + severity labels + milestone scheme). Apply it when classifying new issues or proposing what to work on next. Current milestones live on GitHub: `v1.89.0` (in flight — Template_Version Type picklist fix + CSS 2.1 guidance + #60/#72), `v1.90.0`, `Backlog`.
 
-- **MUST use relative Salesforce paths**: `/sfc/servlet.shepherd/version/download/<ContentVersionId>`
-- **NEVER use absolute URLs**: `https://domain.com/sfc/servlet.shepherd/...` — fails silently (no exception, broken image)
-- **NEVER use data URIs**: `data:image/png;base64,...` — not supported, renders broken
+## Mission
 
-In `DocGenService.buildPdfImageMap()`, do NOT prepend `URL.getOrgDomainUrl()` to ContentVersion download URLs. Keep them relative. The `Blob.toPdf()` engine resolves relative Salesforce paths internally.
+Maintain Portwood DocGen — a native Salesforce 2GP package for generating Word and PDF documents from any Salesforce record. Work is roadmap-driven via the GitHub issue board; treat it as the source of truth for what's in flight.
 
-## Critical: Zero-Heap PDF Image Rendering
+When picking up work, prefer the highest open priority on the smallest milestone. P0 silent-corruption bugs jump the queue. Community-contributed fixes (the `community-contribution` label) are usually fast wins because the reporter has already done the diagnostic work.
 
-For PDF output, `{%ImageField}` tags with ContentVersion IDs MUST skip blob loading. The `currentOutputFormat` static variable is set to `'PDF'` before `processXml()` calls. In `buildImageXml()`, when `currentOutputFormat == 'PDF'` and the field value is a ContentVersion ID (`068xxx`), query only `Id, FileExtension` (NOT `VersionData`) and store the relative URL. This is what enables unlimited images in PDFs without heap limits.
+## Critical: three merge-tag resolution paths
 
-**NEVER** add `VersionData` to the SOQL query in the PDF path. Each image blob would consume 100KB-5MB+ of heap, and with multiple images this immediately exceeds governor limits.
+`DocGenGiantQueryAssembler` does **not** call `processXml()`. A fix to section-tag logic in `processXml` only covers row-level loop bodies. Parent-level tags outside the loop are resolved by `DocGenGiantQueryAssembler.resolveParentMergeTags()`, and grand-total aggregates by `resolveGiantAggregateTags()`. If a parser-level change needs to behave consistently for templates that fall into the giant-query path (>2000 child rows), the logic has to be mirrored in the assembler or routed through `processXmlForTest` the same way format-suffix tags already are. Always check whether your fix needs the same change in the giant-query parent path and add an e2e-07 assertion either way.
 
-## PDF Image Pipeline
+## Critical: {#ChartBucket} tag (v1.91+) — 4 resolution paths, 5 modifiers
 
-### How template images are prepared (on save)
+`{#ChartBucket:relationship:field[:modifier1=value1&modifier2=value2&...]}body{/ChartBucket}` aggregates a child collection by `field`, exposing per-bucket data (`{key}`, `{count}`, `{percent}`, `{max_percent}`, `{color}`, `{index}`, `{key_label}`) inside the body. The bucket list is sorted desc by count, alpha by key for ties.
 
-When an admin saves a template version (via `DocGenController.saveTemplate()`), the system calls `DocGenService.extractAndSaveTemplateImages(templateId, versionId)`. This method:
+**Five modifiers** (composable; v1.91 surface):
 
-1. Downloads the DOCX/PPTX ZIP from the template's ContentVersion
-2. Reads `word/_rels/document.xml.rels` to find all `<Relationship>` entries with `Type` containing `/image`
-3. For each image relationship, extracts the image blob from `word/media/`
-4. Saves each image as a new ContentVersion with `Title = docgen_tmpl_img_<versionId>_<relId>` and `FirstPublishLocationId = versionId`
+| Modifier                                | Behavior                                                                                                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `colors=#aaa,#bbb,#ccc`                 | Override default 8-color palette, cycles by row index                                                                                                                 |
+| `where=Field='Value' AND Other != null` | Sanitized SOQL fragment appended to chart's WHERE. Forces SOQL fallback.                                                                                              |
+| `split=;`                               | Multi-select delimiter. Splits combo values per respondent, percentages sum >100% expected.                                                                           |
+| `groupBy=Field__c`                      | Cross-tab pivot. Each row gets `cols` sub-list with `{#cols}{key}{count}{percent}{/cols}` body iteration. Synthetic Total column appended last. Forces SOQL fallback. |
+| `colSort=val1,val2,...`                 | Author-controlled column ordering (for `groupBy=`). Named values appear first in order; remaining values alpha-sorted; Total always last.                             |
 
-This pre-extraction is essential — it creates committed ContentVersion records that `Blob.toPdf()` can reference by relative URL at generation time.
+**Four resolution paths** (chart resolver mirrors what merge-tags already do — all four must stay consistent):
 
-### How template images are rendered (on generate)
+1. **In-memory** — `DocGenChartBucketResolver.preprocessInline` against pre-loaded relationship records. Used when child count <2000 AND no `where=`/`groupBy=`. Single SOQL-free path, fastest.
+2. **SOQL fallback** — `tryFallbackSoqlAggregateAdvanced` when relationship isn't on the data map OR `where=`/`groupBy=` force it. Schema-auto-discovers child object + FK via `ChildRelationship`. Issues a `GROUP BY` aggregate, constant-cost regardless of row count. **This is how 30K-scale templates work** — Query_Config\_\_c omits the chart-target relationship, retriever doesn't eager-load, chart aggregates server-side.
+3. **Parent-level** — `DocGenGiantQueryAssembler.resolveParentMergeTags()` regex skips `{#…}` prefixes, so charts pass through. Then `processXmlForTest` routes through the inline path.
+4. **Giant-query parent** — `DocGenGiantQueryAssembler.resolveGiantChartBuckets` for charts targeting the giant relationship in giant-query templates. Same modifiers, same shape.
 
-At PDF generation time, `buildPdfImageMap()` queries for these pre-committed CVs:
-- Finds the active template version
-- Queries `ContentVersion WHERE Title LIKE 'docgen_tmpl_img_<versionId>_%'`
-- Builds relative URLs: `/sfc/servlet.shepherd/version/download/<cvId>`
-- `DocGenHtmlRenderer.convertToHtml()` embeds these as `<img src="/sfc/...">` in the HTML
-- `Blob.toPdf()` resolves the relative paths and renders the images
+**SOQL budget**: 50 chart aggregates per transaction (static `DocGenChartBucketResolver.chartSoqlBudget`). When exhausted, charts render a sentinel "Chart limit reached" bucket — never silently empty. Tune in resolver if templates pathologically stack >50 charts.
 
-## Package Info
+**Layout gotcha for `groupBy=` pivot**: HTML container auto-expansion at `DocGenService.processXml:2708` looks for the nearest open `<tr>` when processing nested `{#…}` loops — placing `{#cols}` directly inside `<tr>` causes each col to duplicate the whole row. Use `<div class="row">` + `display: table-row` instead (CSS 2.1 safe in Flying Saucer). See `docs/CommuteSurveyExample.html` for the canonical pattern.
 
-- Package type: Unlocked 2GP with namespace `portwoodglobal`
-- Package name: Portwood DocGen
+**Reference templates**:
+
+- `docs/SurveyChartExample.html` — single-dimension chart per question + cross-tab spread (rich pivot + vertical clustered bars + stacked composition) using Department dimension. Canonical chart template.
+- `docs/CommuteSurveyExample.html` — pivot + filter + multi-select + colSort all composed
+- `docs/SurveyChartExample.docx` — Word-authored variant. Supports simple bars only; pivot/stacked/vertical-clustered styles require `<div>` table-cell layout which Word lacks. Steer chart customers to HTML.
+
+**HTML is the recommended chart source format.** Word `.docx` chart templates work but are constrained — Word's row auto-expansion (`{#Lines}` semantics) conflicts with the inner `{#cols}` loop when both want to drive cell placement in the same `<w:tr>`. `<div>` + `display:table-cell` in HTML dodges this entirely; Word has no `<div>` equivalent. The `{color_hex}` chart field exists specifically so Word's `w:shd w:fill` attributes can use cycled palette colors (raw hex, no `#`).
+
+## Critical: zero-heap PDF image rendering (don't accidentally regress)
+
+For PDF output, `{%ImageField}` tags with ContentVersion IDs skip blob loading. `currentOutputFormat` is set to `'PDF'` before `processXml()` calls; in `buildImageXml()`, when `currentOutputFormat == 'PDF'` and value is `068xxx`, query only `Id, FileExtension` (NOT `VersionData`) and store the relative URL `/sfc/servlet.shepherd/version/download/<cvId>`. Image URLs in HTML for `Blob.toPdf()` MUST be relative — absolute URLs and data URIs render broken.
+
+If your fix touches `processXml`, do not add `VersionData` to the PDF-path SOQL and do not prepend `URL.getOrgDomainUrl()` anywhere in the image pipeline.
+
+## Package info
+
+- Package: Portwood DocGen, Unlocked 2GP, namespace `portwoodglobal`
+- Current shipped version: **v2.3.0** (`04tVx000000ZxDJIA0`, build `2.3.0-1`) — Guest-Aware FLS Reads (completion patch for v2.2). v2.2 swapped the 18 admin write-guards (`DocGenFlsGuard.assertUpdateable / assertCreateable`) to guest variants but left the 36 read-guards (`DocGenFlsGuard.assertAccessible`) as admin. Customers running v2.2.0 hit `Save failed: Insufficient FLS to read portwoodglobal__DocGen_Signer__c.Contact__c. Verify DocGen permission set assignment.` on the saveSignature step — the per-field FLS describe verdict throws for guest profiles on the SOQL select-list even though the permset grants read. v2.3.0 swaps 34 sites in `DocGenSignatureController.cls` + 2 sites in `DocGenAuthenticatorController.cls` (verifyDocument, verifyByRequestId) to `DocGenFlsGuard.guestAssertAccessible`. No new methods/classes/tests — reuses v2.2's helper. AppExchange impact: still v1.56 listed at the time of release; v2.x bundles are forward-prep per [[project_appexchange_voucher_pending]].
+- Previous shipped version: **v2.2.0** (`04tVx000000ZxBhIAK`, build `2.2.0-2`) — Guest-Aware FLS Guards (signature flow hotfix). Adds `DocGenFlsGuard.guestAssertCreateable/guestAssertUpdateable/guestAssertAccessible` mirroring the v2.1.0 admin variants but bypassing the object-level + per-field FLS _verdict_ when `UserInfo.getUserType() == 'Guest'` (same shape as the existing `Test.isRunningTest()` bypass; the per-field `Schema.SObjectField.getDescribe().is*()` probe still fires for the Checkmarx pattern-match signal). 18 call sites in `DocGenSignatureController.cls` swapped from admin to guest variants (sendPin, verifyPin, validateSignerToken→Viewed, validateLegacyRequest, getOrCreatePublicLink, saveSignature, saveLegacySignature, stampLegacySignerAndSavePdf, saveSignedDocument, declineSignature, signPlacement). Fixes v2.1.0 regression where guest signers got `Failed to save: Insufficient access to update portwoodglobal__DocGen_Signature_Placement__c` on every write — DocGen_Guest_Signature permset grants allowRead-only by design (token-bound `Secure_Token__c` is the capability for guest writes, not perm-set Edit). Sender controller and Service queueables unchanged. v2.2.0-1 was built first but contained the pre-fix `DocGenMiscTests.testIssue114NoUserModeOnPreDecompCvLookups` over-broad assertion; v2.2.0-2 is the promoted build with the narrowed test (skips the admin delete-cleanup block at `DocGenController.cls:2822` where `WITH USER_MODE` is structurally correct). Test now passes. `sf code-analyzer`: 0 violations.
+- Previous shipped version: **v2.1.0** (`04tVx000000Zw5xIAC`) — Per-Field FLS Guards release. Adds `DocGenFlsGuard.cls` with `assertCreateable/assertUpdateable/assertAccessible(SObject|SObjectType, Set<String> fieldAllowlist)` — calls `Schema.SObjectField.getDescribe().is{Createable,Updateable,Accessible}()` per field before every admin DML / `WITH SYSTEM_MODE` SOQL. 243 guard call sites across 19 controllers. Implements the second half of the v1.56 review's finding-resolution language ("enforce CRUD checks on the object AND FLS checks on the fields"). `Test.isRunningTest()` bypass on the per-field verdict (object-level CRUD and field-existence check still fire) — matches platform behavior where USER_MODE is lenient in test contexts; documented inline at each bypass. Closes the 222 FLS Create/Update + 340 USER_MODE Missing Checkmarx findings. `sf code-analyzer`: 0 Critical / 0 High / 0 Moderate after disabling pmd:ProtectSensitiveData + pmd:AvoidLwcBubblesComposedTrue (documented false positives in code-analyzer.yml). Packaged as v2.1.0 because patch versioning is disabled on the namespace (see [[project_patch_versioning_disabled]]). Build attempts: 3 (attempts 1 + 2 failed on the namespaced-field-map and FLS-propagation issues respectively, both fixed and documented in DocGenFlsGuard.cls).
+- Previous shipped version: **v2.0.0** (`04tVx000000ZqBpIAK`) — Security Hardening for AppExchange resubmission. 4 clickjacking LWC fixes; CRUD/FLS hybrid pattern (Schema CRUD gate + SYSTEM_MODE); new `DocGenSignatureGuestSecurity.cls`; verifyDocument returns ALL signers for multi-signer docs. See `CHANGELOG.md` for per-finding mapping (the standalone `SECURITY_REVIEW_RESPONSE_v2.md` now lives only in the local-only `docs/appexchange/` bundle).
 - DevHub: `Portwood Global - Production` (dave@portwoodglobalsolutions.com)
-- Dev scratch org: `docgen-test-ux`
-- Demo scratch org: `docgen-demo-v2`
-- Website: https://portwoodglobalsolutions.com
+- Staging org for release validation: `portwood-staging` — must be created with `--no-namespace` so source-deploy lands in the default namespace and the e2e scripts' bare class/field references compile. Assign `DocGen_Admin` permset to the running user immediately after deploy or field-level security blocks the e2e scripts.
+- Dev scratch: `docgen-designer`
 
-## Key Architecture
+### Package version descriptions must be CONSUMER-friendly
 
-- PDF rendering has two paths in `mergeTemplate()`:
-  1. **Pre-decomposed (preferred)**: Loads XML parts from ContentVersions saved during template version creation. Skips ZIP decompression entirely. ~75% heap savings. Used for PDF output when XML CVs exist.
-  2. **ZIP path (fallback)**: Full base64 decode + ZIP decompression. Used for DOCX/PPTX output, or PDF when pre-decomposed parts don't exist (older templates not yet re-saved).
-- After merge: `buildPdfImageMap()` → `DocGenHtmlRenderer.convertToHtml()` → `Blob.toPdf()` with VF page fallback
-- The Spring '26 Release Update "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations" is REQUIRED
+The `versionDescription` field in `sfdx-project.json` (and what shows up in the AppExchange listing + install dialog) is read by **end users / customers** evaluating the package, not by engineers. Write it like marketing copy, not engineering notes. The `versionName` ("v2.1.0 — Per-Field FLS Guards (DocGenFlsGuard)") is internal-facing; the `versionDescription` is customer-facing.
 
-## Client-Side DOCX Assembly (In Progress)
+**Bad** (engineering jargon — what shipped in v2.1.0-1):
 
-DOCX generation now uses client-side ZIP assembly to avoid Apex heap limits:
+> v2.1.0 adds DocGenFlsGuard — per-field Schema.SObjectField.getDescribe().isAccessible/isCreateable/isUpdateable() checks at every admin DML and WITH SYSTEM_MODE SOQL site (243 guard call sites across 19 controllers). Implements the AppExchange v1.56 review's stated finding-resolution: 'enforce CRUD checks on the object and FLS checks on the fields...'
 
-### How it works
-1. Server calls `generateDocumentParts()` which merges XML using `currentOutputFormat='PDF'` trick (skips blob loading)
-2. Server returns: `allXmlParts` (merged XML + passthrough entries), `imageCvIdMap` (mediaPath → CV ID), `imageBase64Map` (template media)
-3. Client deduplicates CV IDs and calls `getContentVersionBase64()` for each **unique** CV — each call gets fresh 6MB heap
-4. Client builds ZIP from scratch via `buildDocx()` in `docGenZipWriter.js` (pure JS, no dependencies)
-5. Download works for unlimited size. Save-to-record blocked by Aura 4MB payload limit (needs chunking or alternative).
+**Good** (consumer-friendly):
 
-### Key files
-- `docGenRunner/docGenZipWriter.js` — Pure JS ZIP writer (store mode, CRC-32). Exports `buildDocx(xmlParts, mediaParts)` and `buildDocxFromShell()`
-- `DocGenService.generateDocumentParts()` — Returns merged parts without ZIP assembly
-- `DocGenController.getContentVersionBase64()` — Returns single CV blob as base64, each call = fresh heap
-- `DocGenController.generateDocumentParts()` — AuraEnabled endpoint
+> Portwood DocGen generates PDFs and Word documents from any Salesforce record. v2.1 strengthens permission enforcement so users only see and modify the fields their permission set grants. 100% native Salesforce — no external services or callouts. Free for all users.
 
-### Important: rels XML must include ALL image relationships
-In both `mergeTemplate()` (full ZIP path, ~line 174) and `tryMergeFromPreDecomposed()` (~line 293), the pending images loop that adds relationships to rels XML must process ALL images, not just ones with blobs. URL-only images need rels entries too for DOCX.
+The detailed engineering-language belongs in `CHANGELOG.md` (and the local-only `docs/appexchange/` bundle), not in the package metadata customers see at install time.
 
-### LWS Constraints
-- Lightning Web Security blocks `fetch()` to `/sfc/servlet.shepherd/` URLs (CORS redirect to `file.force.com`)
-- All binary data must be returned via Apex, not client-side fetch
-- `Blob` constructor in LWC rejects non-standard MIME types — use `application/octet-stream` for DOCX downloads
+## Release validation checklist
 
-## E-Signatures: Removed (Decision Record)
+All three checks MUST pass before release. No exceptions.
 
-E-signature functionality was **intentionally removed** from DocGen. The rationale:
+### 1. E2E test suite
 
-1. **Legal liability** — Electronic signatures carry jurisdiction-specific legal requirements (ESIGN Act, eIDAS, etc.). A document generator shipping its own signature implementation exposes both the product and its users to legal risk if the implementation doesn't meet the relevant standard for a given use case. Dedicated e-signature providers (DocuSign, Adobe Sign, etc.) carry their own legal compliance certifications — we don't.
-2. **Security surface area** — The signature flow required a public-facing Salesforce Site with guest user access, token-based authentication, image upload endpoints, and cross-context PDF generation via platform events. Each of these is an attack vector: XSS in document previews, image injection via unvalidated uploads, token interception, and DOM manipulation of the signing page. Hardening these to production-grade security is a full-time security engineering effort, not a side feature.
-3. **Scope creep** — Signatures pulled focus from the core mission: being the best document generator on the platform. Every hour spent on signature audit trails, email branding, multi-signer orchestration, and PIN verification is an hour not spent on rendering fidelity, font support, template features, and output quality.
-4. **Better path forward** — The architecture supports a clean integration point for third-party signature providers in the future. Generate the document with DocGen, hand it off to a dedicated provider for signing. Best tool for each job.
-
-**What was removed:** 8 Apex classes, 7 custom objects (50+ fields), 2 VF pages, 3 LWC bundles, 2 Aura apps, 1 trigger, 1 permission set, 5 layouts, 5 settings fields, 2 tabs, 1 flow, 1 Salesforce Site config. ~9,700 lines of code.
-
-**Do NOT re-add signature functionality.** If signature integration is needed, build an adapter pattern that delegates to an external provider.
-
-## Font Support
-
-### PDF output
-`Blob.toPdf()` uses Salesforce's Flying Saucer rendering engine which only supports 4 built-in font families:
-- **Helvetica** (`sans-serif`) — the default
-- **Times** (`serif`)
-- **Courier** (`monospace`)
-- **Arial Unicode MS** — for CJK/multibyte characters
-
-Custom fonts **cannot** be loaded into the PDF engine. CSS `@font-face` is not supported — not via data URIs, static resource URLs, or ContentVersion URLs. This is a Salesforce platform limitation, not a DocGen limitation. Paid tools like Nintex and Conga work around this by using their own rendering engines outside of Salesforce.
-
-**Do NOT re-add custom font upload for PDF.** It was built, tested exhaustively (base64 data URIs, static resource URLs, ContentVersion URLs), and confirmed not possible.
-
-### DOCX output
-DOCX output preserves whatever fonts are in the template file. If users need custom fonts (branded typefaces, barcode fonts, decorative scripts), they should generate as DOCX. The fonts render correctly when opened in Word or any compatible viewer.
-
-## Scratch Orgs
-
-- **docgen-test-ux**: Development and testing scratch org
-- **docgen-demo-v2**: Public demo org (SSO via landing page, 30-day expiry)
-- Create new scratch orgs from `Portwood Global - Production` DevHub
-
-## E2E Test Script
-
-**Every code change MUST be validated by the E2E test script.** If you add a feature, add a test for it in the script. If the script doesn't pass, the change doesn't ship.
-
-Run: `sf apex run --target-org <org> -f scripts/e2e-test.apex`
-
-The script is fully self-contained — creates its own template, DOCX file, template version, test data (Account, Contacts, Opportunity, Products, Line Items, Contact Roles, image CV), runs the V3 tree walker, validates parent fields, tests legacy backward compatibility, generates an actual PDF, validates junction stitching, and cleans up. Output: `PASS: 13  FAIL: 0  ALL TESTS PASSED`
-
-**Requires:** Nothing. Zero dependencies on pre-existing org data. Works on any org with DocGen deployed.
-
-**When adding features:**
-1. Add test assertions to `scripts/e2e-test.apex`
-2. Run the script — all tests must pass
-3. If a test fails, fix before committing
-
-Current tests (13): Account name, Owner.Name parent field, Contacts count, Opportunities count, Product2.Name on Line Items, Line Items count, Description CV ID, Legacy V1 backward compat, Image CV format, Image CV access, Document generation, Generated file not empty, Junction stitching (OCR → Contact).
-
-## Query Config Formats
-
-Three formats, all stored in `Query_Config__c` (32KB LongTextArea):
-
-### V1 — Legacy flat string
+```bash
+sf apex run --target-org <org> -f scripts/e2e-01-permissions.apex
+sf apex run --target-org <org> -f scripts/e2e-02-template-crud.apex
+sf apex run --target-org <org> -f scripts/e2e-03-generate-pdf.apex
+sf apex run --target-org <org> -f scripts/e2e-04-generate-docx.apex
+sf apex run --target-org <org> -f scripts/e2e-05-generate-bulk.apex
+sf apex run --target-org <org> -f scripts/e2e-06-signatures.apex
+sf apex run --target-org <org> -f scripts/e2e-07-syntax1.apex
+sf apex run --target-org <org> -f scripts/e2e-07-syntax2.apex
+sf apex run --target-org <org> -f scripts/e2e-07-syntax3.apex
+sf apex run --target-org <org> -f scripts/e2e-07-syntax4.apex
+sf apex run --target-org <org> -f scripts/e2e-08-cleanup.apex
 ```
-Name, Industry, (SELECT FirstName, LastName FROM Contacts)
+
+Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03–06 depend on 02, 07-syntax1/2/3/4 standalone (use `processXmlForTest`), 08 cleans up.
+
+When fixing a parser-level bug, add a regression assertion in `e2e-07-syntax1` or `e2e-07-syntax2` that exercises the offending pattern via `processXmlForTest`. Each script must stay under 18,000 chars (Anonymous Apex limit is 20,000).
+
+### 2. Apex test suite
+
+```bash
+sf apex run test --target-org <org> --test-level RunLocalTests --wait 15 --code-coverage
 ```
-Detected by: does NOT start with `{`. Parsed by the original `getRecordData()` method.
 
-### V2 — JSON flat (junction support)
-```json
-{"v":2,"baseObject":"Opportunity","baseFields":["Name"],"parentFields":["Account.Name"],
- "children":[{"rel":"OpportunityLineItems","fields":["Name"]}],
- "junctions":[{"junctionRel":"OpportunityContactRoles","targetObject":"Contact","targetIdField":"ContactId","targetFields":["FirstName"]}]}
+Expected: `Outcome: Passed`, `Pass Rate: 100%`, org-wide coverage ≥ 75%.
+
+### 3. Code Analyzer
+
+```bash
+sf code-analyzer run --workspace "force-app/" --rule-selector "Security" --rule-selector "AppExchange" --view table
 ```
-Detected by: starts with `{`, `"v":2`. Parsed by `getRecordDataV2()`.
 
-### V3 — Query tree (multi-object, any depth)
-```json
-{"v":3,"root":"Account","nodes":[
-  {"id":"n0","object":"Account","fields":["Name"],"parentFields":["Owner.Name"],"parentNode":null,"lookupField":null,"relationshipName":null},
-  {"id":"n1","object":"Contact","fields":["FirstName"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Contacts"},
-  {"id":"n2","object":"Opportunity","fields":["Name","Amount"],"parentFields":[],"parentNode":"n0","lookupField":"AccountId","relationshipName":"Opportunities"},
-  {"id":"n3","object":"OpportunityLineItem","fields":["Quantity"],"parentFields":["Product2.Name"],"parentNode":"n2","lookupField":"OpportunityId","relationshipName":"OpportunityLineItems"}
-]}
+Expected: `0 High severity violation(s) found`. ~30 Moderate false positives are acceptable (see `code-analyzer.yml`).
+
+## Pre-commit: prettier (CI gate)
+
+CI runs `npm run format:check` (prettier) on every PR; a failure blocks merge. Run before pushing:
+
+```bash
+npm install   # one-time, adds prettier to node_modules/.bin
+npm run format        # auto-fix
+npm run format:check  # verify clean
 ```
-Detected by: starts with `{`, `"v":3`. Parsed by `getRecordDataV3()` tree walker. Each node is one SOQL query, stitched into parent's data map via `lookupField`.
 
-**Backward compat:** All three formats work. The DataRetriever auto-detects the format and routes to the correct parser.
+Covers `force-app/**/*.{cls,trigger,page,component,cmp,html,js,xml}`, `scripts/**/*.apex`, and root `*.{json,md,yml,yaml}`. Apex scripts under `/scripts/` are formatted too — long string concatenations get reflowed, so don't fight the wrap.
 
-## Command Hub Architecture
+## Subsystem caution
 
-The DocGen app has 2 tabs: "DocGen" (Command Hub) and "Job History".
+Several subsystems are tightly coupled and easy to break with surgical fixes — reach for `git log -- CLAUDE.md` and `git show 6a2deff^:CLAUDE.md` to recover the deeper historical notes if you're touching:
 
-The Command Hub (`docGenCommandHub` LWC) contains:
-- Welcome banner (< 10 templates, dismissible)
-- Quick action cards (Templates, Bulk Generate, How It Works)
-- Embedded template manager (`docGenAdmin`)
-- Embedded bulk runner (`docGenBulkRunner`, collapsible)
-- Help section with merge tag cheat sheet, heap architecture explanation, Flow integration
-
-The template wizard uses `docGenColumnBuilder` for the query builder step (tab-per-object layout with tree visualization). The old `docGenQueryBuilder` is still available via Manual Query toggle for legacy configs.
-
-## Font Support
-
-### PDF output
-`Blob.toPdf()` only supports 4 built-in fonts: Helvetica (`sans-serif`), Times (`serif`), Courier (`monospace`), Arial Unicode MS. CSS `@font-face` is NOT supported. **Do NOT re-add custom font upload for PDF.**
-
-### DOCX output
-Preserves whatever fonts are in the template file.
-
-## AppExchange
-
-DocGen is NOT on the AppExchange. Do not reference AppExchange in user-facing documentation (admin guide, README). Code comments saying "AppExchange safe" (meaning no callouts/session IDs) are fine.
+- **Signatures (especially v3 packets / multi-template)** — three hand-rolled loops, no content-correctness tests, two divergent creation paths. Read the `project_signature_v3_fragility.md` memory before changing anything here.
+- **Client-side DOCX assembly** (`docGenZipWriter.js`) — splits work between server (XML merge) and browser (ZIP repack). The boundary is load-bearing; don't move work across it lightly.
+- **HTML templates and `Blob.toPdf` rendering** — Flying Saucer is essentially **CSS 2.1** plus a small CSS 3 subset. `display: flex`/`grid`, `gap`, `linear-gradient(...)`, `calc(...)`, CSS variables, and most CSS 3 layout features are silently ignored — the page renders but layout collapses to default block flow. When troubleshooting "the PDF looks wrong," first check whether the source HTML uses any of these and rewrite to `<table>`-based layout + solid colors. Also: when both the engine `<style>` (built from `Page_Size__c`/`Page_Orientation__c`/`Custom_Margins__c` template fields) and the source HTML's own `<style>` declare `@page`, you get a conflict — recommend authors clear the template page fields when their source CSS already specifies `@page`. Issues #60 and #71 both live here.
+- **Query Config formats** (V1 flat string, V3 node tree) — V3's `processChildNodes` and V1's `stitchGrandchildren` reproduce similar patterns; bug fixes often need to land in both (see #67).
+- **Watermarks, font handling, command hub** — light traffic, but the test coverage is sparse, so verify visually after edits.

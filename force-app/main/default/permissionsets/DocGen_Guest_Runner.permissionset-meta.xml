@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description
+    >Deprecated. The Experience Cloud guest render path has been removed from DocGen; this permission set is retained only for upgrade compatibility and grants no access. Safe to unassign from site guest users.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>DocGen Guest Runner (deprecated)</label>
+</PermissionSet>
