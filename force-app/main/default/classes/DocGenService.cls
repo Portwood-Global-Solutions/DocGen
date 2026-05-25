@@ -1200,28 +1200,41 @@ public with sharing class DocGenService {
             
             Integer tagClose = xml.indexOf('}', cursor);
             if (tagClose == -1) {
+                String snippet = xml.substring(cursor, Math.min(cursor + 80, len));
+                String lineInfo = '';
+                if (currentTemplateType == 'HTML') {
+                    lineInfo = ' (Line ' + (xml.substring(0, cursor).countMatches('\n') + 1) + ')';
+                }
                 throw new DocGenException(
-                    'Malformed merge tag: missing closing "}" near position ' + cursor +
-                    '. Check for an unclosed tag in the template.'
+                    'Malformed merge tag: missing closing "}"' + lineInfo + ' near "' + snippet + '". Check for an unclosed tag in the template.'
                 );
             }
             
             String rawTag = xml.substring(cursor + 1, tagClose);
             String tagContent = rawTag.trim();
+            Integer originalCursor = cursor;
 
-            // Strip Salesforce-style {!Field} prefix — treat {!X} the same as {X}
-            if (tagContent.startsWith('!')) {
-                tagContent = tagContent.substring(1).trim();
-            }
+            try {
+                // Strip Salesforce-style {!Field} prefix — treat {!X} the same as {X}
+                if (tagContent.startsWith('!')) {
+                    tagContent = tagContent.substring(1).trim();
+                }
             
-            if (tagContent.startsWith('#')) {
-                String key = tagContent.substring(1).trim();
-                Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
-                if (sectionEnd == -1) {
-                    throw new DocGenException(
-                        'Malformed loop tag: missing closing "{/' + key + '}" for "{#' + key + '}".'
-                    );
-                } else {
+                if (tagContent.startsWith('#')) {
+                    String key = tagContent.substring(1).trim();
+                    Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, key);
+                    if (sectionEnd == -1) {
+                        Integer snippetStart = Math.max(0, originalCursor - 40);
+                        Integer snippetEnd = Math.min(len, originalCursor + 40);
+                        String snippet = xml.substring(snippetStart, snippetEnd);
+                        String lineInfo = '';
+                        if (currentTemplateType == 'HTML') {
+                            lineInfo = ' (Line ' + (xml.substring(0, originalCursor).countMatches('\n') + 1) + ')';
+                        }
+                        throw new DocGenException(
+                            'Malformed loop tag: missing closing "{/' + key + '}" for "{#' + key + '}"' + lineInfo + ' opened near "' + snippet + '".'
+                        );
+                    } else {
                     // Default: Content between tags
                     Integer contentStart = tagClose + 1;
                     Integer contentEnd = sectionEnd;
@@ -1414,6 +1427,20 @@ public with sharing class DocGenService {
                     }
                 }
                 cursor = tagClose + 1;
+            }
+            } catch (DocGenException dge) {
+                throw dge;
+            } catch (Exception e) {
+                Integer snippetStart = Math.max(0, originalCursor - 40);
+                Integer snippetEnd = Math.min(len, tagClose + 40);
+                String snippet = xml.substring(snippetStart, snippetEnd);
+                String lineInfo = '';
+                if (currentTemplateType == 'HTML') {
+                    lineInfo = ' (Line ' + (xml.substring(0, originalCursor).countMatches('\n') + 1) + ')';
+                }
+                throw new DocGenException(
+                    'Error processing tag {' + rawTag + '}' + lineInfo + ' near "' + snippet + '": ' + e.getMessage()
+                );
             }
         }
         return output;
