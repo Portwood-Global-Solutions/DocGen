@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Translations xmlns="http://soap.sforce.com/2006/04/metadata">
+    <customLabels>
+        <label>このレコードのドキュメントを作成または結合します。</label>
+        <name>DocGenRunner_Subtitle</name>
+    </customLabels>
+    <customLabels>
+        <label>カテゴリ</label>
+        <name>DocGenRunner_Category</name>
+    </customLabels>
+    <customLabels>
+        <label>テンプレートを選択</label>
+        <name>DocGenRunner_SelectTemplate</name>
+    </customLabels>
+    <customLabels>
+        <label>テンプレートを選択してください...</label>
+        <name>DocGenRunner_ChooseTemplate</name>
+    </customLabels>
+    <customLabels>
+        <label>出力先</label>
+        <name>DocGenRunner_OutputDestination</name>
+    </customLabels>
+    <customLabels>
+        <label>ドキュメントを作成</label>
+        <name>DocGenRunner_CreateDocument</name>
+    </customLabels>
+    <customLabels>
+        <label>ドキュメントパケット</label>
+        <name>DocGenRunner_DocumentPacket</name>
+    </customLabels>
+    <customLabels>
+        <label>PDF を結合</label>
+        <name>DocGenRunner_CombinePdfs</name>
+    </customLabels>
+    <customLabels>
+        <label>パケットを作成</label>
+        <name>DocGenRunner_CreatePacket</name>
+    </customLabels>
+    <customLabels>
+        <label>PDF を結合</label>
+        <name>DocGenRunner_CombinePdfsAction</name>
+    </customLabels>
+    <customLabels>
+        <label>ダウンロード</label>
+        <name>DocGenRunner_Download</name>
+    </customLabels>
+    <customLabels>
+        <label>レコードに保存</label>
+        <name>DocGenRunner_SaveToRecord</name>
+    </customLabels>
+</Translations>
