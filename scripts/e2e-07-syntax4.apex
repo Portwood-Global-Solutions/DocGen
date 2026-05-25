@@ -279,6 +279,28 @@ try {
     System.debug('CHART PIPELINE WORD SUBSTITUTION: FAIL — ' + e.getMessage());
 }
 
+// PowerPoint routes through the same PNG-via-CV branch as Word (PPTX charts).
+try {
+    Map<String, String> opts = new Map<String, String>();
+    String sig = DocGenChartImageController.tagSignature('R__r', 'F__c', 'bar', opts);
+    String fakeCvId = '0681x00000000000002';
+    Map<String, String> chartCvMap = new Map<String, String>{ sig => fakeCvId };
+    Map<String, Object> data = new Map<String, Object>();
+    String out = DocGenChartTagExpander.expand('{Chart:R__r:F__c:bar}', 'PowerPoint', data, chartCvMap);
+    Boolean tagOk = out.contains('{%__dgchart_' + fakeCvId + '}');
+    Boolean dataSeeded = data.get('__dgchart_' + fakeCvId) == fakeCvId;
+    if (tagOk && dataSeeded) {
+        pass++;
+        System.debug('CHART PIPELINE PPTX SUBSTITUTION: PASS');
+    } else {
+        fail++;
+        System.debug('CHART PIPELINE PPTX SUBSTITUTION: FAIL — tagOk=' + tagOk + ' dataSeeded=' + dataSeeded);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('CHART PIPELINE PPTX SUBSTITUTION: FAIL — ' + e.getMessage());
+}
+
 // ============================================================
 // #115 — merge errors name the tag + show a snippet
 // ============================================================

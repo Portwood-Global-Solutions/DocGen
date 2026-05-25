@@ -684,10 +684,10 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 this.showToast('Info', 'Generating document...', 'info');
                 await this._generateOfficeClientSide(saveToRecord, ext, 'application/octet-stream');
             } else {
-                // PowerPoint — server-side. Chart prep runs but PPTX chart
-                // embed is task #10 (deferred); the merge will text-fallback
-                // chart tags until that lands. Wiring it consistently now so
-                // the runner doesn't need re-plumbing later.
+                // PowerPoint — server-side merge. Chart prep rasterizes each
+                // {Chart:...} to a PNG CV (prepareChartImages now scans PPTX
+                // slide XML); the merge substitutes the marker and
+                // postProcessPowerPointSlides embeds it as a real <p:pic>.
                 const chartContext = await this._prepareCharts();
                 let result;
                 try {

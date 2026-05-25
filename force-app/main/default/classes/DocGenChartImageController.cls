@@ -88,11 +88,14 @@ public with sharing class DocGenChartImageController {
         }
         DocGen_Template__c template = templates[0];
 
-        if (template.Type__c != 'Word' && template.Type__c != 'HTML') {
+        // Word, HTML, and PowerPoint all flow through the PNG-via-CV pipeline.
+        // PowerPoint scans its slide XML for chart tags; the merge-time expander
+        // + postProcessPowerPointSlides embed the resulting PNG as a <p:pic>. (#116/PPTX)
+        if (template.Type__c != 'Word' && template.Type__c != 'HTML' && template.Type__c != 'PowerPoint') {
             return new List<ChartImageRequest>();
         }
 
-        String body = template.Type__c == 'HTML' ? loadActiveHtmlBody(templateId) : loadActiveWordBody(templateId);
+        String body = loadActiveBody(template.Type__c, templateId);
         if (String.isBlank(body) || !body.contains(CHART_OPEN_PREFIX)) {
             return new List<ChartImageRequest>();
         }
@@ -163,15 +166,13 @@ public with sharing class DocGenChartImageController {
         DocGen_Template__c template = templates[0];
 
         Map<String, String> chartCvMap = new Map<String, String>();
-        // Word AND HTML templates both flow through the PNG-via-CV pipeline.
-        // PowerPoint/Excel use their own embedding helpers in DocGenService;
-        // they're routed via Apex callers that pass templateType explicitly,
-        // not through this LWC entry point.
-        if (template.Type__c != 'Word' && template.Type__c != 'HTML') {
+        // Word, HTML, and PowerPoint flow through the PNG-via-CV pipeline.
+        // Excel embedding is not wired on this path yet.
+        if (template.Type__c != 'Word' && template.Type__c != 'HTML' && template.Type__c != 'PowerPoint') {
             return chartCvMap;
         }
 
-        String body = template.Type__c == 'HTML' ? loadActiveHtmlBody(templateId) : loadActiveWordBody(templateId);
+        String body = loadActiveBody(template.Type__c, templateId);
         if (String.isBlank(body) || !body.contains(CHART_OPEN_PREFIX)) {
             return chartCvMap;
         }
@@ -332,6 +333,67 @@ public with sharing class DocGenChartImageController {
     // =====================================================================
     // Internals
     // =====================================================================
+
+    /**
+     * Dispatches to the right active-version body loader for chart-tag scanning,
+     * so prepareChartImages / prepareChartImagesServerSide see the same body text
+     * the merge engine processes. HTML → raw template HTML; PowerPoint → all slide
+     * XML concatenated; everything else (Word) → word/document.xml.
+     */
+    private static String loadActiveBody(String templateType, Id templateId) {
+        if (templateType == 'HTML') {
+            return loadActiveHtmlBody(templateId);
+        }
+        if (templateType == 'PowerPoint') {
+            return loadActivePptxBody(templateId);
+        }
+        return loadActiveWordBody(templateId);
+    }
+
+    /**
+     * PowerPoint body loader — concatenates every pre-decomposed slide part
+     * (docgen_tmpl_xml_<versionId>_ppt__slides__slideN.xml) so findTopLevelChartTags
+     * can locate {Chart:...} tags across all slides. Mirrors loadActiveWordBody;
+     * the merge-time expander in processXml de-fragments <a:t> runs and recomputes
+     * the same signature, so contiguous tags match the CV uploaded here. (PPTX charts)
+     */
+    private static String loadActivePptxBody(Id templateId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> vs = [
+            SELECT Id
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (vs.isEmpty()) {
+            return null;
+        }
+        // ppt/slides/slide1.xml → docgen_tmpl_xml_<vid>_ppt__slides__slide1.xml
+        // (the '/' → '__' encoding from DocGenService pre-decomposition).
+        String slidePrefix = 'docgen_tmpl_xml_' + vs[0].Id + '_ppt__slides__slide';
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Title LIKE :(slidePrefix + '%') AND IsLatest = TRUE
+            WITH USER_MODE
+        ];
+        if (cvs.isEmpty()) {
+            return null;
+        }
+        String body = '';
+        for (ContentVersion cv : cvs) {
+            if (cv.VersionData != null) {
+                body += cv.VersionData.toString();
+            }
+        }
+        return body;
+    }
 
     private static String loadActiveWordBody(Id templateId) {
         DocGenFlsGuard.assertAccessible(

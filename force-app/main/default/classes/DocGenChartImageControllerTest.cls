@@ -217,6 +217,64 @@ private class DocGenChartImageControllerTest {
     }
 
     @IsTest
+    static void prepareChartImages_powerPointTemplateWithChartTag_emitsRequest() {
+        // PPTX charts (#116 follow-up): prepareChartImages must scan PowerPoint
+        // slide XML, not just word/document.xml. Two slides are pre-decomposed;
+        // the chart tag lives on slide 2, so this also proves loadActivePptxBody
+        // concatenates ALL slide parts (a single-slide test wouldn't).
+        Account acc = new Account(Name = 'Chart Pipeline PPTX Test');
+        insert acc;
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Chart Pipeline PPTX Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'PowerPoint',
+            Query_Config__c = 'Name'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        String slide1 =
+            '<?xml version="1.0" encoding="UTF-8"?>' +
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"' +
+            ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<p:cSld><p:spTree><a:p><a:r><a:t>Title slide, no chart</a:t></a:r></a:p></p:spTree></p:cSld></p:sld>';
+        String slide2 =
+            '<?xml version="1.0" encoding="UTF-8"?>' +
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"' +
+            ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<p:cSld><p:spTree><a:p><a:r>' +
+            '<a:t>{Chart:Survey_Responses__r:A__c:bar:title=Demo}</a:t>' +
+            '</a:r></a:p></p:spTree></p:cSld></p:sld>';
+        insert new List<ContentVersion>{
+            new ContentVersion(
+                Title = 'docgen_tmpl_xml_' + ver.Id + '_ppt__slides__slide1.xml',
+                PathOnClient = 'slide1.xml',
+                VersionData = Blob.valueOf(slide1)
+            ),
+            new ContentVersion(
+                Title = 'docgen_tmpl_xml_' + ver.Id + '_ppt__slides__slide2.xml',
+                PathOnClient = 'slide2.xml',
+                VersionData = Blob.valueOf(slide2)
+            )
+        };
+
+        Test.startTest();
+        List<DocGenChartImageController.ChartImageRequest> reqs = DocGenChartImageController.prepareChartImages(
+            tpl.Id,
+            acc.Id
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, reqs);
+        System.assertEquals(1, reqs.size(), 'Chart tag on slide 2 should produce one request.');
+        DocGenChartImageController.ChartImageRequest r = reqs[0];
+        System.assertEquals(16, r.signature.length(), 'Signature is 16 hex chars.');
+        System.assert(String.isNotBlank(r.svgString) && r.svgString.contains('<svg'), 'SVG should be well-formed.');
+        System.assert(r.width > 0 && r.height > 0, 'Dimensions should be positive.');
+    }
+
+    @IsTest
     static void prepareChartImages_wordTemplate_chartInLoopBodySkipped() {
         // Charts inside loop bodies are intentionally skipped — their bucket
         // data depends on the loop iteration item, which isn't in scope at
