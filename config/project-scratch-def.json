@@ -1,15 +1,20 @@
 {
-  "orgName": "DocGen Signatures Dev",
-  "edition": "developer",
-  "features": ["EnableSetPasswordInApi", "Sites"],
-  "settings": {
-    "lightningExperienceSettings": {
-      "enableS1DesktopEnabled": true
-    },
-    "securitySettings": {
-      "sessionSettings": {
-        "forceRelogin": false
-      }
+    "orgName": "DocGen Signatures Dev",
+    "edition": "developer",
+    "features": ["EnableSetPasswordInApi", "Sites"],
+    "settings": {
+        "languageSettings": {
+            "enableTranslationWorkbench": true,
+            "enableEndUserLanguages": true,
+            "enablePlatformLanguages": true
+        },
+        "lightningExperienceSettings": {
+            "enableS1DesktopEnabled": true
+        },
+        "securitySettings": {
+            "sessionSettings": {
+                "forceRelogin": false
+            }
+        }
     }
-  }
 }
