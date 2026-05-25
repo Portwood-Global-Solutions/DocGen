@@ -9,7 +9,7 @@
                 ></lightning-icon>
                 <h2>DocGen</h2>
             </div>
-            <p class="header-subtitle">Create or combine documents for this record.</p>
+            <p class="header-subtitle">{label.subtitle}</p>
         </div>
 
         <div class="widget-body">
@@ -59,7 +59,7 @@
                     <!-- 1.47 — Category filter (only shown when 2+ categories exist) -->
                     <template lwc:if={showCategoryFilter}>
                         <div class="slds-form-element slds-var-m-bottom_medium">
-                            <label class="slds-form-element__label">Category</label>
+                            <label class="slds-form-element__label">{label.category}</label>
                             <div class="slds-form-element__control">
                                 <select class="custom-select" onchange={handleCategoryChange}>
                                     <template for:each={categoryOptions} for:item="cat">
@@ -71,10 +71,10 @@
                     </template>
 
                     <div class="slds-form-element slds-var-m-bottom_medium">
-                        <label class="slds-form-element__label">Select Template</label>
+                        <label class="slds-form-element__label">{label.selectTemplate}</label>
                         <div class="slds-form-element__control">
                             <select class="custom-select" onchange={handleTemplateChangeInternal}>
-                                <option value="">Choose a template...</option>
+                                <option value="">{label.chooseTemplate}</option>
                                 <template for:each={templateOptions} for:item="tmpl">
                                     <option key={tmpl.value} value={tmpl.value} selected={tmpl.selected}>
                                         {tmpl.label}
@@ -86,7 +86,7 @@
 
                     <!-- Custom Output Selector -->
                     <div lwc:if={showOutputDestinationSelector} class="slds-form-element slds-var-m-bottom_medium">
-                        <label class="slds-form-element__label">Output Destination</label>
+                        <label class="slds-form-element__label">{label.outputDestination}</label>
                         <div class="custom-mini-pills">
                             <template for:each={modernOutputOptions} for:item="out">
                                 <button
@@ -226,7 +226,7 @@
                     </div>
 
                     <div lwc:if={showOutputDestinationSelector} class="slds-form-element slds-var-m-bottom_medium">
-                        <label class="slds-form-element__label">Output Destination</label>
+                        <label class="slds-form-element__label">{label.outputDestination}</label>
                         <div class="custom-mini-pills">
                             <template for:each={modernOutputOptions} for:item="out">
                                 <button
@@ -268,7 +268,7 @@
                     </div>
 
                     <div lwc:if={showOutputDestinationSelector} class="slds-form-element slds-var-m-bottom_medium">
-                        <label class="slds-form-element__label">Output Destination</label>
+                        <label class="slds-form-element__label">{label.outputDestination}</label>
                         <div class="custom-mini-pills">
                             <template for:each={modernOutputOptions} for:item="out">
                                 <button
@@ -348,7 +348,7 @@
                         </div>
 
                         <div lwc:if={showOutputDestinationSelector} class="slds-form-element slds-var-m-bottom_medium">
-                            <label class="slds-form-element__label">Output Destination</label>
+                            <label class="slds-form-element__label">{label.outputDestination}</label>
                             <div class="custom-mini-pills">
                                 <template for:each={modernOutputOptions} for:item="out">
                                     <button

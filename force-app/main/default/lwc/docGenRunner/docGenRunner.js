@@ -35,7 +35,34 @@ import TYPE_FIELD from '@salesforce/schema/DocGen_Template__c.Type__c';
 import IS_DEFAULT_FIELD from '@salesforce/schema/DocGen_Template__c.Is_Default__c';
 import CATEGORY_FIELD from '@salesforce/schema/DocGen_Template__c.Category__c';
 
+// #95 — Custom Labels so the runner UI follows the user's Salesforce language
+// (Spanish translations shipped in translations/es.translation-meta.xml).
+import LBL_SUBTITLE from '@salesforce/label/c.DocGenRunner_Subtitle';
+import LBL_CATEGORY from '@salesforce/label/c.DocGenRunner_Category';
+import LBL_SELECT_TEMPLATE from '@salesforce/label/c.DocGenRunner_SelectTemplate';
+import LBL_CHOOSE_TEMPLATE from '@salesforce/label/c.DocGenRunner_ChooseTemplate';
+import LBL_OUTPUT_DESTINATION from '@salesforce/label/c.DocGenRunner_OutputDestination';
+import LBL_CREATE_DOCUMENT from '@salesforce/label/c.DocGenRunner_CreateDocument';
+import LBL_DOCUMENT_PACKET from '@salesforce/label/c.DocGenRunner_DocumentPacket';
+import LBL_COMBINE_PDFS from '@salesforce/label/c.DocGenRunner_CombinePdfs';
+import LBL_CREATE_PACKET from '@salesforce/label/c.DocGenRunner_CreatePacket';
+import LBL_COMBINE_PDFS_ACTION from '@salesforce/label/c.DocGenRunner_CombinePdfsAction';
+import LBL_DOWNLOAD from '@salesforce/label/c.DocGenRunner_Download';
+import LBL_SAVE_TO_RECORD from '@salesforce/label/c.DocGenRunner_SaveToRecord';
+
 export default class DocGenRunner extends NavigationMixin(LightningElement) {
+    // Exposed to the template as {label.X}. Custom Labels resolve to the
+    // running user's language at runtime (#95).
+    label = {
+        subtitle: LBL_SUBTITLE,
+        category: LBL_CATEGORY,
+        selectTemplate: LBL_SELECT_TEMPLATE,
+        chooseTemplate: LBL_CHOOSE_TEMPLATE,
+        outputDestination: LBL_OUTPUT_DESTINATION,
+        download: LBL_DOWNLOAD,
+        saveToRecord: LBL_SAVE_TO_RECORD
+    };
+
     @api recordId;
     @api objectApiName;
     @api showDownloadOption;
@@ -112,7 +139,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     get modernModeOptions() {
         const options = [
             {
-                label: 'Create Document',
+                label: LBL_CREATE_DOCUMENT,
                 value: 'generate',
                 icon: '📄',
                 class: this.appMode === 'generate' ? 'seg-btn active' : 'seg-btn'
@@ -120,7 +147,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         ];
         if (this.canUseDocumentPacket) {
             options.push({
-                label: 'Document Packet',
+                label: LBL_DOCUMENT_PACKET,
                 value: 'packet',
                 icon: '📚',
                 class: this.appMode === 'packet' ? 'seg-btn active' : 'seg-btn'
@@ -128,7 +155,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         }
         if (this.canUseCombinePdfs) {
             options.push({
-                label: 'Combine PDFs',
+                label: LBL_COMBINE_PDFS,
                 value: 'mergeOnly',
                 icon: '🔗',
                 class: this.appMode === 'mergeOnly' ? 'seg-btn active' : 'seg-btn'
@@ -185,7 +212,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         const options = [];
         if (allowedModes.includes('download')) {
             options.push({
-                label: 'Download',
+                label: LBL_DOWNLOAD,
                 value: 'download',
                 icon: '⬇️',
                 class: resolvedMode === 'download' ? 'pill-btn active' : 'pill-btn'
@@ -193,7 +220,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         }
         if (allowedModes.includes('save')) {
             options.push({
-                label: 'Save to Record',
+                label: LBL_SAVE_TO_RECORD,
                 value: 'save',
                 icon: '☁️',
                 class: resolvedMode === 'save' ? 'pill-btn active' : 'pill-btn'
@@ -265,17 +292,17 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         if (this.mergeEnabled && this.selectedPdfCvIds.length > 0) {
             return `Create & Combine (${this.selectedPdfCvIds.length + 1} Files) ✨`;
         }
-        return 'Create Document ✨';
+        return `${LBL_CREATE_DOCUMENT} ✨`;
     }
 
     get packetButtonLabel() {
         const count = this.packetTemplateIds.length;
-        return count > 0 ? `Create Packet (${count} Designs) 📚✨` : 'Create Packet ✨';
+        return count > 0 ? `Create Packet (${count} Designs) 📚✨` : `${LBL_CREATE_PACKET} ✨`;
     }
 
     get mergeOnlyButtonLabel() {
         const count = this.mergeOnlyCvIds.length;
-        return count > 0 ? `Combine ${count} PDFs 🔗✨` : 'Combine PDFs ✨';
+        return count > 0 ? `Combine ${count} PDFs 🔗✨` : `${LBL_COMBINE_PDFS_ACTION} ✨`;
     }
 
     get mergeChildrenButtonLabel() {
