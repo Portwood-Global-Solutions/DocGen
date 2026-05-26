@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.7.0 — Flow Signer variable now appears (managed-package constructor fix) (`<version id pending build>`, build `2.7.0-1`)
+
+Completes the v2.6.0 Flow signature work. v2.6.0 added `@AuraEnabled` to `DocGenSignatureFlowAction.Signer`, but in the demobox (a real managed-package install) the `Signer` type **still** didn't appear in Flow's Apex-Defined variable picker.
+
+### Root cause
+
+A managed-package Apex class is only usable as a Flow **Apex-Defined variable** in a subscriber org if Flow can instantiate it — which requires an explicit **`global` no-arg constructor**. `Signer` had only the implicit constructor, which is `public` (invisible to subscribers), so Flow could not construct the type and omitted it from the picker — even though the class is `global` with `@AuraEnabled` fields. Added `global Signer() {}`.
+
+This could not be caught in staging: staging is a no-namespace org where `public`/`global` behave identically, so the constructor-visibility boundary only exists in a real managed-package install. Verified by installing the v2.7.0 beta into the demobox before promoting.
+
+The three Flow-Apex-Defined requirements, for the record: (1) `global` class, (2) `@AuraEnabled` members, (3) `global` no-arg constructor. `Request`/`Response`/`Result` wrappers are set inline on the action element (not built as variables), so they intentionally do not need this.
+
+### Release validation
+
+| Check                               | Result  |
+| ----------------------------------- | ------- |
+| Beta install + Flow check (demobox) | pending |
+| RunLocalTests / build tests         | pending |
+| `sf code-analyzer` (S+AE)           | pending |
+
 ## v2.6.0 — Flow signature types + custom-signing helpers + text-box fix (`04tVx000000a037IAA`, build `2.6.0-2`)
 
 Three fixes. The first two are Flow-automation gaps in the signature feature, surfaced while installing v2.5.0 in a managed-package subscriber org (the demobox) — neither is a v2.5.0 regression; both are long-standing managed-package visibility gaps. The third fixes a Word text-box rendering bug.

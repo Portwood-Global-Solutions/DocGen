@@ -26,8 +26,18 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
      * variable/collection to hold signers. Without @AuraEnabled the action still
      * appears but the type is absent from the variable picker, so the Signers
      * collection can't be built. Do not remove @AuraEnabled as "redundant."
+     *
+     * A SUBSCRIBER org additionally requires the explicit `global` no-arg
+     * constructor below: in a managed package the implicit constructor is
+     * public (invisible to subscribers), so without it Flow cannot instantiate
+     * Signer and the type never appears in the Apex-Defined picker — even with
+     * `global` class + `@AuraEnabled` fields. Do not remove the constructor.
      */
     global class Signer {
+        // Required for subscriber-org Flow to instantiate this Apex-Defined type.
+        global Signer() {
+        }
+
         @InvocableVariable(
             required=true
             label='Name'
