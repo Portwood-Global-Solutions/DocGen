@@ -2,9 +2,9 @@
 
 Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes and QR codes, compute totals — 100% native, zero external dependencies, 100% free forever. All features, all users, no paid tiers. PowerPoint and Excel coming soon.
 
-[Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/changelog)
+[Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-2.7.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -18,10 +18,10 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 ## Install
 
 ```bash
-sf package install --package 04tVx000000ZxDJIA0 --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000a1IXIAY --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZxDJIA0) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ZxDJIA0)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a1IXIAY) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a1IXIAY)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -440,7 +440,9 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v2.5.0  | **Latest (Released)**                   | `04tVx000000ZyyzIAC` |
+| v2.7.0  | **Latest (Released)**                   | `04tVx000000a1IXIAY` |
+| v2.6.0  | Previous                                | `04tVx000000a037IAA` |
+| v2.5.0  | Previous                                | `04tVx000000ZyyzIAC` |
 | v2.4.0  | Previous                                | `04tVx000000ZyanIAC` |
 | v2.3.0  | Previous                                | `04tVx000000ZxDJIA0` |
 | v2.2.0  | Previous                                | `04tVx000000ZxBhIAK` |
