@@ -19,6 +19,13 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
     /**
      * Represents one signer in a signature request.
      * In Flow, create a collection of these and pass it to the Signers input.
+     *
+     * Fields carry BOTH @InvocableVariable AND @AuraEnabled. @InvocableVariable
+     * binds them as inputs on the action; @AuraEnabled is what makes Signer
+     * selectable as an Apex-Defined data type when a Flow author creates the
+     * variable/collection to hold signers. Without @AuraEnabled the action still
+     * appears but the type is absent from the variable picker, so the Signers
+     * collection can't be built. Do not remove @AuraEnabled as "redundant."
      */
     global class Signer {
         @InvocableVariable(
@@ -26,6 +33,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
             label='Name'
             description='The signer\'s full legal name. This is what appears on the signed document.'
         )
+        @AuraEnabled
         global String name;
 
         @InvocableVariable(
@@ -33,18 +41,21 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
             label='Email'
             description='The signer\'s email address. They will receive the signing link at this address.'
         )
+        @AuraEnabled
         global String email;
 
         @InvocableVariable(
             label='Role'
             description='Matches the {@Signature_Role} tag in your template. Example: "Buyer" matches {@Signature_Buyer}. Defaults to "Signer" if blank.'
         )
+        @AuraEnabled
         global String role;
 
         @InvocableVariable(
             label='Contact Id'
             description='Optional. The Salesforce Contact record Id for this signer. Links the signature audit trail to the Contact for reporting.'
         )
+        @AuraEnabled
         global Id contactId;
     }
 

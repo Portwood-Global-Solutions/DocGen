@@ -2085,7 +2085,7 @@ DocGen ships four Flow invocable actions plus two helpers for custom signing UIs
 | Generate a single document for one record (most common)                       | **DocGen — Generate Document**                    |
 | Auto-detect "is this dataset big enough to need async?" and route accordingly | **DocGen — Generate Document (Auto Giant Query)** |
 | Run a template against many records in one batch                              | **DocGen — Generate Bulk Documents**              |
-| Email a document for typed-name signature                                     | **DocGen — Send Signature Request**               |
+| Email a document for typed-name signature                                     | **DocGen: Create Signature Request**              |
 
 The first is the workhorse. The other three exist because Flow can't always tell at design time whether a dataset will be small (sync) or huge (async), and bulk + signatures need different inputs.
 
@@ -2164,19 +2164,20 @@ For a truly storage-less path, drop into Apex: `DocGenService.generatePdfBlob(te
 
 **Step 1 — Get Records:** fetch the primary Contact for the Opportunity.
 
-**Step 2 — Build the signers collection.** Add an **Assignment** element to construct an Apex-defined `DocGenSignatureFlowAction.Signer` record:
+**Step 2 — Build the signers collection.** First create a Flow **Variable** resource with **Data Type = Apex-Defined** and **Apex Class = `DocGenSignatureFlowAction.Signer`** (a single record), plus a second **collection** variable of the same type to hold them. Then add an **Assignment** element to populate the signer:
 
 ```
-firstName = {!PrimaryContact.FirstName}
-lastName  = {!PrimaryContact.LastName}
+name      = {!PrimaryContact.Name}    // full legal name — single field, not first/last
 email     = {!PrimaryContact.Email}
-role      = "Buyer"             // matches {@Signature_Buyer:1:Full} in the template
-contactId = {!PrimaryContact.Id}
+role      = "Buyer"                   // matches {@Signature_Buyer:1:Full} in the template; blank → "Signer"
+contactId = {!PrimaryContact.Id}      // optional — links the audit trail to the Contact
 ```
 
-Add it to a `signers` collection variable.
+Only **`name`** and **`email`** are required. Add the populated record into your `signers` collection variable (a second Assignment, `signers Add {!signer}`).
 
-**Step 3 — DocGen — Send Signature Request.**
+> **Don't see `DocGenSignatureFlowAction.Signer` in the Apex Class list?** You need package **v2.6.0 or later** — earlier versions shipped the type without the `@AuraEnabled` annotation Flow requires to expose an Apex-Defined variable, so the action appeared but the type couldn't be selected. On older versions, use the legacy primitive inputs instead: **Signer Names**, **Signer Emails**, **Signer Roles**, and **Signer Contact Ids** (each a Text collection, matched by position).
+
+**Step 3 — DocGen: Create Signature Request.**
 
 | Input             | Value                                         |
 | ----------------- | --------------------------------------------- |
@@ -2187,8 +2188,11 @@ Add it to a `signers` collection variable.
 
 **Outputs:**
 
+- `success` — `true` if the request was created. Branch on this; on `false` read `errorMessage`.
 - `signatureRequestId` — the `DocGen_Signature_Request__c` Id; useful for status tracking on the parent Opportunity.
-- `status` — `Sent` if everything went through.
+- `signerUrls` — the per-signer signing links (Text collection, in signer order). Use these if you send your own emails instead of DocGen's.
+- `emailStatus` — delivery result when DocGen sends the branded emails (e.g. OWA missing, daily limit exceeded).
+- `errorMessage` — populated when `success` is `false`.
 
 **Result:** the signer receives a branded invitation email. They click → enter the PIN → sign → submit. The signed PDF lands on the Opportunity's Files related list with a verification page appended.
 
@@ -2219,17 +2223,18 @@ Wire this to a Flow Text Variable populated upstream — typically by an Apex ac
 
 ### 11.8 Recipe — Custom signing UI (advanced)
 
-Two helpers exist for orgs that want to build their own signing experience instead of using the bundled Visualforce pages — for example, an embedded signature pad inside an existing customer portal.
+Three helper actions exist for orgs that want to build their own signing experience instead of using the bundled Visualforce pages — for example, an embedded signature pad inside an existing customer portal. **These require package v2.6.0 or later** (earlier versions shipped them but they weren't exposed to subscriber Flows). In Flow Builder, search "DocGen" and pick the action by its label:
 
-- **`DocGenSignatureValidator.validate`** — validates a secure token from the signing URL and returns signer name, document title, and a preview URL. Call this when your custom page first loads.
-- **`DocGenSignatureFinalizer.finalize`** — accepts a base64-encoded PNG of the captured signature and writes the audit record. Call this when the user clicks "Sign and Submit".
+- **Validate Signature Token** (`DocGenSignatureValidator`) — validates a secure token from the signing URL and returns signer name, document title, and a preview URL. Call this when your custom page first loads.
+- **Submit Signed Signature** (`DocGenSignatureSubmitter`) — accepts the secure token plus the base64-encoded signature and submits it. A lighter-weight alternative to Finalize.
+- **Finalize Signature Image** (`DocGenSignatureFinalizer`) — accepts a base64-encoded PNG of the captured signature, stamps it onto the document, enqueues the PDF rendition, and writes the audit record. Call this when the user clicks "Sign and Submit".
 
 A typical custom-screen Flow:
 
 1. Pass `?token=…` into the screen Flow URL.
-2. **Action: DocGenSignatureValidator.validate** with `{!token}` — receive name/title/preview.
+2. **Action: Validate Signature Token** with `{!token}` — receive name/title/preview.
 3. Display the preview. Capture the signature in a Lightning component, base64-encode the PNG.
-4. **Action: DocGenSignatureFinalizer.finalize** with `{!token}` and `{!base64Png}` — done.
+4. **Action: Finalize Signature Image** with `{!token}` and `{!base64Png}` — done.
 
 Most customers don't need this. Use the bundled Visualforce signing pages unless you have a specific reason to embed.
 
@@ -2338,12 +2343,12 @@ import generatePdf from '@salesforce/apex/portwoodglobal.DocGenController.genera
 
 Usable from Flow Builder and from Apex via `Invocable.Action.createCustomAction(...)`:
 
-| Action                               | Class                        | Input                                                                                                        | Output                                              |
-| ------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
-| Generate Document                    | `DocGenFlowAction`           | `templateId`, `recordId`, optional `outputFormatOverride`                                                    | `contentDocumentId`, `contentVersionId`, `fileName` |
-| Generate Bulk Documents              | `DocGenBulkFlowAction`       | `templateId`, `whereClause`, `jobLabel`, `mergePdf`, `batchSize`, `mergeOnly`                                | `jobId`                                             |
-| Generate Document (Auto Giant Query) | `DocGenGiantQueryFlowAction` | `templateId`, `recordId`                                                                                     | `contentDocumentId` (small) OR `jobId` (giant)      |
-| Create Signature Request             | `DocGenSignatureFlowAction`  | `templateId`, `recordId`, `signers` (List<Signer>: `email`, `role`, `firstName`, `lastName`), `signingOrder` | `signatureRequestId`, `status`                      |
+| Action                               | Class                        | Input                                                                                                           | Output                                                                       |
+| ------------------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Generate Document                    | `DocGenFlowAction`           | `templateId`, `recordId`, `saveToRecord`, `documentTitle`, `outputFormatOverride`, `jsonData`                   | `contentDocumentId`, `contentVersionId`, `success`, `errorMessage`           |
+| Generate Bulk Documents              | `DocGenBulkFlowAction`       | `templateId`, `queryCondition`, `recordIds`, `jobLabel`, `combinedPdfOnly`, `keepIndividualFiles`, `batchSize`  | `jobId`, `success`, `errorMessage`                                           |
+| Generate Document (Auto Giant Query) | `DocGenGiantQueryFlowAction` | `templateId`, `recordId`                                                                                        | `contentDocumentId` (small) OR `jobId` (giant)                               |
+| Create Signature Request             | `DocGenSignatureFlowAction`  | `templateId`, `relatedRecordId`, `signers` (List<Signer>: `name`, `email`, `role`, `contactId`), `signingOrder` | `success`, `signatureRequestId`, `signerUrls`, `emailStatus`, `errorMessage` |
 
 ### 12.5 `DocGenDataProvider` interface — custom data source
 

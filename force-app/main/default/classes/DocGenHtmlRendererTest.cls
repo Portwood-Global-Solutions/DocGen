@@ -2469,4 +2469,55 @@ private class DocGenHtmlRendererTest {
         String output = DocGenHtmlRenderer.unescapeXmlEntities(input);
         System.assertEquals('A & B — C < D', output, 'Numeric and named entities decode together');
     }
+
+    @IsTest
+    static void unwrapTextboxes_styledParagraph_doesNotSplitOrLeakMarker() {
+        // Regression: the enclosing-paragraph lookup used lastIndexOf('<w:p', ...),
+        // which prefix-matches <w:pStyle>/<w:pPr> sitting between the real <w:p> and
+        // the textbox. It landed mid-paragraph, split the <w:p>, orphaned its <w:pPr>,
+        // and leaked the __DGTXBX_OPEN sentinel as raw text. Here the textbox lives in
+        // a styled paragraph — the exact shape that triggered the leak. Dimensions
+        // mirror a real reported case (top~0.206in, w~3.575in, h~0.906in).
+        String xml =
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body>' +
+            '<w:p>' +
+            '<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>' +
+            '<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><wp:anchor>' +
+            '<wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>' +
+            '<wp:positionV relativeFrom="paragraph"><wp:posOffset>188595</wp:posOffset></wp:positionV>' +
+            '<wp:extent cx="3268980" cy="828040"/>' +
+            '<wps:wsp><wps:txbx><w:txbxContent>' +
+            '<w:p><w:r><w:t>BoxText</w:t></w:r></w:p>' +
+            '</w:txbxContent></wps:txbx><wps:bodyPr vert="horz"/></wps:wsp>' +
+            '</wp:anchor></w:drawing></mc:Choice>' +
+            '<mc:Fallback><w:pict><v:rect><v:textbox><w:txbxContent>' +
+            '<w:p><w:r><w:t>FallbackText</w:t></w:r></w:p>' +
+            '</w:txbxContent></v:textbox></v:rect></w:pict></mc:Fallback>' +
+            '</mc:AlternateContent></w:r>' +
+            '</w:p>' +
+            '</w:body></w:document>';
+
+        String result = DocGenHtmlRenderer.unwrapTextboxes(xml);
+
+        System.assert(result.contains('__DGTXBX_OPEN'), 'Textbox sentinel marker should be emitted');
+        System.assert(result.contains('BoxText'), 'Textbox inner content must be preserved');
+        // The whole styled <w:p> is replaced as a unit — with the prefix bug the
+        // paragraph split, leaving an orphaned <w:pPr> in the output.
+        System.assert(
+            !result.contains('<w:pPr>'),
+            'Enclosing styled paragraph must be replaced whole, not split (no orphaned <w:pPr>): ' + result
+        );
+        System.assert(!result.contains('<mc:AlternateContent'), 'AlternateContent textbox should be unwrapped');
+    }
+
+    @IsTest
+    static void findEnclosingParagraphStart_skipsPrefixFalseMatches() {
+        // <w:pPr>/<w:pStyle> share the '<w:p' prefix; the helper must skip them and
+        // return the real <w:p> open tag.
+        String xml = '<w:body><w:p><w:pPr><w:pStyle w:val="X"/></w:pPr><w:r>HERE</w:r></w:p></w:body>';
+        Integer hereIdx = xml.indexOf('HERE');
+        Integer pStart = DocGenHtmlRenderer.findEnclosingParagraphStart(xml, hereIdx);
+        System.assertEquals(xml.indexOf('<w:p>'), pStart, 'Should return the real <w:p>, not <w:pPr>/<w:pStyle>');
+    }
 }
