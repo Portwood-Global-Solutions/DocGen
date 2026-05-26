@@ -350,4 +350,94 @@ private class DocGenSignatureFlowActionTest {
         System.assertEquals(false, results[0].success, 'Invalid template Id should result in success=false');
         System.assertNotEquals(null, results[0].errorMessage, 'Error message should be populated');
     }
+
+    // =========================================================================
+    // Standalone DocGenSigner collection (v2.7) — the Flow-buildable input
+    // =========================================================================
+
+    @isTest
+    static void testGenerate_signerRecordsHappyPath() {
+        DocGen_Template__c tmpl = TestDataFactory.getTestTemplate();
+        Account acc = TestDataFactory.getTestAccount();
+        DocGenSignatureFlowAction.Request req = new DocGenSignatureFlowAction.Request();
+        req.templateId = tmpl.Id;
+        req.relatedRecordId = acc.Id;
+
+        DocGenSigner s1 = new DocGenSigner();
+        s1.name = 'Dana Records';
+        s1.email = 'dana@records.test';
+        s1.role = 'Buyer';
+        DocGenSigner s2 = new DocGenSigner();
+        s2.name = 'Evan Records';
+        s2.email = 'evan@records.test';
+        // role left blank -> defaults to "Signer"
+        req.signerRecords = new List<DocGenSigner>{ s1, s2 };
+
+        Test.startTest();
+        List<DocGenSignatureFlowAction.Result> results = DocGenSignatureFlowAction.generate(
+            new List<DocGenSignatureFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, results.size());
+        DocGenSignatureFlowAction.Result r = results[0];
+        System.assertEquals(true, r.success, 'signerRecords path should succeed: ' + r.errorMessage);
+        System.assertEquals(2, r.signerUrls.size(), 'Two signer URLs from signerRecords');
+        System.assertEquals('Buyer', r.signerRoles[0]);
+        System.assertEquals('Signer', r.signerRoles[1], 'Blank role defaults to Signer');
+
+        List<DocGen_Signer__c> persisted = [
+            SELECT Signer_Email__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__c = :r.signatureRequestId
+            ORDER BY Sort_Order__c
+        ];
+        System.assertEquals(2, persisted.size());
+        System.assertEquals('dana@records.test', persisted[0].Signer_Email__c);
+    }
+
+    @isTest
+    static void testValidate_signerRecords_blankName() {
+        DocGenSignatureFlowAction.Request req = new DocGenSignatureFlowAction.Request();
+        req.templateId = TestDataFactory.getTestTemplate().Id;
+        req.relatedRecordId = TestDataFactory.getTestAccount().Id;
+        DocGenSigner s = new DocGenSigner();
+        s.name = '';
+        s.email = 'x@test.com';
+        req.signerRecords = new List<DocGenSigner>{ s };
+
+        Test.startTest();
+        Boolean caught = false;
+        try {
+            DocGenSignatureFlowAction.generate(new List<DocGenSignatureFlowAction.Request>{ req });
+        } catch (DocGenException e) {
+            caught = true;
+            System.assert(e.getMessage().contains('Name'));
+        }
+        Test.stopTest();
+        System.assert(caught, 'Blank name in signerRecords must throw');
+    }
+
+    @isTest
+    static void testValidate_signerRecords_blankEmail() {
+        DocGenSignatureFlowAction.Request req = new DocGenSignatureFlowAction.Request();
+        req.templateId = TestDataFactory.getTestTemplate().Id;
+        req.relatedRecordId = TestDataFactory.getTestAccount().Id;
+        DocGenSigner s = new DocGenSigner();
+        s.name = 'No Email';
+        s.email = '';
+        s.contactId = null;
+        req.signerRecords = new List<DocGenSigner>{ s };
+
+        Test.startTest();
+        Boolean caught = false;
+        try {
+            DocGenSignatureFlowAction.generate(new List<DocGenSignatureFlowAction.Request>{ req });
+        } catch (DocGenException e) {
+            caught = true;
+            System.assert(e.getMessage().contains('Email'));
+        }
+        Test.stopTest();
+        System.assert(caught, 'Blank email in signerRecords must throw');
+    }
 }

@@ -1,16 +1,20 @@
 # Changelog
 
-## v2.7.0 — Flow Signer variable now appears (managed-package constructor fix) (`<version id pending build>`, build `2.7.0-1`)
+## v2.7.0 — Flow Signer variable now appears (standalone `DocGenSigner` type) (`<version id pending build>`, build `2.7.0-2`)
 
-Completes the v2.6.0 Flow signature work. v2.6.0 added `@AuraEnabled` to `DocGenSignatureFlowAction.Signer`, but in the demobox (a real managed-package install) the `Signer` type **still** didn't appear in Flow's Apex-Defined variable picker.
+Completes the v2.6.0 Flow signature work. v2.6.0 added `@AuraEnabled` to `DocGenSignatureFlowAction.Signer`, but in the demobox (a real managed-package install) the type **still** didn't appear in Flow's Apex-Defined variable picker.
 
 ### Root cause
 
-A managed-package Apex class is only usable as a Flow **Apex-Defined variable** in a subscriber org if Flow can instantiate it — which requires an explicit **`global` no-arg constructor**. `Signer` had only the implicit constructor, which is `public` (invisible to subscribers), so Flow could not construct the type and omitted it from the picker — even though the class is `global` with `@AuraEnabled` fields. Added `global Signer() {}`.
+`Signer` is an **inner class**. Flow does not expose inner/nested Apex classes as Apex-Defined variable types — `@AuraEnabled` on a nested class's fields does nothing for the variable picker (confirmed: katiekodes.com/flow-apex-defined-data-types — _"Adding this annotation to the attributes of classes that are 'nested' inside other Apex classes does not make those 'inner' classes show up in Flow. You need to use a standalone class."_). No combination of `global` / `@AuraEnabled` / constructor on an inner class can make it appear.
 
-This could not be caught in staging: staging is a no-namespace org where `public`/`global` behave identically, so the constructor-visibility boundary only exists in a real managed-package install. Verified by installing the v2.7.0 beta into the demobox before promoting.
+### Fix
 
-The three Flow-Apex-Defined requirements, for the record: (1) `global` class, (2) `@AuraEnabled` members, (3) `global` no-arg constructor. `Request`/`Response`/`Result` wrappers are set inline on the action element (not built as variables), so they intentionally do not need this.
+New **standalone top-level** class `DocGenSigner` (global, `@AuraEnabled` fields, explicit `global` no-arg constructor — the full managed-package Apex-Defined recipe). Added a new `signerRecords` (`List<DocGenSigner>`) input to **DocGen: Create Signature Request**, labeled "Signers", and `buildSignerInputs` now prefers it. The original inner `Signer`/`signers` input can't be removed (managed packages can't drop published global members), so it's relabeled "(legacy inner type — not selectable in Flow)" and its `required` flag relaxed; existing Flows and the legacy primitive-list inputs are unaffected.
+
+Why three releases: this could not be reproduced in staging (a no-namespace org doesn't enforce the managed visibility boundary). Each hypothesis (`@AuraEnabled` in v2.6.0, then `global` constructor in v2.7.0-1) was disproved by installing the beta into the demobox and checking the actual picker — which is exactly how the inner-class root cause was finally confirmed before promoting.
+
+**The full requirement set for a managed-package Apex-Defined Flow variable:** (1) **top-level** (standalone) class, (2) `global` class, (3) `@AuraEnabled` members, (4) `global` no-arg constructor.
 
 ### Release validation
 

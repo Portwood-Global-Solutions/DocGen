@@ -1,7 +1,7 @@
 {
   "packageDirectories": [
     {
-      "versionName": "2.7.0 — Flow Signer variable (managed-package constructor fix)",
+      "versionName": "2.7.0 — Flow Signer variable (standalone DocGenSigner type)",
       "versionNumber": "2.7.0.NEXT",
       "ancestorId": "04tVx000000a037IAA",
       "path": "force-app",
@@ -156,6 +156,7 @@
     "Portwood DocGen Managed@2.5.0-1": "04tVx000000ZyxNIAS",
     "Portwood DocGen Managed@2.5.0-2": "04tVx000000ZyyzIAC",
     "Portwood DocGen Managed@2.6.0-1": "04tVx000000Zzv3IAC",
-    "Portwood DocGen Managed@2.6.0-2": "04tVx000000a037IAA"
+    "Portwood DocGen Managed@2.6.0-2": "04tVx000000a037IAA",
+    "Portwood DocGen Managed@2.7.0-1": "04tVx000000a0O5IAI"
   }
 }

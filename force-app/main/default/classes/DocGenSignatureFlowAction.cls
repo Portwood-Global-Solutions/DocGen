@@ -84,12 +84,22 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
         )
         global Id relatedRecordId;
 
+        // DEPRECATED inner-type input. Inner classes never appear in Flow's
+        // Apex-Defined variable picker, so this was never buildable as a Flow
+        // variable. Kept (a managed package can't drop a published global member)
+        // and `required` relaxed so the action is usable without it. Use
+        // `signerRecords` (standalone DocGenSigner) instead.
         @InvocableVariable(
-            required=true
-            label='Signers'
-            description='A collection of DocGen Signers. Each signer needs a Name and Email. Optionally set Role (to match template tags) and Contact Id (for audit linking). Build the collection using Assignment elements in your Flow.'
+            label='Signers (legacy inner type — not selectable in Flow)'
+            description='DEPRECATED. Used the inner Signer type, which Flow cannot expose as an Apex-Defined variable. Use the "Signers" input (DocGenSigner collection) instead.'
         )
         global List<Signer> signers;
+
+        @InvocableVariable(
+            label='Signers'
+            description='A collection of DocGen Signers. Create an Apex-Defined variable of type DocGenSigner (Name + Email required; Role and Contact Id optional), add each to a collection with an Assignment element, and pass it here. Recommended input.'
+        )
+        global List<DocGenSigner> signerRecords;
 
         // Keep legacy inputs for backward compatibility with existing Flows
         @InvocableVariable(
@@ -304,7 +314,31 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
     private static List<Map<String, Object>> buildSignerInputs(Request req) {
         List<Map<String, Object>> inputs = new List<Map<String, Object>>();
 
-        // Prefer the new Signer apex type collection
+        // Preferred: the standalone DocGenSigner collection — the only signer type
+        // Flow can expose as an Apex-Defined variable (inner classes never appear).
+        if (req.signerRecords != null && !req.signerRecords.isEmpty()) {
+            for (DocGenSigner s : req.signerRecords) {
+                if (String.isBlank(s.name)) {
+                    throw new DocGenException('Each signer must have a Name.');
+                }
+                if (String.isBlank(s.email)) {
+                    throw new DocGenException(
+                        'Each signer must have an Email. Signer "' + s.name + '" is missing an email.'
+                    );
+                }
+                inputs.add(
+                    new Map<String, Object>{
+                        'signerName' => s.name,
+                        'signerEmail' => s.email,
+                        'roleName' => String.isNotBlank(s.role) ? s.role : 'Signer',
+                        'contactId' => s.contactId
+                    }
+                );
+            }
+            return inputs;
+        }
+
+        // Legacy inner-type collection (still supported; not Flow-buildable)
         if (req.signers != null && !req.signers.isEmpty()) {
             for (Signer s : req.signers) {
                 if (String.isBlank(s.name)) {
