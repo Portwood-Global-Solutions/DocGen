@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.5.0 — Large-dataset template chrome fix (`04tVx000000ZyyzIAC`, build `2.5.0-2`, promoted 2026-05-26)
+
+P1 bug fix (#134). Templates over the ~2,000-child-row giant-query threshold rendered **only their data rows** — the title, text-above-table, column headers, and footer were dropped. Fixed so large reports render with full formatting, identical to smaller ones.
+
+### Root cause
+
+`DocGenGiantQueryAssembler` loaded the internal `docgen_tmpl_html_<versionId>` template snapshot `WITH USER_MODE`. That CV's ContentDocumentLink defaults to `Visibility=InternalUsers`, which is invisible under USER_MODE (the documented #114 quirk), so the read returned empty and the assembler silently fell back to a bare table built from the Query_Config field names — dropping all template chrome. It was the lone USER_MODE read in the class; every other snapshot/CV read here is `WITH SYSTEM_MODE`, as is the analogous read in `DocGenController`.
+
+Confirmed a regression (not data volume, not v2.4.0): the customer's working (3,553 rows, full chrome) and broken (3,552 rows, bare table) outputs had the same dataset — both giant-query. A template re-save regenerated the snapshot with the InternalUsers visibility default, which the USER_MODE read then couldn't see.
+
+### Fix
+
+`DocGenGiantQueryAssembler.cls` snapshot read → FLS-guard (`DocGenFlsGuard.assertAccessible`) + `WITH SYSTEM_MODE` (the hybrid pattern used everywhere else for these package-internal reads). User entitlement is already gated by the active-version query above.
+
+### Release validation
+
+| Check                     | Result                                                     |
+| ------------------------- | ---------------------------------------------------------- |
+| DocGenGiantQueryTest      | 42/42 pass (incl. new chrome-preservation regression test) |
+| RunLocalTests             | passed — build coverage check 76% org-wide                 |
+| `sf code-analyzer` (S+AE) | 0 violations (45 suppressed — known FPs)                   |
+| e2e-01 … e2e-08           | all PASS / FAIL 0                                          |
+
+### Known follow-ups (#134, lower priority)
+
+- Giant-query path skips `processXml`, so parent-level section/conditional/inverse tags and secondary child loops leak as raw text.
+- "Save to Record" on the giant-query path also downloads.
+
 ## v2.4.0 — Multi-language runner + PowerPoint charts (`04tVx000000ZyanIAC`, build `2.4.0-2`, promoted 2026-05-25)
 
 Feature release. Brings the document runner UI to 10 languages, fixes PowerPoint chart rendering, and adds location-aware template error messages. 100% native — no external services or callouts.
