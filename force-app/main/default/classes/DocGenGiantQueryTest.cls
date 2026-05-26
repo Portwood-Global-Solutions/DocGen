@@ -264,6 +264,88 @@ private class DocGenGiantQueryTest {
         }
     }
 
+    /**
+     * Regression guard (P1 #134): when a docgen_tmpl_html_ snapshot exists, the
+     * giant-query assembler must build the document AROUND it — preserving the
+     * template's title / column headers / footer — not fall back to the bare
+     * Query_Config table. The production bug was the snapshot read using
+     * WITH USER_MODE (invisible for InternalUsers-visibility package CVs), which
+     * silently took the bare-table branch and dropped all chrome.
+     *
+     * NOTE: test-context USER_MODE is lenient (the running user owns the test CV),
+     * so this asserts the chrome-preservation PATH rather than isolating the
+     * USER_MODE→SYSTEM_MODE access change (which only manifests with InternalUsers
+     * CDL visibility — covered by the customer-template reproduction).
+     */
+    @IsTest
+    static void testGiantQuerySnapshotChromePreserved() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
+            DocGen_Template_Version__c ver = [
+                SELECT Id
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :tpl.Id AND Is_Active__c = TRUE
+                LIMIT 1
+            ];
+
+            // Snapshot the template HTML with recognizable chrome wrapping the loop.
+            String snapshotHtml =
+                '<html><body>' +
+                '<h1>GQ_CHROME_TITLE</h1>' +
+                '<table>' +
+                '<tr><th>GQ_CHROME_HEADER</th></tr>' +
+                '<tr>{#Contacts}<td>{FirstName}</td>{/Contacts}</tr>' +
+                '</table>' +
+                '<p>GQ_CHROME_FOOTER</p>' +
+                '</body></html>';
+            insert new ContentVersion(
+                Title = 'docgen_tmpl_html_' + ver.Id,
+                PathOnClient = 'snapshot.html',
+                VersionData = Blob.valueOf(snapshotHtml),
+                IsMajorVersion = false
+            );
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Harvesting',
+                Parent_Record_Id__c = String.valueOf(acc.Id)
+            );
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
+
+            // Run the assembler directly with one pre-rendered row fragment (mirrors
+            // testAssemblerParentFieldFormatting) so we can assert on the assembled
+            // HTML without going through the batch's Blob.toPdf path.
+            DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
+            String prefix = 'docgen_giant_' + job.Id + '_';
+            insert new ContentVersion(
+                Title = prefix + '00001',
+                PathOnClient = prefix + '00001.html',
+                VersionData = Blob.valueOf('<tr><td>Row0</td></tr>')
+            );
+
+            Test.startTest();
+            System.enqueueJob(assembler);
+            Test.stopTest();
+
+            List<ContentVersion> debug = [
+                SELECT VersionData
+                FROM ContentVersion
+                WHERE Title = :(prefix + 'debug_html')
+                LIMIT 1
+            ];
+            System.assert(!debug.isEmpty(), 'Assembler should have produced debug HTML');
+            String assembled = debug[0].VersionData.toString();
+            System.assert(
+                assembled.contains('GQ_CHROME_TITLE'),
+                'Title chrome must survive (snapshot used, not bare-table fallback). Got: ' + assembled.abbreviate(400)
+            );
+            System.assert(assembled.contains('GQ_CHROME_HEADER'), 'Column-header chrome must survive');
+            System.assert(assembled.contains('GQ_CHROME_FOOTER'), 'Footer chrome must survive');
+        }
+    }
+
     @IsTest
     static void testStitchJobExecution() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
