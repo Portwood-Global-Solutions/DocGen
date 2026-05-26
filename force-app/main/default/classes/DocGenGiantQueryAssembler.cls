@@ -264,11 +264,21 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         String html = null;
         if (!vers.isEmpty()) {
             String htmlTitle = 'docgen_tmpl_html_' + vers[0].Id;
+            // SYSTEM_MODE per #114: docgen_tmpl_html_ is an internal package snapshot
+            // CV whose ContentDocumentLink defaults to Visibility=InternalUsers, so
+            // WITH USER_MODE returns empty even though the record exists. That empty
+            // result silently routed the giant-query path to its bare-table fallback,
+            // dropping the template's title/column-headers/footer (the >2000-row
+            // regression). User access is already gated by the active-version query
+            // above; this is the FLS-guard + SYSTEM_MODE hybrid used everywhere else in
+            // this class (see line ~381) and in DocGenController (the analogous read).
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
+            /* code-analyzer-suppress ApexFlsViolation */
             List<ContentVersion> htmlCvs = [
                 SELECT VersionData
                 FROM ContentVersion
                 WHERE Title = :htmlTitle
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 LIMIT 1
             ];
             if (!htmlCvs.isEmpty()) {
