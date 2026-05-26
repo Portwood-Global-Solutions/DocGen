@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.7.0 — Flow Signer variable now appears (standalone `DocGenSigner` type) (`04tVx000000a1IXIAY`, build `2.7.0-2`, promoted 2026-05-26)
+
+Completes the v2.6.0 Flow signature work. v2.6.0 added `@AuraEnabled` to `DocGenSignatureFlowAction.Signer`, but in the demobox (a real managed-package install) the type **still** didn't appear in Flow's Apex-Defined variable picker.
+
+### Root cause
+
+`Signer` is an **inner class**. Flow does not expose inner/nested Apex classes as Apex-Defined variable types — `@AuraEnabled` on a nested class's fields does nothing for the variable picker (confirmed: katiekodes.com/flow-apex-defined-data-types — _"Adding this annotation to the attributes of classes that are 'nested' inside other Apex classes does not make those 'inner' classes show up in Flow. You need to use a standalone class."_). No combination of `global` / `@AuraEnabled` / constructor on an inner class can make it appear.
+
+### Fix
+
+New **standalone top-level** class `DocGenSigner` (global, `@AuraEnabled` fields, explicit `global` no-arg constructor — the full managed-package Apex-Defined recipe). Added a new `signerRecords` (`List<DocGenSigner>`) input to **DocGen: Create Signature Request**, labeled "Signers", and `buildSignerInputs` now prefers it. The original inner `Signer`/`signers` input can't be removed (managed packages can't drop published global members), so it's relabeled "(legacy inner type — not selectable in Flow)" and its `required` flag relaxed; existing Flows and the legacy primitive-list inputs are unaffected.
+
+Why three releases: this could not be reproduced in staging (a no-namespace org doesn't enforce the managed visibility boundary). Each hypothesis (`@AuraEnabled` in v2.6.0, then `global` constructor in v2.7.0-1) was disproved by installing the beta into the demobox and checking the actual picker — which is exactly how the inner-class root cause was finally confirmed before promoting.
+
+**The full requirement set for a managed-package Apex-Defined Flow variable:** (1) **top-level** (standalone) class, (2) `global` class, (3) `@AuraEnabled` members, (4) `global` no-arg constructor.
+
+### Release validation
+
+| Check                                 | Result                                                                                                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flow Apex-Defined picker (subscriber) | PASS — `DocGenSigner` appears in a fresh subscriber scratch org; end-to-end action returns `success=true`, signature request + signers + tokens created (roles mapped Buyer/Seller) |
+| `DocGenSignatureFlowActionTest`       | 19/19 (incl. 3 new `signerRecords`/`DocGenSigner` tests)                                                                                                                            |
+| RunLocalTests / build tests           | 0 failures — full suite passed in the `2.7.0-2` build validation (code-coverage)                                                                                                    |
+| `sf code-analyzer` (S+AE)             | 0 violations (benign SFGE engine timeout on one entry point — a scan warning, not a finding)                                                                                        |
+
 ## v2.6.0 — Flow signature types + custom-signing helpers + text-box fix (`04tVx000000a037IAA`, build `2.6.0-2`)
 
 Three fixes. The first two are Flow-automation gaps in the signature feature, surfaced while installing v2.5.0 in a managed-package subscriber org (the demobox) — neither is a v2.5.0 regression; both are long-standing managed-package visibility gaps. The third fixes a Word text-box rendering bug.

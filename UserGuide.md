@@ -2164,7 +2164,7 @@ For a truly storage-less path, drop into Apex: `DocGenService.generatePdfBlob(te
 
 **Step 1 — Get Records:** fetch the primary Contact for the Opportunity.
 
-**Step 2 — Build the signers collection.** First create a Flow **Variable** resource with **Data Type = Apex-Defined** and **Apex Class = `DocGenSignatureFlowAction.Signer`** (a single record), plus a second **collection** variable of the same type to hold them. Then add an **Assignment** element to populate the signer:
+**Step 2 — Build the signers collection.** First create a Flow **Variable** resource with **Data Type = Apex-Defined** and **Apex Class = `DocGenSigner`** (a single record), plus a second **collection** variable of the same type to hold them. Then add an **Assignment** element to populate the signer:
 
 ```
 name      = {!PrimaryContact.Name}    // full legal name — single field, not first/last
@@ -2175,7 +2175,7 @@ contactId = {!PrimaryContact.Id}      // optional — links the audit trail to t
 
 Only **`name`** and **`email`** are required. Add the populated record into your `signers` collection variable (a second Assignment, `signers Add {!signer}`).
 
-> **Don't see `DocGenSignatureFlowAction.Signer` in the Apex Class list?** You need package **v2.6.0 or later** — earlier versions shipped the type without the `@AuraEnabled` annotation Flow requires to expose an Apex-Defined variable, so the action appeared but the type couldn't be selected. On older versions, use the legacy primitive inputs instead: **Signer Names**, **Signer Emails**, **Signer Roles**, and **Signer Contact Ids** (each a Text collection, matched by position).
+> **Don't see `DocGenSigner` in the Apex Class list?** You need package **v2.7.0 or later** — that's the version that introduced the standalone `DocGenSigner` type. (Flow only exposes top-level Apex classes as Apex-Defined variables; the earlier inner `DocGenSignatureFlowAction.Signer` could never appear, regardless of version.) On older versions, use the legacy primitive inputs instead: **Signer Names**, **Signer Emails**, **Signer Roles**, and **Signer Contact Ids** (each a Text collection, matched by position).
 
 **Step 3 — DocGen: Create Signature Request.**
 
