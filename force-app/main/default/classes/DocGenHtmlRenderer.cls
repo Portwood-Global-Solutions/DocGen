@@ -4608,6 +4608,7 @@ public with sharing class DocGenHtmlRenderer {
      * DrawingML wps:wsp shape) over <mc:Fallback> (legacy VML v:textbox).
      * Both branches duplicate the same <w:txbxContent>, so only one is used.
      */
+    @TestVisible
     private static String unwrapTextboxes(String xml) {
         if (
             String.isBlank(xml) ||
@@ -4650,7 +4651,7 @@ public with sharing class DocGenHtmlRenderer {
             // The textbox structure lives inside <w:p><w:r>...</w:r></w:p>; we need
             // to replace the WHOLE outer paragraph so the unwrapped textbox content
             // becomes a body-level sibling rather than nested inside a single <p>.
-            Integer outerPStart = xml.lastIndexOf('<w:p', nextStart);
+            Integer outerPStart = findEnclosingParagraphStart(xml, nextStart);
             Integer outerPEnd = -1;
             if (outerPStart != -1) {
                 outerPEnd = findClosingTag(xml, outerPStart, 'w:p');
@@ -4853,5 +4854,35 @@ public with sharing class DocGenHtmlRenderer {
             cursor = replaceTo;
         }
         return out;
+    }
+
+    /**
+     * Finds the opening index of the <w:p> paragraph enclosing fromIdx, searching
+     * backward. CRITICAL: '<w:p' is a prefix of <w:pPr>, <w:pStyle>, <w:proofErr>,
+     * <w:pgSz>, etc. A naive lastIndexOf('<w:p', fromIdx) matches one of those (they
+     * sit between the real <w:p> and the textbox) and lands mid-paragraph, which
+     * corrupts the enclosing-paragraph bounds in unwrapTextboxes — splitting the
+     * paragraph, orphaning its <w:pPr>, and leaking the __DGTXBX_ sentinel as raw
+     * text (collapsed running header). The real paragraph tag is only '<w:p>' or
+     * '<w:p ' — i.e. the character right after the '<w:p' prefix is '>' or whitespace.
+     */
+    @TestVisible
+    private static Integer findEnclosingParagraphStart(String xml, Integer fromIdx) {
+        Integer searchFrom = fromIdx;
+        while (searchFrom >= 0) {
+            Integer idx = xml.lastIndexOf('<w:p', searchFrom);
+            if (idx == -1) {
+                return -1;
+            }
+            Integer afterIdx = idx + 4; // char immediately after the '<w:p' prefix
+            if (afterIdx < xml.length()) {
+                String c = xml.substring(afterIdx, afterIdx + 1);
+                if (c == '>' || c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+                    return idx;
+                }
+            }
+            searchFrom = idx - 1; // prefix false-match (<w:pPr> etc.) — keep walking back
+        }
+        return -1;
     }
 }

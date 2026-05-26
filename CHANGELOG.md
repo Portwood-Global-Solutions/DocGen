@@ -1,5 +1,36 @@
 # Changelog
 
+## v2.6.0 — Flow signature types + custom-signing helpers + text-box fix (`04tVx000000a037IAA`, build `2.6.0-2`)
+
+Three fixes. The first two are Flow-automation gaps in the signature feature, surfaced while installing v2.5.0 in a managed-package subscriber org (the demobox) — neither is a v2.5.0 regression; both are long-standing managed-package visibility gaps. The third fixes a Word text-box rendering bug.
+
+### 1. `Signer` selectable as a Flow Apex-Defined variable type
+
+`DocGenSignatureFlowAction.Signer` carried only `@InvocableVariable`, so the **DocGen: Create Signature Request** action appeared in Flow but the `Signer` type was absent from the Apex-Defined variable picker — authors couldn't build the `Signers` collection the action requires. Added `@AuraEnabled` to all four `Signer` fields (`name`, `email`, `role`, `contactId`); the class was already `global`. Verified not a regression: `@AuraEnabled` was never present, back to v1.46 where `Signer` was introduced. The legacy primitive-list inputs (`Signer Names` / `Signer Emails` / …) were the only working path before this.
+
+### 2. Custom-signing-UI helper actions now visible to subscribers
+
+`DocGenSignatureValidator`, `DocGenSignatureSubmitter`, and `DocGenSignatureFinalizer` (the UserGuide §11.8 helpers for building a custom in-app signing experience) were declared `public`. In a managed package, `public` `@InvocableMethod` classes are invisible in subscriber Flow Builder, so these three actions could not be added to any customer Flow. Promoted the classes, their inner `FlowInput` / `FlowOutput` / `FinalizeRequest` types, fields, and methods to `global`. Inputs are primitives, so no `@AuraEnabled` is needed.
+
+### 3. Word text-box marker no longer leaks into output (PDF/HTML)
+
+When a Word template's floating text box sat in a styled paragraph (`<w:pPr><w:pStyle>`), the docx→HTML text-box unwrap (`DocGenHtmlRenderer.unwrapTextboxes`) located the enclosing paragraph with `lastIndexOf('<w:p', …)`. `'<w:p'` is a prefix of `<w:pStyle>` / `<w:pPr>`, so the lookup landed mid-paragraph, split the `<w:p>`, orphaned its `<w:pPr>`, and leaked the internal sentinel — e.g. `__DGTXBX_OPEN|left=0|top=0.206|w=3.573|h=0.906|vert=horz|hrel=column|vrel=paragraph__` — as visible text (collapsing the running header in the worst case). Added `findEnclosingParagraphStart`, which accepts only the real paragraph tag (`<w:p>` / `<w:p ` — next char is `>` or whitespace). New regression tests in `DocGenHtmlRendererTest` reproduce the reported marker shape. **Known follow-up (separate issue):** a text box that _shares_ its paragraph with other content (e.g. an inline image) still drops that sibling content — the whole paragraph is replaced by the marker.
+
+### Docs
+
+- **UserGuide §11.6** corrected: the signer example referenced `firstName` / `lastName` (fields that don't exist — `Signer` has a single `name`) and a nonexistent `status` output; added the "create an Apex-Defined Variable of type `DocGenSignatureFlowAction.Signer`" step and the legacy-input fallback. The action label was wrong ("Send Signature Request" → real label **DocGen: Create Signature Request**) in §11.1 and §11.6.
+- **UserGuide §12** API table corrected: Generate Document (`fileName` → real outputs), Generate Bulk (`whereClause`/`mergePdf`/`mergeOnly` → `queryCondition`/`combinedPdfOnly`/`keepIndividualFiles`), and Create Signature Request rows now match the actual invocable variable names.
+- **CLAUDE.md**: corrected package type (Managed 2GP, not Unlocked) and documented the `global` + `@AuraEnabled` visibility rules for subscriber Flows.
+
+### Release validation
+
+| Check                       | Result                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| e2e-01 … e2e-08             | all PASS / FAIL 0 (re-run on staging against the fixed code)                                      |
+| `DocGenHtmlRendererTest`    | 117/117 pass, incl. 2 new text-box regression tests                                               |
+| RunLocalTests / build tests | 0 failures, 76% org-wide; full suite passed inside the `2.6.0-2` build validation (code-coverage) |
+| `sf code-analyzer` (S+AE)   | 0 High; 0 violations (50 documented inline suppressions)                                          |
+
 ## v2.5.0 — Large-dataset template chrome fix (`04tVx000000ZyyzIAC`, build `2.5.0-2`, promoted 2026-05-26)
 
 P1 bug fix (#134). Templates over the ~2,000-child-row giant-query threshold rendered **only their data rows** — the title, text-above-table, column headers, and footer were dropped. Fixed so large reports render with full formatting, identical to smaller ones.

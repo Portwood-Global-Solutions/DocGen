@@ -1,21 +1,24 @@
-public without sharing class DocGenSignatureSubmitter {
-    public class FlowInput {
+// global (not public) so the @InvocableMethod is visible in subscriber-org Flow
+// Builder — this is a managed package, where public Apex is invisible to subscribers.
+// Inputs are primitives (no Apex-Defined Flow variable), so no @AuraEnabled needed.
+global without sharing class DocGenSignatureSubmitter { // NOPMD AvoidGlobalModifier
+    global class FlowInput {
         @InvocableVariable(label='Secure Token' required=true)
-        public String token;
+        global String token;
         @InvocableVariable(label='Signature Data (Base64)' required=true)
-        public String signatureData;
+        global String signatureData;
     }
 
-    public class FlowOutput {
+    global class FlowOutput {
         @InvocableVariable(label='Is Success')
-        public Boolean isSuccess;
+        global Boolean isSuccess;
         @InvocableVariable(label='Error Message')
-        public String errorMessage;
+        global String errorMessage;
     }
 
     @InvocableMethod(label='Submit Signed Signature' category='DocGen')
     // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
-    public static List<FlowOutput> submitSignature(List<FlowInput> inputs) {
+    global static List<FlowOutput> submitSignature(List<FlowInput> inputs) {
         List<FlowOutput> results = new List<FlowOutput>();
         for (FlowInput input : inputs) {
             // CxSAST: Loop bounded by design — max 1 iteration (InvocableMethod single-record pattern)

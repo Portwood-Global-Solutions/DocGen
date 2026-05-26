@@ -1,10 +1,13 @@
-public without sharing class DocGenSignatureFinalizer {
-    public class FinalizeRequest {
+// global (not public) so the @InvocableMethod is visible in subscriber-org Flow
+// Builder — this is a managed package, where public Apex is invisible to subscribers.
+// Inputs are primitives (no Apex-Defined Flow variable), so no @AuraEnabled needed.
+global without sharing class DocGenSignatureFinalizer { // NOPMD AvoidGlobalModifier
+    global class FinalizeRequest {
         @InvocableVariable(required=true description='The secure token for the signature request')
-        public String token;
+        global String token;
 
         @InvocableVariable(required=true description='The Base64 encoded PNG signature image')
-        public String base64Image;
+        global String base64Image;
     }
 
     @InvocableMethod(
@@ -12,7 +15,7 @@ public without sharing class DocGenSignatureFinalizer {
         description='Stamps the signature onto the DOCX and enqueues the Server-Side PDF Rendition. Runs in System Context.'
     )
     // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
-    public static void finalizeSignature(List<FinalizeRequest> requests) {
+    global static void finalizeSignature(List<FinalizeRequest> requests) {
         for (FinalizeRequest req : requests) {
             // CxSAST: Loop bounded by design — max 1 iteration (InvocableMethod single-record pattern)
             System.debug(LoggingLevel.DEBUG, 'DocGen: Finalizing signature via Flow System Context.');

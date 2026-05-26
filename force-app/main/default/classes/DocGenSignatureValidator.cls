@@ -1,24 +1,27 @@
-public without sharing class DocGenSignatureValidator {
-    public class FlowInput {
+// global (not public) so the @InvocableMethod is visible in subscriber-org Flow
+// Builder — this is a managed package, where public Apex is invisible to subscribers.
+// Inputs are primitives (no Apex-Defined Flow variable), so no @AuraEnabled needed.
+global without sharing class DocGenSignatureValidator { // NOPMD AvoidGlobalModifier
+    global class FlowInput {
         @InvocableVariable(label='Secure Token' required=true)
-        public String token;
+        global String token;
     }
 
-    public class FlowOutput {
+    global class FlowOutput {
         @InvocableVariable(label='Is Valid')
-        public Boolean isValid;
+        global Boolean isValid;
         @InvocableVariable(label='Error Message')
-        public String errorMessage;
+        global String errorMessage;
         @InvocableVariable(label='Signer Name')
-        public String signerName;
+        global String signerName;
         @InvocableVariable(label='Document Title')
-        public String documentTitle;
+        global String documentTitle;
         @InvocableVariable(label='Document Preview URL')
-        public String documentUrl;
+        global String documentUrl;
     }
 
     @InvocableMethod(label='Validate Signature Token' category='DocGen')
-    public static List<FlowOutput> validateToken(List<FlowInput> inputs) {
+    global static List<FlowOutput> validateToken(List<FlowInput> inputs) {
         List<FlowOutput> results = new List<FlowOutput>();
         for (FlowInput input : inputs) {
             DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(input.token);
