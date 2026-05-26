@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/changelog)
 
-[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -440,7 +440,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v2.4.0  | **Latest (Released)**                   | `04tVx000000ZyanIAC` |
+| v2.5.0  | **Latest (Released)**                   | `04tVx000000ZyyzIAC` |
+| v2.4.0  | Previous                                | `04tVx000000ZyanIAC` |
 | v2.3.0  | Previous                                | `04tVx000000ZxDJIA0` |
 | v2.2.0  | Previous                                | `04tVx000000ZxBhIAK` |
 | v2.1.0  | Previous                                | `04tVx000000Zw5xIAC` |
