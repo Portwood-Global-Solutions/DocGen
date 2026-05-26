@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.7.0 — Flow Signer variable now appears (standalone `DocGenSigner` type) (`<version id pending build>`, build `2.7.0-2`)
+## v2.7.0 — Flow Signer variable now appears (standalone `DocGenSigner` type) (`04tVx000000a1IXIAY`, build `2.7.0-2`, promoted 2026-05-26)
 
 Completes the v2.6.0 Flow signature work. v2.6.0 added `@AuraEnabled` to `DocGenSignatureFlowAction.Signer`, but in the demobox (a real managed-package install) the type **still** didn't appear in Flow's Apex-Defined variable picker.
 
@@ -18,11 +18,12 @@ Why three releases: this could not be reproduced in staging (a no-namespace org 
 
 ### Release validation
 
-| Check                               | Result  |
-| ----------------------------------- | ------- |
-| Beta install + Flow check (demobox) | pending |
-| RunLocalTests / build tests         | pending |
-| `sf code-analyzer` (S+AE)           | pending |
+| Check                                 | Result                                                                                                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flow Apex-Defined picker (subscriber) | PASS — `DocGenSigner` appears in a fresh subscriber scratch org; end-to-end action returns `success=true`, signature request + signers + tokens created (roles mapped Buyer/Seller) |
+| `DocGenSignatureFlowActionTest`       | 19/19 (incl. 3 new `signerRecords`/`DocGenSigner` tests)                                                                                                                            |
+| RunLocalTests / build tests           | 0 failures — full suite passed in the `2.7.0-2` build validation (code-coverage)                                                                                                    |
+| `sf code-analyzer` (S+AE)             | 0 violations (benign SFGE engine timeout on one entry point — a scan warning, not a finding)                                                                                        |
 
 ## v2.6.0 — Flow signature types + custom-signing helpers + text-box fix (`04tVx000000a037IAA`, build `2.6.0-2`)
 
