@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.8.0 — Large-table rendering fidelity (full-width tables + faithful footers/borders)
+
+Three table-rendering fixes, all surfaced on a real customer template (a ~3,560-row NZ "Skinny" short-codes list) generated through the giant-query path, and verified end-to-end against that template + data (86-page PDF).
+
+### 1. Giant-query tables rendered at ~50% width
+
+The data table rendered at roughly half page width on most pages of large (>2,000-child-row) documents. Root cause: `DocGenGiantQueryAssembler` prepended its own `<colgroup>` on top of the one the template snapshot already carried — two colgroups = double the column count = 200% width, packing the real cells into the left half. A regression surfaced by the v2.5.0 chrome fix (before it, the empty-snapshot fallback emitted a single-colgroup `width:100%` table). Fix: drop the duplicate; capture the snapshot's authored `<table>` tag + single colgroup and reproduce them verbatim in every chunk-break table. Added `max-width:100%` so an authored absolute width can't spill past the printable area and clip the last column.
+
+### 2. Footer (and partial-border tables) rendered a black box
+
+`DocGenHtmlRenderer.processTable` collapsed all border information into a single `hasBorders` boolean and applied a blanket `border:0.5pt solid #000` to every cell — so a footer authored as a single top rule (e.g. a top-only orange `<w:tblBorders>`) came out as a full black grid. Replaced with per-side translation: explicit `<w:tblBorders>` overrides the named style, outer sides go on `<table>`, and `insideH`/`insideV` become the cells' grid lines in the authored color. A top-rule-only footer now renders exactly that.
+
+### 3. Giant-query data rows used an invented gray border
+
+The giant path applied a hardcoded `td,th { border:0.5pt solid #ccc }` globally, which both ignored the authored grid color and leaked onto the running footer's cells. Data rows now carry a `gqc` class and inherit the **authored** grid border (resolved via `DocGenHtmlRenderer.resolveCellGridBorderCss` from the template's `styles.xml`), scoped to data cells so it never touches the header/footer.
+
+### Repeat-header grouping (`{RepeatHeader}`)
+
+A `{RepeatHeader}` marker in a header-row cell (or Word's native "Repeat Header Rows") groups that row into `<thead>` so it reprints at section boundaries of large documents. **Note:** true per-page header repeat on giant tables is deferred — Flying Saucer's `-fs-table-paginate` mis-paginates real (metric, multi-running-element) templates — and is planned for a future release.
+
+### Release validation
+
+- e2e-01..08 + 07-syntax1..4: PASS / FAIL 0
+- RunLocalTests: 100% pass; org-wide coverage ≥ 75%
+- `sf code-analyzer` (Security + AppExchange): 0 violations
+- Verified on the real Skinny `.docx` + 3,559 records: full-width table on every page, footer = top rule only, no clipped columns, 86 pages
+
 ## v2.7.0 — Flow Signer variable now appears (standalone `DocGenSigner` type) (`04tVx000000a1IXIAY`, build `2.7.0-2`, promoted 2026-05-26)
 
 Completes the v2.6.0 Flow signature work. v2.6.0 added `@AuraEnabled` to `DocGenSignatureFlowAction.Signer`, but in the demobox (a real managed-package install) the type **still** didn't appear in Flow's Apex-Defined variable picker.
