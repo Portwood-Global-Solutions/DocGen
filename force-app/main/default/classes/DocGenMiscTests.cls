@@ -5626,6 +5626,35 @@ private class DocGenMiscTests {
     }
 
     @IsTest
+    static void testRepeatHeaderMarkerInjectsTblHeaderAndStrips() {
+        // {RepeatHeader} in a header-row cell must, pre-merge, strip the marker text and
+        // add <w:tblHeader/> to the row's properties so the renderer repeats it per page.
+        String docXml =
+            '<w:document xmlns:w="x"><w:body><w:tbl><w:tblPr/>' +
+            '<w:tr><w:tc><w:p><w:r><w:t>{RepeatHeader}Short Code</w:t></w:r></w:p></w:tc></w:tr>' +
+            '<w:tr><w:tc><w:p><w:r><w:t>105</w:t></w:r></w:p></w:tc></w:tr>' +
+            '</w:tbl></w:body></w:document>';
+
+        String result = DocGenService.mergeRunsInTagsForTest(docXml);
+
+        System.assert(result.contains('<w:tblHeader/>'), 'Marker must inject <w:tblHeader/>: ' + result);
+        System.assert(!result.contains('{RepeatHeader}'), 'Marker text must be stripped: ' + result);
+        System.assert(result.contains('Short Code'), 'Surrounding header text must be preserved: ' + result);
+        // The flag must land on the header row, not the data row.
+        System.assert(
+            result.indexOf('<w:tblHeader/>') < result.indexOf('Short Code'),
+            'tblHeader must be in the marked (header) row: ' + result
+        );
+    }
+
+    @IsTest
+    static void testRepeatHeaderMarkerNoopWhenAbsent() {
+        // Cheap-guard path: untouched when no marker is present.
+        String docXml = '<w:document xmlns:w="x"><w:body><w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body></w:document>';
+        System.assertEquals(docXml, DocGenService.mergeRunsInTagsForTest(docXml), 'No marker → unchanged');
+    }
+
+    @IsTest
     static void testNestedTableOuterCellOwnTcPrStillRespected() {
         // Outer cell has its own <w:tcPr> with shading; nested cells have their
         // own tcPr. Outer must use ITS OWN shading, not the inner cell's.

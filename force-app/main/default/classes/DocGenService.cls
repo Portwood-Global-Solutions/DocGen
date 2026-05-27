@@ -2715,6 +2715,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     private static String mergeRunsInTags(String xml) {
+        // De-fragment split merge tags first (so a {RepeatHeader} broken across runs is
+        // contiguous), then apply the structural {RepeatHeader} → <w:tblHeader/> pass.
+        // This wrapper runs at every merge call site, so all paths (single, bulk, giant
+        // config, snapshot creation) honor the marker before processXml strips it.
+        return applyRepeatHeaderMarkers(mergeRunsInTagsCore(xml));
+    }
+
+    private static String mergeRunsInTagsCore(String xml) {
         // 1. Find all <w:t...>text</w:t> and <a:t>text</a:t> elements (Word + PowerPoint)
         Pattern wtPattern = Pattern.compile('<[wa]:t(?:\\s[^>]*)?>([^<]*)</[wa]:t>');
         Matcher m = wtPattern.matcher(xml);
@@ -2810,6 +2818,85 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
 
         return result;
+    }
+
+    /**
+     * {RepeatHeader} marker → Word's native repeat-header. For each table row whose text
+     * contains the (case-insensitive) {RepeatHeader} marker, strips the marker and ensures
+     * the row's <w:trPr> carries <w:tblHeader/>. Runs pre-merge — before processXml strips
+     * unrecognized tags — at the single mergeRunsInTags chokepoint, so every render path
+     * honors it. The renderer (DocGenHtmlRenderer.processTable) groups <w:tblHeader/> rows
+     * into a <thead> that Flying Saucer reprints atop each page; the giant-query assembler
+     * reprints it per chunk. Cheap guard: no-op when the marker is absent.
+     */
+    private static String applyRepeatHeaderMarkers(String xml) {
+        if (String.isBlank(xml) || !Pattern.compile('(?i)\\{repeatheader\\}').matcher(xml).find()) {
+            return xml;
+        }
+
+        // Collect the start of every <w:tr that directly encloses a marker. Match
+        // '<w:tr>' / '<w:tr ' (not '<w:trPr') and require the marker to fall before the
+        // row's first </w:tr> so a marker outside any row never mis-flags a prior row.
+        String lower = xml.toLowerCase();
+        Set<Integer> rowStarts = new Set<Integer>();
+        Integer scan = 0;
+        while (true) {
+            Integer hit = lower.indexOf('{repeatheader}', scan);
+            if (hit == -1) {
+                break;
+            }
+            Integer trStart = Math.max(xml.lastIndexOf('<w:tr>', hit), xml.lastIndexOf('<w:tr ', hit));
+            if (trStart != -1) {
+                Integer rowClose = xml.indexOf('</w:tr>', trStart);
+                if (rowClose != -1 && rowClose > hit) {
+                    rowStarts.add(trStart);
+                }
+            }
+            scan = hit + 14; // length of '{repeatheader}'
+        }
+
+        // Inject <w:tblHeader/> descending by position so earlier offsets stay valid.
+        List<Integer> ordered = new List<Integer>(rowStarts);
+        ordered.sort();
+        for (Integer i = ordered.size() - 1; i >= 0; i--) {
+            xml = injectTblHeader(xml, ordered[i]);
+        }
+
+        // Strip the marker text everywhere (any case).
+        return Pattern.compile('(?i)\\{repeatheader\\}').matcher(xml).replaceAll('');
+    }
+
+    /**
+     * Ensures the <w:tr> beginning at trStart carries <w:tblHeader/> in its own <w:trPr>,
+     * without touching a nested row's properties (direct-child guard, issue #49).
+     * Idempotent — a row that already repeats is left unchanged.
+     */
+    private static String injectTblHeader(String xml, Integer trStart) {
+        Integer openEnd = xml.indexOf('>', trStart);
+        if (openEnd == -1) {
+            return xml;
+        }
+        Integer firstTc = xml.indexOf('<w:tc', openEnd);
+        Integer trPrStart = xml.indexOf('<w:trPr', openEnd);
+        Boolean hasOwnTrPr = (trPrStart != -1 && (firstTc == -1 || trPrStart < firstTc));
+        if (!hasOwnTrPr) {
+            // No direct <w:trPr> — insert a fresh one right after the <w:tr …> open tag.
+            return xml.substring(0, openEnd + 1) + '<w:trPr><w:tblHeader/></w:trPr>' + xml.substring(openEnd + 1);
+        }
+        Integer trPrTagEnd = xml.indexOf('>', trPrStart);
+        if (trPrTagEnd == -1) {
+            return xml;
+        }
+        // Self-closing <w:trPr/> → expand it to carry the flag.
+        if (xml.substring(trPrStart, trPrTagEnd + 1).endsWith('/>')) {
+            return xml.substring(0, trPrStart) + '<w:trPr><w:tblHeader/></w:trPr>' + xml.substring(trPrTagEnd + 1);
+        }
+        // Open <w:trPr> … </w:trPr>: skip if it already repeats, else insert at the front.
+        Integer trPrClose = xml.indexOf('</w:trPr>', trPrStart);
+        if (trPrClose != -1 && xml.substring(trPrStart, trPrClose).contains('<w:tblHeader')) {
+            return xml;
+        }
+        return xml.substring(0, trPrTagEnd + 1) + '<w:tblHeader/>' + xml.substring(trPrTagEnd + 1);
     }
 
     private static String processXml(String xml, Map<String, Object> data) {

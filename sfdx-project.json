@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "2.7.0 — Flow Signer variable (standalone DocGenSigner type)",
-      "versionNumber": "2.7.0.NEXT",
-      "ancestorId": "04tVx000000a037IAA",
+      "versionName": "2.8.0 — Large-table rendering fidelity (full-width + footers)",
+      "versionNumber": "2.8.0.NEXT",
+      "ancestorId": "04tVx000000a1IXIAY",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v2.7 completes the Flow signature improvement from v2.6: you can now add a Signer variable directly in Flow when building a Send-for-Signature automation. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v2.8 sharpens large, multi-page tables: data tables now fill the full page width on every page (no more half-width tables on big datasets), and footers and table borders render exactly as designed in your template. Free for all users."
     }
   ],
   "name": "Portwood DocGen",

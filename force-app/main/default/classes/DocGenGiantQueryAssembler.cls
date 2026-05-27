@@ -16,6 +16,15 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
     private String lookupFieldName;
     private String whereClauseOverride;
     private String colGroupHtml = '';
+    // The authored <table …> opening tag captured from the template snapshot. Chunk-break
+    // tables reproduce this verbatim so every page renders at the SAME authored width /
+    // table-layout as the first table (and as the single/bulk render). Default is a generic
+    // full-width tag, used only for list-based output or the no-snapshot fallback.
+    private String tableOpenTag = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">';
+    // The authored <thead>…</thead> captured from the snapshot, if the template marked a
+    // repeat-header row ({RepeatHeader} / Word's tblHeader). Reproduced in each chunk-break
+    // table so the column headers reprint at the top of every page.
+    private String theadHtml = '';
 
     public DocGenGiantQueryAssembler(Id jobId, Id templateId, Id recordId, String giantRelationshipName) {
         this(jobId, templateId, recordId, giantRelationshipName, null, null, null);
@@ -107,11 +116,14 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         // Insert </table><table> breaks every ROWS_PER_PDF_CHUNK rows to prevent
         // Flying Saucer's "Maximum stack depth" error on very large tables.
         // This keeps everything in ONE Blob.toPdf() call — no gap between chunks.
-        // Prepend colgroup to rows so the first table also gets fixed column widths
-        if (String.isNotBlank(this.colGroupHtml)) {
-            allRows = this.colGroupHtml + allRows;
-        }
-        allRows = insertTableBreaks(allRows, ROWS_PER_PDF_CHUNK, this.colGroupHtml);
+        //
+        // We do NOT prepend a colgroup here: buildHtmlTemplate already leaves the
+        // template's FIRST table carrying exactly one (authored) colgroup. Prepending
+        // a second one was the half-width bug — two colgroups = 2× the column count =
+        // 200% width, so the real cells packed into the left half (see #134 follow-up).
+        // Each chunk-break table reproduces the authored <table …> tag + colgroup so
+        // every page renders at the same authored width as the first table.
+        allRows = insertTableBreaks(allRows, ROWS_PER_PDF_CHUNK, this.tableOpenTag, this.colGroupHtml, this.theadHtml);
 
         String html = injectRowsIntoTemplate(htmlTemplate, allRows);
         allRows = null;
@@ -287,6 +299,9 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         }
 
         String columnCss = '';
+        // Border CSS for the self-built data rows. Default to the authored grid below;
+        // the gray fallback only applies if the table props can't be parsed.
+        String cellBorderCss = 'border:0.5pt solid #ccc;';
         try {
             Map<String, Object> cfg = DocGenService.extractGiantQueryFragmentConfig(templateId, giantRelationshipName);
             columnCss = cfg.get('columnCss') != null ? (String) cfg.get('columnCss') : '';
@@ -295,15 +310,38 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             if (tblPropsXml.contains('<w:tblGrid')) {
                 this.colGroupHtml = buildColGroupFromTblGrid(tblPropsXml);
             }
+            if (String.isNotBlank(tblPropsXml)) {
+                // Prime the style map so a named table style (e.g. TableGrid) resolves to
+                // its real border here: this queueable runs in a fresh transaction, so the
+                // stylesXml static the snapshot-creation pass set is gone. The cfg already
+                // carries the template's styles.xml.
+                String capturedStyles = cfg.get('stylesXml') != null ? (String) cfg.get('stylesXml') : '';
+                if (String.isNotBlank(capturedStyles)) {
+                    DocGenHtmlRenderer.stylesXml = capturedStyles;
+                }
+                // Style giant data rows with the AUTHORED grid border (same resolution
+                // processTable gives the snapshot header), not an invented gray. ''
+                // means the table has no borders → data rows get none, as authored.
+                cellBorderCss = DocGenHtmlRenderer.resolveCellGridBorderCss(tblPropsXml);
+            }
         } catch (Exception e) {
             String noop = e.getMessage();
         } // NOPMD EmptyCatchBlock
 
         if (html != null) {
             if (html.contains('</style>')) {
+                // table-layout:fixed makes the authored colgroup widths authoritative;
+                // max-width:100% keeps the authored absolute width from spilling past the
+                // printable area (clipping the last column). The authored grid border is
+                // scoped to DATA cells only (td.gqc) so it never leaks onto the running
+                // header/footer cells — those keep their own authored borders (e.g. a
+                // footer's top-rule-only border, not a full box). Header background + bold
+                // come from the snapshot's authored inline styles.
                 html = html.replace(
                     '</style>',
-                    'table { table-layout: fixed; } td, th { border: 0.5pt solid #ccc; padding: 3px 5px; } th { background-color: #f0f0f0; font-weight: bold; } tr { page-break-inside: avoid; } ' +
+                    'table { table-layout: fixed; max-width: 100%; } td.gqc { ' +
+                        cellBorderCss +
+                        ' padding: 3px 5px; } tr { page-break-inside: avoid; } ' +
                         columnCss +
                         '</style>'
                 );
@@ -334,7 +372,9 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 Integer bodyEnd = html.lastIndexOf('</body>');
                 html =
                     html.substring(0, bodyEnd) +
-                    '<table style="width:100%;border-collapse:collapse;">{ROWS}</table>' +
+                    '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">' +
+                    this.colGroupHtml +
+                    '{ROWS}</table>' +
                     html.substring(bodyEnd);
             }
         } else {
@@ -350,10 +390,56 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 'tr { page-break-inside: avoid; }' +
                 columnCss +
                 '</style></head><body><table>' +
+                this.colGroupHtml +
                 headerRow +
                 '{ROWS}</table></body></html>';
         }
+        // Capture the authored <table …> tag + colgroup now embedded in the first
+        // table so chunk-break tables can reproduce them verbatim.
+        captureTableShell(html);
         return html;
+    }
+
+    /**
+     * Captures the opening <table …> tag and the single authored <colgroup> that
+     * enclose the {ROWS} placeholder, storing them on the instance. Chunk-break
+     * tables reuse these so every page renders at the SAME authored width and
+     * column widths as the first table (and as the single/bulk render). No-ops
+     * for list-based output (no enclosing <table>), leaving the generic defaults.
+     */
+    private void captureTableShell(String htmlWithPlaceholder) {
+        Integer idx = htmlWithPlaceholder.indexOf('{ROWS}');
+        if (idx == -1) {
+            return;
+        }
+        Integer tblStart = htmlWithPlaceholder.lastIndexOf('<table', idx);
+        if (tblStart == -1) {
+            return; // list-based output or no table — keep the generic full-width default
+        }
+        Integer tblOpenEnd = htmlWithPlaceholder.indexOf('>', tblStart);
+        if (tblOpenEnd == -1) {
+            return;
+        }
+        this.tableOpenTag = htmlWithPlaceholder.substring(tblStart, tblOpenEnd + 1);
+
+        // Authored colgroup, if any, sits between the table tag and {ROWS}.
+        Integer cgStart = htmlWithPlaceholder.indexOf('<colgroup', tblStart);
+        if (cgStart != -1 && cgStart < idx) {
+            Integer cgEnd = htmlWithPlaceholder.indexOf('</colgroup>', cgStart);
+            if (cgEnd != -1) {
+                this.colGroupHtml = htmlWithPlaceholder.substring(cgStart, cgEnd + '</colgroup>'.length());
+            }
+        }
+
+        // Authored <thead> (repeat-header rows) sits before {ROWS}. Capture it so each
+        // chunk-break table reprints the header at the top of the chunk.
+        Integer thStart = htmlWithPlaceholder.indexOf('<thead', tblStart);
+        if (thStart != -1 && thStart < idx) {
+            Integer thEnd = htmlWithPlaceholder.indexOf('</thead>', thStart);
+            if (thEnd != -1) {
+                this.theadHtml = htmlWithPlaceholder.substring(thStart, thEnd + '</thead>'.length());
+            }
+        }
     }
 
     /**
@@ -467,6 +553,10 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         String mergedFooter = String.isBlank(footerHtml)
             ? null
             : resolveParentMergeTags(DocGenService.decodeBraceEntities(footerHtml));
+
+        // Capture the authored <table …> tag + colgroup (when the loop renders into a
+        // table) so chunk-break tables reproduce the author's own width / columns.
+        captureTableShell(bodyContent);
 
         return DocGenService.wrapHtmlForPdf(bodyContent, sourceStyles, mergedHeader, mergedFooter);
     }
@@ -1334,10 +1424,20 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
      * This resets Flying Saucer's DOM tree depth without splitting into
      * separate PDF files, keeping the output as one continuous document.
      */
-    private static String insertTableBreaks(String allRows, Integer rowsPerBreak, String colGroupHtml) {
+    private static String insertTableBreaks(
+        String allRows,
+        Integer rowsPerBreak,
+        String tableOpenTag,
+        String colGroupHtml,
+        String theadHtml
+    ) {
         if (String.isBlank(allRows)) {
             return allRows;
         }
+        String openTag = String.isNotBlank(tableOpenTag)
+            ? tableOpenTag
+            : '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">';
+        String theadBlock = String.isNotBlank(theadHtml) ? theadHtml : '';
 
         final String TR_CLOSE = '</tr>';
         final Integer trCloseLen = TR_CLOSE.length();
@@ -1369,8 +1469,10 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             }
         }
 
-        final String TABLE_BREAK =
-            '</table><table style="width:100%;border-collapse:collapse;table-layout:fixed;">' + colGroup;
+        // Reproduce the authored <table …> tag (captured from the snapshot) so each
+        // chunk renders at the same authored width / layout as the first table — and
+        // reprint the captured <thead> so column headers repeat on every page.
+        final String TABLE_BREAK = '</table>' + openTag + colGroup + theadBlock;
 
         // Build result with table breaks inserted at row boundaries.
         // Use List<String> + join instead of string concatenation for heap efficiency.
