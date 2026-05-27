@@ -2227,7 +2227,10 @@ public with sharing class DocGenHtmlRenderer {
         // via CSS specificity.
         String tableStyle = 'border-collapse:collapse';
         Boolean tableWidthSet = false;
-        Boolean hasBorders = false;
+        // Interior grid borders (Word insideH/insideV) applied to cells; null = none.
+        // Outer table borders (top/right/bottom/left) go on the <table> element.
+        String cellInsideH = null;
+        String cellInsideV = null;
 
         // Parse table properties
         String tblPr = extractElement(tblXml, 'w:tblPr');
@@ -2253,43 +2256,53 @@ public with sharing class DocGenHtmlRenderer {
                 }
             }
 
-            // Table borders — check inline borders first, then style reference
+            // Table borders — translate each authored side faithfully. An explicit
+            // <w:tblBorders> overrides the named style. Outer sides (top/right/bottom/
+            // left) go on the <table>; insideH/insideV become the cells' horizontal/
+            // vertical grid lines. A partial border (e.g. a footer with top-only and
+            // everything else "none") therefore renders exactly as authored — a single
+            // top rule — instead of the old forced full black box.
+            String bTop = null;
+            String bBottom = null;
+            String bLeft = null;
+            String bRight = null;
             if (tblPr.contains('<w:tblBorders')) {
-                // Parse actual border values — only set hasBorders if at least one is real (not none/nil)
                 String tblBdr = extractElement(tblPr, 'w:tblBorders');
                 if (String.isNotBlank(tblBdr)) {
-                    String bTop = parseBorderSide(tblBdr, 'w:top');
-                    String bBottom = parseBorderSide(tblBdr, 'w:bottom');
-                    String bLeft = parseBorderSide(tblBdr, 'w:left');
-                    String bRight = parseBorderSide(tblBdr, 'w:right');
-                    String bInsH = parseBorderSide(tblBdr, 'w:insideH');
-                    String bInsV = parseBorderSide(tblBdr, 'w:insideV');
-                    if (
-                        bTop != null ||
-                        bBottom != null ||
-                        bLeft != null ||
-                        bRight != null ||
-                        bInsH != null ||
-                        bInsV != null
-                    ) {
-                        hasBorders = true;
-                        // Use the first real border found for the table-level style
-                        String rep = bTop != null
-                            ? bTop
-                            : (bInsH != null ? bInsH : (bLeft != null ? bLeft : '0.5pt solid #000'));
-                        tableStyle += ';border:' + rep;
-                    }
+                    bTop = parseBorderSide(tblBdr, 'w:top');
+                    bBottom = parseBorderSide(tblBdr, 'w:bottom');
+                    bLeft = parseBorderSide(tblBdr, 'w:left');
+                    bRight = parseBorderSide(tblBdr, 'w:right');
+                    cellInsideH = parseBorderSide(tblBdr, 'w:insideH');
+                    cellInsideV = parseBorderSide(tblBdr, 'w:insideV');
                 }
             } else if (tblPr.contains('w:tblStyle')) {
-                // Table uses a named style — resolve from styles.xml if available
+                // Named style (e.g. TableGrid) — resolve to one border and apply it to
+                // every side, matching how Word draws the style's default full grid.
                 String styleVal = extractAttr(tblPr, 'w:tblStyle', 'w:val');
                 if (styleVal != null) {
                     String resolvedBorder = resolveTableStyleBorder(styleVal);
                     if (resolvedBorder != null) {
-                        hasBorders = true;
-                        tableStyle += ';border:' + resolvedBorder;
+                        bTop = resolvedBorder;
+                        bBottom = resolvedBorder;
+                        bLeft = resolvedBorder;
+                        bRight = resolvedBorder;
+                        cellInsideH = resolvedBorder;
+                        cellInsideV = resolvedBorder;
                     }
                 }
+            }
+            if (bTop != null) {
+                tableStyle += ';border-top:' + bTop;
+            }
+            if (bRight != null) {
+                tableStyle += ';border-right:' + bRight;
+            }
+            if (bBottom != null) {
+                tableStyle += ';border-bottom:' + bBottom;
+            }
+            if (bLeft != null) {
+                tableStyle += ';border-left:' + bLeft;
             }
 
             // RTL table: cells reversed manually in processTableRow
@@ -2397,8 +2410,11 @@ public with sharing class DocGenHtmlRenderer {
             }
         }
 
-        // Process rows
-        String rows = '';
+        // Process rows. Rows flagged as repeat-headers — Word's <w:tblHeader/>, which the
+        // {RepeatHeader} marker also sets in a pre-merge pass — are grouped into a single
+        // <thead> so Flying Saucer repeats them at the top of every page the table spans.
+        String headerRows = '';
+        String bodyRows = '';
         Integer cursor = 0;
         while (cursor < tblXml.length()) {
             Integer trStart = tblXml.indexOf('<w:tr', cursor);
@@ -2411,41 +2427,56 @@ public with sharing class DocGenHtmlRenderer {
                 break;
             }
 
-            rows += processTableRow(tblXml.substring(trStart, trEnd), images, tblPr, hasBorders, isBidiVisual);
+            String rowXml = tblXml.substring(trStart, trEnd);
+            String rowHtml = processTableRow(rowXml, images, tblPr, cellInsideH, cellInsideV, isBidiVisual);
+            if (rowIsHeader(rowXml)) {
+                headerRows += rowHtml;
+            } else {
+                bodyRows += rowHtml;
+            }
             cursor = trEnd;
         }
+        String rows = String.isNotBlank(headerRows) ? '<thead>' + headerRows + '</thead>' + bodyRows : bodyRows;
 
         return '<table style="' + tableStyle + '">' + colGroupHtml + rows + '</table>';
     }
 
     /**
-     * Processes a <w:tr> element into an HTML <tr>.
+     * True when a <w:tr> is a repeat-header row (carries <w:tblHeader/>). Uses the
+     * direct-child guard from issue #49: <w:trPr> is the first child of a row, so a
+     * <w:trPr> appearing only AFTER the first <w:tc> belongs to a NESTED row and must
+     * not flag the outer row. The {RepeatHeader} pre-merge pass injects <w:tblHeader/>,
+     * so authoring that marker routes through this same detection.
+     */
+    private static Boolean rowIsHeader(String trXml) {
+        Integer trPrIdx = trXml.indexOf('<w:trPr');
+        if (trPrIdx == -1) {
+            return false;
+        }
+        Integer firstTcIdx = trXml.indexOf('<w:tc');
+        if (firstTcIdx != -1 && trPrIdx >= firstTcIdx) {
+            return false;
+        }
+        String trPr = extractElement(trXml, 'w:trPr');
+        return String.isNotBlank(trPr) && isOoxmlOnOffElementTrue(trPr, 'w:tblHeader');
+    }
+
+    /**
+     * Processes a <w:tr> element into an HTML <tr>. cellInsideH/cellInsideV are the
+     * authored interior grid borders (Word insideH/insideV), applied to cells that
+     * don't declare their own <w:tcBorders>; null means no interior border.
      */
     private static String processTableRow(
         String trXml,
         Map<String, String> images,
         String tblPr,
-        Boolean hasBorders,
+        String cellInsideH,
+        String cellInsideV,
         Boolean isBidiVisual
     ) {
         Integer cursor = 0;
 
-        // Check for header row. extractElement is naive (returns first match), so when
-        // a row contains a nested table whose rows have their own w:trPr, we'd otherwise
-        // pick up the inner row's <w:tblHeader/> and mark this outer row as a header.
-        // Symptom: outer cell renders as <th>, browsers/Flying Saucer apply default
-        // bold to th, and that bold cascades into every nested cell. Issue #49.
-        // Direct-child rule: w:trPr is always the first child element in a w:tr — if
-        // the first <w:trPr we find appears after a <w:tc, it belongs to a nested row.
-        String trPr = null;
-        Integer trPrIdx = trXml.indexOf('<w:trPr');
-        if (trPrIdx != -1) {
-            Integer firstTcIdx = trXml.indexOf('<w:tc');
-            if (firstTcIdx == -1 || trPrIdx < firstTcIdx) {
-                trPr = extractElement(trXml, 'w:trPr');
-            }
-        }
-        Boolean isHeader = String.isNotBlank(trPr) && isOoxmlOnOffElementTrue(trPr, 'w:tblHeader');
+        Boolean isHeader = rowIsHeader(trXml);
 
         List<String> cellList = new List<String>();
         while (cursor < trXml.length()) {
@@ -2459,7 +2490,9 @@ public with sharing class DocGenHtmlRenderer {
                 break;
             }
 
-            cellList.add(processTableCell(trXml.substring(tcStart, tcEnd), images, tblPr, hasBorders, isHeader));
+            cellList.add(
+                processTableCell(trXml.substring(tcStart, tcEnd), images, tblPr, cellInsideH, cellInsideV, isHeader)
+            );
             cursor = tcEnd;
         }
 
@@ -2482,7 +2515,8 @@ public with sharing class DocGenHtmlRenderer {
         String tcXml,
         Map<String, String> images,
         String tblPr,
-        Boolean hasBorders,
+        String cellInsideH,
+        String cellInsideV,
         Boolean isHeader
     ) {
         List<String> styles = new List<String>();
@@ -2535,12 +2569,13 @@ public with sharing class DocGenHtmlRenderer {
                 styles.add('vertical-align:' + sanitizeCssToken(vAlign));
             }
 
-            // Cell-specific borders: <w:tcBorders>
+            // Cell-specific borders: <w:tcBorders> override; otherwise inherit the
+            // table's interior grid borders (insideH → top/bottom, insideV → left/right).
             String tcBdr = tcPr.contains('<w:tcBorders') ? extractElement(tcPr, 'w:tcBorders') : null;
             if (String.isNotBlank(tcBdr)) {
                 addBorderStyles(styles, tcBdr);
-            } else if (hasBorders) {
-                styles.add('border:0.5pt solid #000'); // from hasBorders (style or inline)
+            } else {
+                addInteriorBorders(styles, cellInsideH, cellInsideV);
             }
 
             // Column span: <w:gridSpan w:val="2"/>
@@ -2555,8 +2590,8 @@ public with sharing class DocGenHtmlRenderer {
             if (String.isNotBlank(tcMar)) {
                 addCellPaddingStyles(styles, tcMar);
             }
-        } else if (hasBorders) {
-            styles.add('border:0.5pt solid #000'); // from hasBorders (style or inline)
+        } else {
+            addInteriorBorders(styles, cellInsideH, cellInsideV);
         }
 
         // Process cell content (paragraphs)
@@ -3371,6 +3406,62 @@ public with sharing class DocGenHtmlRenderer {
         }
 
         return '0.5pt solid #000'; // Default for styles with tblBorders
+    }
+
+    /**
+     * Resolves a table's authored interior grid borders into a CSS declaration block
+     * for a <td>/<th> rule. Mirrors processTable's resolution exactly (explicit
+     * <w:tblBorders> insideH/insideV, else the named-style default) so the giant-query
+     * path can style its self-built data rows with the SAME borders the snapshot's
+     * header row gets — instead of an invented gray. tblPropsXml is the <w:tblPr>.
+     * Returns '' when the table has no interior borders (faithful: no grid lines).
+     */
+    public static String resolveCellGridBorderCss(String tblPropsXml) {
+        if (String.isBlank(tblPropsXml)) {
+            return '';
+        }
+        String insideH = null;
+        String insideV = null;
+        if (tblPropsXml.contains('<w:tblBorders')) {
+            String tblBdr = extractElement(tblPropsXml, 'w:tblBorders');
+            if (String.isNotBlank(tblBdr)) {
+                insideH = parseBorderSide(tblBdr, 'w:insideH');
+                insideV = parseBorderSide(tblBdr, 'w:insideV');
+            }
+        } else if (tblPropsXml.contains('w:tblStyle')) {
+            String styleVal = extractAttr(tblPropsXml, 'w:tblStyle', 'w:val');
+            if (styleVal != null) {
+                String resolved = resolveTableStyleBorder(styleVal);
+                insideH = resolved;
+                insideV = resolved;
+            }
+        }
+        String css = '';
+        if (insideH != null) {
+            css += 'border-top:' + insideH + ';border-bottom:' + insideH + ';';
+        }
+        if (insideV != null) {
+            css += 'border-left:' + insideV + ';border-right:' + insideV + ';';
+        }
+        return css;
+    }
+
+    /**
+     * Applies the table's interior grid borders to a cell that declares no explicit
+     * <w:tcBorders>: insideH → top & bottom, insideV → left & right. Either may be
+     * null (that direction has no grid line). With border-collapse, neighbouring
+     * cells' borders merge into single lines — reproducing Word's authored grid
+     * (full grid for TableGrid, none for a top-rule-only footer).
+     */
+    private static void addInteriorBorders(List<String> styles, String insideH, String insideV) {
+        if (insideH != null) {
+            styles.add('border-top:' + insideH);
+            styles.add('border-bottom:' + insideH);
+        }
+        if (insideV != null) {
+            styles.add('border-left:' + insideV);
+            styles.add('border-right:' + insideV);
+        }
     }
 
     private static void addBorderStyles(List<String> styles, String bdrXml) {

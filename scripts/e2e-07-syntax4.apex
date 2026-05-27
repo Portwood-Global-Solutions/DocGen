@@ -353,6 +353,24 @@ try {
     }
 }
 
+// {RepeatHeader} marker → native <w:tblHeader/> (pre-merge), marker stripped
+try {
+    String rh = DocGenService.mergeRunsInTagsForTest(
+        '<w:tbl><w:tblPr/><w:tr><w:tc><w:p><w:r><w:t>{RepeatHeader}Code</w:t></w:r></w:p></w:tc></w:tr>' +
+        '<w:tr><w:tc><w:p><w:r><w:t>105</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    );
+    if (rh.contains('<w:tblHeader/>') && !rh.contains('{RepeatHeader}') && rh.contains('Code')) {
+        pass++;
+        System.debug('REPEAT HEADER MARKER: PASS');
+    } else {
+        fail++;
+        System.debug('REPEAT HEADER MARKER: FAIL — ' + rh);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('REPEAT HEADER MARKER: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX4 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

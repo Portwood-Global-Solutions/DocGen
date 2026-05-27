@@ -1095,6 +1095,15 @@ Repeat a block for each child record.
 
 **Container auto-expansion.** If the loop tags sit inside a table row or a bulleted/numbered list paragraph, DocGen detects it and repeats the **entire row/paragraph** instead of just the inner content. This is how invoice line-item tables work — drop `{#OpportunityLineItems}` and `{/OpportunityLineItems}` anywhere inside the row and every line item gets its own row automatically.
 
+**Repeating the column header on every page (`{RepeatHeader}`).** When a loop table runs over multiple pages, add the text `{RepeatHeader}` anywhere inside the header row (the row with your column labels). DocGen strips the marker and reprints that header row at the top of every page the table spans — including very large tables that page across dozens of pages. Place it once, in the header row only:
+
+```
+| {RepeatHeader}Short Code | Cost to send | Cost to receive |
+| {#ShortCodes} {Code} | {Send} | {Receive} {/ShortCodes} |
+```
+
+This works in **Word (`.docx`) templates**. In **HTML templates**, wrap the header row in a native `<thead>…</thead>` instead — DocGen and the PDF engine repeat it automatically. _(For large datasets that use the giant-query path, re-save the template once after adding `{RepeatHeader}` so the change is captured.)_
+
 Nested loops are supported:
 
 ```

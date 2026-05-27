@@ -468,9 +468,82 @@ private class DocGenHtmlRendererTest {
                 '</w:body></w:document>';
 
             String html = DocGenHtmlRenderer.convertToHtml(xml);
-            System.assert(html.contains('border:0.5pt solid #000'), 'Should have cell borders');
+            // Authored a top-only table border (no insideH/insideV): the <table> gets a
+            // top border and cells get NONE — not a forced full black box per cell.
+            System.assert(html.contains('border-top:'), 'Table should carry its authored top border');
+            System.assert(!html.contains('border:0.5pt solid #000'), 'Top-only border must not box every cell');
             System.assert(html.contains('Pct'), 'Should contain pct cell text');
             System.assert(html.contains('Dxa'), 'Should contain dxa cell text');
+        }
+    }
+
+    @IsTest
+    static void testPartialTableBorderFidelity() {
+        // A footer-style table: explicit tblBorders with ONLY a top rule (orange) and
+        // every other side "none". Faithful output = a single top border on the <table>,
+        // no interior grid, no per-cell box — NOT the old forced full black grid.
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml =
+                '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body><w:tbl><w:tblPr>' +
+                '<w:tblStyle w:val="TableGrid"/>' +
+                '<w:tblBorders>' +
+                '<w:top w:val="single" w:sz="4" w:color="FA6414"/>' +
+                '<w:left w:val="none"/><w:bottom w:val="none"/><w:right w:val="none"/>' +
+                '<w:insideH w:val="none"/><w:insideV w:val="none"/>' +
+                '</w:tblBorders></w:tblPr>' +
+                '<w:tr>' +
+                '<w:tc><w:p><w:r><w:t>L</w:t></w:r></w:p></w:tc>' +
+                '<w:tc><w:p><w:r><w:t>R</w:t></w:r></w:p></w:tc>' +
+                '</w:tr></w:tbl></w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(
+                html.contains('border-top:0.5pt solid #FA6414'),
+                'Authored orange top rule must survive with its color. Got: ' + html
+            );
+            System.assert(
+                !html.contains('border-left'),
+                'Top-only border must not add any vertical grid line. Got: ' + html
+            );
+            System.assert(
+                !html.contains('border:0.5pt solid #000'),
+                'Top-only border must not box every cell in black. Got: ' + html
+            );
+        }
+    }
+
+    @IsTest
+    static void testExplicitGridBorderAppliesToCells() {
+        // Explicit insideH/insideV grid → cells inherit those interior borders (the
+        // full-grid case), each in the authored color.
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml =
+                '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body><w:tbl><w:tblPr><w:tblBorders>' +
+                '<w:top w:val="single" w:sz="4" w:color="000000"/>' +
+                '<w:bottom w:val="single" w:sz="4" w:color="000000"/>' +
+                '<w:left w:val="single" w:sz="4" w:color="000000"/>' +
+                '<w:right w:val="single" w:sz="4" w:color="000000"/>' +
+                '<w:insideH w:val="single" w:sz="4" w:color="000000"/>' +
+                '<w:insideV w:val="single" w:sz="4" w:color="000000"/>' +
+                '</w:tblBorders></w:tblPr>' +
+                '<w:tr>' +
+                '<w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc>' +
+                '<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc>' +
+                '</w:tr></w:tbl></w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            // Cells get interior left/right borders (insideV) — proves the grid is drawn.
+            System.assert(
+                html.contains('border-left:0.5pt solid #000000'),
+                'Interior grid must reach cells. Got: ' + html
+            );
         }
     }
 
@@ -1558,6 +1631,35 @@ private class DocGenHtmlRendererTest {
 
             System.assert(html.contains('<th'), 'Should render header cell as th');
             System.assert(html.contains('<td'), 'Should render data cell as td');
+        }
+    }
+
+    @IsTest
+    static void testRepeatHeaderRowWrappedInThead() {
+        // A row carrying <w:tblHeader/> (the structural flag {RepeatHeader} injects) must
+        // be grouped into <thead>, which Flying Saucer reprints on every page. Data rows
+        // stay outside it.
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String xml =
+                '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body><w:tbl><w:tblPr></w:tblPr>' +
+                '<w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:p><w:r><w:t>Code</w:t></w:r></w:p></w:tc></w:tr>' +
+                '<w:tr><w:tc><w:p><w:r><w:t>105</w:t></w:r></w:p></w:tc></w:tr>' +
+                '</w:tbl></w:body></w:document>';
+
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+
+            System.assert(html.contains('<thead>'), 'Repeat-header row must be grouped into <thead>. Got: ' + html);
+            System.assert(
+                html.indexOf('Code') < html.indexOf('</thead>'),
+                'Header text must sit inside <thead>. Got: ' + html
+            );
+            System.assert(
+                html.indexOf('</thead>') < html.indexOf('105'),
+                'Data rows must follow </thead>, not be inside it. Got: ' + html
+            );
         }
     }
 

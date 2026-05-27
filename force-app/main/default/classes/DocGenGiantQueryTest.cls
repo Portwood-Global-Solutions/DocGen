@@ -346,6 +346,149 @@ private class DocGenGiantQueryTest {
         }
     }
 
+    /**
+     * Regression for the half-width giant-query table: the assembler must reuse the
+     * snapshot's authored <table> tag + its SINGLE colgroup, not prepend a second one
+     * (two colgroups = 2× columns = 200% width, packing real cells into the left half)
+     * and not force width:100%. Guards "what the user authored = what comes out".
+     */
+    @IsTest
+    static void testGiantQueryAuthoredWidthSingleColgroup() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
+            DocGen_Template_Version__c ver = [
+                SELECT Id
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :tpl.Id AND Is_Active__c = TRUE
+                LIMIT 1
+            ];
+
+            // Snapshot table authored at a FIXED width with its own colgroup (mirrors a
+            // DOCX table with tblW type="dxa" + tblGrid — the shape that rendered at 50%).
+            String snapshotHtml =
+                '<html><body>' +
+                '<table style="width:432.35pt;border-collapse:collapse;table-layout:fixed">' +
+                '<colgroup><col style="width:23.13%"/><col style="width:38.43%"/><col style="width:38.44%"/></colgroup>' +
+                '<tr><th>H1</th><th>H2</th><th>H3</th></tr>' +
+                '<tr>{#Contacts}<td>{FirstName}</td><td>x</td><td>y</td>{/Contacts}</tr>' +
+                '</table></body></html>';
+            insert new ContentVersion(
+                Title = 'docgen_tmpl_html_' + ver.Id,
+                PathOnClient = 'snapshot.html',
+                VersionData = Blob.valueOf(snapshotHtml),
+                IsMajorVersion = false
+            );
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Harvesting',
+                Parent_Record_Id__c = String.valueOf(acc.Id)
+            );
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
+
+            DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
+            String prefix = 'docgen_giant_' + job.Id + '_';
+            insert new ContentVersion(
+                Title = prefix + '00001',
+                PathOnClient = prefix + '00001.html',
+                VersionData = Blob.valueOf('<tr><td>Row0</td><td>0</td><td>0</td></tr>')
+            );
+
+            Test.startTest();
+            System.enqueueJob(assembler);
+            Test.stopTest();
+
+            String assembled = [
+                    SELECT VersionData
+                    FROM ContentVersion
+                    WHERE Title = :(prefix + 'debug_html')
+                    LIMIT 1
+                ]
+                .VersionData.toString();
+
+            System.assertEquals(
+                1,
+                assembled.countMatches('<colgroup'),
+                'Exactly one colgroup — the duplicate prepend was the half-width bug. Got: ' + assembled.abbreviate(600)
+            );
+            System.assert(
+                assembled.contains('width:432.35pt'),
+                'Authored fixed table width must be preserved (not forced to 100%). Got: ' + assembled.abbreviate(600)
+            );
+            System.assert(
+                assembled.contains('width:23.13%'),
+                'Authored column widths must survive in the colgroup. Got: ' + assembled.abbreviate(600)
+            );
+        }
+    }
+
+    /**
+     * When the snapshot table carries a <thead> (a {RepeatHeader} / tblHeader row), the
+     * assembler must capture it so the column headers can reprint on every page.
+     */
+    @IsTest
+    static void testGiantQueryRepeatHeaderCaptured() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
+            DocGen_Template_Version__c ver = [
+                SELECT Id
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :tpl.Id AND Is_Active__c = TRUE
+                LIMIT 1
+            ];
+
+            String snapshotHtml =
+                '<html><body>' +
+                '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+                '<colgroup><col style="width:50%"/><col style="width:50%"/></colgroup>' +
+                '<thead><tr><th>GQ_THEAD_LABEL</th><th>H2</th></tr></thead>' +
+                '<tr>{#Contacts}<td>{FirstName}</td><td>x</td>{/Contacts}</tr>' +
+                '</table></body></html>';
+            insert new ContentVersion(
+                Title = 'docgen_tmpl_html_' + ver.Id,
+                PathOnClient = 'snapshot.html',
+                VersionData = Blob.valueOf(snapshotHtml),
+                IsMajorVersion = false
+            );
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Harvesting',
+                Parent_Record_Id__c = String.valueOf(acc.Id)
+            );
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
+
+            DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
+            String prefix = 'docgen_giant_' + job.Id + '_';
+            insert new ContentVersion(
+                Title = prefix + '00001',
+                PathOnClient = prefix + '00001.html',
+                VersionData = Blob.valueOf('<tr><td>Row0</td><td>0</td></tr>')
+            );
+
+            Test.startTest();
+            System.enqueueJob(assembler);
+            Test.stopTest();
+
+            String assembled = [
+                    SELECT VersionData
+                    FROM ContentVersion
+                    WHERE Title = :(prefix + 'debug_html')
+                    LIMIT 1
+                ]
+                .VersionData.toString();
+
+            System.assert(
+                assembled.contains('<thead>') && assembled.contains('GQ_THEAD_LABEL'),
+                'Repeat-header <thead> must be preserved in the assembled output. Got: ' + assembled.abbreviate(600)
+            );
+        }
+    }
+
     @IsTest
     static void testStitchJobExecution() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
