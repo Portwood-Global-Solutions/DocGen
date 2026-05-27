@@ -1,5 +1,36 @@
 # Changelog
 
+## v3.0.0 — AppExchange review readiness (`04tVx000000a8blIAA`, build `3.0.0-1`, promoted 2026-05-27)
+
+AppExchange submission release. Carries forward v2.9's large-table repeating-header improvements and adds a small security-review hardening pass around signature temporary-file cleanup.
+
+### 1. Signature temp-document cleanup now has an explicit delete gate
+
+Two cleanup-only signature paths now check `Schema.sObjectType.ContentDocument.isDeletable()` before deleting temporary `ContentDocument` records:
+
+- `DocGenSignatureController.cleanupSignatureTempImages`
+- `DocGenSignatureService.cleanupTempImages`
+
+The delete scope is unchanged — both paths still delete only DocGen-generated temporary signature images. The change aligns these paths with the CRUD-check pattern already used by the other document-cleanup code and keeps the review artifact consistent with the package source.
+
+### 2. AppExchange scanner response bundle refreshed
+
+The Force.com scanner report from 2026-05-27 reports 605 pattern findings, mostly from helper-guarded CRUD/FLS and dynamic-query feature paths. Current Salesforce Code Analyzer remains clean. The local-only AppExchange bundle now includes a v3.0 response note mapping the scanner groups to their controls:
+
+- Dynamic SOQL paths use Schema object/field allowlists, clause keyword/comment/terminator rejection, Id binds where applicable, and `AccessLevel.USER_MODE`.
+- Privileged DML/SOQL paths use `DocGenFlsGuard` / `DocGenSignatureGuestSecurity` before `SYSTEM_MODE`.
+- Guest signing/verification `without sharing` paths are token/PIN/expiry bounded by design.
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Package build coverage: 77%, code coverage check passed
+- `sf code-analyzer` (Security + AppExchange): 0 violations (50 inline suppressions reported)
+- `DocGenSignatureTests`: 267/267 pass
+- `npm run format:check`: pass
+
+Promoted package: `04tVx000000a8blIAA` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a8blIAA)
+
 ## v2.9.0 — Large-table repeating headers (`04tVx000000a7fhIAA`, build `2.9.0-1`, promoted 2026-05-27)
 
 Follow-up release for giant-query PDF rendering, verified against the real NZ "Skinny" short-codes `.docx` template and 3,559 staging records.

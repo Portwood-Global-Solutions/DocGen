@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-2.9.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -18,10 +18,10 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 ## Install
 
 ```bash
-sf package install --package 04tVx000000a7fhIAA --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000a8blIAA --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a7fhIAA) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a7fhIAA)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a8blIAA) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a8blIAA)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -367,7 +367,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v2.9.0**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.0.0**.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -440,7 +440,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v2.9.0  | **Latest (Released)**                   | `04tVx000000a7fhIAA` |
+| v3.0.0  | **Latest (Released)**                   | `04tVx000000a8blIAA` |
+| v2.9.0  | Previous                                | `04tVx000000a7fhIAA` |
 | v2.8.0  | Previous                                | `04tVx000000a7e5IAA` |
 | v2.7.0  | Previous                                | `04tVx000000a1IXIAY` |
 | v2.6.0  | Previous                                | `04tVx000000a037IAA` |
