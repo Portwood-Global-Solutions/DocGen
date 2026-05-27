@@ -2439,9 +2439,6 @@ public with sharing class DocGenHtmlRenderer {
         String rows = bodyRows;
         if (String.isNotBlank(headerRows)) {
             rows = '<thead>' + headerRows + '</thead>' + bodyRows;
-            // Flying Saucer only reprints <thead> on each page break when the table
-            // opts in via this proprietary property; without it the header shows once.
-            tableStyle += ';-fs-table-paginate:paginate';
         }
 
         return '<table style="' + tableStyle + '">' + colGroupHtml + rows + '</table>';

@@ -380,7 +380,11 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
                     }
                 }
 
-                row += '<td class="gqc' + colNum + '">' + txt + '</td>';
+                // Common "gqc" class + per-column "gqcN". The common class lets the
+                // giant CSS scope the authored grid border to DATA cells only, so it
+                // never leaks onto the running header/footer cells (which carry their
+                // own authored borders — e.g. a footer's top-rule-only border).
+                row += '<td class="gqc gqc' + colNum + '">' + txt + '</td>';
             }
             result += row + '</tr>';
         }

@@ -330,13 +330,16 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
 
         if (html != null) {
             if (html.contains('</style>')) {
-                // table-layout:fixed makes the authored colgroup widths authoritative.
-                // Borders come from the authored grid (cellBorderCss); header background
-                // and bold come from the snapshot's authored inline styles, so we no
-                // longer force a gray #f0f0f0 fill here.
+                // table-layout:fixed makes the authored colgroup widths authoritative;
+                // max-width:100% keeps the authored absolute width from spilling past the
+                // printable area (clipping the last column). The authored grid border is
+                // scoped to DATA cells only (td.gqc) so it never leaks onto the running
+                // header/footer cells — those keep their own authored borders (e.g. a
+                // footer's top-rule-only border, not a full box). Header background + bold
+                // come from the snapshot's authored inline styles.
                 html = html.replace(
                     '</style>',
-                    'table { table-layout: fixed; } td, th { ' +
+                    'table { table-layout: fixed; max-width: 100%; } td.gqc { ' +
                         cellBorderCss +
                         ' padding: 3px 5px; } tr { page-break-inside: avoid; } ' +
                         columnCss +
@@ -429,25 +432,12 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         }
 
         // Authored <thead> (repeat-header rows) sits before {ROWS}. Capture it so each
-        // chunk-break table reprints the header at the top of every page.
+        // chunk-break table reprints the header at the top of the chunk.
         Integer thStart = htmlWithPlaceholder.indexOf('<thead', tblStart);
         if (thStart != -1 && thStart < idx) {
             Integer thEnd = htmlWithPlaceholder.indexOf('</thead>', thStart);
             if (thEnd != -1) {
                 this.theadHtml = htmlWithPlaceholder.substring(thStart, thEnd + '</thead>'.length());
-                // Flying Saucer only reprints <thead> per page when the table opts in.
-                // processTable already adds this for DOCX; ensure chunk tables carry it
-                // too (covers HTML-template tables that declared <thead> themselves).
-                if (!this.tableOpenTag.contains('-fs-table-paginate')) {
-                    if (this.tableOpenTag.contains('style="')) {
-                        this.tableOpenTag = this.tableOpenTag.replace('style="', 'style="-fs-table-paginate:paginate;');
-                    } else {
-                        this.tableOpenTag = this.tableOpenTag.replace(
-                            '<table',
-                            '<table style="-fs-table-paginate:paginate;"'
-                        );
-                    }
-                }
             }
         }
     }
