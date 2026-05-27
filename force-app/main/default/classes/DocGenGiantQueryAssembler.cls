@@ -435,6 +435,19 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             Integer thEnd = htmlWithPlaceholder.indexOf('</thead>', thStart);
             if (thEnd != -1) {
                 this.theadHtml = htmlWithPlaceholder.substring(thStart, thEnd + '</thead>'.length());
+                // Flying Saucer only reprints <thead> per page when the table opts in.
+                // processTable already adds this for DOCX; ensure chunk tables carry it
+                // too (covers HTML-template tables that declared <thead> themselves).
+                if (!this.tableOpenTag.contains('-fs-table-paginate')) {
+                    if (this.tableOpenTag.contains('style="')) {
+                        this.tableOpenTag = this.tableOpenTag.replace('style="', 'style="-fs-table-paginate:paginate;');
+                    } else {
+                        this.tableOpenTag = this.tableOpenTag.replace(
+                            '<table',
+                            '<table style="-fs-table-paginate:paginate;"'
+                        );
+                    }
+                }
             }
         }
     }

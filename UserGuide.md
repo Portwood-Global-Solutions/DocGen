@@ -1102,7 +1102,7 @@ Repeat a block for each child record.
 | {#ShortCodes} {Code} | {Send} | {Receive} {/ShortCodes} |
 ```
 
-This works in **Word (`.docx`) templates**. In **HTML templates**, wrap the header row in a native `<thead>…</thead>` instead — DocGen and the PDF engine repeat it automatically. _(For large datasets that use the giant-query path, re-save the template once after adding `{RepeatHeader}` so the change is captured.)_
+This works in **Word (`.docx`) templates**. In **HTML templates**, wrap the header row in a native `<thead>…</thead>` and add `-fs-table-paginate: paginate;` to the table's CSS so the PDF engine reprints the header on each page. _(For large datasets that use the giant-query path, re-save the template once after adding `{RepeatHeader}` so the change is captured.)_
 
 Nested loops are supported:
 

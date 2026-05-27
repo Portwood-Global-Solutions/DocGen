@@ -1660,6 +1660,11 @@ private class DocGenHtmlRendererTest {
                 html.indexOf('</thead>') < html.indexOf('105'),
                 'Data rows must follow </thead>, not be inside it. Got: ' + html
             );
+            // Flying Saucer only reprints the header per page with this property.
+            System.assert(
+                html.contains('-fs-table-paginate:paginate'),
+                'A table with a repeat-header must opt into per-page header reprint. Got: ' + html
+            );
         }
     }
 
