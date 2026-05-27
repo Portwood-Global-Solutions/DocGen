@@ -1556,8 +1556,10 @@ public without sharing class DocGenSignatureController {
                 for (ContentVersion cv : tempCvs) {
                     docIds.add(cv.ContentDocumentId);
                 }
-                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-                delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds];
+                if (Schema.sObjectType.ContentDocument.isDeletable()) {
+                    /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                    delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds]; // NOPMD ApexCRUDViolation — CRUD checked above
+                }
             }
         } catch (Exception e) {
             System.debug(LoggingLevel.ERROR, 'DocGen: Failed to clean up temp signature images: ' + e.getMessage());
