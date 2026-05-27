@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.9.0 — Large-table repeating headers (`04tVx000000a7fhIAA`, build `2.9.0-1`, promoted 2026-05-27)
+
+Follow-up release for giant-query PDF rendering, verified against the real NZ "Skinny" short-codes `.docx` template and 3,559 staging records.
+
+### 1. Giant-query table headers now repeat on each PDF page
+
+Large-query Word templates already preserve their authored header row as `<thead>` in the internal HTML snapshot, but Flying Saucer only repeats table headers during PDF pagination when the table opts into its pagination extension. The giant-query assembler now injects the required CSS (`-fs-table-paginate: paginate` plus `thead { display: table-header-group; }`) into snapshot-backed and HTML-backed large tables.
+
+The fix is scoped to the giant-query table shell so normal document merge behavior is unchanged.
+
+### 2. Word-authored tables keep a continuous single-line frame
+
+The first repeat-header pass made the table render as separated cell boxes in the PDF. The assembler now forces collapsed borders and zero border spacing on giant-query tables, and uses Word-style cell padding (`0pt 5.4pt`) for generated data rows. The real Skinny proof now renders as a compact, continuous table grid instead of a gapped frame.
+
+### 3. Loop rows accidentally inside `<thead>` are repaired
+
+Some Word templates carry Word's repeat-header flag on both the visible header row and the merge-loop row. The DOCX-to-HTML snapshot then places both rows inside `<thead>`, and the giant-query assembler used to drop the closing `</thead>` while replacing the loop row with generated data. The assembler now closes the header block before injecting generated rows, preserving the real header and keeping data rows in the table body.
+
+### Release validation
+
+- e2e-01..08 + 07-syntax1..4: PASS / FAIL 0
+- RunLocalTests: 1,470 tests, 100% pass, 77% org-wide coverage
+- `sf code-analyzer` (Security + AppExchange): 0 violations (45 existing inline suppressions)
+- `DocGenGiantQueryTest`: 46/46 pass, including repeat-header and loop-row-inside-`thead` regression coverage
+- `npm run format:check`: pass
+- Verified on the real Skinny `.docx` + 3,559 records: repeated orange header on page 2+, continuous borders, 68-page PDF
+
+Promoted package: `04tVx000000a7fhIAA` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a7fhIAA)
+
 ## v2.8.0 — Large-table rendering fidelity (full-width tables + faithful footers/borders)
 
 Three table-rendering fixes, all surfaced on a real customer template (a ~3,560-row NZ "Skinny" short-codes list) generated through the giant-query path, and verified end-to-end against that template + data (86-page PDF).

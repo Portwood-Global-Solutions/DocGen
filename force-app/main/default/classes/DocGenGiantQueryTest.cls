@@ -486,6 +486,84 @@ private class DocGenGiantQueryTest {
                 assembled.contains('<thead>') && assembled.contains('GQ_THEAD_LABEL'),
                 'Repeat-header <thead> must be preserved in the assembled output. Got: ' + assembled.abbreviate(600)
             );
+            System.assert(
+                assembled.contains('-fs-table-paginate: paginate') &&
+                assembled.contains('thead { display: table-header-group; }'),
+                'Flying Saucer table-header pagination CSS must be present. Got: ' + assembled.abbreviate(600)
+            );
+        }
+    }
+
+    /**
+     * Some Word-authored templates accidentally carry w:tblHeader on the loop row too.
+     * The DOCX snapshot then puts both the visible header row and the loop row inside
+     * <thead>. The assembler must close the header block before {ROWS}; otherwise it
+     * drops </thead> and the table headers stop repeating in large-query PDFs.
+     */
+    @IsTest
+    static void testGiantQueryRepeatHeaderWithLoopRowInsideThead() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
+            DocGen_Template_Version__c ver = [
+                SELECT Id
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :tpl.Id AND Is_Active__c = TRUE
+                LIMIT 1
+            ];
+
+            String snapshotHtml =
+                '<html><body>' +
+                '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+                '<colgroup><col style="width:50%"/><col style="width:50%"/></colgroup>' +
+                '<thead>' +
+                '<tr><th>GQ_STATIC_HEADER</th><th>H2</th></tr>' +
+                '<tr>{#Contacts}<th>{FirstName}</th><th>x</th>{/Contacts}</tr>' +
+                '</thead>' +
+                '</table></body></html>';
+            insert new ContentVersion(
+                Title = 'docgen_tmpl_html_' + ver.Id,
+                PathOnClient = 'snapshot.html',
+                VersionData = Blob.valueOf(snapshotHtml),
+                IsMajorVersion = false
+            );
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Harvesting',
+                Parent_Record_Id__c = String.valueOf(acc.Id)
+            );
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
+
+            DocGenGiantQueryAssembler assembler = new DocGenGiantQueryAssembler(job.Id, tpl.Id, acc.Id, 'Contacts');
+            String prefix = 'docgen_giant_' + job.Id + '_';
+            insert new ContentVersion(
+                Title = prefix + '00001',
+                PathOnClient = prefix + '00001.html',
+                VersionData = Blob.valueOf('<tr><td>Row0</td><td>0</td></tr>')
+            );
+
+            Test.startTest();
+            System.enqueueJob(assembler);
+            Test.stopTest();
+
+            String assembled = [
+                    SELECT VersionData
+                    FROM ContentVersion
+                    WHERE Title = :(prefix + 'debug_html')
+                    LIMIT 1
+                ]
+                .VersionData.toString();
+
+            System.assert(
+                assembled.contains('<thead><tr><th>GQ_STATIC_HEADER</th><th>H2</th></tr></thead>'),
+                'Only the real static header row should remain in <thead>. Got: ' + assembled.abbreviate(700)
+            );
+            System.assert(
+                assembled.contains('</thead><tr><td>Row0</td><td>0</td></tr></table>'),
+                'Giant-query rows must render after the closed <thead>. Got: ' + assembled.abbreviate(700)
+            );
         }
     }
 

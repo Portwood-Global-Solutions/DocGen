@@ -329,6 +329,12 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         } // NOPMD EmptyCatchBlock
 
         if (html != null) {
+            String giantTableCss =
+                'table { border-collapse: collapse; border-spacing: 0; table-layout: fixed; max-width: 100%; -fs-table-paginate: paginate; } ' +
+                'thead { display: table-header-group; } td.gqc { ' +
+                cellBorderCss +
+                ' padding: 0pt 5.4pt; } tr { page-break-inside: avoid; } ' +
+                columnCss;
             if (html.contains('</style>')) {
                 // table-layout:fixed makes the authored colgroup widths authoritative;
                 // max-width:100% keeps the authored absolute width from spilling past the
@@ -337,14 +343,11 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 // header/footer cells — those keep their own authored borders (e.g. a
                 // footer's top-rule-only border, not a full box). Header background + bold
                 // come from the snapshot's authored inline styles.
-                html = html.replace(
-                    '</style>',
-                    'table { table-layout: fixed; max-width: 100%; } td.gqc { ' +
-                        cellBorderCss +
-                        ' padding: 3px 5px; } tr { page-break-inside: avoid; } ' +
-                        columnCss +
-                        '</style>'
-                );
+                html = html.replace('</style>', giantTableCss + '</style>');
+            } else if (html.contains('</head>')) {
+                html = html.replace('</head>', '<style>' + giantTableCss + '</style></head>');
+            } else {
+                html = '<style>' + giantTableCss + '</style>' + html;
             }
 
             // Resolve parent merge tags on the template (~2KB, before row injection)
@@ -366,7 +369,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 Integer loopTrStart = html.lastIndexOf('<tr', openIdx);
                 Integer tableEnd = html.indexOf('</table>', openIdx);
                 if (loopTrStart != -1 && tableEnd != -1) {
-                    html = html.substring(0, loopTrStart) + '{ROWS}' + html.substring(tableEnd);
+                    html = replaceGiantLoopTableTail(html, openIdx, loopTrStart, tableEnd);
                 }
             } else {
                 Integer bodyEnd = html.lastIndexOf('</body>');
@@ -384,8 +387,9 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 '<html><head><style>' +
                 '@page { size: letter; margin: 0.75in; }' +
                 'body { font-family: Helvetica, sans-serif; font-size: 9pt; margin: 0; }' +
-                'table { width: 100%; border-collapse: collapse; table-layout: fixed; }' +
-                'td, th { border: 0.5pt solid #ccc; padding: 3px 5px; }' +
+                'table { width: 100%; border-collapse: collapse; border-spacing: 0; table-layout: fixed; -fs-table-paginate: paginate; }' +
+                'thead { display: table-header-group; }' +
+                'td, th { border: 0.5pt solid #ccc; padding: 0pt 5.4pt; }' +
                 'th { background-color: #f0f0f0; font-weight: bold; }' +
                 'tr { page-break-inside: avoid; }' +
                 columnCss +
@@ -450,6 +454,33 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
     }
 
     /**
+     * Replaces the giant-query loop row and the remainder of its source table with
+     * {ROWS}. Some Word templates accidentally mark the loop row itself as a
+     * repeat-header row, so the DOCX-to-HTML snapshot places it inside <thead>.
+     * In that shape, close the header block before injecting rows; otherwise the
+     * assembler drops </thead> and Flying Saucer cannot repeat the real headers.
+     */
+    private static String replaceGiantLoopTableTail(
+        String html,
+        Integer openIdx,
+        Integer loopTrStart,
+        Integer tableEnd
+    ) {
+        Integer theadStart = html.lastIndexOf('<thead', loopTrStart);
+        Integer theadEnd = html.indexOf('</thead>', openIdx);
+        Boolean loopInsideThead =
+            theadStart != -1 &&
+            theadEnd != -1 &&
+            theadStart < loopTrStart &&
+            loopTrStart < theadEnd;
+        String prefix = html.substring(0, loopTrStart);
+        if (loopInsideThead) {
+            prefix += '</thead>';
+        }
+        return prefix + '{ROWS}' + html.substring(tableEnd);
+    }
+
+    /**
      * HTML-type template shell builder. Reads the active version's body CV
      * (already rewritten with /sfc/ image URLs at upload time), resolves
      * parent + aggregate merge tags, inserts a {ROWS} placeholder at the
@@ -489,6 +520,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         String rawHtml = cvs[0].VersionData.toString();
 
         String sourceStyles = DocGenService.extractHtmlStyleBlocks(rawHtml);
+        sourceStyles += '<style>table { border-collapse: collapse; border-spacing: 0; -fs-table-paginate: paginate; } thead { display: table-header-group; }</style>';
         String bodyContent = DocGenService.extractHtmlBodyContent(rawHtml);
 
         // Resolve parent-level merge tags (outside the loop) and grand-total
@@ -523,7 +555,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             Boolean useList = (liStart != -1 && listEnd != -1 && (trStart == -1 || liStart > trStart));
 
             if (useTable) {
-                bodyContent = bodyContent.substring(0, trStart) + '{ROWS}' + bodyContent.substring(tableEnd);
+                bodyContent = replaceGiantLoopTableTail(bodyContent, openIdx, trStart, tableEnd);
             } else if (useList) {
                 bodyContent = bodyContent.substring(0, liStart) + '{ROWS}' + bodyContent.substring(listEnd);
             } else {
