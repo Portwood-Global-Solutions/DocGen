@@ -54,6 +54,8 @@ DocGen renders PDFs through Salesforce's Visualforce PDF service, which sits beh
 
 One-time. Applies to the whole org.
 
+If the release update page looks like it might already be enabled but the button is grayed out and says **Enable Test Run**, it is **not enabled** in that org. When the update is active, Salesforce shows **Disable Test Run**. If you cannot enable it yourself, open a Salesforce Support case and ask Salesforce to enable the Visualforce PDF Rendering Service for `Blob.toPdf()` invocations in the affected org. A common symptom is raw CSS appearing at the top of generated PDFs.
+
 ### Step 4 — Make your first template
 
 1. **App Launcher → DocGen** (search "DocGen" if it's not pinned).
@@ -149,7 +151,7 @@ Or use the install links at the top of this guide. The install bundles the merge
 
 1. **Assign the `DocGen_Admin` permission set** to yourself — Setup → Users → Permission Sets → DocGen Admin → Manage Assignments → Add. See [§4](#4-permission-sets) for who needs what.
 2. **Add `HTML` and `Excel` to two `Type` picklists** _(one-time, see callout below)_ — required before you can create HTML or Excel templates.
-3. **Enable the Visualforce PDF Rendering Service release update** — Setup → Release Updates → "Use the Visualforce PDF Rendering Service for `Blob.toPdf()` Invocations" → Get Started → Enable. Mandatory for PDF output.
+3. **Enable the Visualforce PDF Rendering Service release update** — Setup → Release Updates → "Use the Visualforce PDF Rendering Service for `Blob.toPdf()` Invocations" → Get Started → Enable. Mandatory for PDF output. If the page shows a grayed-out **Enable Test Run** button, the update is still off for that org; open a Salesforce Support case and ask Salesforce to enable it.
 4. **Open the DocGen app** from the App Launcher. The Command Hub is your home base for managing templates, running bulk jobs, and configuring signatures.
 5. **For e-signatures only** — run through the [signature admin setup](#1012-admin-setup-one-time) before sending the first signature request: Site URL, Org-Wide Email Address, guest permission set on the site's guest user.
 
@@ -2431,7 +2433,15 @@ Covers:
 
 ### 13.3 Blob.toPdf Release Update
 
-Mandatory. Enable: Setup → Release Updates → "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations". Without this, PDFs don't render relative Salesforce image URLs correctly.
+Mandatory. Enable: Setup → Release Updates → "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations". Without this, PDFs don't render relative Salesforce image URLs correctly, and some orgs may show raw CSS at the top of generated PDFs.
+
+The release-update UI is easy to misread. If the button is grayed out and says **Enable Test Run**, the update is not enabled in that org. When it is enabled, the button says **Disable Test Run**. If you cannot turn it on from Setup, create a Salesforce Support case for the affected production org or sandbox.
+
+![Salesforce release update screen showing a grayed-out Enable Test Run button](docs/images/blob-to-pdf-enable-test-run.jpg)
+
+Suggested case language:
+
+> Please enable the "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations" release update in this org. We generate PDFs using a managed package that calls `Blob.toPdf()`. The Release Updates page still shows "Enable Test Run", and generated PDFs are rendering raw CSS at the top of the document.
 
 ### 13.4 Custom fields on DocGen objects
 
@@ -2508,14 +2518,22 @@ The signing page runs as a guest user, which the platform restricts pretty heavi
     - Template has a malformed merge tag (unclosed `{` or missing `{/Rel}` for a loop).
     - `Blob.toPdf` Release Update not enabled (PDF only).
 
-### 15.2 Heap size too large
+### 15.2 Raw CSS appears at the top of generated PDFs
+
+This usually means the Visualforce PDF Rendering Service release update for `Blob.toPdf()` is not active in the org. Go to Setup → Release Updates → "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations".
+
+![Generated PDF showing raw CSS printed at the top of the document](docs/images/blob-to-pdf-css-leak.jpg)
+
+If the page shows a grayed-out **Enable Test Run** button, the update is still off. When enabled, the button says **Disable Test Run**. Open a Salesforce Support case and ask Salesforce to enable the release update for the affected org; once Salesforce enables it, regenerate the PDF.
+
+### 15.3 Heap size too large
 
 You should almost never see this — DocGen estimates dataset size up front and routes large jobs to the giant-query async path automatically. If you do hit it:
 
 1. Confirm the package is current (Setup → Installed Packages → DocGen version).
 2. If you're current, file an issue at portwood.dev/support with the template Id and record Id — this is a routing bug we want to know about.
 
-### 15.3 Merge tags render as literal text (e.g., `{Name}` appears in the output)
+### 15.4 Merge tags render as literal text (e.g., `{Name}` appears in the output)
 
 Usually:
 
@@ -2524,7 +2542,7 @@ Usually:
 - The template isn't the active version — re-save.
 - Rich-text or CSS `{...}` blocks in stored template HTML can look like unresolved tags but aren't — they're valid CSS.
 
-### 15.4 Signature emails don't arrive
+### 15.5 Signature emails don't arrive
 
 Check in this order:
 
@@ -2537,7 +2555,7 @@ Check in this order:
 7. **DKIM** — Setup → DKIM Keys, create + activate, add CNAME records to DNS.
 8. **`Email_Status__c` field** on the signature request — shows the exact per-signer error.
 
-### 15.5 PDF image is broken / doesn't render
+### 15.6 PDF image is broken / doesn't render
 
 For ContentVersion-backed images:
 
@@ -2550,16 +2568,16 @@ For rich text images:
 - Rich text HTML is pre-resolved to data URIs before merge.
 - If the source field has broken images, output will show broken images.
 
-### 15.6 Custom font doesn't render in PDF
+### 15.7 Custom font doesn't render in PDF
 
 See [§14.2](#142-pdf-font-limitations). Generate as DOCX for custom fonts.
 
-### 15.7 Giant-query job stuck in "Harvesting"
+### 15.8 Giant-query job stuck in "Harvesting"
 
 - Check the **Job History** tab for error messages.
 - Check **Setup → Apex Jobs** for the batch + queueable status.
 - Most common cause: a field in the query config was deleted or renamed. Fix the query config and re-run.
 
-### 15.8 Still stuck?
+### 15.9 Still stuck?
 
 The web guide at [portwood.dev/guide](https://portwood.dev/guide) is always current with the latest release. For implementation help or training, visit [portwood.dev/support](https://portwood.dev/support) — we'll walk you through it.
