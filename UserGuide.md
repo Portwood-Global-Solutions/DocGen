@@ -2526,6 +2526,8 @@ This usually means the Visualforce PDF Rendering Service release update for `Blo
 
 If the page shows a grayed-out **Enable Test Run** button, the update is still off. When enabled, the button says **Disable Test Run**. Open a Salesforce Support case and ask Salesforce to enable the release update for the affected org; once Salesforce enables it, regenerate the PDF.
 
+![Salesforce release update screen showing a grayed-out Enable Test Run button](https://raw.githubusercontent.com/Portwood-Global-Solutions/DocGen/refs/heads/main/docs/images/blob-to-pdf-enable-test-run.jpg)
+
 ### 15.3 Heap size too large
 
 You should almost never see this — DocGen estimates dataset size up front and routes large jobs to the giant-query async path automatically. If you do hit it:
