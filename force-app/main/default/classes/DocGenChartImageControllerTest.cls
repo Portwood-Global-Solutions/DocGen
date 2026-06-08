@@ -275,6 +275,72 @@ private class DocGenChartImageControllerTest {
     }
 
     @IsTest
+    static void powerPointImageReplacement_usesPlaceholderSize() {
+        // PowerPoint authors position charts by drawing a placeholder shape. The
+        // chart PNG may be rasterized at a larger logical size for readability,
+        // but the inserted <p:pic> must stay inside the placeholder box so it
+        // does not overlap tables or callout panels on the slide.
+        String slideXml =
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"' +
+            ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"' +
+            ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+            '<p:cSld><p:spTree>' +
+            '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Chart Placeholder"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>' +
+            '<p:spPr><a:xfrm><a:off x="457200" y="914400"/><a:ext cx="1828800" cy="914400"/></a:xfrm>' +
+            '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>' +
+            '<p:txBody><a:bodyPr/><a:p><a:r><a:t><!--DGPIC|rId5|8572500|3429000|1--></a:t></a:r></a:p></p:txBody>' +
+            '</p:sp>' +
+            '</p:spTree></p:cSld></p:sld>';
+
+        String out = DocGenService.convertDgPicMarkersInSlide(slideXml, new List<Map<String, Object>>());
+
+        System.assert(out.contains('<p:pic>'), 'Placeholder shape should be replaced by a picture.');
+        System.assert(
+            out.contains('<a:off x="457200" y="914400"/>'),
+            'Picture should preserve the placeholder position.'
+        );
+        System.assert(
+            out.contains('<a:ext cx="1828800" cy="914400"/>'),
+            'Picture should preserve the placeholder size, not the larger rasterized chart size.'
+        );
+        System.assert(!out.contains('8572500'), 'Rasterized width must not leak into the slide geometry.');
+        System.assert(!out.contains('3429000'), 'Rasterized height must not leak into the slide geometry.');
+    }
+
+    @IsTest
+    static void powerPointImageReplacement_addsMissingPictureNamespaces() {
+        // Some client-authored/rewritten slides use synthetic ns0/ns1 prefixes
+        // and omit p/a/r declarations. The inserted picture uses p:/a:/r:, so
+        // the slide root must carry those namespace bindings or PowerPoint will
+        // repair the generated deck.
+        String slideXml =
+            '<ns0:sld xmlns:ns0="http://schemas.openxmlformats.org/presentationml/2006/main"' +
+            ' xmlns:ns1="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<ns0:cSld><ns0:spTree>' +
+            '<ns0:sp><ns0:nvSpPr><ns0:cNvPr id="2" name="Chart Placeholder"/><ns0:cNvSpPr/><ns0:nvPr/></ns0:nvSpPr>' +
+            '<ns0:spPr><ns1:xfrm><ns1:off x="457200" y="914400"/><ns1:ext cx="1828800" cy="914400"/></ns1:xfrm></ns0:spPr>' +
+            '<ns0:txBody><ns1:bodyPr/><ns1:p><ns1:r><ns1:t><!--DGPIC|rId5|8572500|3429000|1--></ns1:t></ns1:r></ns1:p></ns0:txBody>' +
+            '</ns0:sp>' +
+            '</ns0:spTree></ns0:cSld></ns0:sld>';
+
+        String out = DocGenService.convertDgPicMarkersInSlide(slideXml, new List<Map<String, Object>>());
+
+        System.assert(out.contains('<p:pic>'), 'Picture insertion should still use the standard PPTX prefixes.');
+        System.assert(
+            out.contains('<p:cNvPr id="3" name="DocGenPicture3"/>'),
+            'Picture id should be allocated after existing cNvPr ids, regardless of namespace prefix.'
+        );
+        System.assert(!out.contains('name="Chart Placeholder"'), 'The original placeholder shape should be replaced.');
+        System.assert(
+            out.contains('<a:off x="457200" y="914400"/>') && out.contains('<a:ext cx="1828800" cy="914400"/>'),
+            'The ns0/ns1 placeholder position and size should be preserved.'
+        );
+        System.assert(out.contains('xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"'));
+        System.assert(out.contains('xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'));
+        System.assert(out.contains('xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'));
+    }
+
+    @IsTest
     static void prepareChartImages_wordTemplate_chartInLoopBodySkipped() {
         // Charts inside loop bodies are intentionally skipped — their bucket
         // data depends on the loop iteration item, which isn't in scope at

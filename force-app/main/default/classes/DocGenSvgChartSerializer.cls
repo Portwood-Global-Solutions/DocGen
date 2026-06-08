@@ -101,8 +101,8 @@ public with sharing class DocGenSvgChartSerializer {
         Integer width = optInt(opts, 'width', 500);
         Integer barHeight = 18;
         Integer barGap = 6;
-        Integer labelWidth = 140;
-        Integer valueWidth = 80;
+        Integer labelWidth = optInt(opts, 'labelWidth', 140);
+        Integer valueWidth = optInt(opts, 'valueWidth', 80);
         String title = opts.get('title');
         Integer titleHeight = String.isNotBlank(title) ? 28 : 0;
         Integer height = optInt(opts, 'height', titleHeight + (buckets.size() * (barHeight + barGap)) + barGap);
@@ -123,7 +123,7 @@ public with sharing class DocGenSvgChartSerializer {
                 maxPct = 100;
             }
         }
-        Integer barArea = width - labelWidth - valueWidth;
+        Integer barArea = Math.max(1, width - labelWidth - valueWidth - 10);
 
         List<String> parts = new List<String>();
         parts.add(
@@ -195,11 +195,10 @@ public with sharing class DocGenSvgChartSerializer {
                     '"/>'
             );
             String valueLabel = countAndPercent(count, pct);
+            Integer valueX = Math.min(labelWidth + barWidth + 6, Math.max(labelWidth + 6, width - valueWidth + 4));
             parts.add(
                 '<text x="' +
-                    (labelWidth +
-                    barWidth +
-                    6) +
+                    valueX +
                     '" y="' +
                     textY +
                     '" font-family="Arial, sans-serif" font-size="11" fill="#111827">' +
@@ -382,8 +381,8 @@ public with sharing class DocGenSvgChartSerializer {
         Integer minHeight = Math.max(legendHeight, 220);
         Integer height = optInt(opts, 'height', titleHeight + minHeight + 10);
 
-        Integer legendWidth = 240;
-        Integer chartArea = width - legendWidth - 10;
+        Integer legendWidth = optInt(opts, 'legendWidth', 240);
+        Integer chartArea = Math.max(120, width - legendWidth - 10);
         Integer chartHeight = height - titleHeight - 20;
 
         Integer cx = chartArea / 2;
@@ -556,15 +555,19 @@ public with sharing class DocGenSvgChartSerializer {
                     escapeXmlAttr(color) +
                     '"/>'
             );
+            String valueLabel = countAndPercent(count, pct);
+            Integer legendTextX = legendX + 22;
+            Integer legendTextMaxWidth = Math.max(20, width - legendTextX - 4);
+            String legendLabel = fitLegendLabel(label, valueLabel, legendTextMaxWidth, 11);
             parts.add(
                 '<text x="' +
-                    (legendX + 22) +
+                    legendTextX +
                     '" y="' +
                     (swatchY + 11) +
                     '" font-family="Arial, sans-serif" font-size="11" fill="#374151">' +
-                    escapeXml(label) +
+                    escapeXml(legendLabel) +
                     ' — ' +
-                    escapeXml(countAndPercent(count, pct)) +
+                    escapeXml(valueLabel) +
                     '</text>'
             );
         }
@@ -1421,6 +1424,23 @@ public with sharing class DocGenSvgChartSerializer {
             return '';
         }
         return s.replace('&', '&amp;').replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;');
+    }
+
+    private static String fitLegendLabel(String label, String valueLabel, Integer maxWidthPx, Integer fontSizePx) {
+        if (label == null) {
+            label = '';
+        }
+        Integer reserved = ((valueLabel == null ? 0 : valueLabel.length()) + 3) * 7;
+        Integer available = Math.max(14, maxWidthPx - reserved);
+        Integer approxCharWidth = Math.max(4, (fontSizePx * 6) / 10);
+        Integer maxChars = Math.max(1, available / approxCharWidth);
+        if (label.length() <= maxChars) {
+            return label;
+        }
+        if (maxChars <= 1) {
+            return '…';
+        }
+        return label.substring(0, maxChars - 1) + '…';
     }
 
     private static Integer optInt(Map<String, String> opts, String key, Integer fallback) {

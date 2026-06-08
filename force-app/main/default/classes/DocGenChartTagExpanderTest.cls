@@ -90,6 +90,18 @@ private class DocGenChartTagExpanderTest {
     }
 
     @IsTest
+    static void powerPointMalformedChartErrorIsEscaped() {
+        String input = '<a:t>{Chart:Survey_Responses__r:Selected_Answer__c:r><a}</a:t>';
+        String out = DocGenChartTagExpander.expand(input, 'PowerPoint');
+        System.assert(out.contains('[Chart error:'), 'PowerPoint should render a text error placeholder. Got: ' + out);
+        System.assert(
+            !out.contains('style "r><a"'),
+            'Raw XML-ish error text must not be emitted into OOXML. Got: ' + out
+        );
+        System.assert(out.contains('&quot;r&gt;&lt;a&quot;'), 'Error text should be XML-escaped. Got: ' + out);
+    }
+
+    @IsTest
     static void missingField_rendersError() {
         String input = '{Chart:Survey_Responses__r}';
         String out = DocGenChartTagExpander.expand(input, 'HTML');

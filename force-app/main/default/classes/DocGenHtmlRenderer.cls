@@ -366,6 +366,7 @@ public with sharing class DocGenHtmlRenderer {
         // Build dynamic page CSS from document dimensions + styles
         // (wmPageDims was computed above for watermark sizing; reuse here)
         Map<String, Decimal> pageDims = wmPageDims;
+        reserveSpaceForHeaderFooter(pageDims, documentXml, headerXml, footerXml, headerFirstXml, footerFirstXml);
         String cellPadding = resolveDefaultCellPadding();
         Boolean hasHeader = String.isNotBlank(headerHtml);
         Boolean hasFooter = String.isNotBlank(footerHtml);
@@ -2762,6 +2763,162 @@ public with sharing class DocGenHtmlRenderer {
         dims.put('contentHeight', (pgH - mTop - mBottom - 288) / 1440.0);
         dims.put('contentWidth', (pgW - mLeft - mRight) / 1440.0);
         return dims;
+    }
+
+    /**
+     * Word does not make the body margin flow around the header; authors reserve
+     * that space with pgMar top/bottom. Flying Saucer renders running headers in
+     * page margin boxes, so tall Word headers overlap body text unless we expand
+     * the PDF margin box to fit the authored header/footer content.
+     */
+    private static void reserveSpaceForHeaderFooter(
+        Map<String, Decimal> dims,
+        String documentXml,
+        String headerXml,
+        String footerXml,
+        String headerFirstXml,
+        String footerFirstXml
+    ) {
+        if (dims == null || String.isBlank(documentXml)) {
+            return;
+        }
+        Decimal headerDistance = readPageDistanceInches(documentXml, 'w:header', 0.5);
+        Decimal footerDistance = readPageDistanceInches(documentXml, 'w:footer', 0.5);
+        Decimal headerHeight = Math.max(
+            estimateDocxFragmentHeightInches(headerXml),
+            estimateDocxFragmentHeightInches(headerFirstXml)
+        );
+        Decimal footerHeight = Math.max(
+            estimateDocxFragmentHeightInches(footerXml),
+            estimateDocxFragmentHeightInches(footerFirstXml)
+        );
+        Decimal safetyGap = 0.08;
+
+        if (headerHeight > 0 && dims.containsKey('marginTop')) {
+            Decimal neededTop = headerDistance + headerHeight + safetyGap;
+            if (neededTop > dims.get('marginTop')) {
+                dims.put('marginTop', neededTop);
+            }
+        }
+        if (footerHeight > 0 && dims.containsKey('marginBottom')) {
+            Decimal neededBottom = footerDistance + footerHeight + safetyGap;
+            if (neededBottom > dims.get('marginBottom')) {
+                dims.put('marginBottom', neededBottom);
+            }
+        }
+        if (dims.containsKey('pageHeight') && dims.containsKey('marginTop') && dims.containsKey('marginBottom')) {
+            dims.put('contentHeight', dims.get('pageHeight') - dims.get('marginTop') - dims.get('marginBottom') - 0.2);
+        }
+    }
+
+    private static Decimal readPageDistanceInches(String xml, String attrName, Decimal fallbackInches) {
+        String val = extractAttr(xml, 'w:pgMar', attrName);
+        if (val == null || !Pattern.matches('-?\\d+', val)) {
+            return fallbackInches;
+        }
+        return Math.abs(Integer.valueOf(val)) / 1440.0;
+    }
+
+    private static Decimal estimateDocxFragmentHeightInches(String xml) {
+        if (String.isBlank(xml)) {
+            return 0;
+        }
+        Decimal height = 0;
+        Integer cursor = 0;
+        while (cursor < xml.length()) {
+            Integer pStart = xml.indexOf('<w:p', cursor);
+            if (pStart == -1) {
+                break;
+            }
+            Integer pOpenEnd = xml.indexOf('>', pStart);
+            Integer pEnd = xml.indexOf('</w:p>', pStart);
+            if (pOpenEnd == -1 || pEnd == -1) {
+                break;
+            }
+            String pXml = xml.substring(pStart, pEnd + 6);
+            Boolean hasVisibleContent =
+                pXml.contains('<w:t') ||
+                pXml.contains('<w:drawing') ||
+                pXml.contains('<w:pict');
+            if (hasVisibleContent) {
+                Decimal runHeight = estimateParagraphRunHeightInches(pXml);
+                Decimal objectHeight = estimateParagraphObjectHeightInches(pXml);
+                Decimal spacing = readParagraphSpacingInches(pXml);
+                height += Math.max(runHeight, objectHeight) + spacing;
+            } else {
+                Decimal spacingOnly = readParagraphSpacingInches(pXml);
+                if (spacingOnly > 0) {
+                    height += spacingOnly;
+                }
+            }
+            cursor = pEnd + 6;
+        }
+        return height;
+    }
+
+    private static Decimal estimateParagraphRunHeightInches(String pXml) {
+        Integer maxHalfPoints = 22;
+        Integer cursor = 0;
+        while (cursor < pXml.length()) {
+            Integer szStart = pXml.indexOf('<w:sz', cursor);
+            if (szStart == -1) {
+                break;
+            }
+            Integer szEnd = pXml.indexOf('>', szStart);
+            if (szEnd == -1) {
+                break;
+            }
+            String val = extractAttrFromTag(pXml.substring(szStart, szEnd), 'w:val');
+            if (val != null && val.isNumeric()) {
+                maxHalfPoints = Math.max(maxHalfPoints, Integer.valueOf(val));
+            }
+            cursor = szEnd + 1;
+        }
+        Decimal points = maxHalfPoints / 2.0;
+        return (points * 1.15) / 72.0;
+    }
+
+    private static Decimal estimateParagraphObjectHeightInches(String pXml) {
+        Decimal maxHeight = 0;
+        Integer cursor = 0;
+        while (cursor < pXml.length()) {
+            Integer extentStart = pXml.indexOf('<wp:extent', cursor);
+            if (extentStart == -1) {
+                break;
+            }
+            Integer extentEnd = pXml.indexOf('>', extentStart);
+            if (extentEnd == -1) {
+                break;
+            }
+            String cy = extractAttrFromTag(pXml.substring(extentStart, extentEnd), 'cy');
+            if (cy != null && cy.isNumeric()) {
+                maxHeight = Math.max(maxHeight, Integer.valueOf(cy) / 914400.0);
+            }
+            cursor = extentEnd + 1;
+        }
+        return maxHeight;
+    }
+
+    private static Decimal readParagraphSpacingInches(String pXml) {
+        Decimal spacing = 0;
+        Integer spacingStart = pXml.indexOf('<w:spacing');
+        if (spacingStart == -1) {
+            return spacing;
+        }
+        Integer spacingEnd = pXml.indexOf('>', spacingStart);
+        if (spacingEnd == -1) {
+            return spacing;
+        }
+        String tag = pXml.substring(spacingStart, spacingEnd);
+        String before = extractAttrFromTag(tag, 'w:before');
+        String after = extractAttrFromTag(tag, 'w:after');
+        if (before != null && Pattern.matches('-?\\d+', before)) {
+            spacing += Math.abs(Integer.valueOf(before)) / 1440.0;
+        }
+        if (after != null && Pattern.matches('-?\\d+', after)) {
+            spacing += Math.abs(Integer.valueOf(after)) / 1440.0;
+        }
+        return spacing;
     }
 
     /**

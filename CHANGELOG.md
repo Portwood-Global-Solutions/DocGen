@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.01.0 — Tall Word header PDF spacing (`04tVx000000hWJBIA2`, build `3.1.0-1`, promoted 2026-06-08)
+
+Word-authored templates with tall page headers could render PDFs where the body started at the original top margin and visually overlapped the header. This release makes the DOCX PDF renderer reserve enough top/bottom page margin for the actual header/footer content before handing the HTML to `Blob.toPdf()`.
+
+### 1. Tall Word headers no longer overlap PDF body content
+
+`DocGenHtmlRenderer` now reads the source page margin distances and estimates header/footer content height from the DOCX XML: paragraph text runs, font sizes, paragraph spacing, and inline image extents. When a Word template has a header or footer taller than the authored page margin, the generated PDF page margin expands so body content starts after the letterhead-style header instead of underneath it.
+
+The behavior is dynamic for Word templates generally, not hardcoded to one customer file. Templates that already reserve enough margin are left unchanged.
+
+### Validation so far
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Package build coverage: 77%, code coverage check passed
+- `DocGenMiscTests.testTallHeaderExpandsPdfTopMargin`: pass in `portwood-staging`
+- Proof PDF generated in `portwood-staging` through `DocGenHtmlRenderer.convertToHtml(...)` → `Blob.toPdf(...)`; page CSS expanded from the authored `1in` top margin to `1.6869in` for the tall-header repro
+- `npx prettier --check force-app/main/default/classes/DocGenHtmlRenderer.cls force-app/main/default/classes/DocGenMiscTests.cls`
+
+Promoted package: `04tVx000000hWJBIA2` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000hWJBIA2)
+
 ## v3.0.0 — AppExchange review readiness (`04tVx000000a8blIAA`, build `3.0.0-1`, promoted 2026-05-27)
 
 AppExchange submission release. Carries forward v2.9's large-table repeating-header improvements and adds a small security-review hardening pass around signature temporary-file cleanup.

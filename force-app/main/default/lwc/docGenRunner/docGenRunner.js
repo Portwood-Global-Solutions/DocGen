@@ -1,7 +1,6 @@
 import { LightningElement, api, wire, track } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getTemplatesForObject from '@salesforce/apex/DocGenController.getTemplatesForObjectAndRecord';
-import processAndReturnDocument from '@salesforce/apex/DocGenController.processAndReturnDocument';
 import generateDocumentParts from '@salesforce/apex/DocGenController.generateDocumentParts';
 import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
@@ -678,43 +677,13 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                         this.downloadBase64(result.base64, (result.title || 'Document') + '.pdf', 'application/pdf');
                     }
                 }
-            } else if (!isPPT) {
-                // Word DOCX / Excel XLSX — client-side assembly
-                const ext = isExcel ? 'xlsx' : 'docx';
+            } else {
+                // Word DOCX / Excel XLSX / PowerPoint PPTX — client-side assembly.
+                // PowerPoint uses the same browser ZIP writer so generated PPTX
+                // packages avoid Apex Compression.ZipWriter container quirks.
+                const ext = isPPT ? 'pptx' : isExcel ? 'xlsx' : 'docx';
                 this.showToast('Info', 'Generating document...', 'info');
                 await this._generateOfficeClientSide(saveToRecord, ext, 'application/octet-stream');
-            } else {
-                // PowerPoint — server-side merge. Chart prep rasterizes each
-                // {Chart:...} to a PNG CV (prepareChartImages now scans PPTX
-                // slide XML); the merge substitutes the marker and
-                // postProcessPowerPointSlides embeds it as a real <p:pic>.
-                const chartContext = await this._prepareCharts();
-                let result;
-                try {
-                    result = await processAndReturnDocument({
-                        templateId: this.selectedTemplateId,
-                        recordId: this.recordId,
-                        chartCvMap: chartContext.map
-                    });
-                } finally {
-                    await this._cleanupCharts(chartContext.cvIds);
-                }
-                if (!result || !result.base64) {
-                    throw new Error('Document generation returned empty result.');
-                }
-                const docTitle = result.title || 'Document';
-                if (saveToRecord) {
-                    // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-                    await saveGeneratedDocument({
-                        recordId: this.recordId,
-                        fileName: docTitle,
-                        base64Data: result.base64,
-                        extension: 'pptx'
-                    });
-                    this.showToast('Success', 'PPTX saved to record.', 'success');
-                } else {
-                    this.downloadBase64(result.base64, docTitle + '.pptx', 'application/octet-stream');
-                }
             }
         } catch (e) {
             this.error = 'Generation Error: ' + (e.body ? e.body.message : e.message || 'Unknown error');

@@ -556,6 +556,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // relationships into ppt/slides/_rels/slideN.xml.rels.
         if (templateType == 'PowerPoint') {
             postProcessPowerPointSlides(mr);
+            normalizePowerPointSlideXml(mr);
+            stripPowerPointRevisionParts(mr);
         }
 
         // Collect existing template images into imageBase64ByRelId for HTML rendering.
@@ -802,13 +804,30 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     private static Blob assembleZip(MergeResult mr) {
         Compression.ZipWriter writer = new Compression.ZipWriter();
 
-        // Add processed XML entries
-        for (String name : mr.processedXmlEntries.keySet()) {
+        // Keep the OPC package manifest first and package relationships early.
+        // PowerPoint is stricter than Word/LibreOffice about generated packages;
+        // deterministic ordering avoids repair prompts from brittle readers.
+        if (mr.contentTypesXml != null) {
+            mr.contentTypesXml = normalizeOpenXmlContentTypes(mr.contentTypesXml);
+            writer.addEntry('[Content_Types].xml', Blob.valueOf(mr.contentTypesXml));
+        }
+        addPassthroughEntryIfPresent(writer, mr, '_rels/.rels');
+
+        // Add processed XML entries in deterministic path order.
+        List<String> processedNames = new List<String>(mr.processedXmlEntries.keySet());
+        processedNames.sort();
+        for (String name : processedNames) {
             writer.addEntry(name, Blob.valueOf(mr.processedXmlEntries.get(name)));
         }
 
-        // Add passthrough entries
-        for (String name : mr.passthroughEntries.keySet()) {
+        // Add passthrough entries in deterministic path order, skipping entries
+        // already written explicitly above.
+        List<String> passthroughNames = new List<String>(mr.passthroughEntries.keySet());
+        passthroughNames.sort();
+        for (String name : passthroughNames) {
+            if (name == '_rels/.rels') {
+                continue;
+            }
             writer.addEntry(name, mr.passthroughEntries.get(name));
         }
 
@@ -821,15 +840,73 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             }
         }
 
-        // Add content types and rels
-        if (mr.contentTypesXml != null) {
-            writer.addEntry('[Content_Types].xml', Blob.valueOf(mr.contentTypesXml));
-        }
         if (mr.relsXml != null) {
             writer.addEntry(mr.relsPath, Blob.valueOf(mr.relsXml));
         }
 
         return writer.getArchive();
+    }
+
+    private static void addPassthroughEntryIfPresent(Compression.ZipWriter writer, MergeResult mr, String name) {
+        Blob entry = mr.passthroughEntries.get(name);
+        if (entry != null) {
+            writer.addEntry(name, entry);
+        }
+    }
+
+    private static String normalizeOpenXmlContentTypes(String contentTypesXml) {
+        if (String.isBlank(contentTypesXml)) {
+            return contentTypesXml;
+        }
+        return contentTypesXml.replace('ContentType="image/jpg"', 'ContentType="image/jpeg"');
+    }
+
+    private static void stripPowerPointRevisionParts(MergeResult mr) {
+        if (mr == null || mr.passthroughEntries == null) {
+            return;
+        }
+
+        List<String> removeNames = new List<String>();
+        for (String name : mr.passthroughEntries.keySet()) {
+            if (name == 'ppt/revisionInfo.xml' || name.startsWith('ppt/changesInfos/') || name.startsWith('[trash]/')) {
+                removeNames.add(name);
+            }
+        }
+        for (String name : removeNames) {
+            mr.passthroughEntries.remove(name);
+        }
+
+        if (mr.relsXml != null) {
+            mr.relsXml = mr.relsXml.replaceAll('<Relationship\\s+[^>]*(revisionInfo|changesInfo)[^>]*/>', '');
+        }
+        if (mr.contentTypesXml != null) {
+            mr.contentTypesXml = mr.contentTypesXml
+                .replaceAll('<Override\\s+PartName="/ppt/revisionInfo\\.xml"[^>]*/>', '')
+                .replaceAll('<Override\\s+PartName="/ppt/changesInfos/[^"]+"[^>]*/>', '');
+        }
+    }
+
+    private static void normalizePowerPointSlideXml(MergeResult mr) {
+        if (mr == null || mr.processedXmlEntries == null) {
+            return;
+        }
+
+        for (String name : new List<String>(mr.processedXmlEntries.keySet())) {
+            if (!name.startsWith('ppt/slides/slide') || !name.endsWith('.xml')) {
+                continue;
+            }
+            String slideXml = mr.processedXmlEntries.get(name);
+            if (String.isBlank(slideXml)) {
+                continue;
+            }
+            slideXml = slideXml
+                .replace('<a:t></a:t>', '<a:t> </a:t>')
+                .replace(
+                    '<a:tableStyleId></a:tableStyleId>',
+                    '<a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>'
+                );
+            mr.processedXmlEntries.put(name, slideXml);
+        }
     }
 
     /**
@@ -953,6 +1030,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // All are returned as path→string maps — the client assembles the ZIP.
         Map<String, String> allXmlParts = new Map<String, String>(mr.processedXmlEntries);
         if (mr.contentTypesXml != null) {
+            mr.contentTypesXml = normalizeOpenXmlContentTypes(mr.contentTypesXml);
             allXmlParts.put('[Content_Types].xml', mr.contentTypesXml);
         }
         if (mr.relsXml != null) {
@@ -1000,7 +1078,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         Map<String, String> imageUrlMap = new Map<String, String>();
         for (Map<String, Object> img : pendingImages) {
             String fileName = (String) img.get('fileName');
-            String mediaPath = 'word/media/' + fileName;
+            String mediaPath = mr.mediaPath + fileName;
             if (img.containsKey('blob')) {
                 imageBase64Map.put(mediaPath, EncodingUtil.base64Encode((Blob) img.get('blob')));
             } else if (img.containsKey('url')) {
@@ -5991,12 +6069,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * ppt/slides/_rels/slideN.xml.rels. Each marker either:
      *   (a) sits inside a <p:sp> whose text body contained the original tag —
      *       we replace the whole <p:sp> with a <p:pic> at the shape's position
-     *       (so authors can size+place the image by placing a placeholder shape).
+     *       and size (so authors can size+place the image by placing a placeholder
+     *       shape).
      *   (b) sits outside any <p:sp> (or we can't find one) — we append a
      *       free-floating <p:pic> to <p:spTree> at the marker's location.
-     * Either way, the image renders at the size we computed when registering
-     * it (intrinsic for PNG/JPEG, fallback 4×3in for ContentVersion blobs we
-     * can't size, override from the {%Field:WxH} suffix when given).
+     * When no enclosing placeholder shape exists, the image renders at the size
+     * computed when registering it (intrinsic for PNG/JPEG, fallback 4×3in for
+     * ContentVersion blobs we can't size, override from the {%Field:WxH} suffix
+     * when given).
      */
     private static void postProcessPowerPointSlides(MergeResult mr) {
         if (pendingImages.isEmpty()) {
@@ -6029,9 +6109,6 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 continue;
             }
 
-            slideXml = convertDgPicMarkersInSlide(slideXml, imagesBySlide.get(slidePath));
-            mr.processedXmlEntries.put(slidePath, slideXml);
-
             // Update the matching slide rels file (ppt/slides/_rels/slideN.xml.rels)
             String relsName = slidePath.replace('slides/', 'slides/_rels/') + '.rels';
             Blob existingRelsBlob = mr.passthroughEntries.get(relsName);
@@ -6044,6 +6121,18 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
                     '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
             }
+
+            Integer nextRelId = nextPowerPointRelationshipId(existingRelsXml);
+            for (Map<String, Object> img : imagesBySlide.get(slidePath)) {
+                String oldRelId = (String) img.get('relId');
+                String newRelId = 'rId' + nextRelId;
+                nextRelId++;
+                img.put('relId', newRelId);
+                slideXml = slideXml.replace('<!--DGPIC|' + oldRelId + '|', '<!--DGPIC|' + newRelId + '|');
+            }
+
+            slideXml = convertDgPicMarkersInSlide(slideXml, imagesBySlide.get(slidePath));
+            mr.processedXmlEntries.put(slidePath, slideXml);
 
             String inserts = '';
             for (Map<String, Object> img : imagesBySlide.get(slidePath)) {
@@ -6061,6 +6150,39 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
     }
 
+    private static Integer nextPowerPointRelationshipId(String relsXml) {
+        Integer maxId = 0;
+        if (String.isBlank(relsXml)) {
+            return 1;
+        }
+
+        Integer cursor = 0;
+        while (cursor < relsXml.length()) {
+            Integer tagStart = relsXml.indexOf('<Relationship', cursor);
+            if (tagStart == -1) {
+                break;
+            }
+            Integer tagEnd = relsXml.indexOf('>', tagStart);
+            if (tagEnd == -1) {
+                break;
+            }
+            String tag = relsXml.substring(tagStart, tagEnd);
+            String idValue = extractXmlAttrValue(tag, 'Id');
+            if (idValue != null && idValue.startsWith('rId')) {
+                try {
+                    Integer relNum = Integer.valueOf(idValue.substring(3));
+                    if (relNum > maxId) {
+                        maxId = relNum;
+                    }
+                } catch (Exception e) {
+                    // Ignore non-numeric relationship ids from source packages.
+                }
+            }
+            cursor = tagEnd + 1;
+        }
+        return maxId + 1;
+    }
+
     /**
      * Per-slide DGPIC marker conversion. Walks the slide XML, replacing each
      * marker with a <p:pic> element. If the marker sits inside a <p:sp>, the
@@ -6072,6 +6194,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     private static String convertDgPicMarkersInSlide(String slideXml, List<Map<String, Object>> images) {
         // Sort markers in order of appearance so position-preservation is stable.
         Integer searchFrom = 0;
+        Integer nextPicId = nextPowerPointShapeId(slideXml);
+        Boolean insertedPicture = false;
         while (true) {
             Integer markerStart = slideXml.indexOf('<!--DGPIC|', searchFrom);
             if (markerStart == -1) {
@@ -6095,7 +6219,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             String relId = parts[0];
             Integer widthEmu = Integer.valueOf(parts[1]);
             Integer heightEmu = Integer.valueOf(parts[2]);
-            Integer picId = Integer.valueOf(parts[3]);
+            Integer picId = nextPicId;
+            nextPicId++;
 
             // Find enclosing <p:sp> (the shape that contains the marker). If
             // we find one, replace it; if not, fall back to in-place insert.
@@ -6103,18 +6228,20 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             Integer spCloseEnd = -1;
             String offX = '914400';
             String offY = '914400';
+            Integer renderWidthEmu = widthEmu;
+            Integer renderHeightEmu = heightEmu;
             if (spOpenStart != -1) {
                 spCloseEnd = findClosingSpAfter(slideXml, markerEnd);
                 if (spCloseEnd != -1) {
                     // Capture the shape's transform so the picture replaces it
-                    // at the same position. The <a:xfrm> sits in <p:spPr>; if
-                    // absent (rare), we fall back to the default position.
+                    // at the same position and size. The <a:xfrm> sits in
+                    // <p:spPr>; if absent (rare), we fall back to marker dimensions.
                     String shapeXml = slideXml.substring(spOpenStart, spCloseEnd);
-                    Integer xfrmStart = shapeXml.indexOf('<a:xfrm');
+                    Integer xfrmStart = findPowerPointLocalTagStart(shapeXml, 'xfrm', 0);
                     if (xfrmStart != -1) {
-                        Integer offIdx = shapeXml.indexOf('<a:off', xfrmStart);
+                        Integer offIdx = findPowerPointLocalTagStart(shapeXml, 'off', xfrmStart);
                         if (offIdx != -1) {
-                            String offTag = shapeXml.substring(offIdx, shapeXml.indexOf('/>', offIdx));
+                            String offTag = shapeXml.substring(offIdx, shapeXml.indexOf('>', offIdx));
                             String xVal = extractXmlAttrValue(offTag, 'x');
                             String yVal = extractXmlAttrValue(offTag, 'y');
                             if (xVal != null) {
@@ -6124,25 +6251,135 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                 offY = yVal;
                             }
                         }
+                        Integer extIdx = findPowerPointLocalTagStart(shapeXml, 'ext', xfrmStart);
+                        if (extIdx != -1) {
+                            String extTag = shapeXml.substring(extIdx, shapeXml.indexOf('>', extIdx));
+                            String cxVal = extractXmlAttrValue(extTag, 'cx');
+                            String cyVal = extractXmlAttrValue(extTag, 'cy');
+                            if (cxVal != null && cyVal != null) {
+                                try {
+                                    Integer placeholderWidth = Integer.valueOf(cxVal);
+                                    Integer placeholderHeight = Integer.valueOf(cyVal);
+                                    if (placeholderWidth > 0 && placeholderHeight > 0) {
+                                        renderWidthEmu = placeholderWidth;
+                                        renderHeightEmu = placeholderHeight;
+                                    }
+                                } catch (Exception e) {
+                                    // Keep marker dimensions if the source transform is malformed.
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            String picXml = buildPicElement(picId, relId, offX, offY, widthEmu, heightEmu);
+            String picXml = buildPicElement(picId, relId, offX, offY, renderWidthEmu, renderHeightEmu);
 
             if (spOpenStart != -1 && spCloseEnd != -1) {
                 // Swap the entire <p:sp>...</p:sp> with the <p:pic>
                 slideXml = slideXml.substring(0, spOpenStart) + picXml + slideXml.substring(spCloseEnd);
                 searchFrom = spOpenStart + picXml.length();
+                insertedPicture = true;
             } else {
                 // No enclosing shape found — insert in place (will likely render
                 // as a free-floating image which authors may not expect but
                 // beats silent loss).
                 slideXml = slideXml.substring(0, markerStart) + picXml + slideXml.substring(markerEnd + 3);
                 searchFrom = markerStart + picXml.length();
+                insertedPicture = true;
             }
         }
+        if (insertedPicture) {
+            slideXml = ensurePowerPointPictureNamespaces(slideXml);
+        }
         return slideXml;
+    }
+
+    private static String ensurePowerPointPictureNamespaces(String slideXml) {
+        if (String.isBlank(slideXml)) {
+            return slideXml;
+        }
+        Integer rootStart = slideXml.indexOf('<p:sld');
+        if (rootStart == -1) {
+            rootStart = slideXml.indexOf('<ns0:sld');
+        }
+        if (rootStart == -1) {
+            rootStart = slideXml.indexOf(':sld');
+            if (rootStart != -1) {
+                rootStart = slideXml.lastIndexOf('<', rootStart);
+            }
+        }
+        if (rootStart == -1) {
+            return slideXml;
+        }
+        Integer rootEnd = slideXml.indexOf('>', rootStart);
+        if (rootEnd == -1) {
+            return slideXml;
+        }
+
+        String rootTag = slideXml.substring(rootStart, rootEnd);
+        String additions = '';
+        if (!rootTag.contains('xmlns:p=')) {
+            additions += ' xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+        }
+        if (!rootTag.contains('xmlns:a=')) {
+            additions += ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+        }
+        if (!rootTag.contains('xmlns:r=')) {
+            additions += ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+        }
+        if (String.isBlank(additions)) {
+            return slideXml;
+        }
+        return slideXml.substring(0, rootEnd) + additions + slideXml.substring(rootEnd);
+    }
+
+    private static Integer nextPowerPointShapeId(String slideXml) {
+        Integer maxId = 0;
+        for (Integer tagStart : findPowerPointLocalTagStarts(slideXml, 'cNvPr')) {
+            Integer tagEnd = slideXml.indexOf('>', tagStart);
+            if (tagEnd == -1) {
+                continue;
+            }
+            String tag = slideXml.substring(tagStart, tagEnd);
+            String idValue = extractXmlAttrValue(tag, 'id');
+            if (idValue != null) {
+                try {
+                    Integer shapeId = Integer.valueOf(idValue);
+                    if (shapeId > maxId) {
+                        maxId = shapeId;
+                    }
+                } catch (Exception e) {
+                    // Ignore non-numeric ids in malformed source parts.
+                }
+            }
+        }
+        return maxId + 1;
+    }
+
+    private static Integer findPowerPointLocalTagStart(String xml, String localName, Integer fromIndex) {
+        if (String.isBlank(xml) || String.isBlank(localName)) {
+            return -1;
+        }
+        Integer safeFrom = Math.max(0, fromIndex == null ? 0 : fromIndex);
+        String suffix = xml.substring(Math.min(safeFrom, xml.length()));
+        Matcher matcher = Pattern.compile('<[A-Za-z][A-Za-z0-9]*:' + localName + '(\\s|>|/)').matcher(suffix);
+        if (!matcher.find()) {
+            return -1;
+        }
+        return safeFrom + matcher.start();
+    }
+
+    private static List<Integer> findPowerPointLocalTagStarts(String xml, String localName) {
+        List<Integer> starts = new List<Integer>();
+        if (String.isBlank(xml) || String.isBlank(localName)) {
+            return starts;
+        }
+        Matcher matcher = Pattern.compile('<[A-Za-z][A-Za-z0-9]*:' + localName + '(\\s|>|/)').matcher(xml);
+        while (matcher.find()) {
+            starts.add(matcher.start());
+        }
+        return starts;
     }
 
     /**
@@ -6158,49 +6395,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      */
     private static Integer findOpeningSpBefore(String xml, Integer pos) {
         String prefix = xml.substring(0, pos);
-        List<Integer> opens = new List<Integer>();
-        List<Integer> closes = new List<Integer>();
-        Integer c = 0;
-        while (c < prefix.length()) {
-            Integer o1 = prefix.indexOf('<p:sp>', c);
-            Integer o2 = prefix.indexOf('<p:sp ', c);
-            Integer cl = prefix.indexOf('</p:sp>', c);
-            Integer nextOpen = -1;
-            if (o1 != -1 && o2 != -1) {
-                nextOpen = Math.min(o1, o2);
-            } else if (o1 != -1) {
-                nextOpen = o1;
-            } else if (o2 != -1) {
-                nextOpen = o2;
-            }
-            if (nextOpen == -1 && cl == -1) {
-                break;
-            }
-            if (nextOpen != -1 && (cl == -1 || nextOpen < cl)) {
-                opens.add(nextOpen);
-                c = nextOpen + 6;
-            } else {
-                closes.add(cl);
-                c = cl + 7;
-            }
-        }
-        // Walk events in order; depth-track. Stack of unmatched opens.
         List<Integer> stack = new List<Integer>();
-        Integer oi = 0;
-        Integer ci = 0;
-        // Apex Integer has no MAX_VALUE constant; 2^31-1 hardcoded as sentinel.
-        Integer SENTINEL = 2147483647;
-        while (oi < opens.size() || ci < closes.size()) {
-            Integer nextO = oi < opens.size() ? opens[oi] : SENTINEL;
-            Integer nextC = ci < closes.size() ? closes[ci] : SENTINEL;
-            if (nextO < nextC) {
-                stack.add(nextO);
-                oi++;
-            } else {
+        Matcher matcher = Pattern.compile('</?[A-Za-z][A-Za-z0-9]*:sp(\\s|>)').matcher(prefix);
+        while (matcher.find()) {
+            String tagStart = prefix.substring(matcher.start(), matcher.end());
+            if (tagStart.startsWith('</')) {
                 if (!stack.isEmpty()) {
                     stack.remove(stack.size() - 1);
                 }
-                ci++;
+            } else {
+                stack.add(matcher.start());
             }
         }
         if (stack.isEmpty()) {
@@ -6216,31 +6420,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      */
     private static Integer findClosingSpAfter(String xml, Integer pos) {
         Integer depth = 0;
-        Integer cursor = pos;
-        while (cursor < xml.length()) {
-            Integer o1 = xml.indexOf('<p:sp>', cursor);
-            Integer o2 = xml.indexOf('<p:sp ', cursor);
-            Integer cl = xml.indexOf('</p:sp>', cursor);
-            Integer nextOpen = -1;
-            if (o1 != -1 && o2 != -1) {
-                nextOpen = Math.min(o1, o2);
-            } else if (o1 != -1) {
-                nextOpen = o1;
-            } else if (o2 != -1) {
-                nextOpen = o2;
-            }
-            if (cl == -1) {
-                return -1;
-            }
-            if (nextOpen != -1 && nextOpen < cl) {
+        String suffix = xml.substring(pos);
+        Matcher matcher = Pattern.compile('</?[A-Za-z][A-Za-z0-9]*:sp(\\s|>)').matcher(suffix);
+        while (matcher.find()) {
+            String tagStart = suffix.substring(matcher.start(), matcher.end());
+            if (!tagStart.startsWith('</')) {
                 depth++;
-                cursor = nextOpen + 6;
             } else {
                 if (depth == 0) {
-                    return cl + 7; // length of '</p:sp>'
+                    Integer closeStart = pos + matcher.start();
+                    Integer closeEnd = xml.indexOf('>', closeStart);
+                    return closeEnd == -1 ? -1 : closeEnd + 1;
                 }
                 depth--;
-                cursor = cl + 7;
             }
         }
         return -1;

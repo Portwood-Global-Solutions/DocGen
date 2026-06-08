@@ -2698,6 +2698,269 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'), 'Blob should not be null for PowerPoint image tag skip');
     }
 
+    @IsTest
+    static void testPowerPointImageMarkerUsesUnusedShapeId() {
+        String slideXml =
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+            '<p:cSld><p:spTree>' +
+            '<p:sp><p:nvSpPr><p:cNvPr id="1" name="Existing"/></p:nvSpPr></p:sp>' +
+            '<p:sp><p:nvSpPr><p:cNvPr id="2" name="Placeholder"/></p:nvSpPr>' +
+            '<p:spPr><a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<a:off x="10" y="20"/><a:ext cx="30" cy="40"/></a:xfrm></p:spPr>' +
+            '<p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<a:r><a:t><!--DGPIC|rIdImg1|100|200|1--></a:t></a:r></a:p></p:txBody>' +
+            '</p:sp>' +
+            '</p:spTree></p:cSld></p:sld>';
+
+        String out = DocGenService.convertDgPicMarkersInSlide(slideXml, new List<Map<String, Object>>());
+
+        System.assert(
+            out.contains('<p:cNvPr id="3" name="DocGenPicture3"/>'),
+            'Inserted picture should use the next unused slide-local cNvPr id. Got: ' + out
+        );
+        System.assertEquals(
+            out.indexOf('<p:cNvPr id="1"'),
+            out.lastIndexOf('<p:cNvPr id="1"'),
+            'Existing shape id 1 should remain unique, not be reused by the inserted picture. Got: ' + out
+        );
+    }
+
+    @IsTest
+    static void testPowerPointImageUsesNumericSlideRelationshipId() {
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        tpl.Type__c = 'PowerPoint';
+        tpl.Query_Config__c = 'Name, Description';
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry(
+            '[Content_Types].xml',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                    '<Default Extension="xml" ContentType="application/xml"/>' +
+                    '<Default Extension="png" ContentType="image/png"/>' +
+                    '<Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' +
+                    '</Types>'
+            )
+        );
+        zw.addEntry(
+            '_rels/.rels',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+            )
+        );
+        zw.addEntry(
+            'ppt/slides/_rels/slide1.xml.rels',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>' +
+                    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>' +
+                    '</Relationships>'
+            )
+        );
+        zw.addEntry(
+            'ppt/slides/slide1.xml',
+            Blob.valueOf(
+                '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+                    '<p:cSld><p:spTree>' +
+                    '<p:sp><p:nvSpPr><p:cNvPr id="1" name="Placeholder"/></p:nvSpPr>' +
+                    '<p:spPr><a:xfrm xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+                    '<a:off x="10" y="20"/><a:ext cx="30" cy="40"/></a:xfrm></p:spPr>' +
+                    '<p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+                    '<a:r><a:t>{%Description}</a:t></a:r></a:p></p:txBody></p:sp>' +
+                    '</p:spTree></p:cSld></p:sld>'
+            )
+        );
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'PPTNumericImageRel',
+            PathOnClient = 'PPTNumericImageRel.pptx',
+            VersionData = zw.getArchive()
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+        Account acc = TestDataFactory.getTestAccount();
+        acc.Description =
+            'data:image/png;base64,' +
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lm0V9wAAAABJRU5ErkJggg==';
+        update acc;
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        Compression.ZipReader reader = new Compression.ZipReader((Blob) result.get('blob'));
+        String relsXml = reader.extract('ppt/slides/_rels/slide1.xml.rels').toString();
+        String slideXml = reader.extract('ppt/slides/slide1.xml').toString();
+
+        System.assert(
+            relsXml.contains('Id="rId3"'),
+            'PPT image relationship should use next numeric rId. Got: ' + relsXml
+        );
+        System.assert(
+            !relsXml.contains('rIdImg'),
+            'PowerPoint repairs non-numeric image relationship ids. Got: ' + relsXml
+        );
+        System.assert(
+            slideXml.contains('r:embed="rId3"'),
+            'Inserted picture should reference numeric rId3. Got: ' + slideXml
+        );
+    }
+
+    @IsTest
+    static void testPowerPointEmptyDrawingTextIsNormalized() {
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        tpl.Type__c = 'PowerPoint';
+        tpl.Query_Config__c = 'Name';
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry(
+            '[Content_Types].xml',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                    '<Default Extension="xml" ContentType="application/xml"/>' +
+                    '<Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' +
+                    '</Types>'
+            )
+        );
+        zw.addEntry(
+            '_rels/.rels',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+            )
+        );
+        zw.addEntry(
+            'ppt/slides/slide1.xml',
+            Blob.valueOf(
+                '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" ' +
+                    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+                    '<p:cSld><p:spTree>' +
+                    '<p:graphicFrame><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">' +
+                    '<a:tbl><a:tblPr><a:tableStyleId></a:tableStyleId></a:tblPr>' +
+                    '<a:tblGrid><a:gridCol w="1000"/></a:tblGrid>' +
+                    '<a:tr h="1000"><a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t></a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc></a:tr>' +
+                    '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>' +
+                    '<p:sp><p:txBody><a:p><a:r><a:t>{Name}</a:t></a:r></a:p></p:txBody></p:sp>' +
+                    '</p:spTree></p:cSld></p:sld>'
+            )
+        );
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'PPTEmptyText',
+            PathOnClient = 'PPTEmptyText.pptx',
+            VersionData = zw.getArchive()
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+        Account acc = TestDataFactory.getTestAccount();
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        Compression.ZipReader reader = new Compression.ZipReader((Blob) result.get('blob'));
+        String slideXml = reader.extract('ppt/slides/slide1.xml').toString();
+
+        System.assert(!slideXml.contains('<a:t></a:t>'), 'Empty DrawingML text nodes trigger PowerPoint repair.');
+        System.assert(
+            !slideXml.contains('<a:tableStyleId></a:tableStyleId>'),
+            'Empty table style ids trigger PowerPoint repair.'
+        );
+        System.assert(slideXml.contains('<a:t> </a:t>'), 'Empty table cells should remain present as whitespace text.');
+    }
+
+    @IsTest
+    static void testPowerPointRevisionPartsStripped() {
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        tpl.Type__c = 'PowerPoint';
+        tpl.Query_Config__c = 'Name';
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry(
+            '[Content_Types].xml',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                    '<Default Extension="xml" ContentType="application/xml"/>' +
+                    '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>' +
+                    '<Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' +
+                    '<Override PartName="/ppt/changesInfos/changesInfo1.xml" ContentType="application/vnd.ms-powerpoint.changesinfo+xml"/>' +
+                    '<Override PartName="/ppt/revisionInfo.xml" ContentType="application/vnd.ms-powerpoint.revisioninfo+xml"/>' +
+                    '</Types>'
+            )
+        );
+        zw.addEntry(
+            '_rels/.rels',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+            )
+        );
+        zw.addEntry(
+            'ppt/_rels/presentation.xml.rels',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>' +
+                    '<Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2015/10/relationships/revisionInfo" Target="revisionInfo.xml"/>' +
+                    '<Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2016/11/relationships/changesInfo" Target="changesInfos/changesInfo1.xml"/>' +
+                    '</Relationships>'
+            )
+        );
+        zw.addEntry(
+            'ppt/presentation.xml',
+            Blob.valueOf('<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>')
+        );
+        zw.addEntry(
+            'ppt/slides/slide1.xml',
+            Blob.valueOf(
+                '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>' +
+                    '<p:sp><p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+                    '<a:r><a:t>{Name}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>'
+            )
+        );
+        zw.addEntry('ppt/revisionInfo.xml', Blob.valueOf('<p:revisionInfo xmlns:p="urn:test"/>'));
+        zw.addEntry('ppt/changesInfos/changesInfo1.xml', Blob.valueOf('<p:changesInfo xmlns:p="urn:test"/>'));
+        zw.addEntry('[trash]/0000.dat', Blob.valueOf('stale'));
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'PPTRevisionParts',
+            PathOnClient = 'PPTRevisionParts.pptx',
+            VersionData = zw.getArchive()
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+        Account acc = TestDataFactory.getTestAccount();
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        Blob outBlob = (Blob) result.get('blob');
+        Compression.ZipReader reader = new Compression.ZipReader(outBlob);
+        Set<String> names = new Set<String>();
+        for (Compression.ZipEntry entry : reader.getEntries()) {
+            names.add(entry.getName());
+        }
+        System.assert(!names.contains('ppt/revisionInfo.xml'), 'revisionInfo.xml should be stripped.');
+        System.assert(!names.contains('ppt/changesInfos/changesInfo1.xml'), 'changesInfo should be stripped.');
+        System.assert(!names.contains('[trash]/0000.dat'), '[trash] entries should be stripped.');
+        System.assert(
+            !reader.extract('ppt/_rels/presentation.xml.rels').toString().contains('revisionInfo'),
+            'presentation rels should not reference revisionInfo.'
+        );
+        System.assert(
+            !reader.extract('[Content_Types].xml').toString().contains('changesInfo'),
+            'content types should not reference changesInfo.'
+        );
+    }
+
     // =========================================================================
     // DocGenService — rich text HTML in PowerPoint (plain text strip)
     // =========================================================================
@@ -5623,6 +5886,39 @@ private class DocGenMiscTests {
             html.contains('<tr><th><table'),
             'outer row with own w:tblHeader must still render <th>: ' + html
         );
+    }
+
+    @IsTest
+    static void testTallHeaderExpandsPdfTopMargin() {
+        String headerXml =
+            '<w:hdr xmlns:w="x" xmlns:wp="x">' +
+            '<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1944623" cy="341375"/></wp:inline></w:drawing></w:r></w:p>' +
+            '<w:p><w:pPr><w:spacing w:before="40"/></w:pPr><w:r><w:rPr><w:sz w:val="28"/></w:rPr><w:t>MARKET UPDATES</w:t></w:r></w:p>' +
+            '<w:p><w:pPr><w:spacing w:before="20"/></w:pPr></w:p>' +
+            '<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>5001 Spring Valley Road</w:t></w:r></w:p>' +
+            '<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Suite 100</w:t></w:r></w:p>' +
+            '<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Dallas, TX 75244</w:t></w:r></w:p>' +
+            '<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Tel: (972) 755-5200</w:t></w:r></w:p>' +
+            '<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>Fax: (972) 755-5210</w:t></w:r></w:p>' +
+            '<w:p><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>www.MarcusMillichap.com</w:t></w:r></w:p>' +
+            '</w:hdr>';
+        String docXml =
+            '<!-- DOCGEN_HEADER_START -->' +
+            headerXml +
+            '<!-- DOCGEN_HEADER_END -->' +
+            '<w:document xmlns:w="x"><w:body>' +
+            '<w:p><w:r><w:t>Body starts after header</w:t></w:r></w:p>' +
+            '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="0" w:footer="0"/></w:sectPr>' +
+            '</w:body></w:document>';
+
+        String html = DocGenHtmlRenderer.convertToHtml(docXml, new Map<String, String>());
+
+        System.assert(html.contains('@top-center'), 'Header should render as a running margin-box element: ' + html);
+        System.assert(
+            !html.contains('margin: 1.0in 1.0in 1.0in 1.0in'),
+            'Tall header must expand the top page margin beyond the authored 1 inch: ' + html
+        );
+        System.assert(html.contains('Body starts after header'), 'Body content should still render: ' + html);
     }
 
     @IsTest

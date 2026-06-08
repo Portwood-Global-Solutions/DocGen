@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "3.0.0 — AppExchange review readiness",
-      "versionNumber": "3.0.0.NEXT",
-      "ancestorId": "04tVx000000a7fhIAA",
+      "versionName": "v3.01.0 — Tall Word Header PDF Spacing",
+      "versionNumber": "3.1.0.NEXT",
+      "ancestorId": "04tVx000000a8blIAA",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v3.0 adds AppExchange review hardening while keeping the v2.9 large-table improvements: repeating PDF table headers and cleaner Word-authored table borders across page breaks. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v3.01 improves PDF output for Word templates with tall headers or footers, keeping body content properly spaced below letterhead-style page headers. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
@@ -161,6 +161,7 @@
     "Portwood DocGen Managed@2.7.0-2": "04tVx000000a1IXIAY",
     "Portwood DocGen Managed@2.8.0-1": "04tVx000000a7e5IAA",
     "Portwood DocGen Managed@2.9.0-1": "04tVx000000a7fhIAA",
-    "Portwood DocGen Managed@3.0.0-1": "04tVx000000a8blIAA"
+    "Portwood DocGen Managed@3.0.0-1": "04tVx000000a8blIAA",
+    "Portwood DocGen Managed@3.1.0-1": "04tVx000000hWJBIA2"
   }
 }

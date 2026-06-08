@@ -604,7 +604,7 @@ public with sharing class DocGenChartTagExpander {
      */
     private static String renderError(Boolean isHtml, String reason, String snippet) {
         if (!isHtml) {
-            return '[Chart error: ' + reason + ']';
+            return '[Chart error: ' + escapeForDisplay(reason) + ']';
         }
         // escapeForDisplay turns the original tag's curly braces into HTML
         // entities so the rendered error block can't be re-parsed as a tag on

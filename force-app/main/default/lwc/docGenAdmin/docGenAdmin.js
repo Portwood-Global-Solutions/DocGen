@@ -11,7 +11,8 @@ import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
 import saveTemplate from '@salesforce/apex/DocGenController.saveTemplate';
 import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
 import deleteTemplateVersion from '@salesforce/apex/DocGenController.deleteTemplateVersion';
-import processAndReturnDocument from '@salesforce/apex/DocGenController.processAndReturnDocument';
+import generateDocumentParts from '@salesforce/apex/DocGenController.generateDocumentParts';
+import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
 import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
@@ -64,7 +65,10 @@ import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemp
 // 1.74 — guard rail for the async-decompose Queueable's 12 MB heap budget
 import getContentVersionSize from '@salesforce/apex/DocGenController.getContentVersionSize';
 import deleteContentVersionDocument from '@salesforce/apex/DocGenController.deleteContentVersionDocument';
+import renderImageAsPdfBase64 from '@salesforce/apex/DocGenController.renderImageAsPdfBase64';
 import { readZip, bytesToBase64 } from './docGenZipReader';
+import { buildDocx } from './docGenZipWriter';
+import { extractFirstImageFromPdfBase64 } from './docGenPdfImageExtractor';
 // Version fields (DocGen_Template_Version__c)
 import VER_IS_ACTIVE_FIELD from '@salesforce/schema/DocGen_Template_Version__c.Is_Active__c';
 import VER_CV_ID_FIELD from '@salesforce/schema/DocGen_Template_Version__c.Content_Version_Id__c';
@@ -2474,17 +2478,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const isPPT = ['PowerPoint', 'PPT', 'PPTX'].includes(this.previewVersion[F.Type]);
 
             if (isPPT || this.editTemplateOutputFormat === 'Native') {
+                let result;
                 const chartContext = await this._prepareChartsForAdmin(
                     this.editTemplateId,
                     this.editTemplateTestRecordId
                 );
-                let result;
                 try {
-                    result = await processAndReturnDocument({
-                        templateId: this.editTemplateId,
-                        recordId: this.editTemplateTestRecordId,
-                        chartCvMap: chartContext.map
-                    });
+                    result = await this._generateOfficeSample(
+                        this.editTemplateId,
+                        this.editTemplateTestRecordId,
+                        chartContext
+                    );
                 } finally {
                     await this._cleanupChartsForAdmin(chartContext.cvIds);
                 }
@@ -2492,7 +2496,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     throw new Error('Document generation returned empty result.');
                 }
                 const docTitle = 'Preview_' + this.previewVersion.VersionNumber + '_' + (result.title || 'Document');
-                const ext = isPPT ? '.pptx' : '.docx';
+                const ext = this._officeExtensionForType(this.previewVersion[F.Type]);
                 this.downloadBase64(result.base64, docTitle + ext, 'application/octet-stream');
                 this.showToast(
                     'Success',
@@ -2672,17 +2676,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
             if (isPPT || this.editTemplateOutputFormat === 'Native') {
                 // Native DOCX/PPTX download
+                let result;
                 const chartContext = await this._prepareChartsForAdmin(
                     this.editTemplateId,
                     this.editTemplateTestRecordId
                 );
-                let result;
                 try {
-                    result = await processAndReturnDocument({
-                        templateId: this.editTemplateId,
-                        recordId: this.editTemplateTestRecordId,
-                        chartCvMap: chartContext.map
-                    });
+                    result = await this._generateOfficeSample(
+                        this.editTemplateId,
+                        this.editTemplateTestRecordId,
+                        chartContext
+                    );
                 } finally {
                     await this._cleanupChartsForAdmin(chartContext.cvIds);
                 }
@@ -2692,7 +2696,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
 
                 const docTitle = 'Sample_' + (result.title || 'Document');
-                const ext = isPPT ? '.pptx' : '.docx';
+                const ext = this._officeExtensionForType(this.editTemplateType);
                 this.downloadBase64(result.base64, docTitle + ext, 'application/octet-stream');
                 this.showToast('Success', 'Sample Document Downloaded', 'success');
             } else {
@@ -2731,6 +2735,127 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.showToast('Generation Failed', 'Generation Failed. ' + msg, 'error');
         } finally {
             this.isLoadingVersions = false;
+        }
+    }
+
+    _officeExtensionForType(templateType) {
+        if (['PowerPoint', 'PPT', 'PPTX'].includes(templateType)) {
+            return '.pptx';
+        }
+        if (templateType === 'Excel') {
+            return '.xlsx';
+        }
+        return '.docx';
+    }
+
+    async _generateOfficeSample(templateId, recordId, chartContext) {
+        const parts = await generateDocumentParts({
+            templateId,
+            recordId,
+            chartCvMap: chartContext.map
+        });
+        if (!parts || !parts.allXmlParts) {
+            throw new Error('Document generation returned empty result.');
+        }
+
+        const allImages = { ...(parts.imageBase64Map || {}) };
+        if (parts.imageCvIdMap) {
+            const uniqueCvIds = new Map();
+            for (const [mediaPath, cvId] of Object.entries(parts.imageCvIdMap)) {
+                if (!uniqueCvIds.has(cvId)) {
+                    uniqueCvIds.set(cvId, []);
+                }
+                uniqueCvIds.get(cvId).push(mediaPath);
+            }
+            for (const [cvId, mediaPaths] of uniqueCvIds) {
+                try {
+                    // eslint-disable-next-line no-await-in-loop
+                    const b64 = await getContentVersionBase64({ contentVersionId: cvId });
+                    if (b64) {
+                        for (const mediaPath of mediaPaths) {
+                            allImages[mediaPath] = b64;
+                        }
+                    }
+                } catch (imgErr) {
+                    console.warn('DocGen admin: Failed to fetch image CV ' + cvId, imgErr);
+                }
+            }
+        }
+
+        if (parts.imageUrlMap) {
+            for (const [mediaPath, url] of Object.entries(parts.imageUrlMap)) {
+                if (!/rtaImage/i.test(url)) continue;
+                try {
+                    // eslint-disable-next-line no-await-in-loop
+                    const pdfB64 = await renderImageAsPdfBase64({ imageUrl: url });
+                    if (!pdfB64) continue;
+                    // eslint-disable-next-line no-await-in-loop
+                    const extracted = await extractFirstImageFromPdfBase64(pdfB64);
+                    if (extracted && extracted.base64) {
+                        allImages[mediaPath] = extracted.base64;
+                        if (extracted.width && extracted.height) {
+                            this._updateDocxImageSizeIfNotExplicit(parts, mediaPath, extracted.width, extracted.height);
+                        }
+                    }
+                } catch (urlErr) {
+                    console.warn('DocGen admin: rich text image extract failed for ' + url, urlErr);
+                }
+            }
+        }
+
+        const fileBytes = buildDocx(parts.allXmlParts, allImages);
+        return {
+            base64: this._uint8ArrayToBase64(fileBytes),
+            title: parts.title || 'Document'
+        };
+    }
+
+    _uint8ArrayToBase64(bytes) {
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    _updateDocxImageSizeIfNotExplicit(parts, mediaPath, widthPx, heightPx) {
+        if (!parts || !parts.allXmlParts) return;
+        const docXml = parts.allXmlParts['word/document.xml'];
+        const relsXml = parts.allXmlParts['word/_rels/document.xml.rels'];
+        if (!docXml || !relsXml) return;
+
+        const targetName = mediaPath.replace(/^word\//, '');
+        const relMatch = relsXml.match(
+            new RegExp(
+                '<Relationship\\s+Id="([^"]+)"[^>]*?Target="' + targetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"',
+                'i'
+            )
+        );
+        if (!relMatch) return;
+        const relId = relMatch[1];
+
+        const blipIdx = docXml.indexOf('r:embed="' + relId + '"');
+        if (blipIdx === -1) return;
+        const drawStart = docXml.lastIndexOf('<w:drawing', blipIdx);
+        const drawEnd = docXml.indexOf('</w:drawing>', blipIdx);
+        if (drawStart === -1 || drawEnd === -1) return;
+
+        const drawingXml = docXml.substring(drawStart, drawEnd + '</w:drawing>'.length);
+        if (drawingXml.indexOf('DOCGEN_EXPLICIT_SIZE') !== -1) return;
+
+        const cxEmu = widthPx * 9525;
+        const cyEmu = heightPx * 9525;
+        let updated = drawingXml.replace(
+            /<wp:extent\s+cx="\d+"\s+cy="\d+"\s*\/>/,
+            '<wp:extent cx="' + cxEmu + '" cy="' + cyEmu + '"/>'
+        );
+        updated = updated.replace(
+            /<a:ext\s+cx="\d+"\s+cy="\d+"\s*\/>/,
+            '<a:ext cx="' + cxEmu + '" cy="' + cyEmu + '"/>'
+        );
+        if (updated !== drawingXml) {
+            parts.allXmlParts['word/document.xml'] =
+                docXml.substring(0, drawStart) + updated + docXml.substring(drawEnd + '</w:drawing>'.length);
         }
     }
 
