@@ -115,6 +115,8 @@ PDF output only. No external services required.
 | `{*Website:qr}`                 | QR code (150px default)          |
 | `{*TrackingUrl:qr:200}`         | QR code at 200px square          |
 
+QR codes are generated natively in Salesforce with Level Q error correction and support values up to 600 characters. For printed or mailed documents, short URLs or tokens under 120 characters scan most reliably at 1 inch square.
+
 ### Charts (v1.99+)
 
 Nine chart styles, one tag, every output format. Pure-Apex PNG rasterization — no `<canvas>`, no external services, no JavaScript libraries. Works in HTML→PDF (Flying Saucer), Word DOCX, Word→PDF, PowerPoint PPTX, and server-side Flow / batch / Queueable contexts.
