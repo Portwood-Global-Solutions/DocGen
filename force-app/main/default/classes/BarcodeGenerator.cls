@@ -119,44 +119,65 @@ public class BarcodeGenerator {
      * @param barcodeType The barcode type ('code128' or 'qr')
      * @return Pattern string, or null if encoding fails
      */
-    // Total data codewords per version, Level M (versions 1-14)
+    // Total data codewords per version, Level Q (versions 1-23)
     private static final List<Integer> QR_DATA_CAPACITY = new List<Integer>{
         0,
-        16,
-        28,
-        44,
-        64,
-        86,
-        108,
-        124,
+        13,
+        22,
+        34,
+        48,
+        62,
+        76,
+        88,
+        110,
+        132,
         154,
-        182,
-        216,
-        254,
-        290,
-        334,
-        365
+        180,
+        206,
+        244,
+        261,
+        295,
+        325,
+        367,
+        397,
+        445,
+        485,
+        512,
+        568,
+        614
     };
 
-    // EC block structure per version, ECL M: {ecPerBlock, grp1Count, grp1DataCW [, grp2Count, grp2DataCW]}
+    // EC block structure per version, ECL Q: {ecPerBlock, grp1Count, grp1DataCW [, grp2Count, grp2DataCW]}
     // Derived from ISO 18004 Table 9 / qrcode-generator RS_BLOCK_TABLE.
     private static final List<List<Integer>> QR_EC_BLOCKS = new List<List<Integer>>{
         new List<Integer>(), // v0 unused
-        new List<Integer>{ 10, 1, 16 }, // v1: 1×16, total=26
-        new List<Integer>{ 16, 1, 28 }, // v2: 1×28, total=44
-        new List<Integer>{ 26, 1, 44 }, // v3: 1×44, total=70
-        new List<Integer>{ 18, 2, 32 }, // v4: 2×32, total=100
-        new List<Integer>{ 24, 2, 43 }, // v5: 2×43, total=134
-        new List<Integer>{ 16, 4, 27 }, // v6: 4×27, total=172
-        new List<Integer>{ 18, 4, 31 }, // v7: 4×31, total=196
-        new List<Integer>{ 22, 2, 38, 2, 39 }, // v8: 2×38 + 2×39, total=242
-        new List<Integer>{ 22, 3, 36, 2, 37 }, // v9: 3×36 + 2×37, total=292
-        new List<Integer>{ 26, 4, 43, 1, 44 }, // v10: 4×43 + 1×44, total=346
-        new List<Integer>{ 30, 1, 50, 4, 51 }, // v11: 1×50 + 4×51, total=404
-        new List<Integer>{ 22, 6, 36, 2, 37 }, // v12: 6×36 + 2×37, total=466
-        new List<Integer>{ 22, 8, 37, 1, 38 }, // v13: 8×37 + 1×38, total=532
-        new List<Integer>{ 24, 4, 40, 5, 41 } // v14: 4×40 + 5×41, total=581
+        new List<Integer>{ 13, 1, 13 }, // v1
+        new List<Integer>{ 22, 1, 22 }, // v2
+        new List<Integer>{ 18, 2, 17 }, // v3
+        new List<Integer>{ 26, 2, 24 }, // v4
+        new List<Integer>{ 18, 2, 15, 2, 16 }, // v5
+        new List<Integer>{ 24, 4, 19 }, // v6
+        new List<Integer>{ 18, 2, 14, 4, 15 }, // v7
+        new List<Integer>{ 22, 4, 18, 2, 19 }, // v8
+        new List<Integer>{ 20, 4, 16, 4, 17 }, // v9
+        new List<Integer>{ 24, 6, 19, 2, 20 }, // v10
+        new List<Integer>{ 28, 4, 22, 4, 23 }, // v11
+        new List<Integer>{ 26, 4, 20, 6, 21 }, // v12
+        new List<Integer>{ 24, 8, 20, 4, 21 }, // v13
+        new List<Integer>{ 20, 11, 16, 5, 17 }, // v14
+        new List<Integer>{ 30, 5, 24, 7, 25 }, // v15
+        new List<Integer>{ 24, 15, 19, 2, 20 }, // v16
+        new List<Integer>{ 28, 1, 22, 15, 23 }, // v17
+        new List<Integer>{ 28, 17, 22, 1, 23 }, // v18
+        new List<Integer>{ 26, 17, 21, 4, 22 }, // v19
+        new List<Integer>{ 30, 15, 24, 5, 25 }, // v20
+        new List<Integer>{ 28, 17, 22, 6, 23 }, // v21
+        new List<Integer>{ 30, 7, 24, 16, 25 }, // v22
+        new List<Integer>{ 30, 11, 24, 14, 25 } // v23
     };
+
+    // QR format-info error correction level bits: L=01, M=00, Q=11, H=10.
+    private static final Integer QR_ECL_FORMAT_BITS = 3;
 
     // Alignment pattern center positions per version (0 = none)
     private static final List<List<Integer>> QR_ALIGN_POS = new List<List<Integer>>{
@@ -174,7 +195,16 @@ public class BarcodeGenerator {
         new List<Integer>{ 6, 30, 54 }, // v11
         new List<Integer>{ 6, 32, 58 }, // v12
         new List<Integer>{ 6, 34, 62 }, // v13
-        new List<Integer>{ 6, 26, 46, 66 } // v14
+        new List<Integer>{ 6, 26, 46, 66 }, // v14
+        new List<Integer>{ 6, 26, 48, 70 }, // v15
+        new List<Integer>{ 6, 26, 50, 74 }, // v16
+        new List<Integer>{ 6, 30, 54, 78 }, // v17
+        new List<Integer>{ 6, 30, 56, 82 }, // v18
+        new List<Integer>{ 6, 30, 58, 86 }, // v19
+        new List<Integer>{ 6, 34, 62, 90 }, // v20
+        new List<Integer>{ 6, 28, 50, 72, 94 }, // v21
+        new List<Integer>{ 6, 26, 50, 74, 98 }, // v22
+        new List<Integer>{ 6, 30, 54, 78, 102 } // v23
     };
 
     // Reed-Solomon error correction over GF(256)
@@ -210,7 +240,7 @@ public class BarcodeGenerator {
     }
 
     // ---------------------------------------------------------------------------
-    // QR Code — Version 1-14, Error Correction Level M, Byte mode
+    // QR Code — Version 1-23, Error Correction Level Q, Byte mode
     // ---------------------------------------------------------------------------
 
     private static String buildQrPattern(String value) {
@@ -226,7 +256,7 @@ public class BarcodeGenerator {
 
         // Select smallest version that fits
         Integer version = 0;
-        for (Integer v = 1; v <= 14; v++) {
+        for (Integer v = 1; v < QR_DATA_CAPACITY.size(); v++) {
             // Byte mode: 4 (mode) + 8 or 16 (count) + 8*len bits → codewords
             Integer countBits = v <= 9 ? 8 : 16;
             Integer totalBits = 4 + countBits + dataBytes.size() * 8;
@@ -345,13 +375,27 @@ public class BarcodeGenerator {
         placeFinderPattern(matrix, reserved, size - 7, 0, size);
         placeFinderPattern(matrix, reserved, 0, size - 7, size);
 
-        // Place timing patterns
+        // Alignment patterns for version >= 2
+        if (version >= 2) {
+            List<Integer> alignPos = QR_ALIGN_POS[version];
+            for (Integer aRow : alignPos) {
+                for (Integer aCol : alignPos) {
+                    placeAlignmentPattern(matrix, reserved, aRow, aCol);
+                }
+            }
+        }
+
+        // Place timing patterns after alignment patterns; overlapping cells stay alignment cells.
         for (Integer i = 8; i < size - 8; i++) {
             Integer val = Math.mod(i, 2) == 0 ? 1 : 0;
-            matrix[6][i] = val;
-            reserved[6][i] = true;
-            matrix[i][6] = val;
-            reserved[i][6] = true;
+            if (!reserved[6][i]) {
+                matrix[6][i] = val;
+                reserved[6][i] = true;
+            }
+            if (!reserved[i][6]) {
+                matrix[i][6] = val;
+                reserved[i][6] = true;
+            }
         }
 
         // Reserve format info areas
@@ -379,73 +423,63 @@ public class BarcodeGenerator {
         matrix[size - 8][8] = 1;
         reserved[size - 8][8] = true;
 
-        // Alignment patterns for version >= 2
-        if (version >= 2) {
-            List<Integer> alignPos = QR_ALIGN_POS[version];
-            for (Integer aRow : alignPos) {
-                for (Integer aCol : alignPos) {
-                    placeAlignmentPattern(matrix, reserved, aRow, aCol);
-                }
-            }
+        // Version information is required for version 7+ QR codes.
+        if (version >= 7) {
+            placeVersionInformation(matrix, reserved, version, size);
         }
 
-        // Place data bits (bottom-right, going up, zigzag)
+        // Place data bits (bottom-right, two-column zigzag) and apply mask 0.
+        Integer direction = -1;
+        Integer row = size - 1;
         Integer bitIdx = 0;
-        for (Integer right = size - 1; right >= 1; right -= 2) {
-            if (right == 6) {
-                right = 5;
-            } // Skip timing column
-            for (Integer vert = 0; vert < size; vert++) {
-                for (Integer j = 0; j < 2; j++) {
-                    Integer col = right - j;
-                    Boolean upward = Math.mod((size - 1 - right) / 2, 2) == 0;
-                    Integer row = upward ? size - 1 - vert : vert;
-                    if (
-                        col >= 0 &&
-                        col < size &&
-                        row >= 0 &&
-                        row < size &&
-                        !reserved[row][col] &&
-                        bitIdx < finalBits.size()
-                    ) {
-                        matrix[row][col] = finalBits[bitIdx++];
+        for (Integer col = size - 1; col > 0; col -= 2) {
+            if (col <= 6) {
+                col--;
+            }
+
+            while (true) {
+                for (Integer offset = 0; offset < 2; offset++) {
+                    Integer currentCol = col - offset;
+                    if (!reserved[row][currentCol]) {
+                        Integer bit = bitIdx < finalBits.size() ? finalBits[bitIdx++] : 0;
+                        if (Math.mod(row + currentCol, 2) == 0) {
+                            bit = bit == 1 ? 0 : 1;
+                        }
+                        matrix[row][currentCol] = bit;
                     }
                 }
-            }
-        }
 
-        // Apply mask pattern 0 (checkerboard: (row + col) % 2 == 0)
-        for (Integer r = 0; r < size; r++) {
-            for (Integer c = 0; c < size; c++) {
-                if (!reserved[r][c] && Math.mod(r + c, 2) == 0) {
-                    matrix[r][c] = matrix[r][c] == 1 ? 0 : 1;
+                row += direction;
+                if (row < 0 || row >= size) {
+                    row -= direction;
+                    direction = -direction;
+                    break;
                 }
             }
         }
 
-        // Write format information (ECL M = 00, mask 0 = 000 → format bits with BCH)
-        // Pre-computed: ECL M (00) + mask 0 (000) → 15-bit format = 101010000010010
-        List<Integer> formatBits = new List<Integer>{ 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0 };
-        // Horizontal: bits 0-7 along row 8, bits 8-14 along column 8
+        // Write format information (ECL Q = 11, mask 0 = 000 → format bits with BCH)
+        List<Integer> formatBits = buildQrFormatBits(QR_ECL_FORMAT_BITS, 0);
+        // Write both copies of the QR format information.
         for (Integer i = 0; i < 15; i++) {
             Integer fb = formatBits[i];
-            // Around top-left finder
+
+            // Vertical copy.
             if (i < 6) {
-                matrix[8][i] = fb;
-            } else if (i == 6) {
-                matrix[8][7] = fb;
-            } else if (i == 7) {
-                matrix[8][8] = fb;
-            } else if (i == 8) {
-                matrix[7][8] = fb;
+                matrix[i][8] = fb;
+            } else if (i < 8) {
+                matrix[i + 1][8] = fb;
             } else {
-                matrix[14 - i][8] = fb;
+                matrix[size - 15 + i][8] = fb;
             }
-            // Around other finders: bits 0-6 vertical, bits 7-14 horizontal
-            if (i < 7) {
-                matrix[size - 1 - i][8] = fb;
+
+            // Horizontal copy.
+            if (i < 8) {
+                matrix[8][size - i - 1] = fb;
+            } else if (i < 9) {
+                matrix[8][15 - i] = fb;
             } else {
-                matrix[8][size - 15 + i] = fb;
+                matrix[8][14 - i] = fb;
             }
         }
 
@@ -527,6 +561,54 @@ public class BarcodeGenerator {
         for (Integer i = count - 1; i >= 0; i--) {
             bits.add(Math.mod(value / (Integer) Math.pow(2, i), 2));
         }
+    }
+
+    private static List<Integer> buildQrFormatBits(Integer eclFormatBits, Integer maskPattern) {
+        Integer data = eclFormatBits * 8 + maskPattern;
+        Integer remainder = data * 1024;
+        Integer generator = 1335; // 0x537
+        for (Integer i = 14; i >= 10; i--) {
+            if (Math.mod(remainder / (Integer) Math.pow(2, i), 2) == 1) {
+                remainder = remainder ^ (generator * (Integer) Math.pow(2, i - 10));
+            }
+        }
+        Integer format = (data * 1024 + remainder) ^ 21522; // XOR mask 0x5412
+
+        List<Integer> bits = new List<Integer>();
+        for (Integer i = 0; i < 15; i++) {
+            bits.add(Math.mod(format / (Integer) Math.pow(2, i), 2));
+        }
+        return bits;
+    }
+
+    private static void placeVersionInformation(
+        List<List<Integer>> matrix,
+        List<List<Boolean>> reserved,
+        Integer version,
+        Integer size
+    ) {
+        Integer versionInfo = buildQrVersionInfo(version);
+        for (Integer i = 0; i < 18; i++) {
+            Integer bit = Math.mod(versionInfo / (Integer) Math.pow(2, i), 2);
+            Integer nearTopOrLeft = i / 3;
+            Integer nearRightOrBottom = size - 11 + Math.mod(i, 3);
+
+            matrix[nearTopOrLeft][nearRightOrBottom] = bit;
+            reserved[nearTopOrLeft][nearRightOrBottom] = true;
+            matrix[nearRightOrBottom][nearTopOrLeft] = bit;
+            reserved[nearRightOrBottom][nearTopOrLeft] = true;
+        }
+    }
+
+    private static Integer buildQrVersionInfo(Integer version) {
+        Integer remainder = version * 4096;
+        Integer generator = 7973; // 0x1F25
+        for (Integer i = 17; i >= 12; i--) {
+            if (Math.mod(remainder / (Integer) Math.pow(2, i), 2) == 1) {
+                remainder = remainder ^ (generator * (Integer) Math.pow(2, i - 12));
+            }
+        }
+        return version * 4096 + remainder;
     }
 
     private static List<Integer> generateReedSolomon(List<Integer> data, Integer ecCount) {

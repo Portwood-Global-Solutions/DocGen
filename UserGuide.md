@@ -1632,6 +1632,8 @@ Handles multiple sources automatically:
 
 Barcodes are rendered as images in PDF and DOCX output. Types supported: `code128`, `qr`.
 
+QR codes are generated natively in Salesforce with Level Q error correction and support values up to 600 characters. For printed or mailed documents, short URLs or tokens under 120 characters are recommended for 1 inch square QR codes.
+
 ### 7.9 Signatures
 
 See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:

@@ -1,5 +1,35 @@
 # Changelog
 
+## v3.02.0 — Higher-reliability QR codes (`04tVx000000muJFIAY`, build `3.2.0-1`, promoted 2026-06-09)
+
+QR codes now use Level Q error correction and support values up to 600 characters, improving scan reliability for printed and mailed documents such as invoices. QR generation remains fully native to Salesforce with no external services or callouts.
+
+### 1. QR codes now use Level Q error correction
+
+`BarcodeGenerator` now uses Level Q Reed-Solomon capacity and block tables instead of Level M. This gives printed QR codes a larger recovery margin for real-world handling such as office printing, folds, smudges, and phone-camera scanning.
+
+### 2. Longer QR values are supported
+
+The QR generator now supports Level Q versions 1-23, allowing values up to 600 ASCII characters. This preserves the existing short-URL use case while adding headroom for longer invoice and payment URLs.
+
+### 3. Larger QR versions now follow the QR matrix layout more closely
+
+The matrix writer now places alignment, timing, format, and version information in QR-spec order, and the data-bit placement uses the standard two-column zigzag traversal. Golden-row tests cover a representative invoice URL so QR output that looks plausible but does not scan is caught in unit tests.
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Package build coverage: 77%, code coverage check passed
+- Fresh scratch org: `docgen-qr-q`
+- Full E2E suite `e2e-01` through `e2e-08`: pass, `FAIL: 0`
+- Apex `RunLocalTests`: 1453/1453 pass, org-wide coverage 77%
+- `BarcodeGeneratorTest`: 15/15 pass
+- `sf code-analyzer` Security + AppExchange rules: 0 violations
+- `npm run format:check`: pass
+- Manual scan checks from generated PNGs: 60-character, invoice-length, and 600-character Level Q QR codes scanned from screen
+
+Promoted package: `04tVx000000muJFIAY` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000muJFIAY)
+
 ## v3.01.0 — Tall Word header PDF spacing (`04tVx000000hWJBIA2`, build `3.1.0-1`, promoted 2026-06-08)
 
 Word-authored templates with tall page headers could render PDFs where the body started at the original top margin and visually overlapped the header. This release makes the DOCX PDF renderer reserve enough top/bottom page margin for the actual header/footer content before handing the HTML to `Blob.toPdf()`.

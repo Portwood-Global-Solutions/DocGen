@@ -119,6 +119,34 @@ private class BarcodeGeneratorTest {
     }
 
     @IsTest
+    static void testQrLevelQInvoiceUrlGoldenRows() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String qr = BarcodeGenerator.getPattern(
+                'https://pay.portwoodglobalsolutions.com/puco/invoice/INV-2026-000123?token=abcdefghijklmnopqrstuvwxyz1234567890',
+                'qr'
+            );
+            List<String> rows = qr.split('\n');
+            System.assertEquals(53, rows.size(), 'Invoice URL should render as QR version 9 at Level Q');
+            System.assertEquals(
+                '11111110111010111111111000000100011111110110001111111',
+                rows[0],
+                'Top data row should match known-good Level Q byte-mode QR'
+            );
+            System.assertEquals(
+                '01000000100011011010010100000000110010001001000000011',
+                rows[9],
+                'Data placement should match known-good Level Q byte-mode QR'
+            );
+            System.assertEquals(
+                '11111110010011000100011110100001101100011011010000011',
+                rows[52],
+                'Bottom data row should match known-good Level Q byte-mode QR'
+            );
+        }
+    }
+
+    @IsTest
     static void testQr255Chars() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
@@ -129,6 +157,25 @@ private class BarcodeGeneratorTest {
             }
             String qr = BarcodeGenerator.getPattern(longText, 'qr');
             System.assertNotEquals(null, qr, '255 chars should fit in QR');
+            List<String> rows = qr.split('\n');
+            System.assertEquals(73, rows.size(), '255 chars should fit in QR version 14 at Level Q');
+            System.assertEquals(73, rows[0].length(), '255 chars should fit in QR version 14 at Level Q');
+        }
+    }
+
+    @IsTest
+    static void testQr600CharsFitsAtLevelQ() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String longText = '';
+            for (Integer i = 0; i < 600; i++) {
+                longText += 'A';
+            }
+            String qr = BarcodeGenerator.getPattern(longText, 'qr');
+            System.assertNotEquals(null, qr, '600 chars should fit in QR after extending Level Q support');
+            List<String> rows = qr.split('\n');
+            System.assertEquals(109, rows.size(), '600 chars should fit in QR version 23 at Level Q');
+            System.assertEquals(109, rows[0].length(), '600 chars should fit in QR version 23 at Level Q');
         }
     }
 
