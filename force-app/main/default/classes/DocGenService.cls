@@ -7470,6 +7470,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
         return new Map<String, Object>{
             'documentXml' => mr.documentXml,
+            'combinedDocumentXml' => combineXmlWithHeadersFooters(mr),
             'relsXml' => mr.relsXml,
             'contentTypesXml' => mr.contentTypesXml,
             'pdfImageMap' => pdfImages,

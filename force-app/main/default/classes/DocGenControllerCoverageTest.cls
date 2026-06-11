@@ -325,7 +325,14 @@ private class DocGenControllerCoverageTest {
         insert new DocGen_Template_Version__c(Template__c = tmpl.Id, Is_Active__c = true);
         String html = '<html><body><p>x</p></body></html>';
         String result = DocGenSignatureSenderController.injectPreviewWatermarkOverlay(html, tmpl.Id);
-        System.assertEquals(html, result, 'Template without watermark → unchanged HTML');
+        System.assert(
+            result.contains('docgen-preview-wrap'),
+            'Template without watermark still gets screen preview wrapper'
+        );
+        System.assert(
+            result.contains('#docgen-footer') && result.contains('order: 999'),
+            'Screen preview should move running footers after body content'
+        );
     }
 
     @IsTest

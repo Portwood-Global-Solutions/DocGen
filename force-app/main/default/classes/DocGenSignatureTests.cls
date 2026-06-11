@@ -4753,6 +4753,12 @@ private class DocGenSignatureTests {
         System.assertNotEquals(null, result, 'Should return merge data');
         String docXml = (String) result.get('documentXml');
         System.assertNotEquals(null, docXml, 'Should have document XML');
+        String combinedXml = (String) result.get('combinedDocumentXml');
+        System.assertNotEquals(null, combinedXml, 'Signature merge should expose header/footer-combined XML');
+        System.assert(
+            combinedXml.contains('{@Signature_Buyer}'),
+            'Combined XML should preserve signature tags for preview/final PDF stamping'
+        );
         // Signature tags should be preserved through the merge
         System.assert(docXml.contains('{@Signature_Buyer}'), 'Should preserve signature tag');
     }
@@ -4765,7 +4771,28 @@ private class DocGenSignatureTests {
         Test.startTest();
         String html = DocGenSignatureSenderController.getDocumentPreviewHtml(tpl.Id, acc.Id);
         Test.stopTest();
-        // May return null if template lacks content — exercises the code path either way
+        if (html != null) {
+            System.assert(
+                html.contains('docgen-preview-wrap') && html.contains('#docgen-footer'),
+                'Sender preview should include screen-only wrapper CSS for paged footer artifacts'
+            );
+        }
+    }
+
+    @isTest
+    static void testGetDocumentPreviewPdfBase64_integration() {
+        DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        String pdfBase64 = DocGenSignatureSenderController.getDocumentPreviewPdfBase64(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(
+            EncodingUtil.base64Encode(Blob.valueOf('test-preview-pdf')),
+            pdfBase64,
+            'Sender PDF preview should return a base64 PDF payload'
+        );
     }
 
     @isTest

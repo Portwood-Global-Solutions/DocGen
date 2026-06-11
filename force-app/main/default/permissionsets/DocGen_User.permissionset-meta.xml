@@ -93,11 +93,27 @@
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>
+        <apexClass>DocGenSigner</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
         <apexClass>DocGenSignatureSenderController</apexClass>
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>
         <apexClass>DocGenSignatureService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>DocGenSignatureSubmitter</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>DocGenSignatureValidator</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>DocGenSignatureFinalizer</apexClass>
         <enabled>true</enabled>
     </classAccesses>
     <description>Standard User access to Document Generation features.</description>
@@ -212,6 +228,16 @@
     <fieldPermissions>
         <editable>false</editable>
         <field>DocGen_Settings__c.Signature_OWA_Id__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Settings__c.Signature_Reminder_Enabled__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Settings__c.Signature_Reminder_Hours__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>

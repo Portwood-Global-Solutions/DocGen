@@ -8,7 +8,7 @@ import getContactInfo from '@salesforce/apex/DocGenSignatureSenderController.get
 import getPendingSignatureRequests from '@salesforce/apex/DocGenSignatureSenderController.getPendingSignatureRequests';
 import getDocGenTemplates from '@salesforce/apex/DocGenSignatureSenderController.getDocGenTemplatesForRecord';
 import getTemplateSignaturePlacements from '@salesforce/apex/DocGenSignatureSenderController.getTemplateSignaturePlacements';
-import getDocumentPreviewHtml from '@salesforce/apex/DocGenSignatureSenderController.getDocumentPreviewHtml';
+import getDocumentPreviewPdfBase64 from '@salesforce/apex/DocGenSignatureSenderController.getDocumentPreviewPdfBase64';
 
 let signerIdCounter = 0;
 let templateIdCounter = 0;
@@ -43,8 +43,9 @@ export default class DocGenSignatureSender extends LightningElement {
 
     // Preview modal
     @track showPreviewModal = false;
-    @track previewHtml = '';
+    @track previewDocuments = [];
     @track previewLoading = false;
+    @track previewStatus = '';
 
     // Previous requests
     @track previousRequests = [];
@@ -85,6 +86,10 @@ export default class DocGenSignatureSender extends LightningElement {
                 this.handleAddSigner();
             }
         }
+    }
+
+    disconnectedCallback() {
+        this._revokePreviewUrls();
     }
 
     // --- Computed Properties ---
@@ -334,78 +339,137 @@ export default class DocGenSignatureSender extends LightningElement {
     async handleShowPreview() {
         this.showPreviewModal = true;
         this.previewLoading = true;
-        this.previewHtml = '';
+        this.previewStatus = 'Generating paginated PDF preview...';
+        this._revokePreviewUrls();
+        this.previewDocuments = [];
 
-        // Defense-in-depth HTML escaper for client-supplied (template name) and
-        // error-message strings injected into preview innerHTML below.
-        const escapeHtml = (s) =>
-            String(s == null ? '' : s)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
+        const runId = (this._previewRunId || 0) + 1;
+        this._previewRunId = runId;
+
+        // Keep this independent of the Apex promise chain. If an Aura/LWC action
+        // stalls and never resolves or rejects, the modal still exits loading
+        // state and gives the sender something actionable.
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        const timeoutId = setTimeout(() => {
+            if (this._previewRunId !== runId || !this.previewLoading) {
+                return;
+            }
+            this.previewDocuments = [
+                {
+                    id: 'timeout',
+                    name: 'Preview',
+                    url: '',
+                    error: 'Preview generation is still running after 45 seconds. Close this preview and try again.'
+                }
+            ];
+            this.previewStatus = '';
+            this.previewLoading = false;
+        }, 45000);
 
         try {
-            // Generate preview for each template and concatenate
-            const htmlParts = [];
+            const docs = [];
             for (let i = 0; i < this.selectedTemplates.length; i++) {
+                if (this._previewRunId !== runId) {
+                    return;
+                }
                 const tmpl = this.selectedTemplates[i];
-                if (this.selectedTemplates.length > 1) {
-                    htmlParts.push(
-                        '<div style="background:#f8fafc;border:1px solid #e5e5e5;border-radius:6px;padding:12px 16px;margin:16px 0;text-align:center;"><strong>Document ' +
-                            (i + 1) +
-                            ' of ' +
-                            this.selectedTemplates.length +
-                            ': ' +
-                            escapeHtml(tmpl.name) +
-                            '</strong></div>'
-                    );
-                }
-                const html = await getDocumentPreviewHtml({
-                    templateId: tmpl.templateId,
-                    relatedRecordId: this.recordId
-                });
-                if (html) {
-                    htmlParts.push(html);
-                } else {
-                    htmlParts.push(
-                        '<p style="color:#706e6b;text-align:center;padding:2rem;">Preview unavailable for ' +
-                            escapeHtml(tmpl.name) +
-                            '</p>'
-                    );
+                const label =
+                    this.selectedTemplates.length > 1
+                        ? 'Document ' + (i + 1) + ' of ' + this.selectedTemplates.length + ': ' + tmpl.name
+                        : tmpl.name;
+                try {
+                    this.previewStatus = 'Rendering ' + label + '...';
+                    const pdfBase64 = await getDocumentPreviewPdfBase64({
+                        templateId: tmpl.templateId,
+                        relatedRecordId: this.recordId
+                    });
+                    if (this._previewRunId !== runId) {
+                        return;
+                    }
+                    docs.push({
+                        id: tmpl.id,
+                        name: label,
+                        url: pdfBase64 ? this._pdfObjectUrlFromBase64(pdfBase64) : '',
+                        error: pdfBase64 ? '' : 'Preview unavailable for ' + tmpl.name
+                    });
+                } catch (err) {
+                    docs.push({
+                        id: tmpl.id,
+                        name: label,
+                        url: '',
+                        error: 'Failed to generate preview for ' + tmpl.name + ': ' + this._errorMessage(err)
+                    });
                 }
             }
-            this.previewHtml = htmlParts.join('');
+            this.previewDocuments = docs;
         } catch (err) {
-            this.previewHtml =
-                '<p style="color:#ea001e;text-align:center;padding:2rem;">Failed to generate preview: ' +
-                escapeHtml(err.body ? err.body.message : err.message) +
-                '</p>';
-        }
-        this.previewLoading = false;
-
-        // Inject server-rendered HTML into the preview container after render.
-        // The HTML is generated server-side by DocGenHtmlRenderer from merged template XML —
-        // all user content is escaped in Apex. This is safe and required for document preview.
-        // eslint-disable-next-line @lwc/lwc/no-async-operation
-        setTimeout(() => {
-            const container = this.template.querySelector('.preview-document-container');
-            if (container && this.previewHtml) {
-                // eslint-disable-next-line @lwc/lwc/no-inner-html
-                container.innerHTML = this.previewHtml;
+            if (this._previewRunId !== runId) {
+                return;
             }
-        }, 100);
+            this.previewDocuments = [
+                {
+                    id: 'error',
+                    name: 'Preview',
+                    url: '',
+                    error: 'Failed to generate preview: ' + this._errorMessage(err)
+                }
+            ];
+        } finally {
+            clearTimeout(timeoutId);
+            if (this._previewRunId === runId) {
+                this.previewStatus = '';
+                this.previewLoading = false;
+            }
+        }
     }
 
     handleClosePreview() {
         this.showPreviewModal = false;
-        this.previewHtml = '';
+        this.previewStatus = '';
+        this._previewRunId = (this._previewRunId || 0) + 1;
+        this._revokePreviewUrls();
+        this.previewDocuments = [];
     }
 
     handleSendFromPreview() {
         this.showPreviewModal = false;
+        this.previewStatus = '';
+        this._previewRunId = (this._previewRunId || 0) + 1;
+        this._revokePreviewUrls();
         this.handleGenerate();
+    }
+
+    _pdfObjectUrlFromBase64(pdfBase64) {
+        const byteCharacters = atob(pdfBase64);
+        const byteArrays = [];
+        const sliceSize = 1024;
+        for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+            const slice = byteCharacters.slice(offset, offset + sliceSize);
+            const byteNumbers = new Array(slice.length);
+            for (let i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i);
+            }
+            byteArrays.push(new Uint8Array(byteNumbers));
+        }
+        return URL.createObjectURL(new Blob(byteArrays, { type: 'application/pdf' }));
+    }
+
+    _errorMessage(err) {
+        if (err && err.body && err.body.message) {
+            return err.body.message;
+        }
+        if (err && err.message) {
+            return err.message;
+        }
+        return 'Unknown error';
+    }
+
+    _revokePreviewUrls() {
+        for (const doc of this.previewDocuments || []) {
+            if (doc.url && doc.url.startsWith('blob:')) {
+                URL.revokeObjectURL(doc.url);
+            }
+        }
     }
 
     // --- Signer Row Handlers ---

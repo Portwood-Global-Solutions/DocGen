@@ -61,6 +61,13 @@ code-analyzer*.json
 # AppExchange submission bundles (scan reports, PDFs, listing copy) — kept local-only, not in the public repo
 docs/appexchange/
 
+# Local triage/customer artifacts — never commit to the public repo
+/AGENTS.md
+/Triage Docs/
+/outputs/
+/scripts/triage-*.apex
+/*.png
+
 # Python scripts
 *.py
 # Exception: the python-docx builder for the chart Word reference template

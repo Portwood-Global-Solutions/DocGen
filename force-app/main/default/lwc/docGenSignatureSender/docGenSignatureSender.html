@@ -425,6 +425,7 @@
                             onclick={handleClosePreview}
                         ></lightning-button-icon>
                         <h2 class="slds-text-heading_medium">Signature Request Preview</h2>
+                        <p class="slds-text-body_small slds-text-color_weak">PDF preview v3</p>
                     </header>
                     <div
                         class="slds-modal__content slds-var-p-around_medium"
@@ -468,15 +469,46 @@
                                         size="medium"
                                     ></lightning-spinner>
                                     <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_medium">
-                                        Merging template with record data...
+                                        {previewStatus}
                                     </p>
                                 </div>
                             </template>
                             <template if:false={previewLoading}>
-                                <div
-                                    class="preview-document-container"
-                                    style="padding: 1rem; font-size: 0.8125rem; line-height: 1.4; overflow-x: auto"
-                                ></div>
+                                <div class="preview-document-container">
+                                    <template for:each={previewDocuments} for:item="doc">
+                                        <div key={doc.id} class="preview-document-frame">
+                                            <template if:true={isPacketMode}>
+                                                <div class="preview-document-title">{doc.name}</div>
+                                            </template>
+                                            <template if:true={doc.url}>
+                                                <div class="preview-ready">
+                                                    <lightning-icon
+                                                        icon-name="doctype:pdf"
+                                                        size="medium"
+                                                        class="preview-ready-icon"
+                                                    ></lightning-icon>
+                                                    <div class="preview-ready-body">
+                                                        <p class="slds-text-title_bold">PDF preview ready</p>
+                                                        <p class="slds-text-body_small slds-text-color_weak">
+                                                            Opens from a browser blob URL so Salesforce page chrome does
+                                                            not affect pagination.
+                                                        </p>
+                                                        <a
+                                                            class="slds-button slds-button_brand slds-var-m-top_small"
+                                                            href={doc.url}
+                                                            target="_blank"
+                                                            rel="noopener"
+                                                            >Open PDF Preview</a
+                                                        >
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template if:true={doc.error}>
+                                                <p class="preview-error">{doc.error}</p>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
                             </template>
                         </div>
                     </div>

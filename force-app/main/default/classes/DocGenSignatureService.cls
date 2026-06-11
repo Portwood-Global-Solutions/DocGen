@@ -922,7 +922,10 @@ public without sharing class DocGenSignatureService {
          */
         private Blob renderTemplateSignaturePdf(Id reqId, Id templateId, String recordId) {
             Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, recordId);
-            String documentXml = (String) mergeData.get('documentXml');
+            String documentXml = (String) mergeData.get('combinedDocumentXml');
+            if (String.isBlank(documentXml)) {
+                documentXml = (String) mergeData.get('documentXml');
+            }
             String relsXml = (String) mergeData.get('relsXml');
             String contentTypesXml = (String) mergeData.get('contentTypesXml');
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
@@ -1191,7 +1194,10 @@ public without sharing class DocGenSignatureService {
             for (Integer docIdx = 0; docIdx < templateIds.size(); docIdx++) {
                 Id tid = templateIds[docIdx];
                 Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(tid, recordId);
-                String documentXml = (String) mergeData.get('documentXml');
+                String documentXml = (String) mergeData.get('combinedDocumentXml');
+                if (String.isBlank(documentXml)) {
+                    documentXml = (String) mergeData.get('documentXml');
+                }
                 String relsXml = (String) mergeData.get('relsXml');
                 String contentTypesXml = (String) mergeData.get('contentTypesXml');
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');

@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.05.0 — Signature Template Fidelity (`04tVx000000nI5RIAU`, build `3.5.0-1`, promoted 2026-06-11)
+
+This release tightens the e-signature path so Word-authored template branding survives from preview through the final signed PDF, and updates the bundled permission sets for signature Flow and reminder features.
+
+### 1. Signature previews and signed PDFs preserve template chrome
+
+Signature generation now carries the combined Word document XML, including headers and footers, through the preview and final signing paths. This fixes templates whose main document body rendered correctly but whose signature preview/final PDF dropped branded header/footer content.
+
+The sender preview now uses a generated PDF preview endpoint and opens the rendered PDF through a browser blob URL, avoiding the in-modal spinner behavior seen when the browser could not reliably render the preview stream inline.
+
+### 2. Permission sets include the signature Flow and reminder surfaces
+
+`DocGen_Admin` now grants access to `DocGenSigner` and `DocGenSignatureReminderSchedulable`.
+
+`DocGen_User` now grants access to `DocGenSigner`, `DocGenSignatureSubmitter`, `DocGenSignatureValidator`, and `DocGenSignatureFinalizer`, so standard DocGen users can see and use the managed-package signature Flow helper types/actions.
+
+Both permission sets include the signature reminder setting fields in source metadata.
+
+### 3. Release hygiene keeps triage artifacts local
+
+The repo ignore rules now explicitly keep local triage documents, generated PDFs/images, and one-off reproduction scripts out of the public repo. The release diff was scanned for the customer-specific triage names, org URLs, local paths, emails, and Salesforce record/content ids used during validation.
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Promoted package: `04tVx000000nI5RIAU` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU)
+- Package build coverage: 76%, code coverage check passed
+- Full e2e suite on release validation scratch org: PASS/FAIL0 across `e2e-01` through `e2e-08`
+- Full Apex suite: `RunLocalTests`, 1478 tests, 100% pass rate, 76% org-wide coverage
+- `sf code-analyzer` Security + AppExchange: 0 violations; SFGE printed internal timeout diagnostics on existing large controller/service paths before returning a clean summary
+- `npm run format:check`: pass
+- Signature template validation: final signed PDF preserved Word template headers/footers through the signature process
+- Permission regression: `scripts/e2e-01-permissions.apex` PASS 48 / FAIL 0
+
 ## v3.04.0 — Smoother template runs (`04tVx000000nGZtIAM`, build `3.4.0-1`, promoted 2026-06-11)
 
 This release focuses on the everyday edges that make document generation feel either calm or mysterious: clearer template-loading errors, better troubleshooting logs, safer fillable PDF versioning, safer fillable PDF bulk behavior, bulk-job permission fixes, right-to-left signing previews, and a new picklist-label merge format.

@@ -828,7 +828,10 @@ public without sharing class DocGenSignatureController {
             // Fallback: generate preview on-the-fly from template + record data
             try {
                 Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, recordId);
-                String docXml = (String) mergeData.get('documentXml');
+                String docXml = (String) mergeData.get('combinedDocumentXml');
+                if (String.isBlank(docXml)) {
+                    docXml = (String) mergeData.get('documentXml');
+                }
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
                 if (String.isNotBlank(docXml)) {
                     DocGenService.applyWatermarkOverride(templateId);

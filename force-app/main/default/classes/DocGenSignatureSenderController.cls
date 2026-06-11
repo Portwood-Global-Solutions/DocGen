@@ -287,29 +287,44 @@ public with sharing class DocGenSignatureSenderController {
 
     @TestVisible
     public static String injectPreviewWatermarkOverlay(String html, Id templateId) {
-        if (String.isBlank(html) || templateId == null)
+        if (String.isBlank(html))
             return html;
 
-        Map<String, Object> wm = new WatermarkResolver().resolve(templateId);
-        if (wm == null)
-            return html;
-        Blob wmData = (Blob) wm.get('data');
-        String wmExt = (String) wm.get('ext');
-        if (wmData == null)
-            return html;
-
-        String mime = (wmExt == 'jpg' || wmExt == 'jpeg') ? 'image/jpeg' : (wmExt == 'gif') ? 'image/gif' : 'image/png';
-        String dataUri = 'data:' + mime + ';base64,' + EncodingUtil.base64Encode(wmData);
+        String overlayDiv = '';
+        if (templateId != null) {
+            Map<String, Object> wm = new WatermarkResolver().resolve(templateId);
+            if (wm != null) {
+                Blob wmData = (Blob) wm.get('data');
+                String wmExt = (String) wm.get('ext');
+                if (wmData != null) {
+                    String mime = (wmExt == 'jpg' ||
+                        wmExt == 'jpeg')
+                        ? 'image/jpeg'
+                        : (wmExt == 'gif') ? 'image/gif' : 'image/png';
+                    String dataUri = 'data:' + mime + ';base64,' + EncodingUtil.base64Encode(wmData);
+                    overlayDiv =
+                        '<div class="docgen-preview-watermark" aria-hidden="true">' +
+                        '<img src="' +
+                        dataUri +
+                        '" alt=""/>' +
+                        '</div>';
+                }
+            }
+        }
 
         // Render the watermark as a real <img> element with explicit max-height. Using a
         // CSS background-image inside an absolutely-positioned overlay collapses to the
         // wrap's content height — a one-line preview leaves the image rendered at ~50px,
         // effectively invisible. An <img> sizes from its intrinsic dimensions and respects
         // max-height, so it shows at a usable size regardless of how short the document is.
+        // The same screen-only CSS keeps running footer boxes visible in browser previews.
+        // Flying Saucer pulls them into @page margin boxes, but browsers leave them in flow;
+        // flex ordering moves them after the preview body instead of before page one.
         String overlay =
             '<style>' +
             '@media screen {' +
-            ' .docgen-preview-wrap { position: relative; min-height: 400px; }' +
+            ' .docgen-preview-wrap { position: relative; min-height: 400px; display: flex; flex-direction: column; }' +
+            ' .docgen-preview-wrap #docgen-footer, .docgen-preview-wrap #docgen-footer-first { display: block !important; order: 999; margin-top: 18pt; }' +
             ' .docgen-preview-watermark { position: absolute; top: 0; left: 0; right: 0; ' +
             'text-align: center; opacity: 0.35; pointer-events: none; z-index: 0; }' +
             ' .docgen-preview-watermark img { width: 90% !important; max-width: 90% !important; ' +
@@ -318,13 +333,6 @@ public with sharing class DocGenSignatureSenderController {
             '}' +
             '@media print { .docgen-preview-watermark { display: none !important; } }' +
             '</style>';
-
-        String overlayDiv =
-            '<div class="docgen-preview-watermark" aria-hidden="true">' +
-            '<img src="' +
-            dataUri +
-            '" alt=""/>' +
-            '</div>';
 
         Integer bodyOpen = html.indexOf('<body');
         Integer bodyClose = html.lastIndexOf('</body>');
@@ -534,7 +542,10 @@ public with sharing class DocGenSignatureSenderController {
             }
 
             // Render preview HTML using public URLs (small, no base64 bloat)
-            String docXml = (String) mergeData.get('documentXml');
+            String docXml = (String) mergeData.get('combinedDocumentXml');
+            if (String.isBlank(docXml)) {
+                docXml = (String) mergeData.get('documentXml');
+            }
             DocGenService.applyWatermarkOverride(templateId);
             String previewHtml = DocGenHtmlRenderer.convertToHtml(docXml, previewImageMap);
 
@@ -697,7 +708,10 @@ public with sharing class DocGenSignatureSenderController {
                     }
                 }
 
-                String docXml = (String) mergeData.get('documentXml');
+                String docXml = (String) mergeData.get('combinedDocumentXml');
+                if (String.isBlank(docXml)) {
+                    docXml = (String) mergeData.get('documentXml');
+                }
                 DocGenService.applyWatermarkOverride(tid);
                 String docHtml = DocGenHtmlRenderer.convertToHtml(docXml, previewImageMap);
                 docHtml = injectPlacementSpans(docHtml);
@@ -1622,7 +1636,10 @@ public with sharing class DocGenSignatureSenderController {
     public static String getDocumentPreviewHtml(Id templateId, String relatedRecordId) {
         try {
             Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
-            String docXml = (String) mergeData.get('documentXml');
+            String docXml = (String) mergeData.get('combinedDocumentXml');
+            if (String.isBlank(docXml)) {
+                docXml = (String) mergeData.get('documentXml');
+            }
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
             DocGenService.applyWatermarkOverride(templateId);
             String html = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
@@ -1632,6 +1649,40 @@ public with sharing class DocGenSignatureSenderController {
             System.debug(LoggingLevel.WARN, 'DocGen: Preview generation failed: ' + e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Generates a paginated PDF preview for the sender modal. Unlike the HTML preview,
+     * this uses Blob.toPdf(), so Word headers/footers, @page margin boxes, counters,
+     * and page breaks are evaluated by the same renderer used for the final signed PDF.
+     */
+    @AuraEnabled
+    public static String getDocumentPreviewPdfBase64(Id templateId, String relatedRecordId) {
+        try {
+            Blob pdfBlob = buildDocumentPreviewPdfBlob(templateId, relatedRecordId);
+            return pdfBlob == null ? null : EncodingUtil.base64Encode(pdfBlob);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: PDF preview generation failed: ' + e.getMessage());
+            throw new AuraHandledException('PDF preview generation failed: ' + e.getMessage());
+        }
+    }
+
+    private static Blob buildDocumentPreviewPdfBlob(Id templateId, String relatedRecordId) {
+        Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
+        String docXml = (String) mergeData.get('combinedDocumentXml');
+        if (String.isBlank(docXml)) {
+            docXml = (String) mergeData.get('documentXml');
+        }
+        if (String.isBlank(docXml)) {
+            return null;
+        }
+
+        Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+        DocGenService.applyWatermarkOverride(templateId);
+        String html = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
+        html = injectPlacementSpans(html);
+
+        return Test.isRunningTest() ? Blob.valueOf('test-preview-pdf') : Blob.toPdf(html);
     }
 
     public static String getSigningPagePath() {

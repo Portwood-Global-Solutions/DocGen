@@ -1,12 +1,18 @@
 // DocGen E2E Test 01 — Permission Set Validation
 // Run: sf apex run --target-org <org> -f scripts/e2e-01-permissions.apex
-// Expected: PASS: N  FAIL: 0
 
 Integer pass = 0;
 Integer fail = 0;
 
 Boolean containsNs(Set<String> s, String val) {
     return s.contains(val) || s.contains('portwoodglobal__' + val);
+}
+
+Boolean containsFld(Set<String> s, String obj, String fld) {
+    return s.contains(obj + '.' + fld) ||
+        s.contains('portwoodglobal__' + obj + '.' + fld) ||
+        s.contains(obj + '.portwoodglobal__' + fld) ||
+        s.contains('portwoodglobal__' + obj + '.portwoodglobal__' + fld);
 }
 
 // ===== DocGen_Admin Permission Set =====
@@ -17,7 +23,6 @@ try {
         System.debug('ADMIN EXISTS: FAIL — DocGen_Admin not found');
     } else {
         pass++;
-        System.debug('ADMIN EXISTS: PASS');
         Id psId = aps[0].Id;
 
         // Apex class accesses
@@ -34,69 +39,78 @@ try {
         Boolean coreOk = cls.contains('DocGenController') && cls.contains('DocGenService');
         if (coreOk) {
             pass++;
-            System.debug('ADMIN CORE CLASSES (DocGenController, DocGenService): PASS');
         } else {
             fail++;
-            System.debug('ADMIN CORE CLASSES: FAIL — found: ' + cls);
+            System.debug('ADMIN CORE CLASSES: FAIL');
         }
 
         // Bulk classes
         Boolean bulkOk = cls.contains('DocGenBulkController');
         if (bulkOk) {
             pass++;
-            System.debug('ADMIN BULK CLASS (DocGenBulkController): PASS');
         } else {
             fail++;
-            System.debug('ADMIN BULK CLASS: FAIL — found: ' + cls);
+            System.debug('ADMIN BULK CLASS: FAIL');
         }
 
         // Signature classes
         Boolean sigOk = cls.contains('DocGenSignatureController') && cls.contains('DocGenAuthenticatorController');
         if (sigOk) {
             pass++;
-            System.debug('ADMIN SIGNATURE CLASSES: PASS');
         } else {
             fail++;
-            System.debug('ADMIN SIGNATURE CLASSES: FAIL — found: ' + cls);
+            System.debug('ADMIN SIGNATURE CLASSES: FAIL');
         }
 
         // Setup classes
         Boolean setupOk = cls.contains('DocGenSetupController');
         if (setupOk) {
             pass++;
-            System.debug('ADMIN SETUP CLASS (DocGenSetupController): PASS');
         } else {
             fail++;
-            System.debug('ADMIN SETUP CLASS: FAIL — found: ' + cls);
+            System.debug('ADMIN SETUP CLASS: FAIL');
         }
 
         // Sender controller
         Boolean senderOk = cls.contains('DocGenSignatureSenderController');
         if (senderOk) {
             pass++;
-            System.debug('ADMIN SENDER CLASS (DocGenSignatureSenderController): PASS');
         } else {
             fail++;
-            System.debug('ADMIN SENDER CLASS: FAIL — found: ' + cls);
+            System.debug('ADMIN SENDER CLASS: FAIL');
         }
 
         // Flow invocables (signature + giant query)
         Boolean sigFlowOk = cls.contains('DocGenSignatureFlowAction');
         if (sigFlowOk) {
             pass++;
-            System.debug('ADMIN FLOW CLASS DocGenSignatureFlowAction: PASS');
         } else {
             fail++;
-            System.debug('ADMIN FLOW CLASS DocGenSignatureFlowAction: FAIL — found: ' + cls);
+            System.debug('ADMIN FLOW CLASS DocGenSignatureFlowAction: FAIL');
         }
 
         Boolean gqFlowOk = cls.contains('DocGenGiantQueryFlowAction');
         if (gqFlowOk) {
             pass++;
-            System.debug('ADMIN FLOW CLASS DocGenGiantQueryFlowAction: PASS');
         } else {
             fail++;
-            System.debug('ADMIN FLOW CLASS DocGenGiantQueryFlowAction: FAIL — found: ' + cls);
+            System.debug('ADMIN FLOW CLASS DocGenGiantQueryFlowAction: FAIL');
+        }
+
+        Boolean signerTypeOk = cls.contains('DocGenSigner');
+        if (signerTypeOk) {
+            pass++;
+        } else {
+            fail++;
+            System.debug('ADMIN CLASS DocGenSigner: FAIL');
+        }
+
+        Boolean reminderSchedOk = cls.contains('DocGenSignatureReminderSchedulable');
+        if (reminderSchedOk) {
+            pass++;
+        } else {
+            fail++;
+            System.debug('ADMIN CLASS DocGenSignatureReminderSchedulable: FAIL');
         }
 
         // VF page accesses
@@ -111,18 +125,16 @@ try {
         Boolean guideOk = apgs.contains('DocGenGuide');
         if (guideOk) {
             pass++;
-            System.debug('ADMIN PAGE DocGenGuide: PASS');
         } else {
             fail++;
-            System.debug('ADMIN PAGE DocGenGuide: FAIL — found: ' + apgs);
+            System.debug('ADMIN PAGE DocGenGuide: FAIL');
         }
         Boolean verifyOk = apgs.contains('DocGenVerify');
         if (verifyOk) {
             pass++;
-            System.debug('ADMIN PAGE DocGenVerify: PASS');
         } else {
             fail++;
-            System.debug('ADMIN PAGE DocGenVerify: FAIL — found: ' + apgs);
+            System.debug('ADMIN PAGE DocGenVerify: FAIL');
         }
 
         // Object permissions — templates, jobs, signature objects
@@ -137,58 +149,51 @@ try {
 
         if (containsNs(objs, 'DocGen_Template__c')) {
             pass++;
-            System.debug('ADMIN OBJ DocGen_Template__c: PASS');
         } else {
             fail++;
-            System.debug('ADMIN OBJ DocGen_Template__c: FAIL — found: ' + objs);
+            System.debug('ADMIN OBJ DocGen_Template__c: FAIL');
         }
 
         if (containsNs(objs, 'DocGen_Job__c')) {
             pass++;
-            System.debug('ADMIN OBJ DocGen_Job__c: PASS');
         } else {
             fail++;
-            System.debug('ADMIN OBJ DocGen_Job__c: FAIL — found: ' + objs);
+            System.debug('ADMIN OBJ DocGen_Job__c: FAIL');
         }
 
         if (containsNs(objs, 'DocGen_Signature_Request__c')) {
             pass++;
-            System.debug('ADMIN OBJ DocGen_Signature_Request__c: PASS');
         } else {
             fail++;
-            System.debug('ADMIN OBJ DocGen_Signature_Request__c: FAIL — found: ' + objs);
+            System.debug('ADMIN OBJ DocGen_Signature_Request__c: FAIL');
         }
 
         if (containsNs(objs, 'DocGen_Signer__c')) {
             pass++;
-            System.debug('ADMIN OBJ DocGen_Signer__c: PASS');
         } else {
             fail++;
-            System.debug('ADMIN OBJ DocGen_Signer__c: FAIL — found: ' + objs);
+            System.debug('ADMIN OBJ DocGen_Signer__c: FAIL');
         }
 
         if (containsNs(objs, 'DocGen_Signature_Audit__c')) {
             pass++;
-            System.debug('ADMIN OBJ DocGen_Signature_Audit__c: PASS');
         } else {
             fail++;
-            System.debug('ADMIN OBJ DocGen_Signature_Audit__c: FAIL — found: ' + objs);
+            System.debug('ADMIN OBJ DocGen_Signature_Audit__c: FAIL');
         }
 
         if (containsNs(objs, 'DocGen_Signature_Placement__c')) {
             pass++;
-            System.debug('ADMIN OBJ DocGen_Signature_Placement__c: PASS');
         } else {
             fail++;
-            System.debug('ADMIN OBJ DocGen_Signature_Placement__c: FAIL — found: ' + objs);
+            System.debug('ADMIN OBJ DocGen_Signature_Placement__c: FAIL');
         }
 
         if (containsNs(objs, 'DocGen_Saved_Query__c')) {
             pass++;
-            System.debug('ADMIN OBJ DocGen_Saved_Query__c: PASS');
         } else {
             fail++;
-            System.debug('ADMIN OBJ DocGen_Saved_Query__c: FAIL — found: ' + objs);
+            System.debug('ADMIN OBJ DocGen_Saved_Query__c: FAIL');
         }
 
         // Key signature field permissions
@@ -201,13 +206,9 @@ try {
             flds.add(fp.Field);
         }
 
-        Boolean pinHashOk =
-            containsNs(flds, 'DocGen_Signer__c.PIN_Hash__c') ||
-            containsNs(flds, 'DocGen_Signer__c.portwoodglobal__PIN_Hash__c') ||
-            flds.contains('portwoodglobal__DocGen_Signer__c.portwoodglobal__PIN_Hash__c');
+        Boolean pinHashOk = containsFld(flds, 'DocGen_Signer__c', 'PIN_Hash__c');
         if (pinHashOk) {
             pass++;
-            System.debug('ADMIN FLD PIN_Hash__c: PASS');
         } else {
             fail++;
             System.debug(
@@ -215,25 +216,17 @@ try {
             );
         }
 
-        Boolean tokenOk =
-            containsNs(flds, 'DocGen_Signer__c.Secure_Token__c') ||
-            containsNs(flds, 'DocGen_Signer__c.portwoodglobal__Secure_Token__c') ||
-            flds.contains('portwoodglobal__DocGen_Signer__c.portwoodglobal__Secure_Token__c');
+        Boolean tokenOk = containsFld(flds, 'DocGen_Signer__c', 'Secure_Token__c');
         if (tokenOk) {
             pass++;
-            System.debug('ADMIN FLD Secure_Token__c: PASS');
         } else {
             fail++;
             System.debug('ADMIN FLD Secure_Token__c: FAIL');
         }
 
-        Boolean hashFieldOk =
-            containsNs(flds, 'DocGen_Signature_Audit__c.Document_Hash_SHA256__c') ||
-            containsNs(flds, 'DocGen_Signature_Audit__c.portwoodglobal__Document_Hash_SHA256__c') ||
-            flds.contains('portwoodglobal__DocGen_Signature_Audit__c.portwoodglobal__Document_Hash_SHA256__c');
+        Boolean hashFieldOk = containsFld(flds, 'DocGen_Signature_Audit__c', 'Document_Hash_SHA256__c');
         if (hashFieldOk) {
             pass++;
-            System.debug('ADMIN FLD Document_Hash_SHA256__c: PASS');
         } else {
             fail++;
             System.debug('ADMIN FLD Document_Hash_SHA256__c: FAIL');
@@ -252,7 +245,6 @@ try {
         System.debug('USER EXISTS: FAIL — DocGen_User not found');
     } else {
         pass++;
-        System.debug('USER EXISTS: PASS');
         Id upsId = ups[0].Id;
 
         Set<String> uo = new Set<String>();
@@ -266,26 +258,23 @@ try {
 
         if (containsNs(uo, 'DocGen_Template__c')) {
             pass++;
-            System.debug('USER READ DocGen_Template__c: PASS');
         } else {
             fail++;
-            System.debug('USER READ DocGen_Template__c: FAIL — found: ' + uo);
+            System.debug('USER READ DocGen_Template__c: FAIL');
         }
 
         if (containsNs(uo, 'DocGen_Signature_Request__c')) {
             pass++;
-            System.debug('USER READ DocGen_Signature_Request__c: PASS');
         } else {
             fail++;
-            System.debug('USER READ DocGen_Signature_Request__c: FAIL — found: ' + uo);
+            System.debug('USER READ DocGen_Signature_Request__c: FAIL');
         }
 
         if (containsNs(uo, 'DocGen_Signer__c')) {
             pass++;
-            System.debug('USER READ DocGen_Signer__c: PASS');
         } else {
             fail++;
-            System.debug('USER READ DocGen_Signer__c: FAIL — found: ' + uo);
+            System.debug('USER READ DocGen_Signer__c: FAIL');
         }
 
         // User class accesses
@@ -300,37 +289,52 @@ try {
         Boolean uClsOk = ucls.contains('DocGenController');
         if (uClsOk) {
             pass++;
-            System.debug('USER CLASS DocGenController: PASS');
         } else {
             fail++;
-            System.debug('USER CLASS DocGenController: FAIL — found: ' + ucls);
+            System.debug('USER CLASS DocGenController: FAIL');
         }
 
         Boolean uFlowOk = ucls.contains('DocGenSignatureFlowAction');
         if (uFlowOk) {
             pass++;
-            System.debug('USER CLASS DocGenSignatureFlowAction: PASS');
         } else {
             fail++;
-            System.debug('USER CLASS DocGenSignatureFlowAction: FAIL — found: ' + ucls);
+            System.debug('USER CLASS DocGenSignatureFlowAction: FAIL');
         }
 
         Boolean uGqFlowOk = ucls.contains('DocGenGiantQueryFlowAction');
         if (uGqFlowOk) {
             pass++;
-            System.debug('USER CLASS DocGenGiantQueryFlowAction: PASS');
         } else {
             fail++;
-            System.debug('USER CLASS DocGenGiantQueryFlowAction: FAIL — found: ' + ucls);
+            System.debug('USER CLASS DocGenGiantQueryFlowAction: FAIL');
         }
 
         Boolean uAuthOk = ucls.contains('DocGenAuthenticatorController');
         if (uAuthOk) {
             pass++;
-            System.debug('USER CLASS DocGenAuthenticatorController: PASS');
         } else {
             fail++;
-            System.debug('USER CLASS DocGenAuthenticatorController: FAIL — found: ' + ucls);
+            System.debug('USER CLASS DocGenAuthenticatorController: FAIL');
+        }
+
+        Boolean uSignerTypeOk = ucls.contains('DocGenSigner');
+        if (uSignerTypeOk) {
+            pass++;
+        } else {
+            fail++;
+            System.debug('USER CLASS DocGenSigner: FAIL');
+        }
+
+        Boolean uSigningHelpersOk =
+            ucls.contains('DocGenSignatureSubmitter') &&
+            ucls.contains('DocGenSignatureValidator') &&
+            ucls.contains('DocGenSignatureFinalizer');
+        if (uSigningHelpersOk) {
+            pass++;
+        } else {
+            fail++;
+            System.debug('USER custom signing helpers: FAIL');
         }
 
         Set<String> upgs = new Set<String>();
@@ -344,10 +348,9 @@ try {
         Boolean uVerifyOk = upgs.contains('DocGenVerify');
         if (uVerifyOk) {
             pass++;
-            System.debug('USER PAGE DocGenVerify: PASS');
         } else {
             fail++;
-            System.debug('USER PAGE DocGenVerify: FAIL — found: ' + upgs);
+            System.debug('USER PAGE DocGenVerify: FAIL');
         }
 
         Set<String> editableJobFields = new Set<String>();
@@ -362,19 +365,17 @@ try {
         Boolean userJobLabelOk = containsNs(editableJobFields, 'DocGen_Job__c.Label__c');
         if (userJobLabelOk) {
             pass++;
-            System.debug('USER FLD DocGen_Job__c.Label__c edit: PASS');
         } else {
             fail++;
-            System.debug('USER FLD DocGen_Job__c.Label__c edit: FAIL — found: ' + editableJobFields);
+            System.debug('USER FLD DocGen_Job__c.Label__c edit: FAIL');
         }
 
         Boolean userJobMergeOnlyOk = containsNs(editableJobFields, 'DocGen_Job__c.Merge_Only__c');
         if (userJobMergeOnlyOk) {
             pass++;
-            System.debug('USER FLD DocGen_Job__c.Merge_Only__c edit: PASS');
         } else {
             fail++;
-            System.debug('USER FLD DocGen_Job__c.Merge_Only__c edit: FAIL — found: ' + editableJobFields);
+            System.debug('USER FLD DocGen_Job__c.Merge_Only__c edit: FAIL');
         }
     }
 } catch (Exception e) {
@@ -390,7 +391,6 @@ try {
         System.debug('GUEST EXISTS: FAIL — DocGen_Guest_Signature not found');
     } else {
         pass++;
-        System.debug('GUEST EXISTS: PASS');
         Id gId = gps[0].Id;
 
         Set<String> gc = new Set<String>();
@@ -412,47 +412,42 @@ try {
         Boolean sigPageOk = gp.contains('DocGenSignature');
         if (sigPageOk) {
             pass++;
-            System.debug('GUEST PAGE DocGenSignature: PASS');
         } else {
             fail++;
-            System.debug('GUEST PAGE DocGenSignature: FAIL — found: ' + gp);
+            System.debug('GUEST PAGE DocGenSignature: FAIL');
         }
 
         Boolean signPageOk = gp.contains('DocGenSign');
         if (signPageOk) {
             pass++;
-            System.debug('GUEST PAGE DocGenSign: PASS');
         } else {
             fail++;
-            System.debug('GUEST PAGE DocGenSign: FAIL — found: ' + gp);
+            System.debug('GUEST PAGE DocGenSign: FAIL');
         }
 
         Boolean verifyPageOk = gp.contains('DocGenVerify');
         if (verifyPageOk) {
             pass++;
-            System.debug('GUEST PAGE DocGenVerify: PASS');
         } else {
             fail++;
-            System.debug('GUEST PAGE DocGenVerify: FAIL — found: ' + gp);
+            System.debug('GUEST PAGE DocGenVerify: FAIL');
         }
 
         // Apex classes
         Boolean gSigCtrl = gc.contains('DocGenSignatureController');
         if (gSigCtrl) {
             pass++;
-            System.debug('GUEST CLASS DocGenSignatureController: PASS');
         } else {
             fail++;
-            System.debug('GUEST CLASS DocGenSignatureController: FAIL — found: ' + gc);
+            System.debug('GUEST CLASS DocGenSignatureController: FAIL');
         }
 
         Boolean gAuthCtrl = gc.contains('DocGenAuthenticatorController');
         if (gAuthCtrl) {
             pass++;
-            System.debug('GUEST CLASS DocGenAuthenticatorController: PASS');
         } else {
             fail++;
-            System.debug('GUEST CLASS DocGenAuthenticatorController: FAIL — found: ' + gc);
+            System.debug('GUEST CLASS DocGenAuthenticatorController: FAIL');
         }
 
         // Object permissions
@@ -467,34 +462,30 @@ try {
 
         if (containsNs(go2, 'DocGen_Signature_Request__c')) {
             pass++;
-            System.debug('GUEST OBJ DocGen_Signature_Request__c: PASS');
         } else {
             fail++;
-            System.debug('GUEST OBJ DocGen_Signature_Request__c: FAIL — found: ' + go2);
+            System.debug('GUEST OBJ DocGen_Signature_Request__c: FAIL');
         }
 
         if (containsNs(go2, 'DocGen_Signer__c')) {
             pass++;
-            System.debug('GUEST OBJ DocGen_Signer__c: PASS');
         } else {
             fail++;
-            System.debug('GUEST OBJ DocGen_Signer__c: FAIL — found: ' + go2);
+            System.debug('GUEST OBJ DocGen_Signer__c: FAIL');
         }
 
         if (containsNs(go2, 'DocGen_Signature_Audit__c')) {
             pass++;
-            System.debug('GUEST OBJ DocGen_Signature_Audit__c: PASS');
         } else {
             fail++;
-            System.debug('GUEST OBJ DocGen_Signature_Audit__c: FAIL — found: ' + go2);
+            System.debug('GUEST OBJ DocGen_Signature_Audit__c: FAIL');
         }
 
         if (containsNs(go2, 'DocGen_Signature_Placement__c')) {
             pass++;
-            System.debug('GUEST OBJ DocGen_Signature_Placement__c: PASS');
         } else {
             fail++;
-            System.debug('GUEST OBJ DocGen_Signature_Placement__c: FAIL — found: ' + go2);
+            System.debug('GUEST OBJ DocGen_Signature_Placement__c: FAIL');
         }
     }
 } catch (Exception e) {
@@ -514,7 +505,6 @@ try {
         System.debug('GUEST_RUNNER EXISTS: FAIL');
     } else {
         pass++;
-        System.debug('GUEST_RUNNER EXISTS: PASS');
         Id grId = grps[0].Id;
         Integer grcCount = [
             SELECT COUNT()
@@ -528,14 +518,12 @@ try {
         ];
         if (grcCount == 0) {
             pass++;
-            System.debug('GUEST_RUNNER DEPRECATED — 0 class grants: PASS');
         } else {
             fail++;
             System.debug('GUEST_RUNNER DEPRECATED — expected 0 class grants, found ' + grcCount + ': FAIL');
         }
         if (grObjCount == 0) {
             pass++;
-            System.debug('GUEST_RUNNER DEPRECATED — 0 object grants: PASS');
         } else {
             fail++;
             System.debug('GUEST_RUNNER DEPRECATED — expected 0 object grants, found ' + grObjCount + ': FAIL');
