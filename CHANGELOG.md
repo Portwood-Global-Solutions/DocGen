@@ -1,6 +1,6 @@
 # Changelog
 
-## v3.04.0 — Smoother template runs (release candidate)
+## v3.04.0 — Smoother template runs (`04tVx000000nGZtIAM`, build `3.4.0-1`, promoted 2026-06-11)
 
 This release focuses on the everyday edges that make document generation feel either calm or mysterious: clearer template-loading errors, better troubleshooting logs, safer fillable PDF versioning, safer fillable PDF bulk behavior, bulk-job permission fixes, right-to-left signing previews, and a new picklist-label merge format.
 
@@ -43,7 +43,7 @@ Related: [#150](https://github.com/Portwood-Global-Solutions/DocGen/issues/150)
 ### Release validation
 
 - Package version create: validated build, `ValidationSkipped = false`
-- Release candidate package: `04tVx000000nGZtIAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nGZtIAM)
+- Promoted package: `04tVx000000nGZtIAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nGZtIAM)
 - Package build coverage: 76%, code coverage check passed
 - Full e2e suite on `codex-acroforms`: PASS/FAIL0 across `e2e-01` through `e2e-08`
 - Full Apex suite: `RunLocalTests`, 1475 tests, 100% pass rate, 76% org-wide coverage
