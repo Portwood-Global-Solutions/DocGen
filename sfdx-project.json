@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.06.0 — HTML Signature Placement Detection",
-      "versionNumber": "3.6.0.NEXT",
-      "ancestorId": "04tVx000000nI5RIAU",
+      "versionName": "v3.07.0 — HTML Signature Rendering",
+      "versionNumber": "3.7.0.NEXT",
+      "ancestorId": "04tVx000000nIv4IAE",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v3.06 fixes e-signature setup for HTML templates so signature fields are detected correctly when sending documents for signature. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v3.07 fixes e-signature previews and completed signed PDFs for HTML templates. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
@@ -167,6 +167,7 @@
     "Portwood DocGen Managed@3.3.0-1": "04tVx000000nEHxIAM",
     "Portwood DocGen Managed@3.4.0-1": "04tVx000000nGZtIAM",
     "Portwood DocGen Managed@3.5.0-1": "04tVx000000nI5RIAU",
-    "Portwood DocGen Managed@3.6.0-1": "04tVx000000nIv4IAE"
+    "Portwood DocGen Managed@3.6.0-1": "04tVx000000nIv4IAE",
+    "Portwood DocGen Managed@3.7.0-1": "04tVx000000nLOHIA2"
   }
 }

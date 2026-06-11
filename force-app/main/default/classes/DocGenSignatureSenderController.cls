@@ -561,12 +561,7 @@ public with sharing class DocGenSignatureSenderController {
             }
 
             // Render preview HTML using public URLs (small, no base64 bloat)
-            String docXml = (String) mergeData.get('combinedDocumentXml');
-            if (String.isBlank(docXml)) {
-                docXml = (String) mergeData.get('documentXml');
-            }
-            DocGenService.applyWatermarkOverride(templateId);
-            String previewHtml = DocGenHtmlRenderer.convertToHtml(docXml, previewImageMap);
+            String previewHtml = renderMergedSignatureHtml(mergeData, templateId, previewImageMap);
 
             // Inject interactive placement spans for the guided signing UI.
             // Watermark overlay is NOT injected here — base64-embedded image would blow
@@ -727,12 +722,7 @@ public with sharing class DocGenSignatureSenderController {
                     }
                 }
 
-                String docXml = (String) mergeData.get('combinedDocumentXml');
-                if (String.isBlank(docXml)) {
-                    docXml = (String) mergeData.get('documentXml');
-                }
-                DocGenService.applyWatermarkOverride(tid);
-                String docHtml = DocGenHtmlRenderer.convertToHtml(docXml, previewImageMap);
+                String docHtml = renderMergedSignatureHtml(mergeData, tid, previewImageMap);
                 docHtml = injectPlacementSpans(docHtml);
                 // Watermark overlay deferred to read time (cache size constraint).
 
@@ -1655,13 +1645,8 @@ public with sharing class DocGenSignatureSenderController {
     public static String getDocumentPreviewHtml(Id templateId, String relatedRecordId) {
         try {
             Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
-            String docXml = (String) mergeData.get('combinedDocumentXml');
-            if (String.isBlank(docXml)) {
-                docXml = (String) mergeData.get('documentXml');
-            }
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
-            DocGenService.applyWatermarkOverride(templateId);
-            String html = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
+            String html = renderMergedSignatureHtml(mergeData, templateId, pdfImageMap);
             html = injectPlacementSpans(html);
             return injectPreviewWatermarkOverlay(html, templateId);
         } catch (Exception e) {
@@ -1688,6 +1673,25 @@ public with sharing class DocGenSignatureSenderController {
 
     private static Blob buildDocumentPreviewPdfBlob(Id templateId, String relatedRecordId) {
         Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
+        Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+        String html = renderMergedSignatureHtml(mergeData, templateId, pdfImageMap);
+        if (String.isBlank(html)) {
+            return null;
+        }
+        html = injectPlacementSpans(html);
+
+        return Test.isRunningTest() ? Blob.valueOf('test-preview-pdf') : Blob.toPdf(html);
+    }
+
+    @TestVisible
+    private static String renderMergedSignatureHtml(
+        Map<String, Object> mergeData,
+        Id templateId,
+        Map<String, String> imageMap
+    ) {
+        if (mergeData == null) {
+            return null;
+        }
         String docXml = (String) mergeData.get('combinedDocumentXml');
         if (String.isBlank(docXml)) {
             docXml = (String) mergeData.get('documentXml');
@@ -1696,12 +1700,12 @@ public with sharing class DocGenSignatureSenderController {
             return null;
         }
 
-        Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
-        DocGenService.applyWatermarkOverride(templateId);
-        String html = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
-        html = injectPlacementSpans(html);
+        if ((String) mergeData.get('templateType') == 'HTML') {
+            return docXml;
+        }
 
-        return Test.isRunningTest() ? Blob.valueOf('test-preview-pdf') : Blob.toPdf(html);
+        DocGenService.applyWatermarkOverride(templateId);
+        return DocGenHtmlRenderer.convertToHtml(docXml, imageMap);
     }
 
     public static String getSigningPagePath() {

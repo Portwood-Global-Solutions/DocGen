@@ -325,6 +325,23 @@ public without sharing class DocGenSignatureService {
         return new StampResult(documentXml, relsXml, contentTypesXml, signatureImageUrls);
     }
 
+    @TestVisible
+    private static String stampSignaturesInHtml(String html, List<DocGen_Signature_Placement__c> placements) {
+        if (String.isBlank(html) || placements == null || placements.isEmpty()) {
+            return html;
+        }
+
+        for (DocGen_Signature_Placement__c plc : placements) {
+            if (plc.Status__c != 'Signed' || String.isBlank(plc.Tag_Text__c))
+                continue;
+
+            if (html.contains(plc.Tag_Text__c)) {
+                html = html.replaceFirst(Pattern.quote(plc.Tag_Text__c), buildPlacementText(plc).escapeHtml4());
+            }
+        }
+        return html;
+    }
+
     /**
      * Builds the replacement text for a signed placement based on its type.
      */
@@ -929,6 +946,7 @@ public without sharing class DocGenSignatureService {
             String relsXml = (String) mergeData.get('relsXml');
             String contentTypesXml = (String) mergeData.get('contentTypesXml');
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+            String templateType = (String) mergeData.get('templateType');
 
             // Use pre-computed image map from request creation
             DocGenFlsGuard.assertAccessible(
@@ -1045,16 +1063,27 @@ public without sharing class DocGenSignatureService {
                 ORDER BY Document_Index__c ASC, Sequence_Order__c ASC
             ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
-            // Stamp typed-name signatures into merged XML
-            StampResult stamped = stampSignaturesInXml(documentXml, relsXml, contentTypesXml, signerImages, placements);
+            String html;
+            if (templateType == 'HTML') {
+                html = stampSignaturesInHtml(documentXml, placements);
+            } else {
+                // Stamp typed-name signatures into merged XML
+                StampResult stamped = stampSignaturesInXml(
+                    documentXml,
+                    relsXml,
+                    contentTypesXml,
+                    signerImages,
+                    placements
+                );
 
-            // Re-prime the HTML renderer context immediately before convertToHtml.
-            DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
-            DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
-            DocGenService.applyWatermarkOverride(templateId);
+                // Re-prime the HTML renderer context immediately before convertToHtml.
+                DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
+                DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
+                DocGenService.applyWatermarkOverride(templateId);
 
-            // Render PDF with template images only (no signature images needed)
-            String html = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
+                // Render PDF with template images only (no signature images needed)
+                html = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
+            }
 
             // Append verification certificate block before closing body
             DocGenFlsGuard.assertAccessible(
@@ -1201,6 +1230,7 @@ public without sharing class DocGenSignatureService {
                 String relsXml = (String) mergeData.get('relsXml');
                 String contentTypesXml = (String) mergeData.get('contentTypesXml');
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+                String templateType = (String) mergeData.get('templateType');
                 pdfImageMap.putAll(cachedImageMap);
 
                 // Filter placements for this document
@@ -1210,19 +1240,24 @@ public without sharing class DocGenSignatureService {
                         docPlacements.add(p);
                 }
 
-                StampResult stamped = stampSignaturesInXml(
-                    documentXml,
-                    relsXml,
-                    contentTypesXml,
-                    signerImages,
-                    docPlacements
-                );
-                // Re-prime renderer context for this document (see #28 — statics don't survive
-                // intermediate calls reliably in async context).
-                DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
-                DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
-                DocGenService.applyWatermarkOverride(tid);
-                String docHtml = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
+                String docHtml;
+                if (templateType == 'HTML') {
+                    docHtml = stampSignaturesInHtml(documentXml, docPlacements);
+                } else {
+                    StampResult stamped = stampSignaturesInXml(
+                        documentXml,
+                        relsXml,
+                        contentTypesXml,
+                        signerImages,
+                        docPlacements
+                    );
+                    // Re-prime renderer context for this document (see #28 — statics don't survive
+                    // intermediate calls reliably in async context).
+                    DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
+                    DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
+                    DocGenService.applyWatermarkOverride(tid);
+                    docHtml = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
+                }
 
                 if (docIdx > 0) {
                     htmlParts.add('<div style="page-break-before:always"></div>');

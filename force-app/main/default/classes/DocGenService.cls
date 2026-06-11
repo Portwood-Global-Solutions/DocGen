@@ -7446,7 +7446,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         MergeResult mr = mergeTemplate(templateId, recordIdStr, null, 'PDF');
 
         if (mr.templateType == 'PowerPoint') {
-            throw new DocGenException('Signature PDF generation is only supported for Word templates.');
+            throw new DocGenException('Signature PDF generation is only supported for Word and HTML templates.');
         }
 
         Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
@@ -7470,7 +7470,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
         return new Map<String, Object>{
             'documentXml' => mr.documentXml,
-            'combinedDocumentXml' => combineXmlWithHeadersFooters(mr),
+            'combinedDocumentXml' => mr.templateType == 'HTML' ? mr.documentXml : combineXmlWithHeadersFooters(mr),
+            'templateType' => mr.templateType,
             'relsXml' => mr.relsXml,
             'contentTypesXml' => mr.contentTypesXml,
             'pdfImageMap' => pdfImages,

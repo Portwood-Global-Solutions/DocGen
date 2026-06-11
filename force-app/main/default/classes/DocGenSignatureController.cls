@@ -834,8 +834,13 @@ public without sharing class DocGenSignatureController {
                 }
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
                 if (String.isNotBlank(docXml)) {
-                    DocGenService.applyWatermarkOverride(templateId);
-                    String liveHtml = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
+                    String liveHtml;
+                    if ((String) mergeData.get('templateType') == 'HTML') {
+                        liveHtml = docXml;
+                    } else {
+                        DocGenService.applyWatermarkOverride(templateId);
+                        liveHtml = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
+                    }
                     liveHtml = DocGenSignatureSenderController.injectPreviewWatermarkOverlay(liveHtml, templateId);
                     res.templateBase64 = prepareSigningPreviewHtml(liveHtml);
                     return res;

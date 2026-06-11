@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.07.0 — HTML Signature Rendering (`04tVx000000nLOHIA2`, build `3.7.0-1`, promoted 2026-06-11)
+
+This release completes HTML-template e-signature support. v3.06 fixed sender-side signature placement detection, but HTML signature previews and completed signed PDFs could still render blank because the signing flow sent already-rendered HTML through the Word-to-HTML renderer.
+
+Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152)
+
+### 1. HTML signature previews render the merged HTML directly
+
+Signature preview generation now carries the template type through the merge result. HTML templates use the merged HTML body directly, while Word templates continue through the existing DOCX XML renderer with header/footer handling.
+
+### 2. Completed HTML signature PDFs stamp tags in HTML
+
+Final signed PDF rendering now uses an HTML-safe stamping path for HTML templates and keeps the existing XML-safe stamping path for Word templates. Signed values are HTML-escaped before replacement.
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Promoted package: `04tVx000000nLOHIA2` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nLOHIA2)
+- Package build coverage: 76%, code coverage check passed
+- Focused Apex validation in `triage-sumit-footer`: `DocGenSignatureTests`, 274/274 tests passed
+- Visual E2E in `triage-sumit-footer`: sender LWC PDF preview, signer preview, completed signed PDF, and verification certificate all rendered successfully for an HTML signature template
+- Full e2e suite on `triage-sumit-footer`: PASS/FAIL0 across `e2e-01` through `e2e-08`
+- Full Apex suite: `RunLocalTests`, 1469 tests, 100% pass rate, 76% org-wide coverage
+- `sf code-analyzer` Security + AppExchange: 0 violations; SFGE printed internal timeout diagnostics on existing large controller paths before returning a clean summary
+
 ## v3.06.0 — HTML Signature Placement Detection (`04tVx000000nIv4IAE`, build `3.6.0-1`, promoted 2026-06-11)
 
 This release fixes HTML-template signature sending. HTML templates that contained valid signature tags such as `{@Signature_Customer}` or `{@Signature_Customer:1:Date}` could render the tag text in generated output but still show **No Signature Placements Found** in the signature sender component.
