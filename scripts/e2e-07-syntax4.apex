@@ -371,6 +371,24 @@ try {
     System.debug('REPEAT HEADER MARKER: FAIL — ' + e.getMessage());
 }
 
+// Picklist label format suffix: {Field:label} renders stored label metadata, raw {Field} stays API value
+try {
+    Map<String, Object> labelData = new Map<String, Object>{ 'Stage__c' => 'QUAL' };
+    labelData.put('__docgenPicklistLabels', new Map<String, String>{ 'Stage__c' => 'Qualified Lead' });
+    String raw = DocGenService.processXmlForTest('{Stage__c}', labelData);
+    String lbl = DocGenService.processXmlForTest('{Stage__c:label}', labelData);
+    if (raw == 'QUAL' && lbl == 'Qualified Lead') {
+        pass++;
+        System.debug('PICKLIST LABEL SUFFIX: PASS');
+    } else {
+        fail++;
+        System.debug('PICKLIST LABEL SUFFIX: FAIL — raw=' + raw + ' label=' + lbl);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('PICKLIST LABEL SUFFIX: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX4 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

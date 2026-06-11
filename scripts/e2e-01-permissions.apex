@@ -349,6 +349,33 @@ try {
             fail++;
             System.debug('USER PAGE DocGenVerify: FAIL — found: ' + upgs);
         }
+
+        Set<String> editableJobFields = new Set<String>();
+        for (FieldPermissions fp : [
+            SELECT Field
+            FROM FieldPermissions
+            WHERE ParentId = :upsId AND PermissionsEdit = TRUE
+        ]) {
+            editableJobFields.add(fp.Field);
+        }
+
+        Boolean userJobLabelOk = containsNs(editableJobFields, 'DocGen_Job__c.Label__c');
+        if (userJobLabelOk) {
+            pass++;
+            System.debug('USER FLD DocGen_Job__c.Label__c edit: PASS');
+        } else {
+            fail++;
+            System.debug('USER FLD DocGen_Job__c.Label__c edit: FAIL — found: ' + editableJobFields);
+        }
+
+        Boolean userJobMergeOnlyOk = containsNs(editableJobFields, 'DocGen_Job__c.Merge_Only__c');
+        if (userJobMergeOnlyOk) {
+            pass++;
+            System.debug('USER FLD DocGen_Job__c.Merge_Only__c edit: PASS');
+        } else {
+            fail++;
+            System.debug('USER FLD DocGen_Job__c.Merge_Only__c edit: FAIL — found: ' + editableJobFields);
+        }
     }
 } catch (Exception e) {
     fail++;

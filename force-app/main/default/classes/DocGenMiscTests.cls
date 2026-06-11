@@ -106,6 +106,30 @@ private class DocGenMiscTests {
     }
 
     @IsTest
+    static void testGetRecordDataIncludesPicklistLabelMetadata() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = TestDataFactory.getTestAccount();
+
+            Test.startTest();
+            Map<String, Object> result = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, Industry');
+            Test.stopTest();
+
+            System.assertEquals('Technology', result.get('Industry'), 'Raw picklist value should remain unchanged.');
+            System.assert(
+                result.containsKey('__docgenPicklistLabels'),
+                'Retrieved records with picklist fields should carry label metadata.'
+            );
+            Map<String, String> labels = (Map<String, String>) result.get('__docgenPicklistLabels');
+            System.assertEquals(
+                'Technology',
+                labels.get('Industry'),
+                'Industry label metadata should resolve from Schema picklist entries.'
+            );
+        }
+    }
+
+    @IsTest
     static void testGetRecordDataWithInvalidObject() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
@@ -4272,6 +4296,23 @@ private class DocGenMiscTests {
             result.contains('.04.2026'),
             'German date from Date type should use dd.MM.yyyy pattern, got: ' + result
         );
+    }
+
+    @IsTest
+    static void testPicklistLabelFormatSuffix() {
+        Map<String, Object> data = DocGenService.addPicklistLabelForTest(
+            new Map<String, Object>{ 'Stage__c' => 'QUAL' },
+            'Stage__c',
+            'Qualified Lead'
+        );
+
+        String raw = DocGenService.processXmlForTest('{Stage__c}', data);
+        String label = DocGenService.processXmlForTest('{Stage__c:label}', data);
+        String title = DocGenService.generateDocTitle('Status - {Stage__c:label}', data);
+
+        System.assertEquals('QUAL', raw, 'Raw merge tags should preserve the API value.');
+        System.assertEquals('Qualified Lead', label, 'The :label suffix should render the picklist label.');
+        System.assertEquals('Status - Qualified Lead', title, 'Document title formats should support :label.');
     }
 
     // ── Issue #97: French locale was incorrectly bucketed with German for

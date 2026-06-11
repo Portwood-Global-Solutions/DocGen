@@ -1883,6 +1883,8 @@ public with sharing class DocGenDataRetriever {
     private static Map<String, Object> mapSObject(SObject record) {
         Map<String, Object> data = new Map<String, Object>();
         Map<String, Object> populatedFields = record.getPopulatedFieldsAsMap();
+        Map<String, String> picklistLabels = new Map<String, String>();
+        Map<String, Schema.SObjectField> fieldMap = record.getSObjectType().getDescribe().fields.getMap();
 
         for (String key : populatedFields.keySet()) {
             try {
@@ -1925,13 +1927,55 @@ public with sharing class DocGenDataRetriever {
                     );
                 } else {
                     data.put(key, value);
+                    String label = resolvePicklistLabel(fieldMap, key, value);
+                    if (label != null) {
+                        picklistLabels.put(key, label);
+                    }
                 }
             } catch (Exception e) {
                 // Intentionally swallowed — field mapping failed (e.g., blob field)
                 String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
             }
         }
+        if (!picklistLabels.isEmpty()) {
+            data.put('__docgenPicklistLabels', picklistLabels);
+        }
         return data;
+    }
+
+    private static String resolvePicklistLabel(
+        Map<String, Schema.SObjectField> fieldMap,
+        String fieldName,
+        Object value
+    ) {
+        if (fieldMap == null || String.isBlank(fieldName) || value == null) {
+            return null;
+        }
+        Schema.SObjectField fieldToken = fieldMap.get(fieldName.toLowerCase());
+        if (fieldToken == null) {
+            return null;
+        }
+        Schema.DescribeFieldResult dfr = fieldToken.getDescribe();
+        Schema.DisplayType fieldType = dfr.getType();
+        if (fieldType != Schema.DisplayType.PICKLIST && fieldType != Schema.DisplayType.MULTIPICKLIST) {
+            return null;
+        }
+
+        Map<String, String> labelsByValue = new Map<String, String>();
+        for (Schema.PicklistEntry entry : dfr.getPicklistValues()) {
+            labelsByValue.put(entry.getValue(), entry.getLabel());
+        }
+
+        String rawValue = String.valueOf(value);
+        if (fieldType == Schema.DisplayType.MULTIPICKLIST) {
+            List<String> labels = new List<String>();
+            for (String part : rawValue.split(';')) {
+                String trimmed = part.trim();
+                labels.add(labelsByValue.containsKey(trimmed) ? labelsByValue.get(trimmed) : trimmed);
+            }
+            return String.join(labels, '; ');
+        }
+        return labelsByValue.containsKey(rawValue) ? labelsByValue.get(rawValue) : rawValue;
     }
 
     // ---------------------------------------------------------------------------

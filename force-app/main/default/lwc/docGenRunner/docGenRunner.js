@@ -318,8 +318,19 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             // Preload record PDFs for merge option
             this.loadRecordPdfs();
         } else if (error) {
-            this.error = 'Error loading templates: ' + error.body.message;
+            this.error = 'Error loading templates: ' + this.normalizeTemplateLoadError(error.body.message);
         }
+    }
+
+    normalizeTemplateLoadError(message) {
+        const rawMessage = message || '';
+        if (rawMessage.includes('Variable does not exist: tmpVar')) {
+            return (
+                'Unable to load DocGen templates. Ask an admin to verify that at least one active DocGen Template is shared with you for this object. ' +
+                'If DocGen Template sharing is Private, share the template record directly or set Setup > Sharing Settings > Portwood DocGen Template > Default Internal Access to Public Read.'
+            );
+        }
+        return rawMessage || 'Unknown error';
     }
 
     /**
@@ -399,9 +410,9 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
 
     get emptyStateMessage() {
         return (
-            "No templates available for this record. Check the template's Specific Record Ids and Required Permission Sets, or ask an admin to create a template for " +
+            'No templates available for this record. Ask an admin to verify that an active template exists for ' +
             (this.objectApiName || 'this object') +
-            '.'
+            ", that the template's Specific Record Ids and Required Permission Sets match this record and user, and that the template record is shared with you. If DocGen Template sharing is Private, use standard Salesforce sharing or set Default Internal Access to Public Read."
         );
     }
 

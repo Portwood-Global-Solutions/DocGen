@@ -258,6 +258,23 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return processXml(xml, data);
     }
 
+    @TestVisible
+    private static Map<String, Object> addPicklistLabelForTest(
+        Map<String, Object> data,
+        String fieldName,
+        String labelValue
+    ) {
+        if (data == null) {
+            data = new Map<String, Object>();
+        }
+        Map<String, String> labels = data.containsKey('__docgenPicklistLabels')
+            ? (Map<String, String>) data.get('__docgenPicklistLabels')
+            : new Map<String, String>();
+        labels.put(fieldName, labelValue);
+        data.put('__docgenPicklistLabels', labels);
+        return data;
+    }
+
     /**
      * Overload that flips currentTemplateType for the duration of the call.
      * Used by HTML-template tests that need to exercise the rich-text and
@@ -2783,6 +2800,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
         MergeResult mr = mergeTemplate(templateId, recordId, null, 'PDF');
 
+        if (mr.templateType == 'PDF') {
+            throw new DocGenException(
+                'Merged bulk output is not supported for fillable PDF templates. Run the bulk job as Individual Files.'
+            );
+        }
+
         // HTML template type: mr.documentXml is already a ready-to-render HTML
         // document — skip the DOCX→HTML conversion (which would return empty
         // since there are no DOCX processedXmlEntries for HTML templates).
@@ -3541,6 +3564,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                 ? (DateTime) val
                                 : DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
                             strVal = dt.format(pattern);
+                        } else if (dateFormat != null && dateFormat.toLowerCase().trim() == 'label') {
+                            strVal = resolvePicklistLabel(data, fieldName, val);
                         } else if (dateFormat != null && val instanceof DateTime) {
                             strVal = ((DateTime) val).format(dateFormat);
                         } else if (dateFormat != null && val instanceof Date) {
@@ -4186,6 +4211,55 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             }
         }
         return current;
+    }
+
+    private static String resolvePicklistLabel(Map<String, Object> data, String path, Object rawValue) {
+        String fallback = rawValue == null ? '' : String.valueOf(rawValue);
+        Map<String, Object> parent = resolveParentMap(data, path);
+        if (parent == null || !parent.containsKey('__docgenPicklistLabels')) {
+            return fallback;
+        }
+        Map<String, String> labels = (Map<String, String>) parent.get('__docgenPicklistLabels');
+        String leaf = path.contains('.') ? path.substringAfterLast('.') : path;
+        if (labels.containsKey(leaf)) {
+            return labels.get(leaf);
+        }
+        for (String key : labels.keySet()) {
+            if (key.equalsIgnoreCase(leaf)) {
+                return labels.get(key);
+            }
+        }
+        return fallback;
+    }
+
+    private static Map<String, Object> resolveParentMap(Map<String, Object> data, String path) {
+        if (data == null || String.isBlank(path) || !path.contains('.')) {
+            return data;
+        }
+        List<String> parts = path.split('\\.');
+        Object current = data;
+        for (Integer i = 0; i < parts.size() - 1; i++) {
+            if (!(current instanceof Map<String, Object>)) {
+                return null;
+            }
+            Map<String, Object> currentMap = (Map<String, Object>) current;
+            if (currentMap.containsKey(parts[i])) {
+                current = currentMap.get(parts[i]);
+                continue;
+            }
+            Boolean found = false;
+            for (String key : currentMap.keySet()) {
+                if (key.equalsIgnoreCase(parts[i])) {
+                    current = currentMap.get(key);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return null;
+            }
+        }
+        return current instanceof Map<String, Object> ? (Map<String, Object>) current : null;
     }
 
     // ---------------------------------------------------------------------------
@@ -7330,7 +7404,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
             String strVal = '';
             if (val != null) {
-                if (dateFormat != null && (val instanceof DateTime || val instanceof Date)) {
+                if (dateFormat != null && dateFormat.toLowerCase().trim() == 'label') {
+                    strVal = resolvePicklistLabel(data, fieldName, val);
+                } else if (dateFormat != null && (val instanceof DateTime || val instanceof Date)) {
                     DateTime dt = val instanceof DateTime
                         ? (DateTime) val
                         : DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));

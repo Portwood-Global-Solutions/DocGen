@@ -831,6 +831,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 String replacement;
                 if (val == null) {
                     replacement = '';
+                } else if (!String.isBlank(fmt) && fmt.toLowerCase().trim() == 'label') {
+                    replacement = resolvePicklistLabel(rec, path, val);
                 } else if (String.isBlank(fmt)) {
                     replacement = String.valueOf(val);
                 } else {
@@ -862,6 +864,53 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         // Resolve {%Image:N} / {%Image:N:SIZE} tags in the parent HTML (headers/footers/summaries)
         html = resolveParentImageTags(html);
         return html;
+    }
+
+    private static String resolvePicklistLabel(SObject record, String path, Object value) {
+        String fallback = value == null ? '' : String.valueOf(value);
+        if (record == null || String.isBlank(path) || value == null) {
+            return fallback;
+        }
+        SObject owner = record;
+        String fieldName = path;
+        if (path.contains('.')) {
+            List<String> parts = path.split('\\.');
+            for (Integer i = 0; i < parts.size() - 1 && owner != null; i++) {
+                try {
+                    owner = owner.getSObject(parts[i]);
+                } catch (Exception e) {
+                    return fallback;
+                }
+            }
+            fieldName = parts[parts.size() - 1];
+        }
+        if (owner == null) {
+            return fallback;
+        }
+        Map<String, Schema.SObjectField> fields = owner.getSObjectType().getDescribe().fields.getMap();
+        Schema.SObjectField fieldToken = fields.get(fieldName.toLowerCase());
+        if (fieldToken == null) {
+            return fallback;
+        }
+        Schema.DescribeFieldResult dfr = fieldToken.getDescribe();
+        Schema.DisplayType fieldType = dfr.getType();
+        if (fieldType != Schema.DisplayType.PICKLIST && fieldType != Schema.DisplayType.MULTIPICKLIST) {
+            return fallback;
+        }
+        Map<String, String> labelsByValue = new Map<String, String>();
+        for (Schema.PicklistEntry entry : dfr.getPicklistValues()) {
+            labelsByValue.put(entry.getValue(), entry.getLabel());
+        }
+        String rawValue = String.valueOf(value);
+        if (fieldType == Schema.DisplayType.MULTIPICKLIST) {
+            List<String> labels = new List<String>();
+            for (String part : rawValue.split(';')) {
+                String trimmed = part.trim();
+                labels.add(labelsByValue.containsKey(trimmed) ? labelsByValue.get(trimmed) : trimmed);
+            }
+            return String.join(labels, '; ');
+        }
+        return labelsByValue.containsKey(rawValue) ? labelsByValue.get(rawValue) : rawValue;
     }
 
     /**

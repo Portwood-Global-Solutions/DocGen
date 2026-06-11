@@ -608,6 +608,24 @@ private class DocGenSignatureTests {
         System.assertNotEquals(null, res);
     }
 
+    @isTest
+    static void testSigningPreviewHtmlAddsRtlDirectionForHebrew() {
+        String rtlPreview = DocGenSignatureController.prepareSigningPreviewHtml('<p>שלום עולם</p>');
+        System.assert(
+            rtlPreview.contains('class="docgen-signing-preview-rtl"'),
+            'Hebrew signing previews should carry the RTL wrapper class.'
+        );
+        System.assert(rtlPreview.contains('dir="rtl"'), 'Hebrew signing previews should set dir="rtl".');
+        System.assert(rtlPreview.contains('direction:rtl'), 'Hebrew signing previews should set CSS direction.');
+
+        String ltrPreview = '<p>Hello world</p>';
+        System.assertEquals(
+            ltrPreview,
+            DocGenSignatureController.prepareSigningPreviewHtml(ltrPreview),
+            'LTR signing previews should not be wrapped.'
+        );
+    }
+
     // Issue #91: when the request is declined, fetchDocumentData must return the
     // declined-state confirmation card instead of rendering a document preview —
     // even if a stale cached preview were still present, the response should not

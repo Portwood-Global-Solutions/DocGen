@@ -63,6 +63,7 @@ global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier â€
 
         for (Request req : requests) {
             Response res = new Response();
+            String effectiveCondition;
             try {
                 // Default: combined PDF only (most efficient)
                 Boolean mergeOnly = (req.combinedPdfOnly != false && req.keepIndividualFiles != true);
@@ -73,7 +74,7 @@ global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier â€
                 // collection of IDs, fold them into an `Id IN (...)` clause so
                 // the bulk pipeline runs only against those records. Combines
                 // (AND) with any user-supplied queryCondition.
-                String effectiveCondition = buildEffectiveCondition(req.queryCondition, req.recordIds);
+                effectiveCondition = buildEffectiveCondition(req.queryCondition, req.recordIds);
 
                 Id jobId = DocGenBulkController.submitJob(
                     req.templateId,
@@ -86,6 +87,12 @@ global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier â€
                 res.jobId = jobId;
                 res.success = true;
             } catch (Exception e) {
+                DocGenErrorLogger.logBulkFlowFailure(
+                    e,
+                    req == null ? null : req.templateId,
+                    effectiveCondition,
+                    req == null ? null : req.jobLabel
+                );
                 res.errorMessage = e.getMessage();
                 res.success = false;
             }

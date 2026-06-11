@@ -1907,7 +1907,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getTemplatesForObject(String objectApiName) {
-        return getTemplatesForObjectInternal(objectApiName, null);
+        try {
+            return getTemplatesForObjectInternal(objectApiName, null);
+        } catch (Exception e) {
+            DocGenErrorLogger.logTemplatePickerFailure(e, objectApiName, null);
+            throw DocGenService.ahe(resolveTemplatePickerLoadError(e));
+        }
     }
 
     /**
@@ -1919,7 +1924,31 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     @AuraEnabled(cacheable=true)
     public static List<DocGen_Template__c> getTemplatesForObjectAndRecord(String objectApiName, String recordId) {
-        return getTemplatesForObjectInternal(objectApiName, recordId);
+        try {
+            return getTemplatesForObjectInternal(objectApiName, recordId);
+        } catch (Exception e) {
+            DocGenErrorLogger.logTemplatePickerFailure(e, objectApiName, recordId);
+            throw DocGenService.ahe(resolveTemplatePickerLoadError(e));
+        }
+    }
+
+    private static final String TEMPLATE_PICKER_SHARING_MESSAGE =
+        'Unable to load DocGen templates. Ask an admin to verify that at least one active DocGen Template is shared ' +
+        'with you for this object. If DocGen Template sharing is Private, share the template record directly or set ' +
+        'Setup > Sharing Settings > Portwood DocGen Template > Default Internal Access to Public Read.';
+
+    @TestVisible
+    private static String resolveTemplatePickerLoadError(Exception e) {
+        String message = e == null ? null : e.getMessage();
+        if (isInternalUserModeBindError(message)) {
+            return TEMPLATE_PICKER_SHARING_MESSAGE;
+        }
+        return String.isBlank(message) ? 'Unable to load DocGen templates.' : message;
+    }
+
+    @TestVisible
+    private static Boolean isInternalUserModeBindError(String message) {
+        return String.isNotBlank(message) && message.contains('Variable does not exist: tmpVar');
     }
 
     /**
@@ -2013,19 +2042,24 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     @TestVisible
     public static Set<String> getCurrentUserPermissionSetNames() {
         Set<String> names = new Set<String>();
-        /* code-analyzer-suppress ApexFlsViolation */
-        for (PermissionSetAssignment psa : [
-            SELECT PermissionSet.Name, PermissionSet.Label
-            FROM PermissionSetAssignment
-            WHERE AssigneeId = :UserInfo.getUserId()
-            WITH USER_MODE
-        ]) {
-            if (psa.PermissionSet != null && psa.PermissionSet.Name != null) {
-                addAudienceToken(names, psa.PermissionSet.Name);
+        try {
+            Id currentUserId = UserInfo.getUserId();
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (PermissionSetAssignment psa : [
+                SELECT PermissionSet.Name, PermissionSet.Label
+                FROM PermissionSetAssignment
+                WHERE AssigneeId = :currentUserId
+                WITH USER_MODE
+            ]) {
+                if (psa.PermissionSet != null && psa.PermissionSet.Name != null) {
+                    addAudienceToken(names, psa.PermissionSet.Name);
+                }
+                if (psa.PermissionSet != null && psa.PermissionSet.Label != null) {
+                    addAudienceToken(names, psa.PermissionSet.Label);
+                }
             }
-            if (psa.PermissionSet != null && psa.PermissionSet.Label != null) {
-                addAudienceToken(names, psa.PermissionSet.Label);
-            }
+        } catch (Exception e) {
+            names.clear();
         }
         return names;
     }
@@ -2479,24 +2513,42 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
             // 2. Create Version if requested
             if (createVersion == true) {
-                // Deactivate current active versions. We pull Watermark_Image_CV_Id__c
-                // here too so we can carry it forward to the new version below —
+                // Deactivate current active versions. We pull Content_Version_Id__c,
+                // Watermark_Image_CV_Id__c, and Type__c here too so we can carry
+                // them forward to the new version below —
                 // without that, querying for "active" versions AFTER deactivation
-                // returns an empty list and the watermark silently gets dropped on
-                // every Save as New Version. That's the bug Nathan hit in 1.65.
+                // returns an empty list and version-owned assets silently get
+                // dropped on every Save as New Version.
                 DocGenFlsGuard.assertAccessible(
                     DocGen_Template_Version__c.sObjectType,
-                    new Set<String>{ 'Watermark_Image_CV_Id__c', 'Template__c', 'Is_Active__c' }
+                    new Set<String>{
+                        'Content_Version_Id__c',
+                        'Watermark_Image_CV_Id__c',
+                        'Template__c',
+                        'Is_Active__c',
+                        'Type__c'
+                    }
                 );
                 /* code-analyzer-suppress ApexFlsViolation */
                 List<DocGen_Template_Version__c> activeVersions = [
-                    SELECT Id, Watermark_Image_CV_Id__c
+                    SELECT Id, Content_Version_Id__c, Watermark_Image_CV_Id__c, Type__c
                     FROM DocGen_Template_Version__c
                     WHERE Template__c = :templateId AND Is_Active__c = TRUE
                     WITH SYSTEM_MODE
+                    ORDER BY CreatedDate DESC
                 ];
+                Id priorVersionId = null;
+                String priorContentVersionId = null;
                 String priorWatermarkCvId = null;
+                String priorVersionType = null;
                 for (DocGen_Template_Version__c av : activeVersions) {
+                    if (priorVersionId == null) {
+                        priorVersionId = av.Id;
+                        priorVersionType = av.Type__c;
+                    }
+                    if (priorContentVersionId == null && String.isNotBlank(av.Content_Version_Id__c)) {
+                        priorContentVersionId = av.Content_Version_Id__c;
+                    }
                     if (priorWatermarkCvId == null && String.isNotBlank(av.Watermark_Image_CV_Id__c)) {
                         priorWatermarkCvId = av.Watermark_Image_CV_Id__c;
                     }
@@ -2509,9 +2561,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     Database.update(activeVersions, AccessLevel.SYSTEM_MODE);
                 }
 
-                // Use specific ContentVersion ID if provided (from upload event),
-                // otherwise fall back to latest version on the document
+                // Use specific ContentVersion ID if provided (from upload event).
+                // If the admin saves a new version without uploading another file,
+                // carry forward the prior active version's template body. Only if
+                // legacy data has no version body do we fall back to the newest
+                // file linked to the template.
                 String cvId = contentVersionId;
+                if (String.isBlank(cvId) && String.isNotBlank(priorContentVersionId)) {
+                    cvId = priorContentVersionId;
+                }
                 if (String.isBlank(cvId)) {
                     List<ContentDocumentLink> links = [
                         SELECT ContentDocument.LatestPublishedVersionId
@@ -2591,6 +2649,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Database.insert(version, AccessLevel.SYSTEM_MODE);
                 createdVersionId = version.Id;
 
+                if (
+                    String.isBlank(contentVersionId) &&
+                    priorVersionId != null &&
+                    priorVersionType == 'PDF' &&
+                    version.Type__c == 'PDF'
+                ) {
+                    copyPdfAcroFormSnapshot(templateId, priorVersionId, version.Id);
+                }
+
                 // Decompose DOCX/PPTX into per-image and per-XML ContentVersions for
                 // heap-light PDF rendering. Runs in a Queueable (12 MB async heap)
                 // rather than inline (6 MB sync heap) so it survives real-world
@@ -2652,38 +2719,88 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 throw DocGenService.ahe('PDF AcroForm snapshots can only be saved for PDF template versions.');
             }
 
-            ContentVersion cv = new ContentVersion(
-                Title = 'docgen_tmpl_pdf_' + String.valueOf(versionId) + '_acroform',
-                PathOnClient = 'docgen_tmpl_pdf_' + String.valueOf(versionId) + '_acroform.json',
-                VersionData = Blob.valueOf(snapshotJson),
-                IsMajorVersion = true
-            );
-            DocGenFlsGuard.assertCreateable(
-                cv,
-                new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'IsMajorVersion' }
-            );
-            /* code-analyzer-suppress ApexFlsViolation */
-            Database.insert(cv, AccessLevel.SYSTEM_MODE);
-
-            Id contentDocId = [
-                SELECT ContentDocumentId
-                FROM ContentVersion
-                WHERE Id = :cv.Id
-                WITH SYSTEM_MODE
-                LIMIT 1
-            ]
-            .ContentDocumentId;
-            ContentDocumentLink cdl = new ContentDocumentLink(
-                ContentDocumentId = contentDocId,
-                LinkedEntityId = templateId,
-                ShareType = 'V',
-                Visibility = 'AllUsers'
-            );
-            /* code-analyzer-suppress ApexFlsViolation */
-            Database.insert(cdl, AccessLevel.SYSTEM_MODE);
-            return cv.Id;
+            return insertPdfAcroFormSnapshot(templateId, versionId, snapshotJson);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error saving PDF AcroForm snapshot.');
+        }
+    }
+
+    private static Id copyPdfAcroFormSnapshot(Id templateId, Id sourceVersionId, Id targetVersionId) {
+        String sourceTitle = 'docgen_tmpl_pdf_' + String.valueOf(sourceVersionId) + '_acroform';
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData', 'Title' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> snapshots = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Title = :sourceTitle
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC, Id DESC
+            LIMIT 1
+        ];
+        if (snapshots.isEmpty() || snapshots[0].VersionData == null) {
+            return null;
+        }
+        return insertPdfAcroFormSnapshot(templateId, targetVersionId, snapshots[0].VersionData.toString());
+    }
+
+    private static Id insertPdfAcroFormSnapshot(Id templateId, Id versionId, String snapshotJson) {
+        String snapshotTitle = 'docgen_tmpl_pdf_' + String.valueOf(versionId) + '_acroform';
+        deleteExistingPdfAcroFormSnapshots(snapshotTitle);
+
+        ContentVersion cv = new ContentVersion(
+            Title = snapshotTitle,
+            PathOnClient = snapshotTitle + '.json',
+            VersionData = Blob.valueOf(snapshotJson),
+            IsMajorVersion = true
+        );
+        DocGenFlsGuard.assertCreateable(
+            cv,
+            new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'IsMajorVersion' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+
+        Id contentDocId = [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Id = :cv.Id
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ]
+        .ContentDocumentId;
+        ContentDocumentLink cdl = new ContentDocumentLink(
+            ContentDocumentId = contentDocId,
+            LinkedEntityId = templateId,
+            ShareType = 'V',
+            Visibility = 'AllUsers'
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.insert(cdl, AccessLevel.SYSTEM_MODE);
+        return cv.Id;
+    }
+
+    private static void deleteExistingPdfAcroFormSnapshots(String snapshotTitle) {
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'ContentDocumentId' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> existingSnapshots = [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Title = :snapshotTitle
+            WITH SYSTEM_MODE
+        ];
+        if (existingSnapshots.isEmpty()) {
+            return;
+        }
+
+        List<ContentDocument> docsToDelete = new List<ContentDocument>();
+        for (ContentVersion snapshot : existingSnapshots) {
+            if (snapshot.ContentDocumentId != null) {
+                docsToDelete.add(new ContentDocument(Id = snapshot.ContentDocumentId));
+            }
+        }
+        if (!docsToDelete.isEmpty()) {
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.delete(docsToDelete, AccessLevel.SYSTEM_MODE);
         }
     }
 
@@ -2703,7 +2820,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 FROM DocGen_Template_Version__c
                 WHERE Template__c = :templateId AND Is_Active__c = TRUE
                 WITH SYSTEM_MODE
-                ORDER BY CreatedDate DESC
+                ORDER BY CreatedDate DESC, Id DESC
                 LIMIT 1
             ];
             if (versions.isEmpty() || versions[0].Type__c != 'PDF') {
@@ -2717,7 +2834,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 FROM ContentVersion
                 WHERE Title = :title
                 WITH SYSTEM_MODE
-                ORDER BY CreatedDate DESC
+                ORDER BY CreatedDate DESC, Id DESC
                 LIMIT 1
             ];
             return new Map<String, Object>{
