@@ -1,5 +1,46 @@
 # Changelog
 
+## v3.03.0 — Fillable PDF templates (`04tVx000000nEHxIAM`, build `3.3.0-1`, promoted 2026-06-10)
+
+This release introduces testing support for PDF-to-PDF fillable form generation. Admins can upload a fillable PDF, map AcroForm fields to Salesforce data, and generate completed PDFs server-side for single-record, Generate Sample, Flow/API, and bulk workflows. The feature is intentionally labeled testing while we broaden coverage across the long tail of government and vendor PDF forms.
+
+### 1. Fillable PDF template type
+
+DocGen Admin now supports **Type = PDF** template uploads. The browser scans the uploaded PDF, extracts fillable AcroForm fields, and stores a mapping snapshot on the active template version. The mapping UI includes:
+
+- a dedicated **Fillable Fields** tab,
+- page/position-aware field ordering,
+- search and mapped/unmapped/type filters,
+- query-aware data-path pickers,
+- editable friendly labels for human names like `Checkbox 3c S-Corp`,
+- checked-value controls for PDF button fields such as checkboxes and radio buttons.
+
+### 2. Server-side PDF form filling
+
+Mapped PDF fields are filled in Apex so PDF templates can run in the same server-side paths as normal document generation. Generate Sample now queues PDF template samples through the async/server path, matching the production bulk-generation model instead of relying on browser-only output.
+
+The renderer supports standard AcroForm text fields and button fields, including checkbox/radio on-state values. Generated PDFs remain fillable/editable by default.
+
+### 3. Browser normalization for object-stream forms
+
+Some PDFs store AcroForm field dictionaries inside compressed object streams. The browser decomposer now normalizes those PDFs into a server-ready body at save time, so Apex can fill the exact field objects referenced by the mapping snapshot. The save flow also preserves the normalized body instead of accidentally re-saving the raw upload.
+
+### 4. Template visibility fixes
+
+Template visibility now combines Salesforce record sharing with DocGen's audience controls. Runner and bulk template lists honor user-readable template records, normalize permission-set names/labels, and support comma/semicolon/whitespace-separated specific-record lists.
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Package build coverage: 76%, code coverage check passed
+- Focused Apex validation in `codex-acroforms`: 242/242 tests pass across `DocGenAcroFormServiceTest`, `DocGenControllerTests`, and `DocGenBulkControllerTest`
+- W-9 PDF proof: new and repaired templates generated server-side with mapped AcroForm values present in the output bytes
+- I-129 government PDF proof: field scan/mapping coverage exercised against 1,200+ fillable fields; broader form-family support remains in testing
+- `sf code-analyzer` (Security + AppExchange): 0 violations
+- `npx prettier --check` on touched LWC/docs/package metadata files
+
+Promoted package: `04tVx000000nEHxIAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nEHxIAM)
+
 ## v3.02.0 — Higher-reliability QR codes (`04tVx000000muJFIAY`, build `3.2.0-1`, promoted 2026-06-09)
 
 QR codes now use Level Q error correction and support values up to 600 characters, improving scan reliability for printed and mailed documents such as invoices. QR generation remains fully native to Salesforce with no external services or callouts.

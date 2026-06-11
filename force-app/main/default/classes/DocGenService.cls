@@ -352,6 +352,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String pageSize; // 1.68 — Letter / Legal / A4
         String pageMargins; // 1.68 — Default / Narrow / Normal / Wide / Custom
         String customMargins; // 1.68 — "T,R,B,L" inches when pageMargins == Custom
+        Blob pdfBlob; // AcroForm PDF template output, already final bytes
 
         MergeResult() {
             processedXmlEntries = new Map<String, String>();
@@ -432,6 +433,24 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         mr.pageSize = (String) dataMap.get('pageSize');
         mr.pageMargins = (String) dataMap.get('pageMargins');
         mr.customMargins = (String) dataMap.get('customMargins');
+
+        // PDF template type: fill an existing AcroForm PDF directly. This path
+        // does not render HTML and does not unzip/repack Office documents.
+        if (templateType == 'PDF') {
+            currentTemplateType = 'PDF';
+            currentOutputFormat = 'PDF';
+            mr.outputFormat = 'PDF';
+            mr.pdfBlob = DocGenAcroFormService.fillPdfTemplate(
+                EncodingUtil.base64Decode(base64File),
+                recordDataMap,
+                templateId
+            );
+            mr.docTitle = generateDocTitle((String) dataMap.get('titleFormat'), recordDataMap);
+            if (mr.docTitle == null) {
+                mr.docTitle = (String) resolveValue(recordDataMap, 'Name');
+            }
+            return mr;
+        }
 
         // HTML template type (v1.61+): no ZIP, no DOCX XML — raw HTML body with
         // merge-tag substitution + header/footer fields wrapped via @page CSS
@@ -949,7 +968,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         MergeResult mr = mergeTemplate(templateId, recordId, resolvedImages, outputFormatOverride);
 
         Blob resultBlob;
-        if (mr.outputFormat == 'PDF' && (mr.templateType == 'Word' || mr.templateType == 'HTML')) {
+        if (mr.outputFormat == 'PDF' && mr.templateType == 'PDF') {
+            resultBlob = mr.pdfBlob;
+        } else if (mr.outputFormat == 'PDF' && (mr.templateType == 'Word' || mr.templateType == 'HTML')) {
             resultBlob = renderPdf(mr, templateId, recordId);
         } else {
             resultBlob = assembleZip(mr);
@@ -1005,6 +1026,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
         if (t.Type__c == 'PowerPoint' && outputFormatOverride == 'PDF') {
             throw new DocGenException('PowerPoint templates cannot render to PDF.');
+        }
+        if (t.Type__c == 'PDF' && outputFormatOverride != 'PDF') {
+            throw new DocGenException('PDF AcroForm templates can only output PDF.');
         }
     }
 
@@ -2148,8 +2172,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // (pre-decomposed XML, relative image URLs, no blob loading)
         MergeResult mr = mergeTemplate(templateId, recordId, null, 'PDF');
 
+        if (mr.templateType == 'PDF') {
+            return new Map<String, Object>{ 'blob' => mr.pdfBlob, 'title' => mr.docTitle };
+        }
+
         if (mr.templateType == 'PowerPoint') {
-            throw new DocGenException('Server-side PDF generation is only supported for Word and HTML templates.');
+            throw new DocGenException(
+                'Server-side PDF generation is only supported for Word, HTML, and PDF templates.'
+            );
         }
 
         Blob pdfBlob = renderPdf(mr, templateId, recordId);
@@ -2246,6 +2276,10 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         MergeResult mr = mergeTemplate(templateId, recordId, null, outputFormatOverride);
         if (String.isNotBlank(documentTitle)) {
             mr.docTitle = documentTitle;
+        }
+
+        if (mr.outputFormat == 'PDF' && mr.templateType == 'PDF') {
+            return savePdfFile(mr.pdfBlob, mr.docTitle, attachmentRecordId);
         }
 
         if (mr.outputFormat == 'PDF' && (mr.templateType == 'Word' || mr.templateType == 'HTML')) {

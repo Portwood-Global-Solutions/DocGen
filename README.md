@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.01.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.03.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -46,6 +46,7 @@ Download example templates from [portwood.dev](https://portwood.dev).
 | ----------------- | ----------------------- | -------------- | ---------------------------------------------------------- |
 | **Word**          | `.docx`                 | PDF or DOCX    | Contracts, proposals, invoices, letters                    |
 | **HTML** (v1.61+) | `.html`, `.htm`, `.zip` | PDF            | Google Docs, Notion, ChatGPT, Apple Pages, any HTML source |
+| **PDF** (v3.03+)  | `.pdf`                  | PDF            | Fillable PDF forms / AcroForm mapping (testing)            |
 | **Excel**         | `.xlsx`                 | XLSX           | Data exports, reports, financial summaries                 |
 | **PowerPoint**    | `.pptx`                 | PPTX           | Presentations, slide decks                                 |
 
@@ -369,7 +370,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.01.0**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.03.0**.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -442,7 +443,9 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.01.0 | **Latest (Released)**                   | `04tVx000000hWJBIA2` |
+| v3.03.0 | **Latest (Released)**                   | `04tVx000000nEHxIAM` |
+| v3.02.0 | Previous                                | `04tVx000000muJFIAY` |
+| v3.01.0 | Previous                                | `04tVx000000hWJBIA2` |
 | v3.0.0  | Previous                                | `04tVx000000a8blIAA` |
 | v2.9.0  | Previous                                | `04tVx000000a7fhIAA` |
 | v2.8.0  | Previous                                | `04tVx000000a7e5IAA` |

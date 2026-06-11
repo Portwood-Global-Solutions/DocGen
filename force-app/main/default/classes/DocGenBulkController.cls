@@ -49,22 +49,8 @@ public with sharing class DocGenBulkController {
             LIMIT 2000
         ];
 
-        // Apply audience filter only — bulk has no single record, so per-record binding doesn't apply.
-        Set<String> userPermSets = DocGenController.getCurrentUserPermissionSetNames();
-        List<DocGen_Template__c> visible = new List<DocGen_Template__c>();
-        for (DocGen_Template__c t : all) {
-            if (String.isBlank(t.Required_Permission_Sets__c)) {
-                visible.add(t);
-                continue;
-            }
-            for (String rawName : t.Required_Permission_Sets__c.split(',')) {
-                if (userPermSets.contains(rawName.trim())) {
-                    visible.add(t);
-                    break;
-                }
-            }
-        }
-        return visible;
+        // Bulk has no single record, so pass null to apply only sharing + audience filters.
+        return DocGenController.filterTemplatesForSender(all, null);
     }
 
     /**

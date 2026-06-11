@@ -690,6 +690,32 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         return EncodingUtil.base64Encode(cv.VersionData);
     }
 
+    @AuraEnabled
+    public static Id getLatestContentVersionId(Id contentDocumentId) {
+        if (contentDocumentId == null) {
+            throw DocGenService.ahe('Content Document Id is required.');
+        }
+        if (String.valueOf(contentDocumentId).startsWith('068')) {
+            return contentDocumentId;
+        }
+        if (!String.valueOf(contentDocumentId).startsWith('069')) {
+            throw DocGenService.ahe('Expected a ContentDocument Id.');
+        }
+        DocGenFlsGuard.assertAccessible(ContentDocument.sObjectType, new Set<String>{ 'LatestPublishedVersionId' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentDocument> docs = [
+            SELECT LatestPublishedVersionId
+            FROM ContentDocument
+            WHERE Id = :contentDocumentId
+            WITH USER_MODE
+            LIMIT 1
+        ];
+        if (docs.isEmpty() || docs[0].LatestPublishedVersionId == null) {
+            throw DocGenService.ahe('Uploaded file version not found.');
+        }
+        return docs[0].LatestPublishedVersionId;
+    }
+
     /**
      * Renders a Salesforce-hosted image URL into a single-image PDF via Blob.toPdf,
      * returns base64. Client parses the PDF to extract the embedded image bytes.
@@ -1856,7 +1882,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * @param queryConfig The query configuration string (V1, V2, or V3 format)
      * @return Map of field names to values for the record
      */
-    @AuraEnabled(cacheable=true)
+    @AuraEnabled
     public static Map<String, Object> previewRecordData(Id recordId, String baseObject, String queryConfig) {
         if (recordId == null || String.isBlank(baseObject) || String.isBlank(queryConfig)) {
             return null;
@@ -1954,7 +1980,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (all.isEmpty())
             return all;
 
-        String recordId18 = (recordId != null) ? String.valueOf(Id.valueOf(recordId)) : null;
+        Set<Id> userReadableTemplateIds = getUserReadableTemplateIds(all);
+        if (userReadableTemplateIds.isEmpty()) {
+            return new List<DocGen_Template__c>();
+        }
+
+        Boolean applyRecordFilter = String.isNotBlank(recordId);
+        String recordId18 = normalizeRecordId(recordId);
         Set<String> userPermSets = getCurrentUserPermissionSetNames();
 
         // Cache results of per-record-filter evaluations so templates sharing the same
@@ -1963,7 +1995,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
         List<DocGen_Template__c> visible = new List<DocGen_Template__c>();
         for (DocGen_Template__c t : all) {
-            if (!templateMatchesRecord(t, recordId18, filterCache))
+            if (!userReadableTemplateIds.contains(t.Id))
+                continue;
+            if (applyRecordFilter && !templateMatchesRecord(t, recordId18, filterCache))
                 continue;
             if (!templateVisibleToUser(t, userPermSets))
                 continue;
@@ -1981,16 +2015,59 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         Set<String> names = new Set<String>();
         /* code-analyzer-suppress ApexFlsViolation */
         for (PermissionSetAssignment psa : [
-            SELECT PermissionSet.Name
+            SELECT PermissionSet.Name, PermissionSet.Label
             FROM PermissionSetAssignment
             WHERE AssigneeId = :UserInfo.getUserId()
             WITH USER_MODE
         ]) {
             if (psa.PermissionSet != null && psa.PermissionSet.Name != null) {
-                names.add(psa.PermissionSet.Name);
+                addAudienceToken(names, psa.PermissionSet.Name);
+            }
+            if (psa.PermissionSet != null && psa.PermissionSet.Label != null) {
+                addAudienceToken(names, psa.PermissionSet.Label);
             }
         }
         return names;
+    }
+
+    @TestVisible
+    private static String normalizeRecordId(String recordId) {
+        if (String.isBlank(recordId))
+            return null;
+        try {
+            return String.valueOf(Id.valueOf(recordId.trim()));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Set<Id> getUserReadableTemplateIds(List<DocGen_Template__c> templates) {
+        Set<Id> templateIds = new Set<Id>();
+        for (DocGen_Template__c template : templates) {
+            if (template != null && template.Id != null) {
+                templateIds.add(template.Id);
+            }
+        }
+        if (templateIds.isEmpty()) {
+            return templateIds;
+        }
+
+        Set<Id> readableIds = new Set<Id>();
+        try {
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (DocGen_Template__c template : [
+                SELECT Id
+                FROM DocGen_Template__c
+                WHERE Id IN :templateIds
+                WITH USER_MODE
+            ]) {
+                readableIds.add(template.Id);
+            }
+        } catch (Exception e) {
+            // If the user cannot read DocGen templates at all, the runner should show none.
+            readableIds.clear();
+        }
+        return readableIds;
     }
 
     /**
@@ -2018,7 +2095,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             return true;
         if (String.isBlank(recordId18))
             return false;
-        for (String rawId : t.Specific_Record_Ids__c.split(',')) {
+        for (String rawId : t.Specific_Record_Ids__c.split('[,;\\s]+')) {
             String trimmed = rawId.trim();
             if (String.isBlank(trimmed))
                 continue;
@@ -2094,20 +2171,17 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     ) {
         if (all == null || all.isEmpty())
             return all;
-        String recordId18 = null;
-        if (String.isNotBlank(relatedRecordId)) {
-            try {
-                recordId18 = String.valueOf(Id.valueOf(relatedRecordId));
-            } catch (Exception e) {
-                recordId18 = null;
-            }
-        }
+        Boolean applyRecordFilter = String.isNotBlank(relatedRecordId);
+        String recordId18 = normalizeRecordId(relatedRecordId);
         Set<String> userPermSets = getCurrentUserPermissionSetNames();
+        Set<Id> userReadableTemplateIds = getUserReadableTemplateIds(all);
         Map<String, Boolean> filterCache = new Map<String, Boolean>();
 
         List<DocGen_Template__c> visible = new List<DocGen_Template__c>();
         for (DocGen_Template__c t : all) {
-            if (!templateMatchesRecord(t, recordId18, filterCache))
+            if (!userReadableTemplateIds.contains(t.Id))
+                continue;
+            if (applyRecordFilter && !templateMatchesRecord(t, recordId18, filterCache))
                 continue;
             if (!templateVisibleToUser(t, userPermSets))
                 continue;
@@ -2166,14 +2240,33 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             return true;
         if (userPermSets == null || userPermSets.isEmpty())
             return false;
-        for (String rawName : t.Required_Permission_Sets__c.split(',')) {
+        for (String rawName : t.Required_Permission_Sets__c.split('[,;\\n\\r]+')) {
             String trimmed = rawName.trim();
             if (String.isBlank(trimmed))
                 continue;
-            if (userPermSets.contains(trimmed))
+            if (userPermSets.contains(normalizeAudienceToken(trimmed)))
                 return true;
         }
         return false;
+    }
+
+    private static void addAudienceToken(Set<String> tokens, String value) {
+        String normalized = normalizeAudienceToken(value);
+        if (String.isNotBlank(normalized)) {
+            tokens.add(normalized);
+        }
+    }
+
+    @TestVisible
+    private static String normalizeAudienceToken(String value) {
+        if (String.isBlank(value))
+            return null;
+        String trimmed = value.trim();
+        Integer namespaceIndex = trimmed.indexOf('__');
+        if (namespaceIndex > 0 && namespaceIndex + 2 < trimmed.length()) {
+            trimmed = trimmed.substring(namespaceIndex + 2);
+        }
+        return trimmed.toLowerCase();
     }
 
     /**
@@ -2249,7 +2342,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * @param createVersion Whether to create a new active version snapshot
      */
     @AuraEnabled
-    public static void saveTemplate(Map<String, Object> fields, Boolean createVersion, String contentVersionId) {
+    public static Id saveTemplate(Map<String, Object> fields, Boolean createVersion, String contentVersionId) {
+        Id createdVersionId = null;
         try {
             // 1. Update Template
             Id templateId = (Id) fields.get('Id');
@@ -2495,6 +2589,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 );
                 /* code-analyzer-suppress ApexFlsViolation */
                 Database.insert(version, AccessLevel.SYSTEM_MODE);
+                createdVersionId = version.Id;
 
                 // Decompose DOCX/PPTX into per-image and per-XML ContentVersions for
                 // heap-light PDF rendering. Runs in a Queueable (12 MB async heap)
@@ -2512,8 +2607,125 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     String noop = htmlErr.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
                 }
             }
+            return createdVersionId;
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error saving template. Please verify your inputs and permissions.');
+        }
+    }
+
+    /**
+     * PDF AcroForm template upload — browser-side decomposition snapshot.
+     *
+     * Some real-world PDFs, including IRS forms authored with Adobe Designer,
+     * store AcroForm dictionaries inside compressed PDF object streams. Apex can
+     * cheaply append incremental field-value updates once the relevant object
+     * dictionaries are known, but it cannot inflate arbitrary FlateDecode PDF
+     * streams at render time. The admin LWC therefore performs the one-time
+     * browser decomposition at upload/save time and stores the server-friendly
+     * field snapshot as a managed ContentVersion.
+     */
+    @AuraEnabled
+    public static Id savePdfAcroFormSnapshot(Id templateId, Id versionId, String snapshotJson) {
+        if (templateId == null || versionId == null) {
+            throw DocGenService.ahe('Template and version are required.');
+        }
+        if (String.isBlank(snapshotJson)) {
+            throw DocGenService.ahe('PDF AcroForm snapshot is empty.');
+        }
+        try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Template__c', 'Type__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template_Version__c> versions = [
+                SELECT Id, Template__c, Type__c
+                FROM DocGen_Template_Version__c
+                WHERE Id = :versionId AND Template__c = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (versions.isEmpty()) {
+                throw DocGenService.ahe('Template version not found.');
+            }
+            if (versions[0].Type__c != 'PDF') {
+                throw DocGenService.ahe('PDF AcroForm snapshots can only be saved for PDF template versions.');
+            }
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'docgen_tmpl_pdf_' + String.valueOf(versionId) + '_acroform',
+                PathOnClient = 'docgen_tmpl_pdf_' + String.valueOf(versionId) + '_acroform.json',
+                VersionData = Blob.valueOf(snapshotJson),
+                IsMajorVersion = true
+            );
+            DocGenFlsGuard.assertCreateable(
+                cv,
+                new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'IsMajorVersion' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(cv, AccessLevel.SYSTEM_MODE);
+
+            Id contentDocId = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :cv.Id
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]
+            .ContentDocumentId;
+            ContentDocumentLink cdl = new ContentDocumentLink(
+                ContentDocumentId = contentDocId,
+                LinkedEntityId = templateId,
+                ShareType = 'V',
+                Visibility = 'AllUsers'
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(cdl, AccessLevel.SYSTEM_MODE);
+            return cv.Id;
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error saving PDF AcroForm snapshot.');
+        }
+    }
+
+    @AuraEnabled
+    public static Map<String, Object> getActivePdfAcroFormSnapshot(Id templateId) {
+        if (templateId == null) {
+            return new Map<String, Object>();
+        }
+        try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Template__c', 'Type__c', 'Is_Active__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template_Version__c> versions = [
+                SELECT Id, Type__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :templateId AND Is_Active__c = TRUE
+                WITH SYSTEM_MODE
+                ORDER BY CreatedDate DESC
+                LIMIT 1
+            ];
+            if (versions.isEmpty() || versions[0].Type__c != 'PDF') {
+                return new Map<String, Object>();
+            }
+            String title = 'docgen_tmpl_pdf_' + String.valueOf(versions[0].Id) + '_acroform';
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData', 'Title' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentVersion> snapshots = [
+                SELECT VersionData
+                FROM ContentVersion
+                WHERE Title = :title
+                WITH SYSTEM_MODE
+                ORDER BY CreatedDate DESC
+                LIMIT 1
+            ];
+            return new Map<String, Object>{
+                'versionId' => versions[0].Id,
+                'snapshotJson' => snapshots.isEmpty() ? null : snapshots[0].VersionData.toString()
+            };
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error loading PDF AcroForm snapshot.');
         }
     }
 
@@ -2662,6 +2874,181 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * PDF AcroForm template upload — prepared browser-normalized body.
+     *
+     * Encrypted/object-stream-heavy government forms are normalized once in the
+     * browser during template save. The active template version must point at
+     * these server-friendly PDF bytes so bulk/async generation can fill fields
+     * purely in Apex without repeating decrypt/inflate work.
+     */
+    @AuraEnabled
+    public static Map<String, Object> savePdfAcroFormPreparedBody(
+        Id templateId,
+        String fileName,
+        String base64Content
+    ) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+        if (String.isBlank(base64Content)) {
+            throw new DocGenException('Prepared PDF content is required.');
+        }
+
+        List<DocGen_Template__c> tpls;
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            tpls = [
+                SELECT Id, Type__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+        } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+        if (tpls.isEmpty()) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+        if (tpls[0].Type__c != 'PDF') {
+            throw new DocGenException('savePdfAcroFormPreparedBody is for PDF-type templates only.');
+        }
+
+        String pathBase = String.isBlank(fileName) ? 'template' : fileName.substringBeforeLast('.');
+        if (String.isBlank(pathBase)) {
+            pathBase = 'template';
+        }
+
+        ContentVersion cv = new ContentVersion();
+        cv.Title = 'docgen_pdf_body_' + templateId + '_' + Datetime.now().getTime();
+        cv.PathOnClient = pathBase + '.pdf';
+        cv.VersionData = EncodingUtil.base64Decode(base64Content);
+        cv.FirstPublishLocationId = templateId;
+        DocGenFlsGuard.assertCreateable(
+            cv,
+            new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'FirstPublishLocationId' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+
+        /* code-analyzer-suppress ApexFlsViolation */
+        ContentVersion reload = [
+            SELECT Id, ContentDocumentId
+            FROM ContentVersion
+            WHERE Id = :cv.Id
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+
+        return new Map<String, Object>{
+            'contentVersionId' => cv.Id,
+            'contentDocumentId' => reload.ContentDocumentId,
+            'fileName' => fileName
+        };
+    }
+
+    @AuraEnabled
+    public static Id savePdfAcroFormPreparedBodyChunk(
+        Id templateId,
+        String uploadKey,
+        Integer chunkIndex,
+        String chunk
+    ) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+        if (String.isBlank(uploadKey)) {
+            throw new DocGenException('Prepared PDF upload key is required.');
+        }
+        if (chunkIndex == null) {
+            throw new DocGenException('Prepared PDF chunk index is required.');
+        }
+        if (String.isBlank(chunk)) {
+            throw new DocGenException('Prepared PDF chunk is empty.');
+        }
+
+        ContentVersion cv = new ContentVersion();
+        cv.Title = 'docgen_pdf_body_chunk_' + uploadKey + '_' + String.valueOf(chunkIndex).leftPad(5, '0');
+        cv.PathOnClient = cv.Title + '.txt';
+        cv.VersionData = Blob.valueOf(chunk);
+        cv.FirstPublishLocationId = templateId;
+        DocGenFlsGuard.assertCreateable(
+            cv,
+            new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'FirstPublishLocationId' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+        return cv.Id;
+    }
+
+    @AuraEnabled
+    public static Id finalizePdfAcroFormPreparedBody(
+        Id templateId,
+        Id versionId,
+        String fileName,
+        List<Id> chunkVersionIds
+    ) {
+        if (templateId == null || versionId == null) {
+            throw new DocGenException('Template and version are required.');
+        }
+        if (chunkVersionIds == null || chunkVersionIds.isEmpty()) {
+            throw new DocGenException('Prepared PDF chunks are required.');
+        }
+        return System.enqueueJob(new DocGenPdfPreparedBodyQueueable(templateId, versionId, fileName, chunkVersionIds));
+    }
+
+    @AuraEnabled(cacheable=false)
+    public static Map<String, Object> getPdfAcroFormPreparedBodyStatus(Id versionId, Id jobId) {
+        Map<String, Object> result = new Map<String, Object>{
+            'jobStatus' => null,
+            'jobErrors' => 0,
+            'isReady' => false,
+            'contentVersionId' => null
+        };
+        if (jobId != null) {
+            List<AsyncApexJob> jobs = [
+                SELECT Status, NumberOfErrors, ExtendedStatus
+                FROM AsyncApexJob
+                WHERE Id = :jobId
+                WITH USER_MODE
+                LIMIT 1
+            ];
+            if (!jobs.isEmpty()) {
+                result.put('jobStatus', jobs[0].Status);
+                result.put('jobErrors', jobs[0].NumberOfErrors);
+                result.put('extendedStatus', jobs[0].ExtendedStatus);
+            }
+        }
+        if (versionId != null) {
+            List<DocGen_Template_Version__c> versions = [
+                SELECT Content_Version_Id__c
+                FROM DocGen_Template_Version__c
+                WHERE Id = :versionId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (!versions.isEmpty() && String.isNotBlank(versions[0].Content_Version_Id__c)) {
+                Id cvId = (Id) versions[0].Content_Version_Id__c;
+                List<ContentVersion> cvs = [
+                    SELECT Id, Title
+                    FROM ContentVersion
+                    WHERE Id = :cvId
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (!cvs.isEmpty()) {
+                    result.put('contentVersionId', cvs[0].Id);
+                    result.put('isReady', String.valueOf(cvs[0].Title).startsWith('docgen_pdf_body_'));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
      * Deletes a DocGen template record.
      * @param templateId The ID of the template to delete
      */
@@ -2671,8 +3058,22 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (!Schema.sObjectType.DocGen_Template__c.isDeletable()) {
                 throw DocGenService.ahe('Insufficient access.');
             }
+            Set<Id> linkedEntityIds = new Set<Id>{ templateId };
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (DocGen_Template_Version__c version : [
+                SELECT Id
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :templateId
+                WITH SYSTEM_MODE
+            ]) {
+                linkedEntityIds.add(version.Id);
+            }
+            Set<Id> contentDocumentIds = collectLinkedTemplateContentDocumentIds(linkedEntityIds);
             /* code-analyzer-suppress ApexFlsViolation */
             delete new DocGen_Template__c(Id = templateId); // NOPMD ApexCRUDViolation - isDeletable() checked above; package-internal custom object
+            if (!contentDocumentIds.isEmpty()) {
+                System.enqueueJob(new DocGenContentDocumentCleanupQueueable(new List<Id>(contentDocumentIds)));
+            }
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error deleting template. Please check your permissions.');
         }
@@ -2808,45 +3209,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 );
             }
 
-            // Collect ContentDocuments to delete:
-            //  - pre-decomposed XML CVs by Title prefix docgen_tmpl_xml_<versionId>_*
-            //  - the version's body CV (Content_Version_Id__c)
-            Set<Id> cdsToDelete = new Set<Id>();
-            String predecompPrefix = 'docgen_tmpl_xml_' + String.valueOf(versionId) + '_';
-            String likePattern = predecompPrefix + '%';
-            /* code-analyzer-suppress ApexFlsViolation */
-            for (ContentVersion cv : [
-                SELECT ContentDocumentId
-                FROM ContentVersion
-                WHERE Title LIKE :likePattern
-                WITH USER_MODE
-            ]) {
-                if (cv.ContentDocumentId != null) {
-                    cdsToDelete.add(cv.ContentDocumentId);
-                }
-            }
-            if (String.isNotBlank(v.Content_Version_Id__c)) {
-                /* code-analyzer-suppress ApexFlsViolation */
-                List<ContentVersion> bodyCvs = [
-                    SELECT ContentDocumentId
-                    FROM ContentVersion
-                    WHERE Id = :v.Content_Version_Id__c
-                    WITH USER_MODE
-                    LIMIT 1
-                ];
-                if (!bodyCvs.isEmpty() && bodyCvs[0].ContentDocumentId != null) {
-                    cdsToDelete.add(bodyCvs[0].ContentDocumentId);
-                }
-            }
-
-            if (!cdsToDelete.isEmpty()) {
-                /* code-analyzer-suppress ApexFlsViolation */
-                Database.delete(
-                    [SELECT Id FROM ContentDocument WHERE Id IN :cdsToDelete WITH USER_MODE],
-                    true,
-                    AccessLevel.USER_MODE
-                );
-            }
+            deleteContentDocumentsForTemplateVersion(v);
 
             /* code-analyzer-suppress ApexFlsViolation */
             Database.delete(v, true, AccessLevel.USER_MODE);
@@ -2855,6 +3218,83 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error deleting version.');
         }
+    }
+
+    private static void deleteContentDocumentsForTemplateVersion(DocGen_Template_Version__c version) {
+        Set<Id> cdsToDelete = new Set<Id>();
+        collectLinkedContentDocuments(new Set<Id>{ version.Id }, cdsToDelete);
+        if (String.isNotBlank(version.Content_Version_Id__c)) {
+            collectContentDocumentsForContentVersions(new Set<Id>{ (Id) version.Content_Version_Id__c }, cdsToDelete);
+        }
+
+        String versionIdText = String.valueOf(version.Id);
+        String snapshotTitle = 'docgen_tmpl_pdf_' + versionIdText + '_acroform';
+        String chunkPrefix = 'docgen_pdf_body_chunk_' + versionIdText + '_';
+        String chunkLike = chunkPrefix + '%';
+        /* code-analyzer-suppress ApexFlsViolation */
+        for (ContentVersion cv : [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Title = :snapshotTitle OR Title LIKE :chunkLike
+            WITH SYSTEM_MODE
+        ]) {
+            if (cv.ContentDocumentId != null) {
+                cdsToDelete.add(cv.ContentDocumentId);
+            }
+        }
+        deleteContentDocuments(cdsToDelete);
+    }
+
+    private static Set<Id> collectLinkedTemplateContentDocumentIds(Set<Id> linkedEntityIds) {
+        Set<Id> cdsToDelete = new Set<Id>();
+        collectLinkedContentDocuments(linkedEntityIds, cdsToDelete);
+        return cdsToDelete;
+    }
+
+    private static void collectLinkedContentDocuments(Set<Id> linkedEntityIds, Set<Id> cdsToDelete) {
+        if (linkedEntityIds == null || linkedEntityIds.isEmpty()) {
+            return;
+        }
+        /* code-analyzer-suppress ApexFlsViolation */
+        for (ContentDocumentLink link : [
+            SELECT ContentDocumentId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId IN :linkedEntityIds
+            WITH SYSTEM_MODE
+        ]) {
+            if (link.ContentDocumentId != null) {
+                cdsToDelete.add(link.ContentDocumentId);
+            }
+        }
+    }
+
+    private static void collectContentDocumentsForContentVersions(Set<Id> contentVersionIds, Set<Id> cdsToDelete) {
+        if (contentVersionIds == null || contentVersionIds.isEmpty()) {
+            return;
+        }
+        /* code-analyzer-suppress ApexFlsViolation */
+        for (ContentVersion cv : [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Id IN :contentVersionIds
+            WITH SYSTEM_MODE
+        ]) {
+            if (cv.ContentDocumentId != null) {
+                cdsToDelete.add(cv.ContentDocumentId);
+            }
+        }
+    }
+
+    private static void deleteContentDocuments(Set<Id> contentDocumentIds) {
+        if (contentDocumentIds == null || contentDocumentIds.isEmpty()) {
+            return;
+        }
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.delete(
+            [SELECT Id FROM ContentDocument WHERE Id IN :contentDocumentIds WITH SYSTEM_MODE],
+            false,
+            AccessLevel.SYSTEM_MODE
+        );
     }
 
     /**
@@ -3001,6 +3441,51 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error queueing PDF generation.');
         }
+    }
+
+    @AuraEnabled(cacheable=false)
+    public static Map<String, Object> getPdfSampleGenerationStatus(Id jobId, Id recordId, Datetime requestedAt) {
+        if (jobId == null || recordId == null) {
+            throw DocGenService.ahe('PDF generation job and sample record are required.');
+        }
+        Map<String, Object> result = new Map<String, Object>();
+
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<AsyncApexJob> jobs = [
+            SELECT Id, Status, NumberOfErrors, ExtendedStatus
+            FROM AsyncApexJob
+            WHERE Id = :jobId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (jobs.isEmpty()) {
+            throw DocGenService.ahe('PDF generation job was not found.');
+        }
+
+        AsyncApexJob job = jobs[0];
+        result.put('jobStatus', job.Status);
+        result.put('numberOfErrors', job.NumberOfErrors);
+        result.put('extendedStatus', job.ExtendedStatus);
+
+        if (job.Status == 'Completed' && job.NumberOfErrors == 0) {
+            Datetime floor = requestedAt == null ? Datetime.now().addMinutes(-10) : requestedAt.addSeconds(-5);
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentVersion> generated = [
+                SELECT Id, Title, CreatedDate
+                FROM ContentVersion
+                WHERE FirstPublishLocationId = :recordId AND FileExtension = 'pdf' AND CreatedDate >= :floor
+                WITH SYSTEM_MODE
+                ORDER BY CreatedDate DESC
+                LIMIT 1
+            ];
+            if (!generated.isEmpty()) {
+                result.put('contentVersionId', generated[0].Id);
+                result.put('title', generated[0].Title);
+                result.put('createdDate', generated[0].CreatedDate);
+            }
+        }
+
+        return result;
     }
 
     @AuraEnabled

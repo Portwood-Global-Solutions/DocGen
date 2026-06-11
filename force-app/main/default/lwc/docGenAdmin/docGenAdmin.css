@@ -1,5 +1,5 @@
 .admin-workspace {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     color: var(--docgen-color-neutral-10, #111827);
 }
 
@@ -68,6 +68,158 @@
     border-radius: var(--slds-g-radius-border-3, 12px);
     overflow: hidden;
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.edit-sample-toolbar {
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.edit-sample-toolbar__picker {
+    flex: 1 1 18rem;
+    min-width: 12rem;
+}
+
+.edit-sample-toolbar__id {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pdf-acroform-mapping {
+    background: #fff;
+    border: 1px solid #d8dde6;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.pdf-acroform-mapping__header {
+    align-items: center;
+    background: #f9fafb;
+    border-bottom: 1px solid #d8dde6;
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem;
+}
+
+.pdf-acroform-mapping__actions {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.pdf-acroform-mapping__preparing {
+    align-items: center;
+    background: #eef4ff;
+    border-bottom: 1px solid #d8e6ff;
+    color: #16325c;
+    display: flex;
+    gap: 0.75rem;
+    min-height: 3rem;
+    padding: 0.75rem;
+    position: relative;
+}
+
+.pdf-acroform-mapping__preparing lightning-spinner {
+    position: relative;
+}
+
+.pdf-acroform-mapping__tools {
+    align-items: center;
+    background: #fff;
+    border-bottom: 1px solid #eef1f6;
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.pdf-acroform-mapping__search {
+    flex: 1 1 20rem;
+    min-width: 12rem;
+}
+
+.pdf-acroform-mapping__filter {
+    flex: 0 0 10rem;
+}
+
+.pdf-acroform-mapping__scroll {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.pdf-acroform-mapping__table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.pdf-acroform-mapping__table th,
+.pdf-acroform-mapping__table td {
+    border-top: 1px solid #eef1f6;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.pdf-acroform-mapping__table th {
+    background: #fbfcfe;
+    color: #3e4a5b;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.pdf-acroform-mapping__table th:nth-child(1) {
+    width: 34%;
+}
+
+.pdf-acroform-mapping__table th:nth-child(2) {
+    width: 9%;
+}
+
+.pdf-acroform-mapping__table th:nth-child(3) {
+    width: 14%;
+}
+
+.pdf-acroform-mapping__table th:nth-child(4) {
+    width: 30%;
+}
+
+.pdf-acroform-mapping__table th:nth-child(5) {
+    width: 13%;
+}
+
+.pdf-acroform-row_mapped {
+    background: #f7fbff;
+}
+
+.pdf-acroform-field-name {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+    .edit-sample-toolbar,
+    .pdf-acroform-mapping__tools {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .edit-sample-toolbar__picker,
+    .pdf-acroform-mapping__search,
+    .pdf-acroform-mapping__filter {
+        flex-basis: auto;
+        width: 100%;
+    }
 }
 
 /* HTML source editor (header/footer show-source toggle) */

@@ -1045,24 +1045,13 @@
                 <div class="slds-modal__content slds-var-p-around_medium">
                     <!-- Sample Record (persistent across all tabs) — hidden for Apex providers -->
                     <template if:true={isRealObject}>
-                        <div
-                            style="
-                                display: flex;
-                                align-items: center;
-                                gap: 1rem;
-                                padding: 0.5rem 0.75rem;
-                                background: #f8fafc;
-                                border: 1px solid #e5e5e5;
-                                border-radius: 6px;
-                                margin-bottom: 0.75rem;
-                            "
-                        >
+                        <div class="edit-sample-toolbar">
                             <lightning-icon
                                 icon-name="utility:record"
                                 size="x-small"
                                 alternative-text="Sample Record"
                             ></lightning-icon>
-                            <div style="flex: 1; min-width: 0">
+                            <div class="edit-sample-toolbar__picker">
                                 <lightning-record-picker
                                     label="Sample Record"
                                     variant="label-hidden"
@@ -1074,9 +1063,23 @@
                                 </lightning-record-picker>
                             </div>
                             <template if:true={editTemplateTestRecordId}>
-                                <span class="slds-text-body_small slds-text-color_weak" style="white-space: nowrap"
-                                    >ID: {editTemplateTestRecordId}</span
-                                >
+                                <span class="edit-sample-toolbar__id slds-text-body_small slds-text-color_weak">
+                                    ID: {editTemplateTestRecordId}
+                                </span>
+                            </template>
+                            <lightning-button
+                                label="Generate Sample"
+                                icon-name="utility:page"
+                                variant="brand"
+                                onclick={handleTestGenerate}
+                                disabled={editGenerateSampleDisabled}
+                            ></lightning-button>
+                            <template if:true={isLoadingVersions}>
+                                <lightning-spinner
+                                    alternative-text="Generating..."
+                                    size="small"
+                                    variant="brand"
+                                ></lightning-spinner>
                             </template>
                         </div>
                     </template>
@@ -2093,6 +2096,207 @@
                             </div>
                         </lightning-tab>
 
+                        <template if:true={isEditTypePdf}>
+                            <lightning-tab label="Fillable Fields" value="pdfFields">
+                                <div class="slds-var-p-around_small">
+                                    <template if:true={hasUploadedPdfAcroFormFields}>
+                                        <div class="pdf-acroform-mapping">
+                                            <div class="pdf-acroform-mapping__header">
+                                                <div class="slds-media slds-media_center">
+                                                    <div class="slds-media__figure">
+                                                        <lightning-icon icon-name="utility:form" size="small">
+                                                        </lightning-icon>
+                                                    </div>
+                                                    <div class="slds-media__body">
+                                                        <h3 class="slds-text-heading_small">Fillable Field Mapping</h3>
+                                                        <p class="slds-text-body_small slds-text-color_weak">
+                                                            {pdfAcroFormMappedCount} of {pdfAcroFormFieldCount} mapped
+                                                        </p>
+                                                        <p class="slds-text-body_small slds-text-color_weak">
+                                                            {pdfAcroFormMappingStatusText}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div class="pdf-acroform-mapping__actions">
+                                                    <lightning-button-icon
+                                                        icon-name="utility:refresh"
+                                                        alternative-text="Reload mapping"
+                                                        title="Reload mapping"
+                                                        variant="border-filled"
+                                                        onclick={handleReloadPdfAcroFormMapping}
+                                                    ></lightning-button-icon>
+                                                    <lightning-button
+                                                        label="Save Mapping"
+                                                        icon-name="utility:save"
+                                                        variant="brand"
+                                                        onclick={handleSavePdfAcroFormMapping}
+                                                        disabled={isPdfAcroFormSaveMappingDisabled}
+                                                    ></lightning-button>
+                                                    <lightning-button-icon
+                                                        icon-name="utility:close"
+                                                        alternative-text="Clear mappings"
+                                                        title="Clear mappings"
+                                                        variant="border-filled"
+                                                        onclick={handleClearPdfAcroFormMappings}
+                                                    ></lightning-button-icon>
+                                                </div>
+                                            </div>
+                                            <template if:true={isPreparingPdfAcroFormBody}>
+                                                <div class="pdf-acroform-mapping__preparing">
+                                                    <lightning-spinner
+                                                        alternative-text="Preparing PDF..."
+                                                        size="small"
+                                                    ></lightning-spinner>
+                                                    <span>{pdfAcroFormPreparationText}</span>
+                                                </div>
+                                            </template>
+                                            <div class="pdf-acroform-mapping__tools">
+                                                <div class="pdf-acroform-mapping__search">
+                                                    <lightning-input
+                                                        type="search"
+                                                        label="Search fillable fields"
+                                                        variant="label-hidden"
+                                                        value={pdfAcroFormSearchTerm}
+                                                        placeholder="Search field, page, position, data path..."
+                                                        onchange={handlePdfAcroFormSearchChange}
+                                                    ></lightning-input>
+                                                </div>
+                                                <div class="pdf-acroform-mapping__filter">
+                                                    <lightning-combobox
+                                                        label="Filter fillable fields"
+                                                        variant="label-hidden"
+                                                        value={pdfAcroFormFilter}
+                                                        options={pdfAcroFormFilterOptions}
+                                                        onchange={handlePdfAcroFormFilterChange}
+                                                    ></lightning-combobox>
+                                                </div>
+                                                <span class="slds-text-body_small slds-text-color_weak">
+                                                    Showing {pdfAcroFormVisibleFieldCount} of {pdfAcroFormFieldCount}
+                                                </span>
+                                            </div>
+                                            <div class="pdf-acroform-mapping__scroll">
+                                                <table class="pdf-acroform-mapping__table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th scope="col">Label / Fillable Field</th>
+                                                            <th scope="col">Type</th>
+                                                            <th scope="col">Position</th>
+                                                            <th scope="col">Data Path</th>
+                                                            <th scope="col">Checked Value</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <template for:each={pdfAcroFormFieldRows} for:item="row">
+                                                            <tr key={row.key} class={row.rowClass}>
+                                                                <td>
+                                                                    <lightning-input
+                                                                        type="text"
+                                                                        variant="label-hidden"
+                                                                        value={row.friendlyLabel}
+                                                                        data-index={row.index}
+                                                                        placeholder="Add label"
+                                                                        onchange={handlePdfAcroFormFriendlyLabelChange}
+                                                                    ></lightning-input>
+                                                                    <div class="pdf-acroform-field-name">
+                                                                        {row.displayName}
+                                                                    </div>
+                                                                    <template if:true={row.partialName}>
+                                                                        <div
+                                                                            class="slds-text-body_small slds-text-color_weak"
+                                                                        >
+                                                                            {row.partialName}
+                                                                        </div>
+                                                                    </template>
+                                                                </td>
+                                                                <td>{row.fieldType}</td>
+                                                                <td>
+                                                                    <template if:true={row.pageLabel}>
+                                                                        <div>{row.pageLabel}</div>
+                                                                    </template>
+                                                                    <template if:true={row.locationLabel}>
+                                                                        <div
+                                                                            class="slds-text-body_small slds-text-color_weak"
+                                                                        >
+                                                                            {row.locationLabel}
+                                                                        </div>
+                                                                    </template>
+                                                                    <template if:true={row.positionText}>
+                                                                        <div
+                                                                            class="slds-text-body_small slds-text-color_weak"
+                                                                        >
+                                                                            {row.positionText}
+                                                                        </div>
+                                                                    </template>
+                                                                </td>
+                                                                <td>
+                                                                    <template if:true={hasPdfAcroFormDataPathOptions}>
+                                                                        <lightning-combobox
+                                                                            variant="label-hidden"
+                                                                            value={row.mappedPath}
+                                                                            data-index={row.index}
+                                                                            placeholder="Select query field"
+                                                                            options={pdfAcroFormDataPathOptions}
+                                                                            onchange={handlePdfAcroFormMappingChange}
+                                                                        ></lightning-combobox>
+                                                                    </template>
+                                                                    <template if:false={hasPdfAcroFormDataPathOptions}>
+                                                                        <lightning-input
+                                                                            type="text"
+                                                                            variant="label-hidden"
+                                                                            value={row.mappedPath}
+                                                                            data-index={row.index}
+                                                                            placeholder="Add fields to the query first"
+                                                                            onchange={handlePdfAcroFormMappingChange}
+                                                                        ></lightning-input>
+                                                                    </template>
+                                                                </td>
+                                                                <td>
+                                                                    <template if:true={row.isButton}>
+                                                                        <lightning-input
+                                                                            type="text"
+                                                                            variant="label-hidden"
+                                                                            value={row.buttonOnValue}
+                                                                            data-index={row.index}
+                                                                            placeholder="Yes"
+                                                                            onchange={handlePdfAcroFormButtonValueChange}
+                                                                        ></lightning-input>
+                                                                        <template if:true={row.buttonOnValuesText}>
+                                                                            <div
+                                                                                class="slds-text-body_small slds-text-color_weak"
+                                                                            >
+                                                                                {row.buttonOnValuesText}
+                                                                            </div>
+                                                                        </template>
+                                                                    </template>
+                                                                </td>
+                                                            </tr>
+                                                        </template>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template if:false={hasUploadedPdfAcroFormFields}>
+                                        <div class="slds-box slds-theme_shade slds-text-align_center">
+                                            <lightning-icon icon-name="utility:form" size="small"></lightning-icon>
+                                            <h3 class="slds-text-heading_small slds-var-m-top_small">
+                                                Fillable Field Mapping
+                                            </h3>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                                Upload a PDF template version or load the active snapshot to map fields.
+                                            </p>
+                                            <lightning-button
+                                                class="slds-var-m-top_small"
+                                                label="Load Active Mapping"
+                                                icon-name="utility:refresh"
+                                                onclick={handleReloadPdfAcroFormMapping}
+                                            ></lightning-button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </lightning-tab>
+                        </template>
+
                         <!-- Tab 4: Document & History -->
                         <lightning-tab label="Document & History" value="document">
                             <div class="slds-var-p-around_small">
@@ -2143,14 +2347,16 @@
                                     </div>
                                     <div class="slds-box slds-theme_shade" style="border-radius: 6px">
                                         <template if:false={isEditTypeHtml}>
-                                            <lightning-file-upload
-                                                label="Upload New Version"
-                                                name="fileUploaderEdit"
-                                                accept={acceptedFormats}
-                                                record-id={editTemplateId}
-                                                onuploadfinished={handleEditUploadFinished}
-                                            >
-                                            </lightning-file-upload>
+                                            <template if:true={showEditFileUpload}>
+                                                <lightning-file-upload
+                                                    label="Upload New Version"
+                                                    name="fileUploaderEdit"
+                                                    accept={acceptedFormats}
+                                                    record-id={editTemplateId}
+                                                    onuploadfinished={handleEditUploadFinished}
+                                                >
+                                                </lightning-file-upload>
+                                            </template>
                                             <p
                                                 class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small"
                                             >
@@ -2204,6 +2410,21 @@
                                             </div>
                                         </template>
 
+                                        <template if:true={hasUploadedPdfAcroFormFields}>
+                                            <div
+                                                class="slds-box slds-box_x-small slds-theme_info slds-var-m-top_medium"
+                                            >
+                                                <lightning-icon
+                                                    icon-name="utility:form"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_small"
+                                                    variant="inverse"
+                                                ></lightning-icon>
+                                                {pdfAcroFormFieldCount} fillable field mappings are ready on the
+                                                <strong>Fillable Fields</strong> tab.
+                                            </div>
+                                        </template>
+
                                         <p class="slds-text-body_small slds-var-m-top_medium slds-text-color_weak">
                                             <strong>Note:</strong> Uploading attaches the file. You must click
                                             <strong>"Save as New Version"</strong> below to create a new snapshot.
@@ -2235,33 +2456,6 @@
                                                 hide-checkbox-column
                                             >
                                             </lightning-datatable>
-                                        </div>
-                                    </template>
-                                </div>
-
-                                <!-- Generate Sample -->
-                                <div class="slds-box slds-theme_shade slds-var-m-top_medium" style="border-radius: 8px">
-                                    <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
-                                        <div>
-                                            <h3 class="slds-text-heading_small">Generate Sample</h3>
-                                            <p class="slds-text-body_small slds-text-color_weak">
-                                                Generate a sample document using the record selected above.
-                                            </p>
-                                        </div>
-                                        <lightning-button
-                                            label="Generate"
-                                            icon-name="utility:page"
-                                            variant="brand"
-                                            onclick={handleTestGenerate}
-                                            disabled={editTemplateTestRecordIdEmpty}
-                                        ></lightning-button>
-                                    </div>
-                                    <template if:true={isGeneratingPreview}>
-                                        <div class="slds-var-m-top_medium slds-is-relative" style="height: 40px">
-                                            <lightning-spinner
-                                                alternative-text="Generating..."
-                                                size="small"
-                                            ></lightning-spinner>
                                         </div>
                                     </template>
                                 </div>

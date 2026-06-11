@@ -4,7 +4,7 @@ Build polished Word and PDF documents from any Salesforce record. Author your te
 
 PowerPoint and Excel templates are also supported as **alpha-stage** formats — see [§2](#2-what-docgen-does) for what to expect.
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RvbhIAC) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000RvbhIAC) · [Support](https://portwood.dev/support)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nEHxIAM) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nEHxIAM) · [Support](https://portwood.dev/support)
 
 ---
 
@@ -209,7 +209,7 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 ### 5.1 Creating a template
 
 1. Open the DocGen app → **My Templates** tab → **+ New Template**.
-2. Pick a template type: **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx`, _alpha_).
+2. Pick a template type: **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), **PDF** (`.pdf`, _testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx`, _alpha_).
 3. Pick a base object (Account, Opportunity, Case, any custom object). The picker ranks **standard objects first** — when an org has many namespaced custom objects whose names contain `Account`, `Opportunity`, etc. (common with payment processors and managed packages), the standard `Opportunity` always appears at the top of the list with a green **Standard** pill. Up to 50 matches render with a scroll.
 4. Upload your file containing `{FieldName}` merge tags.
 5. Configure the query — which fields, which child relationships (see [§6](#6-query-builder)).
@@ -220,6 +220,7 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 
 - Word (`.docx`) template → output PDF **or** DOCX (pick one when you save the template)
 - HTML (`.html` / `.htm` / `.zip`) template → output PDF only (see [§5.7](#57-html-templates-google-docs-notion-any-html-source))
+- PDF (`.pdf`) fillable template → output PDF only (PDF-to-PDF / AcroForm filling is currently in testing)
 - PowerPoint (`.pptx`) template → output PPTX only (PowerPoint→PDF is not supported by the Salesforce platform)
 - Excel (`.xlsx`) template → output XLSX only
 
@@ -234,6 +235,30 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 > **Web (150 ppi)** — most templates drop to 1–2 MB with no visible quality
 > loss. See [§14.8](#148-template--output-size-guidance) for the full
 > breakdown of why this limit exists and what generation flows it affects.
+
+#### Fillable PDF templates (PDF-to-PDF, testing)
+
+DocGen can upload a fillable PDF form, read its AcroForm fields in the browser, and map those fields to Salesforce data. The generated output stays a PDF: DocGen fills the mapped fields server-side so the same template can run for a single record, Generate Sample, Flow/API generation, and bulk generation.
+
+This feature is currently in testing. It is designed for standard AcroForm PDFs. Many government forms work, including forms whose field dictionaries are stored in PDF object streams after the browser prepares a server-ready copy. XFA-only forms and unusual encrypted forms may still need additional support.
+
+Basic workflow:
+
+1. Create or edit a template with **Type = PDF**.
+2. Upload the fillable `.pdf`.
+3. After upload, open the **Fillable Fields** tab. DocGen scans the PDF and lists the fields in page/position order.
+4. Use **Label / Fillable Field** to add your own human label, such as `Checkbox 3c S-Corp`. The original PDF field name remains visible underneath for troubleshooting.
+5. Pick a **Data Path** from the template query, or enter a static/formula-style value where appropriate.
+6. For checkboxes/radio buttons (`Btn` fields), map the data path to a boolean-like value and set **Checked Value** to the PDF's on-state value when needed. Common Salesforce values such as `true`, `yes`, `1`, and `checked` are treated as checked.
+7. Click **Save as New Version**. DocGen saves the field mapping snapshot and prepares a server-ready PDF body for generation.
+8. Later edits to labels, mappings, or checked values can be made directly on the **Fillable Fields** tab with **Save Mapping**.
+
+Important notes while the feature is in testing:
+
+- The mapped field list is based on the PDF structure, not visual text recognition. Use the page, position, and friendly label to make large forms navigable.
+- If DocGen says the mapping does not match the active PDF body, save the PDF as a new template version so the mapping and server-ready body are regenerated together.
+- Browser-side scanning is used only to understand and normalize the PDF. Actual generation happens server-side, including Generate Sample and bulk generation.
+- Fillable fields generally remain fillable/editable in the generated PDF. Flattening output is not the default behavior.
 
 ### 5.2 Template versions
 

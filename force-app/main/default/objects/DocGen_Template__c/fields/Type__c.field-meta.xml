@@ -29,6 +29,11 @@
                 <default>false</default>
                 <label>HTML</label>
             </value>
+            <value>
+                <fullName>PDF</fullName>
+                <default>false</default>
+                <label>PDF</label>
+            </value>
         </valueSetDefinition>
     </valueSet>
 </CustomField>

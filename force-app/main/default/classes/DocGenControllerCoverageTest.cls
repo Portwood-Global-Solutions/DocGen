@@ -140,6 +140,35 @@ private class DocGenControllerCoverageTest {
     }
 
     @IsTest
+    static void contentDocumentCleanupQueueableDeletesDocuments() {
+        Account acct = new Account(Name = 'Cleanup Queueable Test');
+        insert acct;
+        ContentVersion cv = new ContentVersion(
+            Title = 'cleanup-queueable-doc',
+            PathOnClient = 'cleanup.txt',
+            VersionData = Blob.valueOf('cleanup'),
+            FirstPublishLocationId = acct.Id
+        );
+        insert cv;
+        Id docId = [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Id = :cv.Id
+        ]
+        .ContentDocumentId;
+
+        Test.startTest();
+        System.enqueueJob(new DocGenContentDocumentCleanupQueueable(new List<Id>{ docId }));
+        Test.stopTest();
+
+        System.assertEquals(
+            0,
+            [SELECT COUNT() FROM ContentDocument WHERE Id = :docId],
+            'Cleanup queueable should delete the content document'
+        );
+    }
+
+    @IsTest
     static void renderImageAsPdfBase64ShortcircuitsInTestMode() {
         // The method has Test.isRunningTest() bypass that returns base64('test-pdf')
         String result = DocGenController.renderImageAsPdfBase64(

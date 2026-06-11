@@ -4924,9 +4924,18 @@ private class DocGenControllerTests {
         insert tplBoundOther;
 
         Test.startTest();
+        List<DocGen_Template__c> noRecordPicker = DocGenController.getTemplatesForObject('Account');
         List<DocGen_Template__c> forAcc = DocGenController.getTemplatesForObjectAndRecord('Account', acc.Id);
         List<DocGen_Template__c> forOther = DocGenController.getTemplatesForObjectAndRecord('Account', other.Id);
         Test.stopTest();
+
+        Set<Id> noRecordPickerIds = new Set<Id>();
+        for (DocGen_Template__c t : noRecordPicker)
+            noRecordPickerIds.add(t.Id);
+        System.assert(
+            noRecordPickerIds.contains(tplBound.Id),
+            'No-record template pickers should not apply Specific_Record_Ids__c filtering'
+        );
 
         Set<Id> forAccIds = new Set<Id>();
         for (DocGen_Template__c t : forAcc)
@@ -4986,6 +4995,33 @@ private class DocGenControllerTests {
     }
 
     @isTest
+    static void testGetTemplatesForObjectAndRecord_idsCanUseNewlinesAndSemicolons() {
+        Account a1 = TestDataFactory.getTestAccount();
+        Account a2 = new Account(Name = 'Delimited A2');
+        Account a3 = new Account(Name = 'Delimited A3');
+        insert new List<Account>{ a2, a3 };
+
+        DocGen_Template__c multi = new DocGen_Template__c(
+            Name = 'Delimited Ids',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Specific_Record_Ids__c = String.valueOf(a1.Id) + '\n' + String.valueOf(a2.Id) + '; ' + String.valueOf(a3.Id)
+        );
+        insert multi;
+
+        Test.startTest();
+        List<DocGen_Template__c> visible = DocGenController.getTemplatesForObjectAndRecord('Account', a2.Id);
+        Test.stopTest();
+
+        Boolean found = false;
+        for (DocGen_Template__c t : visible)
+            if (t.Id == multi.Id)
+                found = true;
+        System.assert(found, 'Specific record IDs should accept pasted newline/semicolon-delimited lists');
+    }
+
+    @isTest
     static void testGetTemplatesForObject_audienceFilter() {
         Account acc = TestDataFactory.getTestAccount();
         DocGen_Template__c open = TestDataFactory.getTestTemplate(); // no audience requirement
@@ -5023,6 +5059,49 @@ private class DocGenControllerTests {
             visIds.contains(eitherOr.Id),
             'Templates with any-of audience match (DocGen_Admin assigned via test setup) are visible'
         );
+    }
+
+    @isTest
+    static void testGetTemplatesForObject_audienceFilterCaseAndNamespaceInsensitive() {
+        DocGen_Template__c gated = new DocGen_Template__c(
+            Name = 'Audience Normalized',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Required_Permission_Sets__c = 'portwoodglobal__docgen_admin'
+        );
+        insert gated;
+
+        Test.startTest();
+        List<DocGen_Template__c> visible = DocGenController.getTemplatesForObject('Account');
+        Test.stopTest();
+
+        Boolean found = false;
+        for (DocGen_Template__c t : visible)
+            if (t.Id == gated.Id)
+                found = true;
+        System.assert(found, 'Audience filter should tolerate namespace prefixes and case differences');
+    }
+
+    @isTest
+    static void testGetTemplatesForObjectAndRecord_invalidRecordIdDoesNotThrow() {
+        DocGen_Template__c scoped = new DocGen_Template__c(
+            Name = 'Scoped Template',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Specific_Record_Ids__c = String.valueOf(TestDataFactory.getTestAccount().Id)
+        );
+        insert scoped;
+
+        Test.startTest();
+        List<DocGen_Template__c> visible = DocGenController.getTemplatesForObjectAndRecord('Account', 'not-an-id');
+        Test.stopTest();
+
+        System.assertNotEquals(null, visible, 'Invalid record ids should return a safe empty/general list, not throw');
+        for (DocGen_Template__c t : visible) {
+            System.assertNotEquals(scoped.Id, t.Id, 'Record-scoped templates require a valid matching record id');
+        }
     }
 
     @isTest

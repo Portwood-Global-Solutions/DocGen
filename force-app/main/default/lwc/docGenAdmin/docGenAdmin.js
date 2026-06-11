@@ -9,11 +9,15 @@ import { downloadBase64 as downloadBase64Util, parseSOQLFields, stripOuterSelect
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
 import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
 import saveTemplate from '@salesforce/apex/DocGenController.saveTemplate';
+import generateDocumentData from '@salesforce/apex/DocGenController.generateDocumentData';
 import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
 import deleteTemplateVersion from '@salesforce/apex/DocGenController.deleteTemplateVersion';
 import generateDocumentParts from '@salesforce/apex/DocGenController.generateDocumentParts';
 import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
+import getLatestContentVersionId from '@salesforce/apex/DocGenController.getLatestContentVersionId';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
+import generatePdfAsync from '@salesforce/apex/DocGenController.generatePdfAsync';
+import getPdfSampleGenerationStatus from '@salesforce/apex/DocGenController.getPdfSampleGenerationStatus';
 import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
 import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
 import deleteChartImages from '@salesforce/apex/DocGenChartImageController.deleteChartImages';
@@ -62,6 +66,11 @@ import testRecordFilter from '@salesforce/apex/DocGenController.testRecordFilter
 // 1.61 — HTML zip sidesteps File Upload Security via client-side unzip + per-part upload
 import saveHtmlTemplateImage from '@salesforce/apex/DocGenController.saveHtmlTemplateImage';
 import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemplateBody';
+import savePdfAcroFormPreparedBodyChunk from '@salesforce/apex/DocGenController.savePdfAcroFormPreparedBodyChunk';
+import finalizePdfAcroFormPreparedBody from '@salesforce/apex/DocGenController.finalizePdfAcroFormPreparedBody';
+import getPdfAcroFormPreparedBodyStatus from '@salesforce/apex/DocGenController.getPdfAcroFormPreparedBodyStatus';
+import savePdfAcroFormSnapshot from '@salesforce/apex/DocGenController.savePdfAcroFormSnapshot';
+import getActivePdfAcroFormSnapshot from '@salesforce/apex/DocGenController.getActivePdfAcroFormSnapshot';
 // 1.74 — guard rail for the async-decompose Queueable's 12 MB heap budget
 import getContentVersionSize from '@salesforce/apex/DocGenController.getContentVersionSize';
 import deleteContentVersionDocument from '@salesforce/apex/DocGenController.deleteContentVersionDocument';
@@ -69,6 +78,7 @@ import renderImageAsPdfBase64 from '@salesforce/apex/DocGenController.renderImag
 import { readZip, bytesToBase64 } from './docGenZipReader';
 import { buildDocx } from './docGenZipWriter';
 import { extractFirstImageFromPdfBase64 } from './docGenPdfImageExtractor';
+import { decomposePdfAcroFormBase64 } from './docGenPdfAcroFormDecomposer';
 // Version fields (DocGen_Template_Version__c)
 import VER_IS_ACTIVE_FIELD from '@salesforce/schema/DocGen_Template_Version__c.Is_Active__c';
 import VER_CV_ID_FIELD from '@salesforce/schema/DocGen_Template_Version__c.Content_Version_Id__c';
@@ -282,6 +292,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track currentFileId;
     @track uploadedFileName = '';
     @track uploadedContentVersionId;
+    @track showEditFileUpload = true;
+    @track uploadedPdfAcroFormSnapshot = null;
+    @track pdfAcroFormSnapshotVersionId = null;
+    @track isPdfAcroFormSnapshotLoaded = false;
+    @track isSavingPdfAcroFormMapping = false;
+    @track isPreparingPdfAcroFormBody = false;
+    @track pdfAcroFormPreparationText = '';
+    @track pdfAcroFormSearchTerm = '';
+    @track pdfAcroFormFilter = 'all';
+    uploadedPdfAcroFormSnapshotJson = null;
+    uploadedPdfAcroFormNormalizedBase64 = null;
 
     // Preview/Restore State
     @track isPreviewModalOpen = false;
@@ -373,6 +394,301 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 .map((p) => ({ value: p.value, label: p.label, extra: p.targetObject || '' }));
         }
         return [];
+    }
+
+    get hasUploadedPdfAcroFormFields() {
+        return (
+            this.uploadedPdfAcroFormSnapshot &&
+            this.uploadedPdfAcroFormSnapshot.fields &&
+            this.uploadedPdfAcroFormSnapshot.fields.length > 0
+        );
+    }
+
+    get pdfAcroFormMappedCount() {
+        if (!this.hasUploadedPdfAcroFormFields) {
+            return 0;
+        }
+        return this.uploadedPdfAcroFormSnapshot.fields.filter((field) => !!(field.mappedPath || '').trim()).length;
+    }
+
+    get hasSavedPdfAcroFormSnapshotTarget() {
+        return String(this.pdfAcroFormSnapshotVersionId || '').startsWith('a07');
+    }
+
+    get isPdfAcroFormSaveMappingDisabled() {
+        return (
+            this.isSavingPdfAcroFormMapping ||
+            this.isPreparingPdfAcroFormBody ||
+            !this.editTemplateId ||
+            !this.hasSavedPdfAcroFormSnapshotTarget ||
+            !this.uploadedPdfAcroFormSnapshotJson
+        );
+    }
+
+    get pdfAcroFormMappingStatusText() {
+        if (!this.hasUploadedPdfAcroFormFields) {
+            return '';
+        }
+        if (this.isPdfAcroFormSnapshotLoaded && this.hasSavedPdfAcroFormSnapshotTarget) {
+            return 'Saved on the active template version.';
+        }
+        if (this.hasSavedPdfAcroFormSnapshotTarget) {
+            return 'Mapping changes are ready to save to the active template version.';
+        }
+        return 'Draft mapping. Save as New Version will store it.';
+    }
+
+    get pdfAcroFormFieldCount() {
+        if (!this.hasUploadedPdfAcroFormFields) {
+            return 0;
+        }
+        return this.uploadedPdfAcroFormSnapshot.fields.length;
+    }
+
+    get pdfAcroFormVisibleFieldCount() {
+        return this.pdfAcroFormFieldRows.length;
+    }
+
+    get pdfAcroFormFilterOptions() {
+        return [
+            { label: 'All fields', value: 'all' },
+            { label: 'Mapped', value: 'mapped' },
+            { label: 'Unmapped', value: 'unmapped' },
+            { label: 'Text fields', value: 'text' },
+            { label: 'Buttons', value: 'button' }
+        ];
+    }
+
+    get pdfAcroFormDataPathOptions() {
+        const paths = this._pdfAcroFormDataPathsFromQuery(this.editTemplateQuery);
+        return [
+            { label: 'Not mapped', value: '' },
+            ...paths.map((path) => ({
+                label: path.label,
+                value: path.value
+            }))
+        ];
+    }
+
+    get hasPdfAcroFormDataPathOptions() {
+        return this.pdfAcroFormDataPathOptions.length > 1;
+    }
+
+    get pdfAcroFormFieldRows() {
+        if (!this.hasUploadedPdfAcroFormFields) {
+            return [];
+        }
+        const search = (this.pdfAcroFormSearchTerm || '').trim().toLowerCase();
+        const filter = this.pdfAcroFormFilter || 'all';
+        return this.uploadedPdfAcroFormSnapshot.fields
+            .map((field, index) => {
+                const displayName = field.name || field.partialName || 'Field ' + (index + 1);
+                const rect = field.rect || [];
+                const positionText = this._pdfAcroFormPositionText(rect, field.mediaBox);
+                const estimatedPageNumber =
+                    field.estimatedPageNumber || this._pdfAcroFormEstimatedPageNumber(displayName);
+                return {
+                    key: (field.objectNumber || 'field') + '-' + index,
+                    index,
+                    rect,
+                    displayName,
+                    friendlyLabel: field.friendlyLabel || '',
+                    partialName: field.partialName,
+                    fieldType: field.fieldType || 'Field',
+                    pageLabel: field.pageNumber
+                        ? 'Page ' + field.pageNumber
+                        : estimatedPageNumber
+                          ? 'Page ~' + estimatedPageNumber
+                          : '',
+                    locationLabel: field.locationLabel || '',
+                    positionText,
+                    isButton: field.fieldType === 'Btn',
+                    mappedPath: field.mappedPath || '',
+                    buttonOnValue: field.buttonOnValue || 'Yes',
+                    buttonOnValuesText:
+                        field.buttonOnValues && field.buttonOnValues.length ? field.buttonOnValues.join(', ') : '',
+                    rowClass: field.mappedPath ? 'pdf-acroform-row pdf-acroform-row_mapped' : 'pdf-acroform-row'
+                };
+            })
+            .filter((row) => {
+                if (filter === 'mapped' && !row.mappedPath) {
+                    return false;
+                }
+                if (filter === 'unmapped' && row.mappedPath) {
+                    return false;
+                }
+                if (filter === 'text' && row.fieldType !== 'Tx') {
+                    return false;
+                }
+                if (filter === 'button' && !row.isButton) {
+                    return false;
+                }
+                if (!search) {
+                    return true;
+                }
+                return [
+                    row.friendlyLabel,
+                    row.displayName,
+                    row.partialName,
+                    row.fieldType,
+                    row.pageLabel,
+                    row.locationLabel,
+                    row.positionText,
+                    row.mappedPath,
+                    row.buttonOnValue,
+                    row.buttonOnValuesText
+                ]
+                    .filter(Boolean)
+                    .some((value) => String(value).toLowerCase().includes(search));
+            })
+            .sort((a, b) => this._comparePdfAcroFormRows(a, b));
+    }
+
+    _pdfAcroFormEstimatedPageNumber(fieldName) {
+        const match = /#subform\[(\d+)\]/.exec(fieldName || '');
+        return match ? Number(match[1]) + 1 : null;
+    }
+
+    _comparePdfAcroFormRows(a, b) {
+        const pageA = this._pdfAcroFormSortPage(a);
+        const pageB = this._pdfAcroFormSortPage(b);
+        if (pageA !== pageB) {
+            return pageA - pageB;
+        }
+
+        const boxA = this._pdfAcroFormSortBox(a);
+        const boxB = this._pdfAcroFormSortBox(b);
+        const rowTolerance = 8;
+        if (Math.abs(boxA.top - boxB.top) > rowTolerance) {
+            return boxB.top - boxA.top;
+        }
+        if (Math.abs(boxA.left - boxB.left) > 0.01) {
+            return boxA.left - boxB.left;
+        }
+        if (Math.abs(boxA.bottom - boxB.bottom) > 0.01) {
+            return boxB.bottom - boxA.bottom;
+        }
+        return a.displayName.localeCompare(b.displayName);
+    }
+
+    _pdfAcroFormSortPage(row) {
+        const match = /^Page\s+~?(\d+)/.exec(row.pageLabel || '');
+        return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+    }
+
+    _pdfAcroFormSortBox(row) {
+        const rect = row.rect || [];
+        const left = Math.min(Number(rect[0]), Number(rect[2]));
+        const right = Math.max(Number(rect[0]), Number(rect[2]));
+        const bottom = Math.min(Number(rect[1]), Number(rect[3]));
+        const top = Math.max(Number(rect[1]), Number(rect[3]));
+        if (![left, right, bottom, top].every(Number.isFinite)) {
+            return {
+                left: Number.MAX_SAFE_INTEGER,
+                right: Number.MAX_SAFE_INTEGER,
+                bottom: Number.MIN_SAFE_INTEGER,
+                top: Number.MIN_SAFE_INTEGER
+            };
+        }
+        return { left, right, bottom, top };
+    }
+
+    _pdfAcroFormDataPathsFromQuery(queryConfig) {
+        if (!queryConfig) {
+            return [];
+        }
+        const byValue = new Map();
+        const addPath = (value, labelPrefix) => {
+            if (!value || typeof value !== 'string') {
+                return;
+            }
+            const trimmed = value.trim();
+            if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('/')) {
+                return;
+            }
+            if (!byValue.has(trimmed)) {
+                byValue.set(trimmed, {
+                    value: trimmed,
+                    label: labelPrefix ? labelPrefix + ': ' + trimmed : trimmed
+                });
+            }
+        };
+
+        try {
+            const qc = queryConfig.trim();
+            if (qc.startsWith('{')) {
+                const config = JSON.parse(qc);
+                if (config.v === 4 && config.provider) {
+                    const declaredLoops = new Set();
+                    for (const fieldName of this.providerFields || []) {
+                        if (typeof fieldName === 'string' && fieldName.startsWith('#')) {
+                            declaredLoops.add(fieldName.substring(1));
+                        }
+                    }
+                    for (const fieldName of this.providerFields || []) {
+                        if (typeof fieldName !== 'string' || fieldName.startsWith('#') || fieldName.startsWith('/')) {
+                            continue;
+                        }
+                        const prefix = fieldName.includes('.') ? fieldName.split('.')[0] : '';
+                        if (!prefix || !declaredLoops.has(prefix)) {
+                            addPath(fieldName, prefix ? 'Parent' : 'Field');
+                        }
+                    }
+                    return Array.from(byValue.values());
+                }
+                if (config.v >= 3 && config.nodes) {
+                    const root = (config.nodes || []).find((node) => !node.parentNode) || {};
+                    for (const fieldName of root.fields || []) {
+                        addPath(fieldName, 'Field');
+                    }
+                    for (const fieldName of root.parentFields || []) {
+                        addPath(fieldName, 'Parent');
+                    }
+                    return Array.from(byValue.values());
+                }
+            }
+
+            const parsed = parseSOQLFields(queryConfig);
+            for (const fieldName of parsed.baseFields || []) {
+                addPath(fieldName, 'Field');
+            }
+            for (const fieldName of parsed.parentFields || []) {
+                addPath(fieldName, 'Parent');
+            }
+        } catch {
+            return [];
+        }
+        return Array.from(byValue.values());
+    }
+
+    _pdfAcroFormPositionText(rect, mediaBox) {
+        if (!rect || rect.length < 4) {
+            return '';
+        }
+        const pointsPerInch = 72;
+        const pageTop = mediaBox && Number.isFinite(Number(mediaBox.top)) ? Number(mediaBox.top) : 792;
+        const pageLeft = mediaBox && Number.isFinite(Number(mediaBox.left)) ? Number(mediaBox.left) : 0;
+        const left = Math.min(Number(rect[0]), Number(rect[2]));
+        const right = Math.max(Number(rect[0]), Number(rect[2]));
+        const bottom = Math.min(Number(rect[1]), Number(rect[3]));
+        const top = Math.max(Number(rect[1]), Number(rect[3]));
+        if (![left, right, bottom, top].every(Number.isFinite)) {
+            return '';
+        }
+        const fromLeft = (left - pageLeft) / pointsPerInch;
+        const fromTop = (pageTop - top) / pointsPerInch;
+        const width = (right - left) / pointsPerInch;
+        const height = (top - bottom) / pointsPerInch;
+        return (
+            fromLeft.toFixed(1) +
+            ' in from left, ' +
+            fromTop.toFixed(1) +
+            ' in from top, ' +
+            width.toFixed(1) +
+            ' x ' +
+            height.toFixed(1) +
+            ' in'
+        );
     }
 
     handleBuilderTabClick(event) {
@@ -931,6 +1247,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Excel only supports Native output — auto-switch from PDF
         if (event.detail.value === 'Excel' && this.newTemplateOutputFormat === 'PDF') {
             this.newTemplateOutputFormat = 'Native';
+        }
+        if (event.detail.value === 'HTML' || event.detail.value === 'PDF') {
+            this.newTemplateOutputFormat = 'PDF';
         }
     }
     handleOutputFormatChange(event) {
@@ -1514,7 +1833,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (event.detail.value === 'Excel' && this.editTemplateOutputFormat === 'PDF') {
             this.editTemplateOutputFormat = 'Native';
         }
-        if (event.detail.value === 'HTML') {
+        if (event.detail.value === 'HTML' || event.detail.value === 'PDF') {
             this.editTemplateOutputFormat = 'PDF';
         }
     }
@@ -1936,7 +2255,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             { label: 'Word', value: 'Word' },
             { label: 'PowerPoint', value: 'PowerPoint' },
             { label: 'Excel', value: 'Excel' },
-            { label: 'HTML', value: 'HTML' }
+            { label: 'HTML', value: 'HTML' },
+            { label: 'PDF', value: 'PDF' }
         ];
     }
 
@@ -1945,7 +2265,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (type === 'Excel') {
             return [{ label: 'Native (.xlsx)', value: 'Native' }];
         }
-        if (type === 'HTML') {
+        if (type === 'HTML' || type === 'PDF') {
             return [{ label: 'PDF', value: 'PDF' }];
         }
         return [
@@ -1959,6 +2279,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (type === 'PowerPoint') return ['.pptx'];
         if (type === 'Excel') return ['.xlsx'];
         if (type === 'HTML') return ['.html', '.htm', '.zip'];
+        if (type === 'PDF') return ['.pdf'];
         return ['.docx'];
     }
 
@@ -2019,6 +2340,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     get isEditTypeHtml() {
         return this.editTemplateType === 'HTML';
+    }
+
+    get isEditTypePdf() {
+        return this.editTemplateType === 'PDF';
     }
 
     // v1.90 — page-layout fields are dead inputs when the HTML body owns @page.
@@ -2219,6 +2544,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.editTemplateRecordFilterResultMessage = '';
             this.editTemplateHeaderHtml = row[F.HeaderHtml] || '';
             this.editTemplateFooterHtml = row[F.FooterHtml] || '';
+            this.uploadedPdfAcroFormSnapshot = null;
+            this.pdfAcroFormSnapshotVersionId = null;
+            this.isPdfAcroFormSnapshotLoaded = false;
+            this.uploadedPdfAcroFormSnapshotJson = null;
 
             let cdLinks = [];
             if (row.ContentDocumentLinks) {
@@ -2242,6 +2571,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
 
             this.loadVersions(row.Id);
+            if (row[F.Type] === 'PDF') {
+                this.loadPdfAcroFormMapping();
+            }
             this.isCreating = false;
             this.isEditModalOpen = true;
             this._editContext = true;
@@ -2475,7 +2807,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 refreshApex(this.wiredTemplatesResult);
             }
 
-            const isPPT = ['PowerPoint', 'PPT', 'PPTX'].includes(this.previewVersion[F.Type]);
+            const previewTemplateType = this.previewVersion[F.Type] || this.editTemplateType;
+            const isPPT = ['PowerPoint', 'PPT', 'PPTX'].includes(previewTemplateType);
 
             if (isPPT || this.editTemplateOutputFormat === 'Native') {
                 let result;
@@ -2496,7 +2829,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     throw new Error('Document generation returned empty result.');
                 }
                 const docTitle = 'Preview_' + this.previewVersion.VersionNumber + '_' + (result.title || 'Document');
-                const ext = this._officeExtensionForType(this.previewVersion[F.Type]);
+                const ext = this._officeExtensionForType(previewTemplateType);
                 this.downloadBase64(result.base64, docTitle + ext, 'application/octet-stream');
                 this.showToast(
                     'Success',
@@ -2509,20 +2842,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     'Generating PDF sample for ' + this.previewVersion.VersionNumber + '...',
                     'info'
                 );
-                const chartContext = await this._prepareChartsForAdmin(
-                    this.editTemplateId,
-                    this.editTemplateTestRecordId
-                );
                 let pdfResult;
-                try {
-                    pdfResult = await generatePdf({
-                        templateId: this.editTemplateId,
-                        recordId: this.editTemplateTestRecordId,
-                        saveToRecord: false,
-                        chartCvMap: chartContext.map
-                    });
-                } finally {
-                    await this._cleanupChartsForAdmin(chartContext.cvIds);
+                if (this._isPdfTemplateType(previewTemplateType)) {
+                    pdfResult = await this._generatePdfAcroFormSample(
+                        this.editTemplateId,
+                        this.editTemplateTestRecordId
+                    );
+                } else {
+                    const chartContext = await this._prepareChartsForAdmin(
+                        this.editTemplateId,
+                        this.editTemplateTestRecordId
+                    );
+                    try {
+                        pdfResult = await generatePdf({
+                            templateId: this.editTemplateId,
+                            recordId: this.editTemplateTestRecordId,
+                            saveToRecord: false,
+                            chartCvMap: chartContext.map
+                        });
+                    } finally {
+                        await this._cleanupChartsForAdmin(chartContext.cvIds);
+                    }
                 }
                 if (!pdfResult || !pdfResult.base64) {
                     throw new Error('PDF generation returned empty result.');
@@ -2619,22 +2959,48 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.editTemplateQuery = fields['Query_Config__c'];
 
         try {
+            this._syncPdfAcroFormSnapshotJson();
+            const savedPdfSnapshotJson = this.uploadedPdfAcroFormSnapshotJson;
+            const templateBodyContentVersionId = this.uploadedContentVersionId;
             // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-            await saveTemplate({
+            const versionId = await saveTemplate({
                 fields: fields,
                 createVersion: true,
-                contentVersionId: this.uploadedContentVersionId
+                contentVersionId: templateBodyContentVersionId
             });
+            if (versionId && savedPdfSnapshotJson) {
+                await savePdfAcroFormSnapshot({
+                    templateId: this.editTemplateId,
+                    versionId,
+                    snapshotJson: savedPdfSnapshotJson
+                });
+            }
+            if (
+                versionId &&
+                this.editTemplateType === 'PDF' &&
+                (this.uploadedPdfAcroFormNormalizedBase64 || templateBodyContentVersionId)
+            ) {
+                await this._queuePdfAcroFormPreparedBody(versionId, templateBodyContentVersionId);
+            }
             this.showToast('Success', 'New version saved. You can now Generate to test it.', 'success');
             // Don't close the modal — authors want to immediately test/preview
             // the new version. Clear the just-uploaded CV reference so a follow-up
             // save doesn't double-attach the same file, refresh the version list,
-            // and switch to the Document & History tab so the new version is in view.
+            // and keep PDF authors on the mapping tab so the saved fields remain in view.
             this.uploadedContentVersionId = null;
+            this._resetEditFileUploadWidget();
+            if (this.editTemplateType === 'PDF' && versionId && savedPdfSnapshotJson) {
+                this.pdfAcroFormSnapshotVersionId = versionId;
+                this.isPdfAcroFormSnapshotLoaded = true;
+                await this.loadPdfAcroFormMapping();
+            } else {
+                this.uploadedPdfAcroFormSnapshot = null;
+                this.uploadedPdfAcroFormSnapshotJson = null;
+            }
             if (this.editTemplateId) {
                 this.loadVersions(this.editTemplateId);
             }
-            this.activeEditTab = 'document';
+            this.activeEditTab = this.editTemplateType === 'PDF' ? 'pdfFields' : 'document';
             return refreshApex(this.wiredTemplatesResult);
         } catch (error) {
             this.showToast('Error saving template', error.body ? error.body.message : error.message, 'error');
@@ -2646,8 +3012,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return !this.editTemplateTestRecordId;
     }
 
+    get editGenerateSampleDisabled() {
+        return (
+            !this.editTemplateTestRecordId ||
+            this.isLoadingVersions ||
+            this.isGeneratingPreview ||
+            this.isPreparingPdfAcroFormBody
+        );
+    }
+
     get isRealObject() {
         return this.editTemplateObject && this.editTemplateObject !== 'ApexProvider';
+    }
+
+    handlePdfAcroFormSearchChange(event) {
+        this.pdfAcroFormSearchTerm = event.target.value || '';
+    }
+
+    handlePdfAcroFormFilterChange(event) {
+        this.pdfAcroFormFilter = event.detail.value || 'all';
     }
 
     async handleTestGenerate() {
@@ -2702,20 +3085,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             } else {
                 // PDF generation — same path as bulk
                 this.showToast('Info', 'Generating PDF Sample...', 'info');
-                const chartContext = await this._prepareChartsForAdmin(
-                    this.editTemplateId,
-                    this.editTemplateTestRecordId
-                );
                 let pdfResult;
-                try {
-                    pdfResult = await generatePdf({
-                        templateId: this.editTemplateId,
-                        recordId: this.editTemplateTestRecordId,
-                        saveToRecord: false,
-                        chartCvMap: chartContext.map
-                    });
-                } finally {
-                    await this._cleanupChartsForAdmin(chartContext.cvIds);
+                if (this._isPdfTemplateType(this.editTemplateType)) {
+                    pdfResult = await this._generatePdfAcroFormSample(
+                        this.editTemplateId,
+                        this.editTemplateTestRecordId
+                    );
+                } else {
+                    const chartContext = await this._prepareChartsForAdmin(
+                        this.editTemplateId,
+                        this.editTemplateTestRecordId
+                    );
+                    try {
+                        pdfResult = await generatePdf({
+                            templateId: this.editTemplateId,
+                            recordId: this.editTemplateTestRecordId,
+                            saveToRecord: false,
+                            chartCvMap: chartContext.map
+                        });
+                    } finally {
+                        await this._cleanupChartsForAdmin(chartContext.cvIds);
+                    }
                 }
 
                 if (!pdfResult || !pdfResult.base64) {
@@ -2738,12 +3128,181 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    async _generatePdfAcroFormSample(templateId, recordId) {
+        const snapshotResult = await getActivePdfAcroFormSnapshot({ templateId });
+        const snapshotJson = snapshotResult && snapshotResult.snapshotJson;
+        if (!snapshotJson) {
+            throw new Error('PDF AcroForm mapping snapshot is missing. Save the fillable field mapping first.');
+        }
+
+        const requestedAt = new Date().toISOString();
+        const jobId = await generatePdfAsync({ templateId, recordId });
+        this.showToast('PDF generation queued', 'Building the sample PDF server-side...', 'info');
+        const result = await this._waitForPdfSampleGeneration(jobId, recordId, requestedAt);
+        if (!result || !result.contentVersionId) {
+            throw new Error('PDF generation completed, but no generated file was found on the sample record.');
+        }
+        const base64 = await getContentVersionBase64({ contentVersionId: result.contentVersionId });
+        return { base64, title: result.title || 'Document' };
+    }
+
+    async _waitForPdfSampleGeneration(jobId, recordId, requestedAt) {
+        const maxAttempts = 40;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await getPdfSampleGenerationStatus({
+                jobId,
+                recordId,
+                requestedAt
+            });
+            if (result && result.jobStatus === 'Failed') {
+                throw new Error(result.extendedStatus || 'Server-side PDF generation failed.');
+            }
+            if (result && result.jobStatus === 'Aborted') {
+                throw new Error(result.extendedStatus || 'Server-side PDF generation was aborted.');
+            }
+            if (result && result.contentVersionId) {
+                return result;
+            }
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        throw new Error('PDF generation is still running. Try Generate Sample again in a moment.');
+    }
+
+    async _queuePdfAcroFormPreparedBody(versionId, sourceContentVersionId) {
+        let base64 = this.uploadedPdfAcroFormNormalizedBase64;
+        if (!versionId) {
+            return;
+        }
+        if (!base64 && !sourceContentVersionId) {
+            return;
+        }
+        this.isPreparingPdfAcroFormBody = true;
+        this.pdfAcroFormPreparationText = 'Preparing PDF for server-side generation...';
+        try {
+            if (!base64 && sourceContentVersionId) {
+                this.pdfAcroFormPreparationText = 'Rebuilding server-ready PDF body...';
+                const uploadedBase64 = await getContentVersionBase64({
+                    contentVersionId: sourceContentVersionId
+                });
+                const snapshot = await decomposePdfAcroFormBase64(uploadedBase64);
+                if (snapshot.requiresNormalizedPdf && !snapshot.normalizedPdfBase64) {
+                    throw new Error('PDF requires a normalized server-ready body, but normalization did not complete.');
+                }
+                base64 = snapshot.normalizedPdfBase64 || uploadedBase64;
+                this.uploadedPdfAcroFormNormalizedBase64 = snapshot.normalizedPdfBase64 || null;
+            }
+            if (!base64) {
+                throw new Error('Prepared PDF content is empty.');
+            }
+            const chunkSize = 450000;
+            const uploadKey = String(versionId).replace(/[^A-Za-z0-9]/g, '') + '_' + Date.now();
+            const chunkVersionIds = [];
+            for (let offset = 0, index = 0; offset < base64.length; offset += chunkSize, index++) {
+                this.pdfAcroFormPreparationText =
+                    'Uploading prepared PDF chunk ' +
+                    (index + 1) +
+                    ' of ' +
+                    Math.ceil(base64.length / chunkSize) +
+                    '...';
+                const chunk = base64.substring(offset, offset + chunkSize);
+                const chunkVersionId = await savePdfAcroFormPreparedBodyChunk({
+                    templateId: this.editTemplateId,
+                    uploadKey,
+                    chunkIndex: index,
+                    chunk
+                });
+                chunkVersionIds.push(chunkVersionId);
+            }
+            this.pdfAcroFormPreparationText = 'Finalizing server-ready PDF body...';
+            const jobId = await finalizePdfAcroFormPreparedBody({
+                templateId: this.editTemplateId,
+                versionId,
+                fileName: this.uploadedFileName || 'template.pdf',
+                chunkVersionIds
+            });
+            await this._waitForPdfAcroFormPreparedBody(versionId, jobId);
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast(
+                'PDF preparation queued failed',
+                'Template version was saved, but the server-ready PDF body was not prepared yet. ' + msg,
+                'warning'
+            );
+        } finally {
+            this.isPreparingPdfAcroFormBody = false;
+            this.pdfAcroFormPreparationText = '';
+        }
+    }
+
+    async _waitForPdfAcroFormPreparedBody(versionId, jobId) {
+        const maxAttempts = 24;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            this.pdfAcroFormPreparationText = 'Preparing PDF for bulk generation...';
+            // eslint-disable-next-line no-await-in-loop
+            const status = await getPdfAcroFormPreparedBodyStatus({ versionId, jobId });
+            if (status && status.isReady) {
+                this.pdfAcroFormPreparationText = 'PDF is ready for generation.';
+                return;
+            }
+            if (status && status.jobStatus === 'Failed') {
+                throw new Error(status.extendedStatus || 'PDF preparation failed.');
+            }
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        throw new Error('PDF preparation is still running. Try Generate Sample again in a moment.');
+    }
+
+    _isPdfTemplateType(templateType) {
+        return String(templateType || '').toLowerCase() === 'pdf';
+    }
+
+    _mergePdfAcroFormMappings(freshSnapshot, savedSnapshot) {
+        const savedByObjectNumber = new Map();
+        const savedByName = new Map();
+        (savedSnapshot.fields || []).forEach((field) => {
+            if (field.objectNumber != null) {
+                savedByObjectNumber.set(String(field.objectNumber), field);
+            }
+            if (field.name) {
+                savedByName.set(field.name, field);
+            }
+        });
+        return {
+            ...freshSnapshot,
+            normalizedPdfBase64: undefined,
+            fields: (freshSnapshot.fields || []).map((field) => {
+                const saved = savedByObjectNumber.get(String(field.objectNumber)) || savedByName.get(field.name) || {};
+                return {
+                    ...field,
+                    friendlyLabel: saved.friendlyLabel || field.friendlyLabel || '',
+                    mappedPath: saved.mappedPath || field.mappedPath || '',
+                    buttonOnValue: saved.buttonOnValue || field.buttonOnValue,
+                    buttonOnValues: saved.buttonOnValues || field.buttonOnValues
+                };
+            })
+        };
+    }
+
+    _pdfBase64ContainsToken(base64, token) {
+        try {
+            return atob(base64 || '').includes(token);
+        } catch (e) {
+            return false;
+        }
+    }
+
     _officeExtensionForType(templateType) {
         if (['PowerPoint', 'PPT', 'PPTX'].includes(templateType)) {
             return '.pptx';
         }
         if (templateType === 'Excel') {
             return '.xlsx';
+        }
+        if (templateType === 'PDF') {
+            return '.pdf';
         }
         return '.docx';
     }
@@ -2883,13 +3442,29 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // (typical DOCX templates are well under 5 MB; 10 MB+ is almost always
         // uncompressed images).
         const TEMPLATE_MAX_BYTES = 10 * 1024 * 1024;
+        let uploadedVersionId;
+        try {
+            uploadedVersionId = file.contentVersionId;
+            if (!uploadedVersionId && file.documentId) {
+                uploadedVersionId = await getLatestContentVersionId({
+                    contentDocumentId: file.documentId
+                });
+            }
+            if (!uploadedVersionId || !String(uploadedVersionId).startsWith('068')) {
+                throw new Error('Uploaded file version could not be resolved.');
+            }
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Upload scan failed', msg, 'error');
+            return;
+        }
         try {
             const size = await getContentVersionSize({
-                contentVersionId: file.contentVersionId
+                contentVersionId: uploadedVersionId
             });
             if (size > TEMPLATE_MAX_BYTES) {
                 await deleteContentVersionDocument({
-                    contentVersionId: file.contentVersionId
+                    contentVersionId: uploadedVersionId
                 });
                 this.showToast(
                     'Template too large',
@@ -2907,8 +3482,200 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
         this.showToast('Success', 'File Uploaded: ' + file.name, 'success');
         this.currentFileId = file.documentId;
-        this.uploadedContentVersionId = file.contentVersionId;
+        this.uploadedContentVersionId = uploadedVersionId;
         this.uploadedFileName = file.name;
+        this.uploadedPdfAcroFormSnapshot = null;
+        this.uploadedPdfAcroFormSnapshotJson = null;
+        this.uploadedPdfAcroFormNormalizedBase64 = null;
+
+        if (this.editTemplateType === 'PDF' || (file.name || '').toLowerCase().endsWith('.pdf')) {
+            try {
+                const base64 = await getContentVersionBase64({
+                    contentVersionId: uploadedVersionId
+                });
+                const snapshot = await decomposePdfAcroFormBase64(base64);
+                this.uploadedPdfAcroFormNormalizedBase64 = snapshot.normalizedPdfBase64 || null;
+                delete snapshot.normalizedPdfBase64;
+                this.uploadedPdfAcroFormSnapshot = snapshot;
+                this.pdfAcroFormSnapshotVersionId = null;
+                this.isPdfAcroFormSnapshotLoaded = false;
+                this._syncPdfAcroFormSnapshotJson();
+                const fieldCount = snapshot.fields ? snapshot.fields.length : 0;
+                this.showToast(
+                    'Fillable fields found',
+                    fieldCount + ' fillable field' + (fieldCount === 1 ? '' : 's') + ' decomposed.',
+                    'success'
+                );
+                this.activeEditTab = 'pdfFields';
+            } catch (err) {
+                const msg = err && err.message ? err.message : 'Unable to decompose fillable fields.';
+                this.showToast('Fillable field scan skipped', msg, 'warning');
+            }
+        }
+        this._resetEditFileUploadWidget();
+    }
+
+    _resetEditFileUploadWidget() {
+        this.showEditFileUpload = false;
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            this.showEditFileUpload = true;
+        }, 0);
+    }
+
+    _syncPdfAcroFormSnapshotJson() {
+        const snapshot = this.uploadedPdfAcroFormSnapshot
+            ? {
+                  ...this.uploadedPdfAcroFormSnapshot,
+                  fields: (this.uploadedPdfAcroFormSnapshot.fields || []).map((field) => ({
+                      ...field,
+                      body: undefined,
+                      widgetBody: undefined,
+                      widgets: (field.widgets || []).map((widget) => ({
+                          ...widget,
+                          body: undefined
+                      }))
+                  }))
+              }
+            : null;
+        this.uploadedPdfAcroFormSnapshotJson = this.uploadedPdfAcroFormSnapshot
+            ? JSON.stringify({
+                  ...snapshot,
+                  xfaPackets: undefined,
+                  normalizedPdfBase64: undefined
+              })
+            : null;
+    }
+
+    async loadPdfAcroFormMapping() {
+        if (!this.editTemplateId || this.editTemplateType !== 'PDF') {
+            return;
+        }
+        try {
+            const result = await getActivePdfAcroFormSnapshot({ templateId: this.editTemplateId });
+            this.pdfAcroFormSnapshotVersionId = result && result.versionId ? result.versionId : null;
+            if (result && result.snapshotJson) {
+                this.uploadedPdfAcroFormSnapshot = JSON.parse(result.snapshotJson);
+                this.isPdfAcroFormSnapshotLoaded = true;
+                this._syncPdfAcroFormSnapshotJson();
+            } else {
+                this.uploadedPdfAcroFormSnapshot = null;
+                this.isPdfAcroFormSnapshotLoaded = false;
+                this.uploadedPdfAcroFormSnapshotJson = null;
+            }
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('PDF mapping load failed', msg, 'warning');
+        }
+    }
+
+    async handleReloadPdfAcroFormMapping() {
+        await this.loadPdfAcroFormMapping();
+    }
+
+    async handleSavePdfAcroFormMapping() {
+        this._syncPdfAcroFormSnapshotJson();
+        if (!this.editTemplateId || !this.hasSavedPdfAcroFormSnapshotTarget || !this.uploadedPdfAcroFormSnapshotJson) {
+            this.showToast(
+                'PDF mapping is a draft',
+                'Save as New Version first, then use Save Mapping for later edits.',
+                'warning'
+            );
+            return;
+        }
+        this.isSavingPdfAcroFormMapping = true;
+        try {
+            await savePdfAcroFormSnapshot({
+                templateId: this.editTemplateId,
+                versionId: this.pdfAcroFormSnapshotVersionId,
+                snapshotJson: this.uploadedPdfAcroFormSnapshotJson
+            });
+            this.isPdfAcroFormSnapshotLoaded = true;
+            this.showToast('Saved', 'Fillable field mapping saved.', 'success');
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Error saving PDF mapping', msg, 'error');
+        } finally {
+            this.isSavingPdfAcroFormMapping = false;
+        }
+    }
+
+    handlePdfAcroFormMappingChange(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (!this.hasUploadedPdfAcroFormFields || Number.isNaN(index)) {
+            return;
+        }
+        const fields = this.uploadedPdfAcroFormSnapshot.fields.map((field, i) => {
+            if (i !== index) {
+                return field;
+            }
+            return {
+                ...field,
+                mappedPath: (event.detail.value || '').trim()
+            };
+        });
+        this.uploadedPdfAcroFormSnapshot = {
+            ...this.uploadedPdfAcroFormSnapshot,
+            fields
+        };
+        this._syncPdfAcroFormSnapshotJson();
+    }
+
+    handlePdfAcroFormFriendlyLabelChange(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (!this.hasUploadedPdfAcroFormFields || Number.isNaN(index)) {
+            return;
+        }
+        const fields = this.uploadedPdfAcroFormSnapshot.fields.map((field, i) => {
+            if (i !== index) {
+                return field;
+            }
+            return {
+                ...field,
+                friendlyLabel: (event.detail.value || '').trim()
+            };
+        });
+        this.uploadedPdfAcroFormSnapshot = {
+            ...this.uploadedPdfAcroFormSnapshot,
+            fields
+        };
+        this._syncPdfAcroFormSnapshotJson();
+    }
+
+    handlePdfAcroFormButtonValueChange(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (!this.hasUploadedPdfAcroFormFields || Number.isNaN(index)) {
+            return;
+        }
+        const fields = this.uploadedPdfAcroFormSnapshot.fields.map((field, i) => {
+            if (i !== index) {
+                return field;
+            }
+            return {
+                ...field,
+                buttonOnValue: (event.detail.value || '').trim() || 'Yes'
+            };
+        });
+        this.uploadedPdfAcroFormSnapshot = {
+            ...this.uploadedPdfAcroFormSnapshot,
+            fields
+        };
+        this._syncPdfAcroFormSnapshotJson();
+    }
+
+    handleClearPdfAcroFormMappings() {
+        if (!this.hasUploadedPdfAcroFormFields) {
+            return;
+        }
+        const fields = this.uploadedPdfAcroFormSnapshot.fields.map((field) => ({
+            ...field,
+            mappedPath: ''
+        }));
+        this.uploadedPdfAcroFormSnapshot = {
+            ...this.uploadedPdfAcroFormSnapshot,
+            fields
+        };
+        this._syncPdfAcroFormSnapshotJson();
     }
 
     @track isUploadingHtml = false;
@@ -3091,6 +3858,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     resetForm() {
         this.uploadedFileName = '';
         this.uploadedContentVersionId = null;
+        this.uploadedPdfAcroFormSnapshot = null;
+        this.uploadedPdfAcroFormSnapshotJson = null;
+        this._resetEditFileUploadWidget();
         this.currentWizardStep = '1';
         this.newTemplateName = '';
         this.newTemplateCategory = '';
