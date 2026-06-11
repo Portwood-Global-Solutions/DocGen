@@ -5005,6 +5005,49 @@ private class DocGenSignatureTests {
         System.assertEquals('Full', seller.placementType, 'v3 type captured');
     }
 
+    @isTest
+    static void testGetTemplateSignaturePlacements_htmlTemplateBody() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'HTML Signature Template',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        insert tmpl;
+
+        String html =
+            '<table class="sig-table"><tr>' +
+            '<td><div class="sig-line">{@Signature_Customer}</div></td>' +
+            '<td><div class="sig-line">{@Signature_Customer:1:Date}</div></td>' +
+            '</tr></table>';
+        ContentVersion bodyCv = new ContentVersion(
+            Title = 'docgen_html_body_test',
+            PathOnClient = 'template.html',
+            VersionData = Blob.valueOf(html),
+            FirstPublishLocationId = tmpl.Id
+        );
+        insert bodyCv;
+
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tmpl.Id,
+            Is_Active__c = true,
+            Content_Version_Id__c = bodyCv.Id
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        Test.startTest();
+        List<DocGenSignatureSenderController.PlacementInfo> placements = DocGenSignatureSenderController.getTemplateSignaturePlacements(
+            tmpl.Id
+        );
+        Test.stopTest();
+
+        System.assertEquals(2, placements.size(), 'HTML body signature tags should be detected');
+        System.assertEquals('Customer', placements[0].role, 'Bare HTML role parsed');
+        System.assertEquals('Full', placements[0].placementType, 'Bare HTML tag defaults to Full');
+        System.assertEquals('Customer', placements[1].role, 'Date HTML role parsed');
+        System.assertEquals('Date', placements[1].placementType, 'Date HTML tag parsed');
+    }
+
     // =========================================================================
     // Trigger coverage: exercise all platform event trigger paths
     // =========================================================================

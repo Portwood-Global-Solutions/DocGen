@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.06.0 — HTML Signature Placement Detection (`04tVx000000nIv4IAE`, build `3.6.0-1`, promoted 2026-06-11)
+
+This release fixes HTML-template signature sending. HTML templates that contained valid signature tags such as `{@Signature_Customer}` or `{@Signature_Customer:1:Date}` could render the tag text in generated output but still show **No Signature Placements Found** in the signature sender component.
+
+Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152)
+
+### 1. HTML signature tags are detected by the sender
+
+Signature placement discovery now reads the active HTML template body when the template type is HTML. Word templates continue to use the existing pre-decomposed `word/document.xml` path.
+
+The parser behavior is unchanged: bare tags like `{@Signature_Customer}` still default to a full-signature placement, and v3 tags like `{@Signature_Customer:1:Date}` keep their explicit order/type.
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Promoted package: `04tVx000000nIv4IAE` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nIv4IAE)
+- Package build coverage: 76%, code coverage check passed
+- Focused Apex validation in `triage-sumit-footer`: `DocGenSignatureTests`, 270/270 tests passed
+- Full e2e suite on `triage-sumit-footer`: PASS/FAIL0 across `e2e-01` through `e2e-08`
+- Full Apex suite: `RunLocalTests`, 1465 tests, 100% pass rate, 76% org-wide coverage
+- `sf code-analyzer` Security + AppExchange: 0 violations; SFGE printed internal timeout diagnostics on existing large controller/service paths before returning a clean summary
+- `npm run format:check`: pass
+- `git diff --check`
+
 ## v3.05.0 — Signature Template Fidelity (`04tVx000000nI5RIAU`, build `3.5.0-1`, promoted 2026-06-11)
 
 This release tightens the e-signature path so Word-authored template branding survives from preview through the final signed PDF, and updates the bundled permission sets for signature Flow and reminder features.

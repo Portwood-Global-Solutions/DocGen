@@ -147,11 +147,13 @@ public with sharing class DocGenSignatureSenderController {
     private static String extractTemplatePlainText(Id templateId) {
         DocGenFlsGuard.assertAccessible(
             DocGen_Template_Version__c.sObjectType,
-            new Set<String>{ 'Template__c', 'Is_Active__c' }
+            new Set<String>{ 'Template__c', 'Is_Active__c', 'Content_Version_Id__c' }
         );
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'VersionData' });
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVersions = [
-            SELECT Id
+            SELECT Id, Content_Version_Id__c, Template__r.Type__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
             WITH SYSTEM_MODE
@@ -160,7 +162,24 @@ public with sharing class DocGenSignatureSenderController {
         if (activeVersions.isEmpty())
             return null;
 
-        String xmlPrefix = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_';
+        DocGen_Template_Version__c activeVersion = activeVersions[0];
+        if (activeVersion.Template__r.Type__c == 'HTML') {
+            if (String.isBlank(activeVersion.Content_Version_Id__c))
+                return null;
+
+            Id bodyCvId = (Id) activeVersion.Content_Version_Id__c;
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentVersion> htmlCvs = [
+                SELECT VersionData
+                FROM ContentVersion
+                WHERE Id = :bodyCvId
+                WITH USER_MODE
+                LIMIT 1
+            ];
+            return htmlCvs.isEmpty() || htmlCvs[0].VersionData == null ? null : htmlCvs[0].VersionData.toString();
+        }
+
+        String xmlPrefix = 'docgen_tmpl_xml_' + activeVersion.Id + '_';
         /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> xmlCvs = [
             SELECT Title, VersionData
