@@ -239,17 +239,29 @@ public with sharing class DocGenBulkController {
         try {
             DocGenFlsGuard.assertAccessible(
                 DocGen_Template__c.sObjectType,
-                new Set<String>{ 'Query_Config__c', 'Test_Record_Id__c', 'Output_Format__c' }
+                new Set<String>{ 'Query_Config__c', 'Test_Record_Id__c', 'Output_Format__c', 'Type__c' }
             );
             /* code-analyzer-suppress ApexFlsViolation */
             List<DocGen_Template__c> tempList = [
-                SELECT Query_Config__c, Test_Record_Id__c, Output_Format__c
+                SELECT Query_Config__c, Test_Record_Id__c, Output_Format__c, Type__c
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
                 WITH SYSTEM_MODE
                 LIMIT 1
             ];
             DocGen_Template__c temp = tempList[0];
+            Boolean isFillablePdfTemplate = temp.Type__c == 'PDF';
+
+            if (isMerge && isFillablePdfTemplate) {
+                AnalysisItem formatItem = new AnalysisItem();
+                formatItem.label = 'Template Format';
+                formatItem.status = 'error';
+                formatItem.message =
+                    'Fillable PDF templates can be generated in bulk as Individual Files. ' +
+                    'Merged PDF and Merge Only modes are not supported for fillable PDF templates.';
+                analysis.items.add(formatItem);
+                analysis.canProceed = false;
+            }
 
             // --- 1. SOQL Queries per batch execution ---
             Integer queriesPerRecord = countQueriesPerRecord(temp.Query_Config__c);
@@ -327,7 +339,13 @@ public with sharing class DocGenBulkController {
             analysis.items.add(countItem);
 
             // --- 4. Heap estimation ---
-            if (String.isNotBlank(temp.Test_Record_Id__c)) {
+            if (isMerge && isFillablePdfTemplate) {
+                AnalysisItem heapItem = new AnalysisItem();
+                heapItem.label = 'Heap Estimate';
+                heapItem.status = 'error';
+                heapItem.message = 'Merged bulk output is unavailable for fillable PDF templates.';
+                analysis.items.add(heapItem);
+            } else if (String.isNotBlank(temp.Test_Record_Id__c)) {
                 try {
                     // Measure actual heap consumed by generation (queries + template + rendering)
                     Integer heapBefore = Limits.getHeapSize();
@@ -539,6 +557,12 @@ public with sharing class DocGenBulkController {
         try {
             Boolean isMergeOnly = (mergeOnly == true);
             Boolean isMergeMode = (mergePdf == true) || isMergeOnly;
+            if (isMergeMode && isFillablePdfTemplate(templateId)) {
+                throw DocGenService.ahe(
+                    'Fillable PDF templates can be generated in bulk as Individual Files. ' +
+                    'Turn off Merged PDF and Merge Only for this template.'
+                );
+            }
 
             // 1. Create Job Record
             DocGen_Job__c job = new DocGen_Job__c(
@@ -573,6 +597,22 @@ public with sharing class DocGenBulkController {
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error starting bulk generation job.');
         }
+    }
+
+    private static Boolean isFillablePdfTemplate(Id templateId) {
+        if (templateId == null) {
+            return false;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> templates = [
+            SELECT Type__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        return !templates.isEmpty() && templates[0].Type__c == 'PDF';
     }
 
     /**

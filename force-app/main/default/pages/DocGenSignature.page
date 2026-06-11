@@ -898,6 +898,24 @@
                         document.getElementById('verify-msg').innerHTML =
                             '<div class="msg msg-' + type + '">' + msg + '</div>';
                     }
+                    function previewHasRtlText(container) {
+                        return (
+                            container && /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(container.textContent || '')
+                        );
+                    }
+                    function applyPreviewDirection(container) {
+                        if (!container) return;
+                        var isRtl =
+                            container.querySelector('[dir="rtl"], .docgen-signing-preview-rtl') ||
+                            previewHasRtlText(container);
+                        container.setAttribute('dir', isRtl ? 'rtl' : 'ltr');
+                        container.style.direction = isRtl ? 'rtl' : 'ltr';
+                        if (isRtl) {
+                            container.style.textAlign = 'right';
+                        } else {
+                            container.style.textAlign = '';
+                        }
+                    }
 
                     // ===== TOKEN FROM URL =====
                     var urlParams = new URLSearchParams(window.location.search);
@@ -1152,6 +1170,7 @@
                                 var docEl = document.getElementById('guided-document');
                                 if (event.status && result && result.templateBase64) {
                                     docEl.innerHTML = result.templateBase64;
+                                    applyPreviewDirection(docEl);
                                     // Resolve images for guest user
                                     resolveGuestImages(docEl);
                                     // Apply already-signed placements
@@ -1161,6 +1180,7 @@
                                 } else {
                                     docEl.innerHTML =
                                         '<p style="color:#706e6b;text-align:center;padding:2rem;">Document preview unavailable.</p>';
+                                    applyPreviewDirection(docEl);
                                 }
                             },
                             { escape: false, buffer: false, timeout: 60000 }
@@ -1526,9 +1546,11 @@
                                 var contentEl = document.getElementById('doc-preview-content');
                                 if (event.status && result && result.templateBase64) {
                                     contentEl.innerHTML = result.templateBase64;
+                                    applyPreviewDirection(contentEl);
                                 } else {
                                     contentEl.innerHTML =
                                         '<p style="color:#706e6b;text-align:center;">Document preview unavailable.</p>';
+                                    applyPreviewDirection(contentEl);
                                 }
                             },
                             { escape: false, buffer: false, timeout: 60000 }

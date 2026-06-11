@@ -18,10 +18,10 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 ## Install
 
 ```bash
-sf package install --package 04tVx000000a8blIAA --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000nEHxIAM --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a8blIAA) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000a8blIAA)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nEHxIAM) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nEHxIAM)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -69,13 +69,14 @@ Word and HTML both support images, rich text, headers/footers, and PDF output. W
 
 ### Formatting
 
-| Tag                      | Output      |
-| ------------------------ | ----------- |
-| `{CloseDate:MM/dd/yyyy}` | 03/18/2026  |
-| `{Amount:currency}`      | $500,000.00 |
-| `{Rate:percent}`         | 15.5%       |
-| `{Quantity:number}`      | 1,234       |
-| `{IsActive:checkbox}`    | [X] or [ ]  |
+| Tag                      | Output                     |
+| ------------------------ | -------------------------- |
+| `{CloseDate:MM/dd/yyyy}` | 03/18/2026                 |
+| `{Amount:currency}`      | $500,000.00                |
+| `{Rate:percent}`         | 15.5%                      |
+| `{Quantity:number}`      | 1,234                      |
+| `{IsActive:checkbox}`    | [X] or [ ]                 |
+| `{StageName:label}`      | User-facing picklist label |
 
 ### Aggregates
 
@@ -370,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.03.0**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.03.0**. Next release candidate: **v3.04.0 — Smoother Template Runs**.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -443,6 +444,7 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
+| v3.04.0 | Release candidate                       | `04tVx000000nGZtIAM` |
 | v3.03.0 | **Latest (Released)**                   | `04tVx000000nEHxIAM` |
 | v3.02.0 | Previous                                | `04tVx000000muJFIAY` |
 | v3.01.0 | Previous                                | `04tVx000000hWJBIA2` |

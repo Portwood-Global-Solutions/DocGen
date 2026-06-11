@@ -57,6 +57,15 @@ private class DocGenBulkFlowActionTest {
             System.assertEquals(1, responses.size(), 'Should have one response');
             System.assertNotEquals(null, responses[0].errorMessage, 'Should have an error message');
             System.assertEquals(null, responses[0].jobId, 'Should not have a jobId on error');
+
+            List<DocGen_Error_Log__c> logs = [
+                SELECT Context__c, Operation__c, Message__c
+                FROM DocGen_Error_Log__c
+                WHERE Context__c = 'DocGenBulkFlowAction'
+            ];
+            System.assertEquals(1, logs.size(), 'Bulk Flow failures should create a diagnostic log');
+            System.assertEquals('Generate Bulk Documents', logs[0].Operation__c);
+            System.assert(logs[0].Message__c != null, 'Diagnostic log should preserve the failure message');
         }
     }
 

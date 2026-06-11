@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Stack_Trace__c</fullName>
+    <description>Apex stack trace for administrator troubleshooting.</description>
+    <label>Stack Trace</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>8</visibleLines>
+</CustomField>

@@ -817,7 +817,7 @@ public without sharing class DocGenSignatureController {
                             previewHtml,
                             templateId
                         );
-                        res.templateBase64 = previewHtml;
+                        res.templateBase64 = prepareSigningPreviewHtml(previewHtml);
                         return res;
                     }
                 } catch (Exception e) {
@@ -834,7 +834,7 @@ public without sharing class DocGenSignatureController {
                     DocGenService.applyWatermarkOverride(templateId);
                     String liveHtml = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
                     liveHtml = DocGenSignatureSenderController.injectPreviewWatermarkOverlay(liveHtml, templateId);
-                    res.templateBase64 = liveHtml;
+                    res.templateBase64 = prepareSigningPreviewHtml(liveHtml);
                     return res;
                 }
             } catch (Exception e) {
@@ -858,10 +858,28 @@ public without sharing class DocGenSignatureController {
                 LIMIT 1
             ];
             if (!cvs.isEmpty()) {
-                res.templateBase64 = getDocumentHtml(cvs[0].VersionData);
+                res.templateBase64 = prepareSigningPreviewHtml(getDocumentHtml(cvs[0].VersionData));
             }
         }
         return res;
+    }
+
+    @TestVisible
+    private static String prepareSigningPreviewHtml(String html) {
+        if (String.isBlank(html) || !containsRtlText(html) || html.contains('docgen-signing-preview-rtl')) {
+            return html;
+        }
+        return '<div class="docgen-signing-preview-rtl" dir="rtl" style="direction:rtl;text-align:right;">' +
+            html +
+            '</div>';
+    }
+
+    private static Boolean containsRtlText(String value) {
+        if (String.isBlank(value)) {
+            return false;
+        }
+        Pattern rtlPattern = Pattern.compile('[\\u0590-\\u08FF\\uFB1D-\\uFDFF\\uFE70-\\uFEFF]');
+        return rtlPattern.matcher(value).find();
     }
 
     /**

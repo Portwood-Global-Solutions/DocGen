@@ -53,6 +53,10 @@
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>
+        <apexClass>DocGenErrorLogger</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
         <apexClass>DocGenException</apexClass>
         <enabled>true</enabled>
     </classAccesses>
@@ -118,12 +122,12 @@
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
-        <editable>false</editable>
+        <editable>true</editable>
         <field>DocGen_Job__c.Label__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
-        <editable>false</editable>
+        <editable>true</editable>
         <field>DocGen_Job__c.Merge_Only__c</field>
         <readable>true</readable>
     </fieldPermissions>

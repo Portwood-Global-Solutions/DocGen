@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Context__c</fullName>
+    <description>DocGen class, endpoint, or subsystem where the error was captured.</description>
+    <label>Context</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>

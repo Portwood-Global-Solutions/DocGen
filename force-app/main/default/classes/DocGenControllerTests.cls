@@ -301,6 +301,86 @@ private class DocGenControllerTests {
         }
     }
 
+    @IsTest
+    static void testSaveTemplatePdfVersionCarriesForwardBodyAndAcroFormMapping() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+
+            ContentVersion pdfCv = new ContentVersion(
+                Title = 'AcroForm Carry Forward',
+                PathOnClient = 'AcroFormCarryForward.pdf',
+                VersionData = Blob.valueOf('%PDF-1.4\n% test pdf body')
+            );
+            insert pdfCv;
+            pdfCv = [SELECT Id FROM ContentVersion WHERE Id = :pdfCv.Id LIMIT 1];
+
+            DocGen_Template_Version__c origActive = [
+                SELECT Id
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :tpl.Id AND Is_Active__c = TRUE
+                LIMIT 1
+            ];
+            origActive.Type__c = 'PDF';
+            origActive.Content_Version_Id__c = pdfCv.Id;
+            update origActive;
+
+            String mappingJson = '{"fields":[{"name":"CustomerName","objectNumber":5,"mappedPath":"Name","friendlyLabel":"Customer"}]}';
+            DocGenController.savePdfAcroFormSnapshot(tpl.Id, origActive.Id, mappingJson);
+
+            Map<String, Object> fields = new Map<String, Object>{
+                'Id' => tpl.Id,
+                'Name' => 'PDF Carry Forward Test',
+                'Category__c' => 'Test',
+                'Type__c' => 'PDF',
+                'Output_Format__c' => 'PDF',
+                'Base_Object_API__c' => 'Account',
+                'Description__c' => 'regression for PDF body and AcroForm mapping carry-forward',
+                'Query_Config__c' => 'Name',
+                'Test_Record_Id__c' => null,
+                'Document_Title_Format__c' => null
+            };
+
+            Test.startTest();
+            Id newVersionId = DocGenController.saveTemplate(fields, true, null);
+            Test.stopTest();
+
+            DocGen_Template_Version__c newActive = [
+                SELECT Content_Version_Id__c, Type__c
+                FROM DocGen_Template_Version__c
+                WHERE Id = :newVersionId
+                LIMIT 1
+            ];
+            System.assertEquals('PDF', newActive.Type__c, 'New version should remain a PDF template version');
+            System.assertEquals(
+                pdfCv.Id,
+                newActive.Content_Version_Id__c,
+                'Save as New Version without a new upload must retain the prior PDF template file'
+            );
+
+            Map<String, Object> activeSnapshot = DocGenController.getActivePdfAcroFormSnapshot(tpl.Id);
+            System.assertEquals(
+                newVersionId,
+                activeSnapshot.get('versionId'),
+                'Active mapping should target the newly created version'
+            );
+            System.assertEquals(
+                mappingJson,
+                activeSnapshot.get('snapshotJson'),
+                'Save as New Version without a new upload must copy the prior AcroForm mapping JSON'
+            );
+
+            String updatedMappingJson = '{"fields":[{"name":"CustomerName","objectNumber":5,"mappedPath":"Industry","friendlyLabel":"Industry"}]}';
+            DocGenController.savePdfAcroFormSnapshot(tpl.Id, newVersionId, updatedMappingJson);
+            Map<String, Object> remappedSnapshot = DocGenController.getActivePdfAcroFormSnapshot(tpl.Id);
+            System.assertEquals(
+                updatedMappingJson,
+                remappedSnapshot.get('snapshotJson'),
+                'Save Mapping should allow remapping fields on the copied active PDF snapshot'
+            );
+        }
+    }
+
     // -----------------------------------------------------------------------
     // deleteTemplate
     // -----------------------------------------------------------------------
@@ -5227,6 +5307,29 @@ private class DocGenControllerTests {
         Set<String> names = DocGenController.getCurrentUserPermissionSetNames();
         Test.stopTest();
         System.assert(names != null && !names.isEmpty(), 'User should have at least one permission set assigned');
+    }
+
+    @isTest
+    static void testTemplatePickerTmpVarErrorResolvesToSharingGuidance() {
+        Exception tmpVarFailure;
+        try {
+            Database.query('SELECT Id FROM Account WHERE Id = :tmpVar1');
+        } catch (Exception e) {
+            tmpVarFailure = e;
+        }
+
+        System.assertNotEquals(null, tmpVarFailure, 'Test setup should force the platform tmpVar bind error');
+        System.assert(
+            DocGenController.isInternalUserModeBindError(tmpVarFailure.getMessage()),
+            'Regression guard should recognize Salesforce internal tmpVar bind errors'
+        );
+
+        String message = DocGenController.resolveTemplatePickerLoadError(tmpVarFailure);
+        System.assert(
+            message.contains('DocGen Template is shared'),
+            'tmpVar bind errors should become actionable template sharing guidance'
+        );
+        System.assert(!message.contains('tmpVar1'), 'Raw platform implementation detail must not reach the runner');
     }
 
     // =========================================================================

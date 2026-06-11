@@ -51,6 +51,133 @@ private class DocGenBulkTests {
     }
 
     @IsTest
+    static void testSubmitJobPdfAcroFormsIndividualFiles() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c t = prepareAcroFormBulkTemplate();
+
+            Test.startTest();
+            Id jobId = DocGenBulkController.submitJob(
+                t.Id,
+                'Name = \'DocGen Test Account\'',
+                'AcroForm Bulk Individual',
+                false,
+                1,
+                false
+            );
+            Test.stopTest();
+
+            DocGen_Job__c job = [
+                SELECT Status__c, Success_Count__c, Error_Count__c
+                FROM DocGen_Job__c
+                WHERE Id = :jobId
+            ];
+            System.assertEquals('Completed', job.Status__c, 'Individual-file AcroForm bulk jobs should complete.');
+            System.assertEquals(1, job.Success_Count__c, 'The matching account should generate one filled PDF.');
+            System.assertEquals(0, job.Error_Count__c, 'The AcroForm PDF path should not be counted as a bulk error.');
+
+            Set<Id> docIds = new Set<Id>();
+            for (ContentDocumentLink link : [
+                SELECT ContentDocumentId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :acc.Id
+            ]) {
+                docIds.add(link.ContentDocumentId);
+            }
+            System.assert(!docIds.isEmpty(), 'Bulk generation should attach a PDF to the source record.');
+
+            Boolean foundFilledPdf = false;
+            for (ContentVersion cv : [
+                SELECT VersionData, FileExtension
+                FROM ContentVersion
+                WHERE ContentDocumentId IN :docIds
+            ]) {
+                if (cv.FileExtension == 'pdf' && cv.VersionData.toString().contains('/V (DocGen Test Account)')) {
+                    foundFilledPdf = true;
+                    break;
+                }
+            }
+            System.assert(foundFilledPdf, 'Generated bulk PDF should contain the filled AcroForm field value.');
+        }
+    }
+
+    @IsTest
+    static void testSubmitJobPdfAcroFormsRejectMergedMode() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c t = prepareAcroFormBulkTemplate();
+
+            DocGenBulkController.JobAnalysis analysis = DocGenBulkController.analyzeJob(t.Id, 1, 1, true);
+            System.assertEquals(false, analysis.canProceed, 'Analyzer should block merged bulk AcroForm output.');
+
+            Boolean sawFormatError = false;
+            for (DocGenBulkController.AnalysisItem item : analysis.items) {
+                if (item.label == 'Template Format' && item.status == 'error') {
+                    sawFormatError = item.message.contains('Individual Files');
+                }
+            }
+            System.assert(sawFormatError, 'Analyzer should explain that Individual Files are supported instead.');
+
+            try {
+                DocGenBulkController.submitJob(
+                    t.Id,
+                    'Name = \'DocGen Test Account\'',
+                    'AcroForm Bulk Merge',
+                    true,
+                    1,
+                    false
+                );
+                System.assert(false, 'Merged AcroForm bulk jobs should be rejected before the batch queues.');
+            } catch (AuraHandledException e) {
+                System.assert(
+                    e.getMessage().contains('Individual Files'),
+                    'Merged-mode error should tell the user how to run the job: ' + e.getMessage()
+                );
+            }
+        }
+    }
+
+    @IsTest
+    static void testDocGenUserCanCreateBulkJobControllerFields() {
+        PermissionSet userPermSet = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_User' LIMIT 1];
+        FieldPermissions labelPerm;
+        FieldPermissions mergeOnlyPerm;
+        for (FieldPermissions fp : [
+            SELECT Field, PermissionsEdit, PermissionsRead
+            FROM FieldPermissions
+            WHERE ParentId = :userPermSet.Id
+        ]) {
+            if (isFieldPermission(fp.Field, 'DocGen_Job__c', 'Label__c')) {
+                labelPerm = fp;
+            } else if (isFieldPermission(fp.Field, 'DocGen_Job__c', 'Merge_Only__c')) {
+                mergeOnlyPerm = fp;
+            }
+        }
+
+        System.assertNotEquals(
+            null,
+            labelPerm,
+            'DocGen_User must declare DocGen_Job__c.Label__c FLS for bulk job creation.'
+        );
+        System.assertEquals(
+            true,
+            labelPerm.PermissionsEdit,
+            'DocGen_User must be able to create Label__c because submitJob writes it before SYSTEM_MODE insert.'
+        );
+        System.assertNotEquals(
+            null,
+            mergeOnlyPerm,
+            'DocGen_User must declare DocGen_Job__c.Merge_Only__c FLS for bulk job creation.'
+        );
+        System.assertEquals(
+            true,
+            mergeOnlyPerm.PermissionsEdit,
+            'DocGen_User must be able to create Merge_Only__c because submitJob writes it before SYSTEM_MODE insert.'
+        );
+    }
+
+    @IsTest
     static void testSavedQueries() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
@@ -71,6 +198,10 @@ private class DocGenBulkTests {
             queries = DocGenBulkController.getSavedQueries(t.Id);
             System.assertEquals(0, queries.size(), 'Should have 0 saved queries after delete');
         }
+    }
+
+    private static Boolean isFieldPermission(String fieldName, String objectName, String leafFieldName) {
+        return fieldName != null && fieldName.contains(objectName) && fieldName.endsWith(leafFieldName);
     }
 
     // =========================================================================
@@ -283,6 +414,42 @@ private class DocGenBulkTests {
 
     private static String buildSimpleDocXml() {
         return TestDataFactory.buildSimpleDocXml();
+    }
+
+    private static DocGen_Template__c prepareAcroFormBulkTemplate() {
+        DocGen_Template__c t = TestDataFactory.getTestTemplate();
+        t.Type__c = 'PDF';
+        t.Output_Format__c = 'PDF';
+        t.Query_Config__c = 'Name';
+        Database.update(t, AccessLevel.SYSTEM_MODE);
+
+        ContentVersion pdfCv = new ContentVersion(
+            Title = 'Bulk AcroForm Template',
+            PathOnClient = 'BulkAcroFormTemplate.pdf',
+            VersionData = Blob.valueOf(simpleAcroFormPdf()),
+            FirstPublishLocationId = t.Id
+        );
+        insert pdfCv;
+
+        DocGen_Template_Version__c ver = TestDataFactory.getTestTemplateVersion();
+        ver.Type__c = 'PDF';
+        ver.Output_Format__c = 'PDF';
+        ver.Query_Config__c = 'Name';
+        ver.Content_Version_Id__c = pdfCv.Id;
+        Database.update(ver, AccessLevel.SYSTEM_MODE);
+        return t;
+    }
+
+    private static String simpleAcroFormPdf() {
+        return '%PDF-1.4\n' +
+            '1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm 3 0 R >>\nendobj\n' +
+            '2 0 obj\n<< /Type /Pages /Count 1 /Kids [4 0 R] >>\nendobj\n' +
+            '3 0 obj\n<< /Fields [5 0 R] >>\nendobj\n' +
+            '4 0 obj\n<< /Type /Page /Parent 2 0 R /Annots [5 0 R] >>\nendobj\n' +
+            '5 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (Name) /Rect [0 0 100 20] >>\nendobj\n' +
+            'xref\n0 6\n0000000000 65535 f \n' +
+            'trailer\n<< /Size 6 /Root 1 0 R >>\n' +
+            'startxref\n0\n%%EOF\n';
     }
 
     // =========================================================================

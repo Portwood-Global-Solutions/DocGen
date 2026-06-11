@@ -1,5 +1,63 @@
 # Changelog
 
+## v3.04.0 — Smoother template runs (release candidate)
+
+This release focuses on the everyday edges that make document generation feel either calm or mysterious: clearer template-loading errors, better troubleshooting logs, safer fillable PDF versioning, safer fillable PDF bulk behavior, bulk-job permission fixes, right-to-left signing previews, and a new picklist-label merge format.
+
+### 1. Template-loading errors are clearer and logged
+
+When a template list fails to load because a private template file is not shared correctly, the runner no longer surfaces the confusing internal `tmpVar1` variable error. Users now get actionable sharing guidance, and DocGen writes troubleshooting details to the new **DocGen Error Log** object so admins can see what failed, where it failed, and which template/record/user context was involved.
+
+Related: fresh `tmpVar1` template-loading failure from Greg's June 10 Slack thread.
+
+### 2. Bulk generation works for DocGen User
+
+`DocGen_User` can now create bulk generation jobs without also needing the admin permission set. The bundled permission set now grants the field access required by the bulk-job create path, and the regression suite verifies the standard user role can create the controller-owned job fields.
+
+Related: [#149](https://github.com/Portwood-Global-Solutions/DocGen/issues/149)
+
+### 3. Picklist labels are available in templates
+
+Admins can render a picklist's user-facing label with `{Field:label}` while `{Field}` continues to render the stored API value. The label suffix works in normal merge tags, document titles, and the giant-query parent merge path.
+
+Related: [#146](https://github.com/Portwood-Global-Solutions/DocGen/issues/146)
+
+### 4. Hebrew and other RTL signing previews read correctly
+
+The signing preview now detects right-to-left text and applies RTL direction to the preview container. The final PDF path was already rendering correctly; this fixes the signer-facing preview.
+
+Related: [#138](https://github.com/Portwood-Global-Solutions/DocGen/issues/138)
+
+### 5. Fillable PDF versioning preserves the PDF and mapping
+
+Saving a fillable PDF template as a new version without uploading another file now carries forward the prior active PDF body and copies its AcroForm mapping JSON to the new version. Admins can then remap fields and save the mapping on the new active version.
+
+Related: [#150](https://github.com/Portwood-Global-Solutions/DocGen/issues/150)
+
+### 6. Fillable PDFs bulk-generate as individual files
+
+Bulk generation now has an explicit AcroForm regression: fillable PDF templates generate filled PDFs in **Individual Files** mode. Merged PDF / Merge Only bulk output is blocked up front with friendly guidance because the merged bulk renderer combines HTML snippets, and fillable PDFs are PDF-to-PDF AcroForm output rather than HTML.
+
+Related: [#150](https://github.com/Portwood-Global-Solutions/DocGen/issues/150)
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Release candidate package: `04tVx000000nGZtIAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nGZtIAM)
+- Package build coverage: 76%, code coverage check passed
+- Full e2e suite on `codex-acroforms`: PASS/FAIL0 across `e2e-01` through `e2e-08`
+- Full Apex suite: `RunLocalTests`, 1475 tests, 100% pass rate, 76% org-wide coverage
+- `sf code-analyzer` Security + AppExchange: 0 violations; SFGE printed internal timeout noise on existing large controller/service paths before returning a clean summary
+- `npm run format:check`: pass
+- `git diff --check`: pass
+- Template sharing error regression: `DocGenControllerTests.testTemplatePickerTmpVarErrorResolvesToSharingGuidance`
+- Error log regression: `DocGenErrorLoggerTest`
+- Bulk permission regression: `DocGenBulkTests.testDocGenUserCanCreateBulkJobControllerFields`; `scripts/e2e-01-permissions.apex` PASS 44 / FAIL 0
+- RTL signing preview regression: `DocGenSignatureTests.testSigningPreviewHtmlAddsRtlDirectionForHebrew`
+- Picklist label regressions: `DocGenMiscTests.testGetRecordDataIncludesPicklistLabelMetadata`, `DocGenMiscTests.testPicklistLabelFormatSuffix`; `scripts/e2e-07-syntax4.apex` PASS 16 / FAIL 0
+- Fillable PDF carry-forward regression: `DocGenControllerTests.testSaveTemplatePdfVersionCarriesForwardBodyAndAcroFormMapping`
+- Fillable PDF bulk regressions: `DocGenBulkTests.testSubmitJobPdfAcroFormsIndividualFiles`, `DocGenBulkTests.testSubmitJobPdfAcroFormsRejectMergedMode`
+
 ## v3.03.0 — Fillable PDF templates (`04tVx000000nEHxIAM`, build `3.3.0-1`, promoted 2026-06-10)
 
 This release introduces testing support for PDF-to-PDF fillable form generation. Admins can upload a fillable PDF, map AcroForm fields to Salesforce data, and generate completed PDFs server-side for single-record, Generate Sample, Flow/API, and bulk workflows. The feature is intentionally labeled testing while we broaden coverage across the long tail of government and vendor PDF forms.

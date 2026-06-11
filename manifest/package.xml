@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <types>
         <members>DocGen</members>
@@ -13,6 +13,8 @@
         <members>DocGenController</members>
         <members>DocGenControllerTests</members>
         <members>DocGenDataRetriever</members>
+        <members>DocGenErrorLogger</members>
+        <members>DocGenErrorLoggerTest</members>
         <members>DocGenException</members>
         <members>DocGenFlowAction</members>
         <members>DocGenHtmlRenderer</members>
@@ -32,6 +34,7 @@
         <name>ApexPage</name>
     </types>
     <types>
+        <members>DocGen_Error_Log__c</members>
         <members>DocGen_Font__c</members>
         <members>DocGen_Job__c</members>
         <members>DocGen_Saved_Query__c</members>
@@ -43,6 +46,7 @@
     <types>
         <members>DocGen_Admin_Guide</members>
         <members>DocGen_Bulk_Gen</members>
+        <members>DocGen_Error_Log__c</members>
         <members>DocGen_Job__c</members>
         <members>DocGen_Setup</members>
         <members>DocGen_Template_Manager</members>
