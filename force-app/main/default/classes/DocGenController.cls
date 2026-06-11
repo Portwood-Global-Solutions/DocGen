@@ -643,7 +643,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, VersionData
                 FROM ContentVersion
                 WHERE Id = :contentVersionId AND Title LIKE 'docgen_%'
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 LIMIT 1
             ];
         } else if (safeFields == 'Id, ContentSize') {
@@ -651,7 +651,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, ContentSize
                 FROM ContentVersion
                 WHERE Id = :contentVersionId AND Title LIKE 'docgen_%'
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 LIMIT 1
             ];
         } else {
@@ -659,7 +659,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 SELECT Id, ContentDocumentId
                 FROM ContentVersion
                 WHERE Id = :contentVersionId AND Title LIKE 'docgen_%'
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 LIMIT 1
             ];
         }
@@ -1005,12 +1005,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 // already been rewritten at upload time (image src → /sfc/ URLs).
                 if (!activeVersions.isEmpty() && String.isNotBlank(activeVersions[0].Content_Version_Id__c)) {
                     Id bodyCvId = (Id) activeVersions[0].Content_Version_Id__c;
+                    DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
                     /* code-analyzer-suppress ApexFlsViolation */
                     List<ContentVersion> htmlCvs = [
                         SELECT VersionData
                         FROM ContentVersion
                         WHERE Id = :bodyCvId
-                        WITH USER_MODE
+                        WITH SYSTEM_MODE
                         LIMIT 1
                     ];
                     if (!htmlCvs.isEmpty()) {
@@ -1185,11 +1186,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     public static Map<String, Object> getGiantQueryFragments(Id jobId) {
         String prefix = 'docgen_giant_' + jobId + '_';
         String shellTitle = 'docgen_giant_' + jobId + '_shell';
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
+        /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> fragments = [
             SELECT Id, Title
             FROM ContentVersion
             WHERE Title LIKE :(prefix + '%') AND Title != :shellTitle
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY Title // NOPMD — internal fragment lookup
         ];
         List<String> fragmentIds = new List<String>();
@@ -1226,11 +1229,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (finalCvId == null) {
             // Legacy lookup: title pattern (pre-v1.90 jobs)
             String finalTitle = 'docgen_giant_' + jobId + '_final';
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
+            /* code-analyzer-suppress ApexFlsViolation */
             List<ContentVersion> finalCvs = [
                 SELECT Id
                 FROM ContentVersion
                 WHERE Title = :finalTitle
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 LIMIT 1 // NOPMD — internal lookup
             ];
             if (!finalCvs.isEmpty()) {
@@ -1240,11 +1245,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
         // Look up PDF parts if multiple chunks were rendered
         String partPrefix = 'docgen_giant_' + jobId + '_part_';
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
+        /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> partCvs = [
             SELECT Id
             FROM ContentVersion
             WHERE Title LIKE :(partPrefix + '%')
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY Title // NOPMD
         ];
         List<String> partIds = new List<String>();
@@ -1302,19 +1309,21 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     public static void cleanupGiantQueryFragments(Id jobId) {
         String prefix = 'docgen_giant_' + jobId + '_';
         Set<Id> docIds = new Set<Id>();
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'ContentDocumentId', 'Title' });
+        /* code-analyzer-suppress ApexFlsViolation */
         for (ContentVersion cv : [
             SELECT ContentDocumentId
             FROM ContentVersion
             WHERE Title LIKE :(prefix + '%')
-            WITH USER_MODE // NOPMD — internal fragment cleanup
+            WITH SYSTEM_MODE // NOPMD — internal fragment cleanup
         ]) {
             docIds.add(cv.ContentDocumentId);
         }
         if (!docIds.isEmpty()) {
             Database.delete(
-                [SELECT Id FROM ContentDocument WHERE Id IN :docIds WITH USER_MODE],
+                [SELECT Id FROM ContentDocument WHERE Id IN :docIds WITH SYSTEM_MODE],
                 true,
-                AccessLevel.USER_MODE
+                AccessLevel.SYSTEM_MODE
             );
         }
     }

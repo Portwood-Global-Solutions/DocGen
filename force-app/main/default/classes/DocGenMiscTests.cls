@@ -9303,4 +9303,112 @@ private class DocGenMiscTests {
             );
         }
     }
+
+    @IsTest
+    static void testGiantQueryInternalContentReadsUseSystemMode() {
+        Map<String, ApexClass> classesByName = new Map<String, ApexClass>();
+        for (ApexClass ac : [
+            SELECT Name, Body
+            FROM ApexClass
+            WHERE Name IN ('DocGenController', 'DocGenGiantQueryAssembler', 'DocGenGiantQueryStitchJob')
+        ]) {
+            classesByName.put(ac.Name, ac);
+        }
+
+        String assemblerBody = classesByName.get('DocGenGiantQueryAssembler').Body;
+        Integer giantPrefixIdx = assemblerBody.indexOf('String prefix = \'docgen_giant_\' + jobId + \'_\';');
+        Integer assemblerLoopIdx = assemblerBody.indexOf('for (ContentVersion cv : frags)', giantPrefixIdx);
+        System.assert(giantPrefixIdx >= 0 && assemblerLoopIdx > giantPrefixIdx, 'Assembler fragment lookup moved.');
+        String assemblerSlice = assemblerBody.substring(giantPrefixIdx, assemblerLoopIdx);
+        System.assert(
+            assemblerSlice.contains('WITH SYSTEM_MODE'),
+            'DocGenGiantQueryAssembler must read internal docgen_giant_ fragments WITH SYSTEM_MODE.'
+        );
+        System.assert(
+            !assemblerSlice.contains('WITH USER_MODE'),
+            'DocGenGiantQueryAssembler must not read internal docgen_giant_ fragments WITH USER_MODE.'
+        );
+
+        String controllerBody = classesByName.get('DocGenController').Body;
+        Integer htmlBodyIdx = controllerBody.indexOf('Id bodyCvId = (Id) activeVersions[0].Content_Version_Id__c;');
+        Integer htmlMissingIdx = controllerBody.indexOf('HTML template has no active version body.', htmlBodyIdx);
+        System.assert(htmlBodyIdx >= 0 && htmlMissingIdx > htmlBodyIdx, 'Giant HTML launch body lookup moved.');
+        String htmlBodySlice = controllerBody.substring(htmlBodyIdx, htmlMissingIdx);
+        System.assert(
+            htmlBodySlice.contains('WITH SYSTEM_MODE'),
+            'Giant-query HTML launch must read the active template body ContentVersion WITH SYSTEM_MODE.'
+        );
+        System.assert(
+            !htmlBodySlice.contains('WITH USER_MODE'),
+            'Giant-query HTML launch must not read the active template body ContentVersion WITH USER_MODE.'
+        );
+
+        Integer managedFallbackIdx = controllerBody.indexOf('WHERE Id = :contentVersionId AND Title LIKE \'docgen_%\'');
+        Integer managedFallbackEnd = controllerBody.indexOf(
+            'throw DocGenService.ahe(\'Access denied or content not found.\');'
+        );
+        System.assert(
+            managedFallbackIdx >= 0 && managedFallbackEnd > managedFallbackIdx,
+            'Managed ContentVersion fallback lookup moved.'
+        );
+        String managedFallbackSlice = controllerBody.substring(managedFallbackIdx, managedFallbackEnd);
+        System.assert(
+            managedFallbackSlice.contains('WITH SYSTEM_MODE'),
+            'Managed docgen_% ContentVersion fallback must use SYSTEM_MODE after the USER_MODE sharing check fails.'
+        );
+        System.assert(
+            !managedFallbackSlice.contains('WITH USER_MODE'),
+            'Managed docgen_% ContentVersion fallback must not keep using USER_MODE after sharing access fails.'
+        );
+
+        String stitchBody = classesByName.get('DocGenGiantQueryStitchJob').Body;
+        assertInternalContentQueryUsesSystemMode(
+            stitchBody,
+            'DocGenGiantQueryStitchJob',
+            'docgen_giant_',
+            'FRAGMENTS_PER_PDF'
+        );
+        assertInternalContentQueryUsesSystemMode(
+            stitchBody,
+            'DocGenGiantQueryStitchJob',
+            'docgen_part_',
+            'No PDF parts found'
+        );
+    }
+
+    private static void assertInternalContentQueryUsesSystemMode(
+        String body,
+        String className,
+        String titlePrefix,
+        String afterMarker
+    ) {
+        Integer cursor = 0;
+        Integer hits = 0;
+        while (true) {
+            Integer idx = body.indexOf(titlePrefix, cursor);
+            if (idx == -1) {
+                break;
+            }
+            Integer close = body.indexOf(afterMarker, idx);
+            if (close == -1) {
+                close = body.indexOf('];', idx);
+            }
+            if (close != -1) {
+                String slice = body.substring(idx, close);
+                if (slice.contains('FROM ContentVersion')) {
+                    hits++;
+                    System.assert(
+                        slice.contains('WITH SYSTEM_MODE'),
+                        className + ' must read internal ' + titlePrefix + ' ContentVersion rows WITH SYSTEM_MODE.'
+                    );
+                    System.assert(
+                        !slice.contains('WITH USER_MODE'),
+                        className + ' must not read internal ' + titlePrefix + ' ContentVersion rows WITH USER_MODE.'
+                    );
+                }
+            }
+            cursor = idx + titlePrefix.length();
+        }
+        System.assert(hits > 0, 'Sanity: expected internal ' + titlePrefix + ' ContentVersion reads in ' + className);
+    }
 }

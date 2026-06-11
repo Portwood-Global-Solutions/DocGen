@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.08.0 — Signature Images and Generation Access (`04tVx000000nOFhIAM`, build `3.8.0-1`, promoted 2026-06-11)
+
+This release closes two field-reported support issues: HTML e-signature templates with embedded Salesforce Files images now render those images in signer-facing previews, and non-admin users who can access a template can generate large/giant-query documents without needing DocGen Admin just to read DocGen's internal generated parts.
+
+Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152), [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+
+### 1. HTML signature previews can render template images
+
+HTML signature preview generation now creates public distribution URLs for Salesforce Files images referenced by HTML template bodies. The cached signer preview HTML rewrites `/sfc/servlet.shepherd/version/download/068...` image sources to those distribution URLs so signer-facing browser previews can load the images, while final PDF rendering keeps the relative `/sfc/...` path required by Salesforce's PDF renderer.
+
+### 2. Non-admin users can generate large templates when internal parts are private
+
+Giant-query generation now reads DocGen-managed internal `docgen_%` / `docgen_giant_%` ContentVersion artifacts with the established FLS guard + `SYSTEM_MODE` pattern after the user's template/job access has already been gated. This fixes the support-thread symptom where a non-admin could see a shared template but generation failed with "Pre-decomposed template parts not found", while admins could generate the same document.
+
+### Release validation
+
+- Package version create: `08cVx000000iKvtIAE` succeeded; package coverage 76%; subscriber package `04tVx000000nOFhIAM`
+- Promoted package: `04tVx000000nOFhIAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOFhIAM) · [Sandbox Install URL](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOFhIAM)
+- Full e2e suite in `triage-sumit-footer`: e2e-01 through e2e-08 PASS/FAIL0
+- Full Apex validation in `triage-sumit-footer`: `RunLocalTests` 1487/1487, org coverage 76% (`707cf00000zNB7s`)
+- Code Analyzer: Security + AppExchange selectors, 0 violations
+- Focused proof in `triage-sumit-footer`: `DocGenSignatureTests` HTML image assertions + giant-query internal content guard passed (`707cf00000zMYTW`)
+- Broader focused Apex validation in `triage-sumit-footer`: `DocGenSignatureTests` 277/277, `DocGenGiantQueryTest` 46/46, `DocGenControllerTests` 223/223
+
 ## v3.07.0 — HTML Signature Rendering (`04tVx000000nLOHIA2`, build `3.7.0-1`, promoted 2026-06-11)
 
 This release completes HTML-template e-signature support. v3.06 fixed sender-side signature placement detection, but HTML signature previews and completed signed PDFs could still render blank because the signing flow sent already-rendered HTML through the Word-to-HTML renderer.

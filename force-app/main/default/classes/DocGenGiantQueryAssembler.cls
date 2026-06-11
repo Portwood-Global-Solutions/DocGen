@@ -66,10 +66,16 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             String allRows = '';
             Set<Id> fragDocIds = new Set<Id>();
 
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'Title', 'VersionData', 'ContentDocumentId' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             List<ContentVersion> frags = [
                 SELECT Title, VersionData, ContentDocumentId
                 FROM ContentVersion
                 WHERE Title LIKE :(prefix + '%') AND Title != :finalExclude AND (NOT Title LIKE :partExclude)
+                WITH SYSTEM_MODE
                 ORDER BY Title
                 LIMIT 10000 // NOPMD — need all fragments for assembly
             ];

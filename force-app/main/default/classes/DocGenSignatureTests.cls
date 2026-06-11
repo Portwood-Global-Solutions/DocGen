@@ -5093,6 +5093,79 @@ private class DocGenSignatureTests {
     }
 
     @isTest
+    static void testRenderMergedSignatureHtml_htmlTemplateRewritesImageSources() {
+        String cvId = '068000000000001AAA';
+        String sourceUrl = '/sfc/servlet.shepherd/version/download/' + cvId;
+        String publicUrl = 'https://example.file.force.com/sfc/dist/version/download/' + cvId;
+        Map<String, Object> mergeData = new Map<String, Object>{
+            'templateType' => 'HTML',
+            'combinedDocumentXml' => '<html><body><img src="' +
+            sourceUrl +
+            '"/><div>{@Signature_Customer}</div></body></html>'
+        };
+
+        Test.startTest();
+        String html = DocGenSignatureSenderController.renderMergedSignatureHtml(
+            mergeData,
+            null,
+            new Map<String, String>{ sourceUrl => publicUrl }
+        );
+        Test.stopTest();
+
+        System.assert(html.contains('src="' + publicUrl + '"'), 'HTML signature preview should use public image URLs');
+        System.assert(!html.contains('src="' + sourceUrl + '"'), 'Raw /sfc image URL should be rewritten for preview');
+        System.assert(html.contains('{@Signature_Customer}'), 'Signature tag should remain for placement injection');
+    }
+
+    @isTest
+    static void testRewriteHtmlImageSources_matchesContentVersionIdFallback() {
+        String cvId = '068000000000002AAA';
+        String sourceUrl = '/sfc/servlet.shepherd/version/download/' + cvId + '?operationContext=S1';
+        String publicUrl = 'https://example.file.force.com/sfc/dist/version/download/' + cvId;
+
+        Test.startTest();
+        String html = DocGenSignatureSenderController.rewriteHtmlImageSources(
+            '<html><body><img alt="Logo" src="' + sourceUrl + '"/></body></html>',
+            new Map<String, String>{ cvId => publicUrl }
+        );
+        Test.stopTest();
+
+        System.assert(html.contains('src="' + publicUrl + '"'), 'CV-id keyed preview map should rewrite HTML img src');
+        System.assert(!html.contains(sourceUrl), 'Original private image src should not remain in signer preview HTML');
+    }
+
+    @isTest
+    static void testBuildSignaturePreviewImageMap_createsPublicLinkForHtmlImageSource() {
+        String tinyPngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        ContentVersion imgCv = new ContentVersion(
+            Title = 'html_signature_logo',
+            PathOnClient = 'logo.png',
+            VersionData = EncodingUtil.base64Decode(tinyPngB64)
+        );
+        insert imgCv;
+        imgCv = [SELECT Id FROM ContentVersion WHERE Id = :imgCv.Id LIMIT 1];
+        String sourceUrl = '/sfc/servlet.shepherd/version/download/' + imgCv.Id;
+
+        Test.startTest();
+        Map<String, String> previewMap = DocGenSignatureSenderController.buildSignaturePreviewImageMap(
+            new Map<String, String>(),
+            '<html><body><img src="' + sourceUrl + '"/>{@Signature_Customer}</body></html>'
+        );
+        Test.stopTest();
+
+        System.assert(previewMap.containsKey(sourceUrl), 'HTML image source should be mapped for signer preview');
+        System.assert(
+            String.isNotBlank(previewMap.get(sourceUrl)) && previewMap.get(sourceUrl).startsWith('http'),
+            'Signer preview image should use a public ContentDistribution URL'
+        );
+        System.assertEquals(
+            1,
+            [SELECT COUNT() FROM ContentDistribution WHERE ContentVersionId = :imgCv.Id],
+            'A public distribution should be created for the HTML template image'
+        );
+    }
+
+    @isTest
     static void testGetDocumentPreviewPdfBase64_htmlTemplateDoesNotBlank() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         Id tmplId = createHtmlSignatureTemplate(
