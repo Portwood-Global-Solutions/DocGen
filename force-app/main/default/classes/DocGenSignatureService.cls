@@ -456,6 +456,53 @@ public without sharing class DocGenSignatureService {
     }
 
     /**
+     * Resolves the signed-PDF file name for a request, in priority order:
+     *   1. Document_Title_Format__c (admin naming pattern, issue #42) resolved against
+     *      the related record — wins when set.
+     *   2. The template Name + " - Signed" — when the request has a Template__c.
+     *   3. The provided fallback (e.g. the source document's "<title> - Signed").
+     * Centralizes naming so the document-based and template-based signature queueables
+     * can't diverge again (the divergence was the "signed files ignore template name" bug).
+     */
+    @TestVisible
+    private static String resolveSignedFileName(DocGen_Signature_Request__c req, String fallbackBase) {
+        String fileName = fallbackBase;
+        if (req.Template__c != null) {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            List<DocGen_Template__c> tpls = [
+                SELECT Name
+                FROM DocGen_Template__c
+                WHERE Id = :req.Template__c
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (!tpls.isEmpty() && String.isNotBlank(tpls[0].Name)) {
+                fileName = tpls[0].Name + ' - Signed';
+            }
+        }
+        if (String.isNotBlank(req.Document_Title_Format__c) && String.isNotBlank(req.Related_Record_Id__c)) {
+            try {
+                Map<String, Object> recordData = DocGenService.loadRecordDataForTitle(
+                    req.Related_Record_Id__c,
+                    req.Document_Title_Format__c
+                );
+                String resolved = DocGenService.generateDocTitle(
+                    req.Document_Title_Format__c,
+                    recordData != null ? recordData : new Map<String, Object>()
+                );
+                if (String.isNotBlank(resolved)) {
+                    fileName = resolved.trim();
+                }
+            } catch (Exception titleErr) {
+                // Title resolution is best-effort — keep the template/fallback name.
+                System.debug(LoggingLevel.WARN, 'DocGen signed-file title format failed: ' + titleErr.getMessage());
+            }
+        }
+        return fileName;
+    }
+
+    /**
      * M3 — signature loop block.
      *
      * Builds the per-signer collection injected under the reserved {#Signatures}
@@ -925,11 +972,16 @@ public without sharing class DocGenSignatureService {
         public void execute(QueueableContext ctx) {
             DocGenFlsGuard.assertAccessible(
                 DocGen_Signature_Request__c.sObjectType,
-                new Set<String>{ 'Source_Document_Id__c', 'Related_Record_Id__c', 'Template__c' }
+                new Set<String>{
+                    'Source_Document_Id__c',
+                    'Related_Record_Id__c',
+                    'Template__c',
+                    'Document_Title_Format__c'
+                }
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Request__c> requests = [
-                SELECT Id, Source_Document_Id__c, Related_Record_Id__c, Template__c
+                SELECT Id, Source_Document_Id__c, Related_Record_Id__c, Template__c, Document_Title_Format__c
                 FROM DocGen_Signature_Request__c
                 WHERE Id = :requestId
                 WITH SYSTEM_MODE
@@ -1024,7 +1076,13 @@ public without sharing class DocGenSignatureService {
                     WITH SYSTEM_MODE
                     LIMIT 1
                 ];
-                String fileName = source.Title + ' - Signed';
+                // BUGFIX: the signed PDF now respects the template name / configured title
+                // format, not just the source file's title. Previously this hardcoded
+                // `source.Title + ' - Signed'`, so signed documents inherited the uploaded/
+                // pre-generated source name instead of the template name — while the
+                // template signature queueable named correctly. Shared resolver keeps the
+                // two paths from diverging again.
+                String fileName = resolveSignedFileName(req, source.Title + ' - Signed');
 
                 if (String.isNotBlank(req.Related_Record_Id__c)) {
                     ContentVersion pdfCv = new ContentVersion();

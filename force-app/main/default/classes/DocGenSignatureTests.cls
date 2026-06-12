@@ -5794,4 +5794,73 @@ private class DocGenSignatureTests {
             'Both null should return empty string'
         );
     }
+
+    // Signed-file naming: the document-based queueable previously hardcoded
+    // "<sourceTitle> - Signed", ignoring the template name + Document_Title_Format__c.
+    @isTest
+    static void testResolveSignedFileName_usesTemplateNameOverSourceTitle() {
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Quote Template',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tpl;
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(Template__c = tpl.Id, Status__c = 'Sent');
+        insert req;
+        req = [
+            SELECT Template__c, Related_Record_Id__c, Document_Title_Format__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :req.Id
+        ];
+        System.assertEquals(
+            'Quote Template - Signed',
+            DocGenSignatureService.resolveSignedFileName(req, 'random-upload-9f3 - Signed'),
+            'Signed file should use the template name, not the source file title'
+        );
+    }
+
+    @isTest
+    static void testResolveSignedFileName_documentTitleFormatWins() {
+        Account a = new Account(Name = 'Acme');
+        insert a;
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Quote Template',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tpl;
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Template__c = tpl.Id,
+            Related_Record_Id__c = a.Id,
+            Document_Title_Format__c = '{Name} Agreement',
+            Status__c = 'Sent'
+        );
+        insert req;
+        req = [
+            SELECT Template__c, Related_Record_Id__c, Document_Title_Format__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :req.Id
+        ];
+        System.assertEquals(
+            'Acme Agreement',
+            DocGenSignatureService.resolveSignedFileName(req, 'fallback - Signed'),
+            'Document_Title_Format__c resolves against the record and wins over the template name'
+        );
+    }
+
+    @isTest
+    static void testResolveSignedFileName_fallbackWhenNoTemplate() {
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(Status__c = 'Sent');
+        insert req;
+        req = [
+            SELECT Template__c, Related_Record_Id__c, Document_Title_Format__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :req.Id
+        ];
+        System.assertEquals(
+            'my-upload - Signed',
+            DocGenSignatureService.resolveSignedFileName(req, 'my-upload - Signed'),
+            'No template and no title format → keep the source-title fallback'
+        );
+    }
 }
