@@ -23,9 +23,14 @@
 global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalModifier - required for @InvocableMethod visibility in subscriber orgs
     global class Request {
         @InvocableVariable(
-            required=true
+            label='Template Id'
+            description='Snapshot signing (recommended): the DocGen Template Id to send. DocGen snapshots the record data at send-time and, on completion, re-renders the document from that snapshot and appends a signing-certificate page to the related record\'s Files. Provide EITHER Template Id (with Related Record Id) OR Content Version Id.'
+        )
+        global Id templateId;
+
+        @InvocableVariable(
             label='Content Version Id'
-            description='The Id of the ContentVersion (068...) to send for signature. This is the already-generated document the signer will see. Example: capture it from the "DocGen: Generate Document" action output.'
+            description='Send-existing-document path: the Id of an already-generated ContentVersion (068...) the signer will see. Provide this OR Template Id. On this path the signed document is not auto-attached to the record (records audit + status only).'
         )
         global Id contentVersionId;
 
@@ -120,9 +125,9 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
         if (req == null) {
             throw new DocGenException('Request is null');
         }
-        if (req.contentVersionId == null) {
+        if (req.templateId == null && req.contentVersionId == null) {
             throw new DocGenException(
-                'Content Version Id is required — pass the Id of an already-generated document (068...).'
+                'Provide either a Template Id (snapshot signing) or a Content Version Id (send existing document).'
             );
         }
         if (req.relatedRecordId == null) {
@@ -144,33 +149,42 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
             }
 
             String signersJson = JSON.serialize(signerInputs);
-            List<DocGenSignatureSenderController.SignerResult> signerResults = DocGenSignatureSenderController.createRequestFromContentVersion(
-                req.contentVersionId,
-                req.relatedRecordId,
-                signersJson,
-                signingOrder,
-                req.documentTitleFormat
-            );
+            List<DocGenSignatureSenderController.SignerResult> signerResults;
+            if (req.templateId != null) {
+                // Snapshot signing: snapshot the record data + re-render with a
+                // certificate page on completion (Milestone 2).
+                signerResults = DocGenSignatureSenderController.createTemplateSnapshotRequest(
+                    req.templateId,
+                    req.relatedRecordId,
+                    signersJson,
+                    signingOrder,
+                    req.documentTitleFormat
+                );
+            } else {
+                // Send an already-generated document (Milestone 1).
+                signerResults = DocGenSignatureSenderController.createRequestFromContentVersion(
+                    req.contentVersionId,
+                    req.relatedRecordId,
+                    signersJson,
+                    signingOrder,
+                    req.documentTitleFormat
+                );
+            }
 
-            // Resolve the created request Id from the first signer
-            if (!signerResults.isEmpty()) {
-                String firstEmail = (String) signerInputs[0].get('signerEmail');
+            // Resolve the created request Id from the first signer (works for both paths).
+            if (!signerResults.isEmpty() && signerResults[0].signerId != null) {
                 // v2.0.1 — per-field FLS enforcement on SOQL reads. SYSTEM_MODE sidesteps
                 // the package-build @TestSetup FLS-propagation issue (see DocGenFlsGuard.cls).
                 DocGenFlsGuard.assertAccessible(
                     DocGen_Signer__c.sObjectType,
-                    new Set<String>{ 'Signature_Request__c', 'Signer_Email__c' }
+                    new Set<String>{ 'Signature_Request__c' }
                 );
                 /* code-analyzer-suppress ApexFlsViolation */
                 List<DocGen_Signer__c> createdSigners = [
                     SELECT Signature_Request__c
                     FROM DocGen_Signer__c
-                    WHERE
-                        Signer_Email__c = :firstEmail
-                        AND Signature_Request__r.Source_Document_Id__c = :req.contentVersionId
-                        AND Signature_Request__r.Related_Record_Id__c = :req.relatedRecordId
+                    WHERE Id = :signerResults[0].signerId
                     WITH SYSTEM_MODE
-                    ORDER BY CreatedDate DESC
                     LIMIT 1
                 ]; // NOPMD ApexCRUDViolation - package-internal
                 if (!createdSigners.isEmpty()) {

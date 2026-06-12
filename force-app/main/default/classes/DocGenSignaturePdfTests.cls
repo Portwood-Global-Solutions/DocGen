@@ -431,4 +431,259 @@ private class DocGenSignaturePdfTests {
         Test.stopTest();
         System.assertEquals(0, results.size());
     }
+
+    // =========================================================================
+    // M2 — snapshot signing (data snapshot at send-time → re-render + cert page
+    // onto the record at completion).
+    // =========================================================================
+
+    private static Id createHtmlSignatureTemplate(String bodyHtml) {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'M2 HTML Template ' + Datetime.now().getTime(),
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name, Industry',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        insert tmpl;
+        ContentVersion bodyCv = new ContentVersion(
+            Title = tmpl.Name + ' Body',
+            PathOnClient = 'template.html',
+            VersionData = Blob.valueOf(bodyHtml),
+            FirstPublishLocationId = tmpl.Id
+        );
+        insert bodyCv;
+        bodyCv = [SELECT Id FROM ContentVersion WHERE Id = :bodyCv.Id LIMIT 1];
+        insert new DocGen_Template_Version__c(
+            Template__c = tmpl.Id,
+            Is_Active__c = true,
+            Content_Version_Id__c = bodyCv.Id
+        );
+        return tmpl.Id;
+    }
+
+    @isTest
+    static void testCreateTemplateSnapshotRequest_capturesSnapshot() {
+        Account acc = new Account(Name = 'Snapshot Co', Industry = 'Technology');
+        insert acc;
+        Id templateId = createHtmlSignatureTemplate(
+            '<html><body><h1>{Name}</h1><p>Industry: {Industry}</p></body></html>'
+        );
+        String signersJson = JSON.serialize(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{
+                    'signerName' => 'Dana Buyer',
+                    'signerEmail' => 'dana@test.com',
+                    'roleName' => 'Buyer'
+                }
+            }
+        );
+
+        Test.startTest();
+        List<DocGenSignatureSenderController.SignerResult> res = DocGenSignatureSenderController.createTemplateSnapshotRequest(
+            templateId,
+            acc.Id,
+            signersJson,
+            'Parallel',
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, res.size(), 'One signer result');
+        System.assert(String.isNotBlank(res[0].signerUrl), 'Signer URL minted');
+
+        DocGen_Signature_Request__c req = [
+            SELECT Template__c, Render_Data_Snapshot__c, Source_Document_Id__c, Related_Record_Id__c, Status__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :templateId
+            ORDER BY CreatedDate DESC
+            LIMIT 1
+        ];
+        System.assertEquals(templateId, req.Template__c);
+        System.assertEquals(acc.Id, req.Related_Record_Id__c);
+        System.assertEquals('Sent', req.Status__c);
+        System.assert(String.isNotBlank(req.Render_Data_Snapshot__c), 'Snapshot JSON captured');
+        System.assert(req.Render_Data_Snapshot__c.contains('Snapshot Co'), 'Snapshot froze the record Name');
+        System.assert(req.Render_Data_Snapshot__c.contains('Technology'), 'Snapshot froze the record Industry');
+        System.assertNotEquals(null, req.Source_Document_Id__c, 'Viewing CV bound to the request');
+
+        List<ContentVersion> cvs = [SELECT Id FROM ContentVersion WHERE Id = :req.Source_Document_Id__c];
+        System.assertEquals(1, cvs.size(), 'Viewing PDF ContentVersion created');
+
+        List<DocGen_Signer__c> signers = [
+            SELECT Secure_Token__c, Status__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__c = :req.Id
+        ];
+        System.assertEquals(1, signers.size());
+        System.assertEquals('Pending', signers[0].Status__c);
+        System.assert(String.isNotBlank(signers[0].Secure_Token__c), 'Signer token minted');
+    }
+
+    @isTest
+    static void testSavePdfSignature_snapshotBacked_leavesInProgressForFinalizer() {
+        // A snapshot-backed request must stay 'In Progress' after savePdfSignature so the
+        // platform-event trigger can enqueue the finalizer (which sets 'Signed'). This is the
+        // tell that the snapshot/publish branch was taken (vs the M1 path which sets 'Signed').
+        Account acc = new Account(Name = 'Finalize Co');
+        insert acc;
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'M2 Stub Tmpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML'
+        );
+        insert tmpl;
+        ContentVersion srcCv = new ContentVersion(
+            Title = 'Src',
+            PathOnClient = 'src.pdf',
+            VersionData = Blob.valueOf('%PDF-1.7 source')
+        );
+        insert srcCv;
+        srcCv = [SELECT Id FROM ContentVersion WHERE Id = :srcCv.Id LIMIT 1];
+
+        String token = '1111111111111111111111111111111111111111111111111111111111111111';
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Template__c = tmpl.Id,
+            Render_Data_Snapshot__c = '{"Name":"Finalize Co"}',
+            Source_Document_Id__c = srcCv.Id,
+            Related_Record_Id__c = acc.Id,
+            Status__c = 'Sent',
+            Signing_Order__c = 'Parallel'
+        );
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+        DocGen_Signer__c signer = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Pat',
+            Signer_Email__c = 'pat@test.com',
+            Role_Name__c = 'Signer',
+            Secure_Token__c = token,
+            Status__c = 'Pending',
+            Sort_Order__c = 1,
+            PIN_Verified_At__c = System.now()
+        );
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
+
+        // No Test.stopTest wrapper — assert the synchronous state savePdfSignature leaves,
+        // before the published event's trigger would finalize.
+        DocGenSignatureController.SavePdfSignatureResult result = DocGenSignatureController.savePdfSignature(
+            token,
+            'Pat',
+            true,
+            '1.2.3.4',
+            'UA'
+        );
+
+        System.assertEquals(true, result.success);
+        System.assertEquals(true, result.isComplete);
+        DocGen_Signer__c after = [SELECT Status__c FROM DocGen_Signer__c WHERE Id = :signer.Id];
+        System.assertEquals('Signed', after.Status__c, 'Signer marked Signed');
+        DocGen_Signature_Request__c reqAfter = [
+            SELECT Status__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :req.Id
+        ];
+        System.assertEquals(
+            'In Progress',
+            reqAfter.Status__c,
+            'Snapshot-backed request stays In Progress so the finalizer can produce the doc + cert and set Signed'
+        );
+    }
+
+    @isTest
+    static void testSnapshotFinalizeQueueable_attachesSignedDocAndHash() {
+        // The finalizer (stubbed PDF under test) must attach a signed document to the related
+        // record, write the SHA-256 to the audit, and flip the request to Signed.
+        Account acc = new Account(Name = 'Queueable Co');
+        insert acc;
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'M2 Q Tmpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML'
+        );
+        insert tmpl;
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Template__c = tmpl.Id,
+            Render_Data_Snapshot__c = '{"Name":"Queueable Co"}',
+            Related_Record_Id__c = acc.Id,
+            Status__c = 'In Progress',
+            Signing_Order__c = 'Parallel'
+        );
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+        DocGen_Signer__c signer = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Pat',
+            Signer_Email__c = 'pat@test.com',
+            Secure_Token__c = '2222222222222222222222222222222222222222222222222222222222222222',
+            Status__c = 'Signed',
+            Sort_Order__c = 1
+        );
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
+        DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c(
+            Signature_Request__c = req.Id,
+            Signer__c = signer.Id,
+            Signer_Name__c = 'Pat',
+            Signer_Email__c = 'pat@test.com',
+            Signed_Date__c = System.now(),
+            Consent_Captured__c = true
+        );
+        Database.insert(audit, AccessLevel.SYSTEM_MODE);
+
+        Test.startTest();
+        System.enqueueJob(new DocGenSignatureService.TemplateSignaturePdfQueueable(req.Id));
+        Test.stopTest();
+
+        DocGen_Signature_Request__c reqAfter = [SELECT Status__c FROM DocGen_Signature_Request__c WHERE Id = :req.Id];
+        System.assertEquals('Signed', reqAfter.Status__c, 'Finalizer flips the request to Signed');
+
+        DocGen_Signature_Audit__c auditAfter = [
+            SELECT Document_Hash_SHA256__c
+            FROM DocGen_Signature_Audit__c
+            WHERE Id = :audit.Id
+        ];
+        System.assert(String.isNotBlank(auditAfter.Document_Hash_SHA256__c), 'SHA-256 hash written to the audit');
+
+        List<ContentDocumentLink> links = [SELECT Id FROM ContentDocumentLink WHERE LinkedEntityId = :acc.Id];
+        System.assert(!links.isEmpty(), 'Signed PDF linked to the related record');
+    }
+
+    @isTest
+    static void testCertificate_showsTypedSignatureName() {
+        // The certificate must show the name the signer TYPED (Signature_Data__c) —
+        // their electronic signature — not just the invited name, and surface the
+        // invited name as "Registered as" when the two differ.
+        Account acc = new Account(Name = 'Cert Co');
+        insert acc;
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Related_Record_Id__c = acc.Id,
+            Status__c = 'Signed'
+        );
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+        DocGen_Signer__c signer = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Pat Tester',
+            Signer_Email__c = 'pat@test.com',
+            Role_Name__c = 'Signer',
+            Secure_Token__c = '3333333333333333333333333333333333333333333333333333333333333333',
+            Status__c = 'Signed',
+            Signature_Data__c = 'Pat Tester NATHAN',
+            Sort_Order__c = 1
+        );
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
+
+        List<DocGen_Signer__c> signers = [
+            SELECT Signer_Name__c, Signature_Data__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
+            FROM DocGen_Signer__c
+            WHERE Id = :signer.Id
+        ];
+
+        Test.startTest();
+        String certHtml = DocGenSignatureService.buildVerificationBlockHtml(req.Id, signers);
+        Test.stopTest();
+
+        System.assert(certHtml.contains('Pat Tester NATHAN'), 'Certificate shows the typed signature name');
+        System.assert(
+            certHtml.contains('Registered as: Pat Tester'),
+            'Certificate shows the invited name as "Registered as" when the typed name differs'
+        );
+    }
 }

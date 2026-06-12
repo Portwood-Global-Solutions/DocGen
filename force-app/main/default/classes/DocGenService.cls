@@ -7481,6 +7481,22 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         };
     }
 
+    /**
+     * Same as mergeTemplateForSignature but renders from a caller-supplied data
+     * snapshot instead of querying the live record. Used by the M2 signature
+     * finalizer so the signed PDF re-renders from the send-time snapshot (immune
+     * to record edits between send and sign). Mirrors generatePdfBlobFromData's
+     * preloadedRecordDataOverride pattern.
+     */
+    public static Map<String, Object> mergeTemplateForSignatureFromData(Id templateId, Map<String, Object> dataMap) {
+        if (dataMap == null) {
+            throw new DocGenException('dataMap cannot be null for snapshot signature render.');
+        }
+        preloadedRecordDataOverride = dataMap;
+        // recordId is null — the override short-circuits SOQL retrieval (see line ~406).
+        return mergeTemplateForSignature(templateId, null);
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // Giant Query helpers — extract, render, and inject pre-rendered loop content
     // ──────────────────────────────────────────────────────────────────────────

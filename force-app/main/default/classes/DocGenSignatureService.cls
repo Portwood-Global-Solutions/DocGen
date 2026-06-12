@@ -186,8 +186,11 @@ public without sharing class DocGenSignatureService {
 
             html += '<tr><td colspan="2" style="padding:8px 0 2px 0;border-bottom:1px solid #eee;">';
 
-            // Name + Role
-            html += '<span style="font-weight:bold;font-size:10pt;">' + s.Signer_Name__c.escapeHtml4() + '</span>';
+            // Signature name + Role. The name the signer actually typed at signing
+            // (Signature_Data__c) is their electronic signature; fall back to the
+            // invited name (Signer_Name__c) when no typed value was captured.
+            String signatureName = String.isNotBlank(s.Signature_Data__c) ? s.Signature_Data__c : s.Signer_Name__c;
+            html += '<span style="font-weight:bold;font-size:10pt;">' + signatureName.escapeHtml4() + '</span>';
             html +=
                 ' <span style="background:' +
                 brandColor +
@@ -197,6 +200,11 @@ public without sharing class DocGenSignatureService {
 
             // Email
             html += '<span style="color:#555;">' + s.Signer_Email__c.escapeHtml4() + '</span><br/>';
+
+            // If the signer amended their name at signing, also show the invited name.
+            if (String.isNotBlank(s.Signature_Data__c) && s.Signature_Data__c != s.Signer_Name__c) {
+                html += '<span style="color:#555;">Registered as: ' + s.Signer_Name__c.escapeHtml4() + '</span><br/>';
+            }
 
             // Audit details
             if (audit != null) {
@@ -801,11 +809,23 @@ public without sharing class DocGenSignatureService {
         public void execute(QueueableContext ctx) {
             DocGenFlsGuard.assertAccessible(
                 DocGen_Signature_Request__c.sObjectType,
-                new Set<String>{ 'Template__c', 'Template_Ids__c', 'Related_Record_Id__c', 'Document_Title_Format__c' }
+                new Set<String>{
+                    'Template__c',
+                    'Template_Ids__c',
+                    'Related_Record_Id__c',
+                    'Document_Title_Format__c',
+                    'Render_Data_Snapshot__c'
+                }
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Request__c> requests = [
-                SELECT Id, Template__c, Template_Ids__c, Related_Record_Id__c, Document_Title_Format__c
+                SELECT
+                    Id,
+                    Template__c,
+                    Template_Ids__c,
+                    Related_Record_Id__c,
+                    Document_Title_Format__c,
+                    Render_Data_Snapshot__c
                 FROM DocGen_Signature_Request__c
                 WHERE Id = :requestId
                 WITH SYSTEM_MODE
@@ -820,6 +840,13 @@ public without sharing class DocGenSignatureService {
                 Blob pdfBlob;
                 if (Test.isRunningTest()) {
                     pdfBlob = Blob.toPdf('<html><body><p>Test PDF - Signed</p></body></html>');
+                } else if (String.isNotBlank(req.Render_Data_Snapshot__c) && req.Template__c != null) {
+                    // M2 snapshot-backed: re-render the document from the send-time
+                    // data snapshot (not the live record), then append the cert page.
+                    Map<String, Object> snap = (Map<String, Object>) JSON.deserializeUntyped(
+                        req.Render_Data_Snapshot__c
+                    );
+                    pdfBlob = renderTemplateSignaturePdf(requestId, req.Template__c, null, snap);
                 } else if (String.isNotBlank(req.Template_Ids__c)) {
                     // Multi-template packet
                     pdfBlob = renderPacketSignaturePdf(requestId, req.Template_Ids__c, req.Related_Record_Id__c);
@@ -938,7 +965,25 @@ public without sharing class DocGenSignatureService {
          * No DOCX intermediate — pure XML → HTML → PDF.
          */
         private Blob renderTemplateSignaturePdf(Id reqId, Id templateId, String recordId) {
-            Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, recordId);
+            return renderTemplateSignaturePdf(reqId, templateId, recordId, null);
+        }
+
+        /**
+         * snapshotData != null (M2) → re-render from the send-time data snapshot
+         * instead of the live record, so the signed PDF matches what the signer
+         * reviewed even if the record changed after send. All downstream
+         * processing (image/style hydration, placement stamping, certificate-page
+         * injection, Blob.toPdf) is identical.
+         */
+        private Blob renderTemplateSignaturePdf(
+            Id reqId,
+            Id templateId,
+            String recordId,
+            Map<String, Object> snapshotData
+        ) {
+            Map<String, Object> mergeData = (snapshotData != null)
+                ? DocGenService.mergeTemplateForSignatureFromData(templateId, snapshotData)
+                : DocGenService.mergeTemplateForSignature(templateId, recordId);
             String documentXml = (String) mergeData.get('combinedDocumentXml');
             if (String.isBlank(documentXml)) {
                 documentXml = (String) mergeData.get('documentXml');
@@ -1090,6 +1135,7 @@ public without sharing class DocGenSignatureService {
                 DocGen_Signer__c.sObjectType,
                 new Set<String>{
                     'Signer_Name__c',
+                    'Signature_Data__c',
                     'Signer_Email__c',
                     'Role_Name__c',
                     'PIN_Verified_At__c',
@@ -1100,7 +1146,7 @@ public without sharing class DocGenSignatureService {
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signer__c> fullSigners = [
-                SELECT Signer_Name__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
+                SELECT Signer_Name__c, Signature_Data__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
                 FROM DocGen_Signer__c
                 WHERE Signature_Request__c = :reqId AND Status__c = 'Signed'
                 WITH SYSTEM_MODE
@@ -1272,6 +1318,7 @@ public without sharing class DocGenSignatureService {
                 DocGen_Signer__c.sObjectType,
                 new Set<String>{
                     'Signer_Name__c',
+                    'Signature_Data__c',
                     'Signer_Email__c',
                     'Role_Name__c',
                     'PIN_Verified_At__c',
@@ -1282,7 +1329,7 @@ public without sharing class DocGenSignatureService {
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signer__c> fullSigners = [
-                SELECT Signer_Name__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
+                SELECT Signer_Name__c, Signature_Data__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
                 FROM DocGen_Signer__c
                 WHERE Signature_Request__c = :reqId AND Status__c = 'Signed'
                 WITH SYSTEM_MODE

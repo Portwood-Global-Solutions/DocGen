@@ -944,6 +944,125 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     /**
+     * Milestone 2 — "send a template for signature with a data snapshot".
+     *
+     * Captures the template's resolved merge data for the record as JSON at
+     * send-time (Render_Data_Snapshot__c) and generates the viewing PDF from that
+     * SAME snapshot, so what the signer reviews is byte-identical to what the
+     * completion finalizer re-renders. On completion the finalizer re-renders from
+     * the snapshot (not the live record) and appends the signing-certificate page —
+     * immune to edits made to the record between send and sign — then links the
+     * completed PDF to the related record.
+     *
+     * signersJson: [{signerName, signerEmail, roleName, contactId}, ...]
+     */
+    @AuraEnabled
+    public static List<SignerResult> createTemplateSnapshotRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat
+    ) {
+        if (templateId == null) {
+            throw new AuraHandledException('A template Id is required.');
+        }
+        if (String.isBlank(relatedRecordId)) {
+            throw new AuraHandledException('A related record Id is required for snapshot signing.');
+        }
+
+        // Load the template's data-binding config.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Name', 'Base_Object_API__c', 'Query_Config__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Template__c> tpls = [
+            SELECT Name, Base_Object_API__c, Query_Config__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (tpls.isEmpty()) {
+            throw new AuraHandledException('Template not found.');
+        }
+        DocGen_Template__c tpl = tpls[0];
+        if (String.isBlank(tpl.Base_Object_API__c) || String.isBlank(tpl.Query_Config__c)) {
+            throw new AuraHandledException(
+                'Snapshot signing requires a template with a base object and query configuration.'
+            );
+        }
+
+        // Snapshot the record's merge data at send-time.
+        Map<String, Object> snapshot = DocGenDataRetriever.getRecordData(
+            relatedRecordId,
+            tpl.Base_Object_API__c,
+            tpl.Query_Config__c
+        );
+        String snapshotJson = JSON.serialize(snapshot);
+        if (snapshotJson.length() > 131072) {
+            throw new AuraHandledException(
+                'This document\'s data is too large for snapshot signing (over 131,072 characters). ' +
+                'Use a smaller template/dataset or the send-existing-document path.'
+            );
+        }
+
+        // Generate the viewing PDF from the SAME snapshot so the signer sees exactly
+        // what the completion finalizer will re-render.
+        Map<String, Object> gen = DocGenService.generatePdfBlobFromData(templateId, snapshot);
+        Blob viewingBlob = (Blob) gen.get('blob');
+        String genTitle = (String) gen.get('title');
+        String fileTitle = String.isNotBlank(genTitle) ? genTitle : tpl.Name;
+
+        // Standalone viewing ContentVersion (not linked to the record — the final
+        // signed + certificate PDF is what lands on the record at completion).
+        ContentVersion viewCv = new ContentVersion();
+        viewCv.Title = fileTitle;
+        viewCv.PathOnClient = fileTitle + '.pdf';
+        viewCv.VersionData = viewingBlob;
+        DocGenFlsGuard.assertCreateable(viewCv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(viewCv, AccessLevel.SYSTEM_MODE);
+
+        // Create the snapshot-backed request: Template__c + Render_Data_Snapshot__c
+        // drive the completion re-render; Source_Document_Id__c is the viewing CV.
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
+        req.Template__c = templateId;
+        req.Render_Data_Snapshot__c = snapshotJson;
+        req.Source_Document_Id__c = viewCv.Id;
+        req.Related_Record_Id__c = relatedRecordId;
+        req.Status__c = 'Sent';
+        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
+        if (String.isNotBlank(documentTitleFormat)) {
+            req.Document_Title_Format__c = documentTitleFormat;
+        }
+        DocGenFlsGuard.assertCreateable(
+            req,
+            new Set<String>{
+                'Template__c',
+                'Render_Data_Snapshot__c',
+                'Source_Document_Id__c',
+                'Related_Record_Id__c',
+                'Status__c',
+                'Signing_Order__c',
+                'Document_Title_Format__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+
+        // Create signer records + emails, URLs at the flat-PDF page.
+        // templateId=null → skip {@Signature} placement creation (snapshot signing has no tags).
+        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
+        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
+        for (Object item : rawInputs) {
+            signerInputs.add((Map<String, Object>) item);
+        }
+        return createSignersAndNotify(req.Id, null, fileTitle, signerInputs, true, getSigningPdfPagePath());
+    }
+
+    /**
      * Legacy single-signer request creation (backward compat).
      */
     @AuraEnabled

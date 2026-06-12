@@ -2361,19 +2361,44 @@ public without sharing class DocGenSignatureController {
         result.remaining = remaining;
         result.isComplete = (remaining == 0);
 
+        // M2: snapshot-backed requests (Template__c set) finalize a signed document +
+        // certificate page server-side. Detect via the parent request's Template__c.
+        DocGenFlsGuard.guestAssertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signature_Request__c> parentReqs = [
+            SELECT Template__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :signer.Signature_Request__c
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        Boolean snapshotBacked = !parentReqs.isEmpty() && parentReqs[0].Template__c != null;
+
         // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
-        // Update parent request status — 'Signed' once every signer is done, else 'In Progress'.
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
-        parentReq.Status__c = result.isComplete ? 'Signed' : 'In Progress';
+        if (snapshotBacked) {
+            // Leave 'In Progress' so the platform-event trigger enqueues the finalizer,
+            // which produces the document + certificate PDF and then sets 'Signed'.
+            // (Setting 'Signed' here would make the trigger skip the finalize step.)
+            parentReq.Status__c = 'In Progress';
+        } else {
+            // M1 flat-PDF path: no template to re-render — record status only.
+            parentReq.Status__c = result.isComplete ? 'Signed' : 'In Progress';
+        }
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
         DocGenFlsGuard.guestAssertUpdateable(parentReq, new Set<String>{ 'Status__c' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 
-        // INTENTIONALLY NO DocGen_Signature_PDF__e publish and NO stamping here.
-        // The flat-PDF path records audit + status and STOPS. Publishing the event
-        // would enqueue the DOCX-XML stamping queueable — wrong for a flat PDF.
-        // Stamping / certificate page is Milestone 2 (out of scope).
+        // M2: publish the platform event so DocGenSignaturePdfTrigger enqueues the
+        // finalizer (it gates on remaining==0 and Template__c) to produce the signed
+        // document + certificate PDF on the related record. The M1 flat-PDF path has no
+        // template to re-render, so it records audit + status only and never publishes.
+        if (snapshotBacked) {
+            DocGen_Signature_PDF__e pdfEvent = new DocGen_Signature_PDF__e();
+            pdfEvent.Request_Id__c = signer.Signature_Request__c;
+            EventBus.publish(pdfEvent);
+        }
 
         result.success = true;
         return result;
