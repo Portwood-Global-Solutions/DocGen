@@ -828,4 +828,48 @@ private class DocGenSignaturePdfTests {
             'Empty Signatures collection collapses cleanly with no leaked tags'
         );
     }
+
+    // The finalize queueable short-circuits under Test.isRunningTest(), so the snapshot
+    // re-render (mergeTemplateForSignatureFromData) was only covered by manual demo
+    // scripts. This exercises it directly and proves the point-in-time guarantee: the
+    // document renders from the send-time data snapshot, immune to later record edits.
+    @isTest
+    static void testMergeTemplateForSignatureFromData_rendersFromSnapshotNotLiveRecord() {
+        Account acc = new Account(Name = 'Frozen Co', Industry = 'FrozenIndustry');
+        insert acc;
+        Id templateId = createHtmlSignatureTemplate(
+            '<html><body><h1>{Name}</h1><p>Industry: {Industry}</p></body></html>'
+        );
+
+        // Capture the snapshot exactly as the send-time flow does.
+        Map<String, Object> snapshot = DocGenDataRetriever.getRecordData(acc.Id, 'Account', 'Name, Industry');
+
+        // Mutate the record AFTER the snapshot — the re-render must ignore this.
+        acc.Name = 'Mutated Co';
+        update acc;
+
+        Test.startTest();
+        Map<String, Object> merged = DocGenService.mergeTemplateForSignatureFromData(templateId, snapshot);
+        Test.stopTest();
+
+        String body = (String) merged.get('combinedDocumentXml');
+        if (String.isBlank(body)) {
+            body = (String) merged.get('documentXml');
+        }
+        System.assert(body.contains('Frozen Co'), 'Renders the frozen snapshot name: ' + body);
+        System.assert(!body.contains('Mutated Co'), 'Must NOT reflect the post-snapshot record edit');
+        System.assertEquals('HTML', (String) merged.get('templateType'), 'HTML template type preserved');
+    }
+
+    @isTest
+    static void testMergeTemplateForSignatureFromData_nullDataMapThrows() {
+        Id templateId = createHtmlSignatureTemplate('<html><body>{Name}</body></html>');
+        Boolean threw = false;
+        try {
+            DocGenService.mergeTemplateForSignatureFromData(templateId, null);
+        } catch (DocGenException e) {
+            threw = true;
+        }
+        System.assert(threw, 'A null snapshot data map must throw rather than fall back to the live record');
+    }
 }
