@@ -1,5 +1,39 @@
 # Changelog
 
+## v3.11.0 — Shared Template Image Rendering (`04tVx000000nPGbIAM`, build `3.11.0-1`, promoted 2026-06-12)
+
+This release fixes the follow-up shared-template image issue reported from Slack. Non-admin users could generate both HTML and Word/giant-query PDFs, but template-owned images referenced by `/sfc/servlet.shepherd/version/download/<ContentVersionId>` could render as broken when the running user did not own or otherwise have file access to the image file.
+
+Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+
+### 1. Non-admin PDF renders can fetch referenced template image assets
+
+`Blob.toPdf()` fetches relative shepherd image URLs as the running user. Before PDF rendering, DocGen now extracts the referenced ContentVersion IDs from the final HTML and links only the current template's DocGen-managed image assets to the source record as Viewer / AllUsers.
+
+The fix applies to normal HTML-template PDFs, Word-to-PDF rendering, and the giant-query final PDF path.
+
+### 2. The access handoff is scoped to template-owned assets
+
+The helper filters candidate files by DocGen template image title prefixes for the active template/version, so it does not broaden access to arbitrary customer files or row-level image data. It also preserves the zero-heap PDF image behavior: images remain relative shepherd URLs and no `VersionData` is loaded for PDF rendering.
+
+### 3. Regression coverage and non-admin visual proof
+
+Regression coverage verifies that a referenced template image file is linked to the source record before PDF rendering. Browser proof in the release validation scratch org used the actual Lightning runner button as a standard DocGen user and generated both HTML and Word giant-query PDFs with the embedded image visible.
+
+### Release validation
+
+- Package version create: `08cVx000000iNP7IAM` succeeded; package coverage 76%; subscriber package `04tVx000000nPGbIAM`
+- Promoted package: `04tVx000000nPGbIAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nPGbIAM) · [Sandbox Install URL](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nPGbIAM)
+- Release landing config updated in production: `DocGen_Landing_Config__mdt.Current` → version `3.11.0`, package `04tVx000000nPGbIAM`
+- Full e2e suite in `triage-sumit-footer`: e2e-01 through e2e-08 PASS/FAIL0
+- Full Apex validation in `triage-sumit-footer`: `RunLocalTests` completed with 0 failures, org coverage 76% (`707cf00000zV0iE`)
+- Focused Apex validation in `triage-sumit-footer`: `DocGenMiscTests.testTemplateAssetImageAccessLinkedForPdfRender` passed
+- Browser proof in `triage-sumit-footer`: standard non-admin user generated HTML and Word giant-query PDFs from the real runner button; both showed rendered template images
+- Visual artifacts: `outputs/proof-images/html-giant-nonadmin.png`, `outputs/proof-images/word-giant-nonadmin.png`
+- Code Analyzer: Security + AppExchange selectors completed with 0 emitted unsuppressed violations
+- `npm run format:check`: pass
+- Customer data note: validation used synthetic scratch-org data; the customer-provided template was inspected locally only to identify document structure and embedded image behavior
+
 ## v3.10.0 — Large-template Snapshot Fidelity (`04tVx000000nOh7IAE`, build `3.10.0-1`, promoted 2026-06-12)
 
 This release fixes the follow-up large-template rendering issue reported from Slack. Non-admin users could generate the document after v3.09.0, but large/giant-query output could still lose template chrome and render as a bare data table when the internal pre-baked HTML snapshot was not visible from the queueable's sharing context.

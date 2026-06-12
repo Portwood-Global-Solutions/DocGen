@@ -2150,6 +2150,132 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * Blob.toPdf() fetches relative shepherd image URLs as the running user. Template
+     * asset images can be linked only to DocGen's internal version records, so a
+     * non-owner/non-admin user who can read the shared template may still see broken
+     * images in the rendered PDF. Before calling Blob.toPdf(), link only referenced
+     * template-owned image files to the source record so the running user can fetch
+     * the existing /sfc/servlet.shepherd/version/download/<cvId> URL without loading
+     * image blobs into heap.
+     */
+    public static void ensureTemplateAssetImageAccessForPdf(Id templateId, Id recordId, String html) {
+        if (templateId == null || recordId == null || String.isBlank(html) || !html.contains('/version/download/')) {
+            return;
+        }
+
+        Set<Id> referencedCvIds = extractShepherdContentVersionIds(html);
+        if (referencedCvIds.isEmpty()) {
+            return;
+        }
+
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> activeVersions = [
+            SELECT Id
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (activeVersions.isEmpty()) {
+            return;
+        }
+
+        String versionId = String.valueOf(activeVersions[0].Id);
+        String templateIdText = String.valueOf(templateId);
+        List<String> assetPrefixes = new List<String>{
+            'docgen_tmpl_img_' +
+            versionId +
+            '_',
+            'docgen_html_img_' +
+            versionId +
+            '_',
+            'docgen_html_img_' +
+            templateIdText +
+            '_'
+        };
+
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'ContentDocumentId' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> referenced = [
+            SELECT Id, Title, ContentDocumentId
+            FROM ContentVersion
+            WHERE Id IN :referencedCvIds
+            WITH SYSTEM_MODE
+        ];
+
+        Set<Id> assetDocIds = new Set<Id>();
+        for (ContentVersion cv : referenced) {
+            Boolean isTemplateAsset = false;
+            for (String prefix : assetPrefixes) {
+                if (cv.Title != null && cv.Title.startsWith(prefix)) {
+                    isTemplateAsset = true;
+                    break;
+                }
+            }
+            if (isTemplateAsset && cv.ContentDocumentId != null) {
+                assetDocIds.add(cv.ContentDocumentId);
+            }
+        }
+        if (assetDocIds.isEmpty()) {
+            return;
+        }
+
+        Set<Id> alreadyLinked = new Set<Id>();
+        /* code-analyzer-suppress ApexFlsViolation */
+        for (ContentDocumentLink existing : [
+            SELECT ContentDocumentId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :recordId AND ContentDocumentId IN :assetDocIds
+            WITH SYSTEM_MODE
+        ]) {
+            alreadyLinked.add(existing.ContentDocumentId);
+        }
+
+        List<ContentDocumentLink> links = new List<ContentDocumentLink>();
+        for (Id docId : assetDocIds) {
+            if (alreadyLinked.contains(docId)) {
+                continue;
+            }
+            links.add(
+                new ContentDocumentLink(
+                    ContentDocumentId = docId,
+                    LinkedEntityId = recordId,
+                    ShareType = 'V',
+                    Visibility = 'AllUsers'
+                )
+            );
+        }
+        if (!links.isEmpty()) {
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(links, false, AccessLevel.SYSTEM_MODE);
+        }
+    }
+
+    private static Set<Id> extractShepherdContentVersionIds(String html) {
+        Set<Id> ids = new Set<Id>();
+        if (String.isBlank(html)) {
+            return ids;
+        }
+        Pattern p = Pattern.compile('/sfc/servlet\\.shepherd/version/download/([a-zA-Z0-9]{15,18})');
+        Matcher m = p.matcher(html);
+        while (m.find()) {
+            try {
+                Id cvId = Id.valueOf(m.group(1));
+                if (String.valueOf(cvId).startsWith('068')) {
+                    ids.add(cvId);
+                }
+            } catch (Exception ignored) {
+                // Not a Salesforce Id; ignore.
+            }
+        }
+        return ids;
+    }
+
+    /**
      * Generates a PDF Blob from a MergeResult using the unified image map.
      * Single entry point for all PDF rendering — used by generateDocument()
      * and generatePdfBlob().
@@ -2179,6 +2305,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // HTML template type: documentXml is a ready-to-render HTML document —
             // skip the DOCX→HTML conversion entirely.
             if (mr.templateType == 'HTML') {
+                ensureTemplateAssetImageAccessForPdf(templateId, recordId, mr.documentXml);
                 lastRenderedHtml = mr.documentXml;
                 return Blob.toPdf(mr.documentXml);
             }
@@ -2191,6 +2318,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             setNumberingXml(mr);
             applyWatermarkOverride(templateId);
             String html = DocGenHtmlRenderer.convertToHtml(combineXmlWithHeadersFooters(mr), pdfImages);
+            ensureTemplateAssetImageAccessForPdf(templateId, recordId, html);
             lastRenderedHtml = html;
 
             return Blob.toPdf(html);

@@ -134,6 +134,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         String html = injectRowsIntoTemplate(htmlTemplate, allRows);
         allRows = null;
         htmlTemplate = null;
+        DocGenService.ensureTemplateAssetImageAccessForPdf(templateId, recordId, html);
 
         // DEBUG: save HTML for inspection before Blob.toPdf()
         ContentVersion debugCv = new ContentVersion(

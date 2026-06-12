@@ -9451,6 +9451,59 @@ private class DocGenMiscTests {
         assertGiantLauncherUsesInternalLoader(flowActionBody, 'DocGenGiantQueryFlowAction');
     }
 
+    @IsTest
+    static void testTemplateAssetImageAccessLinkedForPdfRender() {
+        Account acc = new Account(Name = 'Template Asset Image Access');
+        insert acc;
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Template Asset Image Access',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Query_Config__c = 'Name'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Query_Config__c = 'Name',
+            Type__c = 'Word',
+            Base_Object_API__c = 'Account',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        ContentVersion img = new ContentVersion(
+            Title = 'docgen_tmpl_img_' + ver.Id + '_rIdLogo',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('PNG'),
+            FirstPublishLocationId = ver.Id
+        );
+        insert img;
+        img = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :img.Id];
+
+        String html = '<html><body><img src="/sfc/servlet.shepherd/version/download/' + img.Id + '" /></body></html>';
+
+        Test.startTest();
+        DocGenService.ensureTemplateAssetImageAccessForPdf(tpl.Id, acc.Id, html);
+        Test.stopTest();
+
+        List<ContentDocumentLink> links = [
+            SELECT Id, Visibility, ShareType
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :img.ContentDocumentId
+        ];
+        System.assertEquals(
+            1,
+            links.size(),
+            'Template image file should be linked to the source record for PDF fetch.'
+        );
+        System.assertEquals('AllUsers', links[0].Visibility, 'PDF fetch link should be visible to internal users.');
+        System.assertEquals('V', links[0].ShareType, 'PDF fetch link should grant viewer access only.');
+    }
+
     private static void assertGiantLauncherUsesInternalLoader(String body, String className) {
         Integer idx = body.indexOf('docgen_tmpl_xml_');
         System.assert(idx >= 0, className + ' should reference pre-decomposed template XML.');
