@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Snapshot_Hash__c</fullName>
+    <description
+    >SHA-256 hash of the frozen document body captured at request creation. Surfaced on the signature certificate and verification so the audit proves the signed document equals what the signer reviewed.</description>
+    <externalId>false</externalId>
+    <label>Snapshot Hash</label>
+    <length>64</length>
+    <required>false</required>
+    <trackHistory>false</trackHistory>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

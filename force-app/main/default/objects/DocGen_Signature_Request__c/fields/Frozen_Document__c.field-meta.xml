@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Frozen_Document__c</fullName>
+    <description
+    >Point-in-time snapshot of the merged document body (JSON of combinedDocumentXml/relsXml/contentTypesXml/templateType per template) captured when the signature request is created. The signed PDF is rendered from THIS frozen content, not a live re-merge, so the signer signs exactly what was reviewed. Null on legacy requests / oversized documents, which fall back to live merge.</description>
+    <externalId>false</externalId>
+    <label>Frozen Document</label>
+    <length>131072</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

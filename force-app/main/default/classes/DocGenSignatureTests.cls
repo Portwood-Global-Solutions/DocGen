@@ -4863,7 +4863,15 @@ private class DocGenSignatureTests {
             'Exactly one new signature request created'
         );
         DocGen_Signature_Request__c newReq = [
-            SELECT Id, Status__c, Signing_Order__c, Template__c, Related_Record_Id__c
+            SELECT
+                Id,
+                Status__c,
+                Signing_Order__c,
+                Template__c,
+                Related_Record_Id__c,
+                Frozen_Document__c,
+                Snapshot_Hash__c,
+                Snapshot_Taken_At__c
             FROM DocGen_Signature_Request__c
             WHERE Template__c = :tpl.Id AND Related_Record_Id__c = :acc.Id
             ORDER BY CreatedDate DESC
@@ -4871,6 +4879,21 @@ private class DocGenSignatureTests {
         ];
         System.assertEquals('Sent', newReq.Status__c, 'New request is Sent');
         System.assertEquals('Sequential', newReq.Signing_Order__c, 'Signing order persisted');
+
+        // INTEGRITY: the real creation path froze a point-in-time snapshot of the merged
+        // document — this is what the signed PDF renders from, not a live re-merge.
+        System.assertNotEquals(null, newReq.Frozen_Document__c, 'Document body was frozen at creation');
+        System.assertNotEquals(null, newReq.Snapshot_Taken_At__c, 'Snapshot timestamp captured');
+        System.assertEquals(
+            DocGenSignatureService.hashFrozenDocument(newReq.Frozen_Document__c),
+            newReq.Snapshot_Hash__c,
+            'Stored snapshot hash matches the frozen content (tamper-evidence)'
+        );
+        System.assertNotEquals(
+            null,
+            DocGenSignatureService.loadFrozenMergeData(newReq.Frozen_Document__c),
+            'Frozen snapshot loads back into renderable per-document merge data'
+        );
 
         // Signer records persisted with expected roles + tokens
         System.assertEquals(

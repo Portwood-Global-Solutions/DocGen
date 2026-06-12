@@ -585,8 +585,33 @@ public with sharing class DocGenSignatureSenderController {
                 'styleTextAttrsMap' => textAttrsMap
             };
             req.Signature_Data__c = JSON.serialize(cachedData);
+
+            // INTEGRITY: freeze the merged document body now, while we're in admin context
+            // with the live record. The signed PDF is rendered from THIS snapshot, not a
+            // re-merge at sign time, so the signer signs exactly what was reviewed. Null
+            // (oversized) leaves the sign path to live-merge — logged, never silent.
+            Set<String> snapshotFields = new Set<String>{ 'Signature_Data__c' };
+            String frozenJson = DocGenSignatureService.buildFrozenDocumentJson(
+                new List<Map<String, Object>>{ mergeData },
+                new List<Id>{ templateId }
+            );
+            if (String.isNotBlank(frozenJson)) {
+                req.Frozen_Document__c = frozenJson;
+                req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(frozenJson);
+                req.Snapshot_Taken_At__c = System.now();
+                snapshotFields.addAll(
+                    new Set<String>{ 'Frozen_Document__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' }
+                );
+            } else {
+                System.debug(
+                    LoggingLevel.WARN,
+                    'DocGen: template document too large to freeze; request ' +
+                        req.Id +
+                        ' will live-merge at sign time.'
+                );
+            }
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-            DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Signature_Data__c' });
+            DocGenFlsGuard.assertUpdateable(req, snapshotFields);
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(req, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
@@ -689,10 +714,14 @@ public with sharing class DocGenSignatureSenderController {
             Map<String, String> combinedPdfImageMap = new Map<String, String>();
             List<String> previewHtmlParts = new List<String>();
             List<List<PlacementInfo>> allPlacements = new List<List<PlacementInfo>>();
+            // INTEGRITY: collect each template's merge output to freeze as the point-in-time
+            // snapshot the packet PDF is rendered from at sign time (vs. live re-merge).
+            List<Map<String, Object>> mergeOutputs = new List<Map<String, Object>>();
 
             for (Integer docIdx = 0; docIdx < templateIds.size(); docIdx++) {
                 Id tid = templateIds[docIdx];
                 Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(tid, relatedRecordId);
+                mergeOutputs.add(mergeData);
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
                 combinedPdfImageMap.putAll(pdfImageMap);
 
@@ -733,8 +762,29 @@ public with sharing class DocGenSignatureSenderController {
                 'previewHtml' => String.join(previewHtmlParts, '')
             };
             req.Signature_Data__c = JSON.serialize(cachedData);
+
+            // INTEGRITY: freeze all template bodies (index-aligned to templateIds) so the
+            // packet signs from reviewed content. Oversized packets leave it unset →
+            // per-document live-merge fallback at sign time (logged, never silent).
+            Set<String> snapshotFields = new Set<String>{ 'Signature_Data__c' };
+            String frozenJson = DocGenSignatureService.buildFrozenDocumentJson(mergeOutputs, templateIds);
+            if (String.isNotBlank(frozenJson)) {
+                req.Frozen_Document__c = frozenJson;
+                req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(frozenJson);
+                req.Snapshot_Taken_At__c = System.now();
+                snapshotFields.addAll(
+                    new Set<String>{ 'Frozen_Document__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' }
+                );
+            } else {
+                System.debug(
+                    LoggingLevel.WARN,
+                    'DocGen: packet document set too large to freeze; request ' +
+                        req.Id +
+                        ' will live-merge at sign time.'
+                );
+            }
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-            DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Signature_Data__c' });
+            DocGenFlsGuard.assertUpdateable(req, snapshotFields);
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(req, AccessLevel.SYSTEM_MODE);
 
