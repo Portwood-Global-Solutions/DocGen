@@ -91,6 +91,31 @@ Bulk-controller permission tests now assert that a DocGen User can create jobs w
 - Browser proof in `triage-sumit-footer`: standard non-admin user generated a 2,105-contact giant-query PDF from the real runner button and received the success toast
 - Test data note: validation used synthetic scratch-org data only; the manual proof fixture was removed after validation
 
+## Unreleased — PDF-viewer e-signature flow
+
+A new, opt-in signing experience that renders the **real generated PDF** in the signer's browser and pushes the completed document back onto the record. Purely additive — the existing typed-name signing flow, `{@Signature_Role}` role tags, and all current templates are unchanged. Reached via the new Flow action **"DocGen: Send Existing Document for Signature"** (`DocGenSignaturePdfFlowAction`); the legacy page remains the default for the bundled send component.
+
+### 1. In-browser PDF-viewer signing page
+
+New guest-facing Visualforce page `DocGenSignaturePdf` renders the actual PDF (not a typed-name placement page) and guides the signer through a modal: token/PIN verification → review the PDF → consent → sign. IDOR-safe — the signer's token resolves only its own bound document; guest reads use the established `DocGenFlsGuard` + `WITH SYSTEM_MODE` pattern.
+
+### 2. Signed document + certificate attached to the record (snapshot re-render)
+
+On a template-snapshot send, DocGen captures the record's merge data **at send-time** as a JSON snapshot. On completion it re-renders the document from that snapshot — so the signed output reflects the data as it was when sent, immune to later record edits — appends a signing-certificate page (signer names, roles, IPs, timestamps, consent), and attaches the combined PDF to the related record with a SHA-256 hash written to the audit record. The certificate shows the name each signer **typed** at signing.
+
+### 3. `{#Signatures}` signature loop block (variable signer count)
+
+Authors can wrap one signature layout in `{#Signatures}...{/Signatures}` anywhere in a template; it renders once per signer, for any signer count — no per-count templates and no orphaned role tags. Per-row fields: `{Name}` (typed e-signature, falling back to the invited name), `{RegisteredName}`, `{Role}`, `{Email}`, `{SignedDate}`, `{Status}`. Backwards-compatible: a template without the block renders identically to before, and role tags still work for fixed-position signatures.
+
+### 4. New Flow action
+
+`DocGenSignaturePdfFlowAction` ("DocGen: Send Existing Document for Signature") is the supported entry point, with two modes: **Template Id** (snapshot re-render onto the record, supports `{#Signatures}`) or **Content Version Id** (send an already-generated document as-is). See UserGuide §11.7.
+
+### Validation
+
+- `RunLocalTests` 1515/1515 (100%), org-wide coverage 76%
+- Live end-to-end: two-signer snapshot send signed in-browser → re-rendered document with two `{#Signatures}` blocks + certificate page attached to the record
+
 ## v3.08.0 — Signature Images and Generation Access (`04tVx000000nOFhIAM`, build `3.8.0-1`, promoted 2026-06-11)
 
 This release closes two field-reported support issues: HTML e-signature templates with embedded Salesforce Files images now render those images in signer-facing previews, and non-admin users who can access a template can generate large/giant-query documents without needing DocGen Admin just to read DocGen's internal generated parts.

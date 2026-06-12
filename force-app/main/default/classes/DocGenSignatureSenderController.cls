@@ -952,6 +952,197 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     /**
+     * Milestone 1 — "send an already-generated document for signature".
+     *
+     * Creates a Template__c-null signature request bound directly to a
+     * pre-generated ContentVersion (Source_Document_Id__c). The signer URLs
+     * point at the new flat-PDF signing page (getSigningPdfPagePath), which
+     * renders the real PDF and captures a name+consent signature → audit +
+     * Status='Signed'. No template merge, no placements (Template__c is null,
+     * so createPlacementsForSigners early-returns cleanly), no DOCX-XML
+     * stamping.
+     *
+     * signersJson: [{signerName, signerEmail, roleName, contactId}, ...]
+     */
+    @AuraEnabled
+    public static List<SignerResult> createRequestFromContentVersion(
+        Id contentVersionId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat
+    ) {
+        if (contentVersionId == null) {
+            throw new AuraHandledException('A source document (ContentVersion Id) is required.');
+        }
+
+        // Parse signers JSON
+        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
+        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
+        for (Object item : rawInputs) {
+            signerInputs.add((Map<String, Object>) item);
+        }
+
+        // Create parent request bound to the pre-generated CV (no Template__c)
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
+        req.Source_Document_Id__c = contentVersionId;
+        req.Template__c = null;
+        req.Related_Record_Id__c = relatedRecordId;
+        req.Status__c = 'Sent';
+        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
+        if (String.isNotBlank(documentTitleFormat)) {
+            req.Document_Title_Format__c = documentTitleFormat;
+        }
+        // Package-internal object — CRUD controlled by DocGen permission sets
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            req,
+            new Set<String>{
+                'Source_Document_Id__c',
+                'Related_Record_Id__c',
+                'Status__c',
+                'Signing_Order__c',
+                'Document_Title_Format__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+
+        // Create signer records + send emails, pointing URLs at the flat-PDF page.
+        // templateId=null → createPlacementsForSigners is skipped (no tags to place).
+        String documentTitle = getDocumentTitle(contentVersionId);
+        return createSignersAndNotify(req.Id, null, documentTitle, signerInputs, true, getSigningPdfPagePath());
+    }
+
+    /**
+     * Milestone 2 — "send a template for signature with a data snapshot".
+     *
+     * Captures the template's resolved merge data for the record as JSON at
+     * send-time (Render_Data_Snapshot__c) and generates the viewing PDF from that
+     * SAME snapshot, so what the signer reviews is byte-identical to what the
+     * completion finalizer re-renders. On completion the finalizer re-renders from
+     * the snapshot (not the live record) and appends the signing-certificate page —
+     * immune to edits made to the record between send and sign — then links the
+     * completed PDF to the related record.
+     *
+     * signersJson: [{signerName, signerEmail, roleName, contactId}, ...]
+     */
+    @AuraEnabled
+    public static List<SignerResult> createTemplateSnapshotRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat
+    ) {
+        if (templateId == null) {
+            throw new AuraHandledException('A template Id is required.');
+        }
+        if (String.isBlank(relatedRecordId)) {
+            throw new AuraHandledException('A related record Id is required for snapshot signing.');
+        }
+
+        // Load the template's data-binding config.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Name', 'Base_Object_API__c', 'Query_Config__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Template__c> tpls = [
+            SELECT Name, Base_Object_API__c, Query_Config__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (tpls.isEmpty()) {
+            throw new AuraHandledException('Template not found.');
+        }
+        DocGen_Template__c tpl = tpls[0];
+        if (String.isBlank(tpl.Base_Object_API__c) || String.isBlank(tpl.Query_Config__c)) {
+            throw new AuraHandledException(
+                'Snapshot signing requires a template with a base object and query configuration.'
+            );
+        }
+
+        // Snapshot the record's merge data at send-time.
+        Map<String, Object> snapshot = DocGenDataRetriever.getRecordData(
+            relatedRecordId,
+            tpl.Base_Object_API__c,
+            tpl.Query_Config__c
+        );
+        String snapshotJson = JSON.serialize(snapshot);
+        if (snapshotJson.length() > 131072) {
+            throw new AuraHandledException(
+                'This document\'s data is too large for snapshot signing (over 131,072 characters). ' +
+                'Use a smaller template/dataset or the send-existing-document path.'
+            );
+        }
+
+        // Parse signer inputs once — reused for the preview render below and for
+        // signer creation at the end of this method.
+        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
+        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
+        for (Object item : rawInputs) {
+            signerInputs.add((Map<String, Object>) item);
+        }
+
+        // Generate the viewing PDF from the SAME snapshot so the signer sees exactly
+        // what the completion finalizer will re-render. M3 — the viewing render gets a
+        // COPY of the snapshot with the pending {#Signatures} loop rows injected, so the
+        // signer previews the signature layout (invited names, "Pending" status). The
+        // stored snapshot (snapshotJson) stays record-data-only; the finalizer injects
+        // the signed rows at completion.
+        Map<String, Object> viewData = new Map<String, Object>(snapshot);
+        viewData.put('Signatures', DocGenSignatureService.buildPendingSignerLoopData(signerInputs));
+        Map<String, Object> gen = DocGenService.generatePdfBlobFromData(templateId, viewData);
+        Blob viewingBlob = (Blob) gen.get('blob');
+        String genTitle = (String) gen.get('title');
+        String fileTitle = String.isNotBlank(genTitle) ? genTitle : tpl.Name;
+
+        // Standalone viewing ContentVersion (not linked to the record — the final
+        // signed + certificate PDF is what lands on the record at completion).
+        ContentVersion viewCv = new ContentVersion();
+        viewCv.Title = fileTitle;
+        viewCv.PathOnClient = fileTitle + '.pdf';
+        viewCv.VersionData = viewingBlob;
+        DocGenFlsGuard.assertCreateable(viewCv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(viewCv, AccessLevel.SYSTEM_MODE);
+
+        // Create the snapshot-backed request: Template__c + Render_Data_Snapshot__c
+        // drive the completion re-render; Source_Document_Id__c is the viewing CV.
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
+        req.Template__c = templateId;
+        req.Render_Data_Snapshot__c = snapshotJson;
+        req.Source_Document_Id__c = viewCv.Id;
+        req.Related_Record_Id__c = relatedRecordId;
+        req.Status__c = 'Sent';
+        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
+        if (String.isNotBlank(documentTitleFormat)) {
+            req.Document_Title_Format__c = documentTitleFormat;
+        }
+        DocGenFlsGuard.assertCreateable(
+            req,
+            new Set<String>{
+                'Template__c',
+                'Render_Data_Snapshot__c',
+                'Source_Document_Id__c',
+                'Related_Record_Id__c',
+                'Status__c',
+                'Signing_Order__c',
+                'Document_Title_Format__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+
+        // Create signer records + emails, URLs at the flat-PDF page (signerInputs parsed above).
+        // templateId=null → skip {@Signature} placement creation (snapshot signing has no tags).
+        return createSignersAndNotify(req.Id, null, fileTitle, signerInputs, true, getSigningPdfPagePath());
+    }
+
+    /**
      * Legacy single-signer request creation (backward compat).
      */
     @AuraEnabled
@@ -1373,6 +1564,26 @@ public with sharing class DocGenSignatureSenderController {
         List<Map<String, Object>> signerInputs,
         Boolean sendEmails
     ) {
+        // Default to the legacy DOCX/HTML signing page. The flat-PDF path
+        // (createRequestFromContentVersion) calls the pagePath overload below.
+        return createSignersAndNotify(
+            requestId,
+            templateId,
+            documentTitle,
+            signerInputs,
+            sendEmails,
+            getSigningPagePath()
+        );
+    }
+
+    private static List<SignerResult> createSignersAndNotify(
+        Id requestId,
+        Id templateId,
+        String documentTitle,
+        List<Map<String, Object>> signerInputs,
+        Boolean sendEmails,
+        String pagePath
+    ) {
         String siteUrl = getSiteBaseUrl();
         List<DocGen_Signer__c> signerRecords = new List<DocGen_Signer__c>();
         List<SignerResult> results = new List<SignerResult>();
@@ -1408,7 +1619,7 @@ public with sharing class DocGenSignatureSenderController {
             sr.signerName = signerName;
             sr.roleName = roleName;
             sr.signerEmail = signerEmail;
-            sr.signerUrl = siteUrl + getSigningPagePath() + '?token=' + token;
+            sr.signerUrl = siteUrl + pagePath + '?token=' + token;
             results.add(sr);
         }
 
@@ -1870,6 +2081,19 @@ public with sharing class DocGenSignatureSenderController {
             return '/apex/' + ns + '__DocGenSignature';
         }
         return '/apex/DocGenSignature';
+    }
+
+    /**
+     * Milestone 1 — path to the new flat-PDF signing page (DocGenSignaturePdf.page).
+     * Same namespace-prefix rule as getSigningPagePath; used only by the
+     * "send existing ContentVersion" path (createRequestFromContentVersion).
+     */
+    public static String getSigningPdfPagePath() {
+        String ns = DocGenSignatureSenderController.class.getName().substringBefore('.');
+        if (String.isNotBlank(ns) && ns != 'DocGenSignatureSenderController') {
+            return '/apex/' + ns + '__DocGenSignaturePdf';
+        }
+        return '/apex/DocGenSignaturePdf';
     }
 
     public static String getSiteBaseUrl() {

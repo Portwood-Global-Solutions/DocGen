@@ -126,6 +126,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>DocGen_Signature_Request__c.Render_Data_Snapshot__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>DocGen_Signature_Request__c.Source_Document_Id__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -290,6 +295,10 @@
     <hasActivationRequired>false</hasActivationRequired>
     <pageAccesses>
         <apexPage>DocGenSignature</apexPage>
+        <enabled>true</enabled>
+    </pageAccesses>
+    <pageAccesses>
+        <apexPage>DocGenSignaturePdf</apexPage>
         <enabled>true</enabled>
     </pageAccesses>
     <pageAccesses>
