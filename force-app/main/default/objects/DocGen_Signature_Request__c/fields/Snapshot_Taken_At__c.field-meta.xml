@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Snapshot_Taken_At__c</fullName>
+    <description
+    >Timestamp when the document body was frozen for signing (request creation). Surfaced on the signature certificate as the point-in-time the signer's content was locked.</description>
+    <externalId>false</externalId>
+    <label>Snapshot Taken At</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>

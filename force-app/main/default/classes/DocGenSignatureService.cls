@@ -174,6 +174,25 @@ public without sharing class DocGenSignatureService {
         html += '<tr><td style="width:140px;padding:3px 0;font-weight:bold;color:#555;">Document ID:</td>';
         html += '<td style="padding:3px 0;">' + String.valueOf(requestId).escapeHtml4() + '</td></tr>';
 
+        // INTEGRITY PROOF: surface when the document was frozen for signing and the hash of
+        // that frozen content, so the certificate proves the signed document is exactly what
+        // the signer reviewed (point-in-time, not a live re-merge).
+        DocGen_Signature_Request__c snapInfo = lookupRequestSnapshotInfo(requestId);
+        if (snapInfo != null && String.isNotBlank(snapInfo.Snapshot_Hash__c)) {
+            if (snapInfo.Snapshot_Taken_At__c != null) {
+                html += '<tr><td style="padding:3px 0;font-weight:bold;color:#555;">Document frozen:</td>';
+                html +=
+                    '<td style="padding:3px 0;">' +
+                    snapInfo.Snapshot_Taken_At__c.format('MMMM d, yyyy \'at\' h:mm a z') +
+                    '</td></tr>';
+            }
+            html += '<tr><td style="padding:3px 0;font-weight:bold;color:#555;">Snapshot hash:</td>';
+            html +=
+                '<td style="padding:3px 0;font-family:monospace;font-size:7pt;word-break:break-all;">' +
+                snapInfo.Snapshot_Hash__c.escapeHtml4() +
+                '</td></tr>';
+        }
+
         html += '<tr><td style="padding:3px 0;font-weight:bold;color:#555;">Completed:</td>';
         html += '<td style="padding:3px 0;">' + System.now().format('MMMM d, yyyy \'at\' h:mm a z') + '</td></tr>';
 
@@ -275,6 +294,153 @@ public without sharing class DocGenSignatureService {
             LIMIT 1
         ];
         return reqs.isEmpty() ? null : reqs[0].Secure_Token__c;
+    }
+
+    /**
+     * Reads the snapshot integrity fields (hash + frozen-at timestamp) for the certificate.
+     * Runs in the async (Automated Process) finalize context, so SYSTEM_MODE is required.
+     * Returns null when absent (legacy/oversized requests) — the cert simply omits the rows.
+     */
+    private static DocGen_Signature_Request__c lookupRequestSnapshotInfo(Id requestId) {
+        if (requestId == null) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{ 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signature_Request__c> reqs = [
+            SELECT Snapshot_Hash__c, Snapshot_Taken_At__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        return reqs.isEmpty() ? null : reqs[0];
+    }
+
+    /**
+     * Deserializes the point-in-time document snapshot frozen at request creation
+     * (Frozen_Document__c JSON) into per-document merge maps shaped like
+     * DocGenService.mergeTemplateForSignature's output, so the sign path can render
+     * from the reviewed content instead of re-merging the live record.
+     *
+     * Returns one entry per template (index-aligned to Template_Ids__c for packets),
+     * or null when no snapshot exists (legacy requests created before this shipped, or
+     * documents too large for the field) — callers then live-merge as before. A corrupt
+     * snapshot also returns null so signing degrades to live-merge rather than failing.
+     *
+     * pdfImageMap is intentionally empty here; the caller fills it from the image map
+     * cached in Signature_Data__c at the same creation moment. styles/numbering come
+     * from the snapshot when present, else the cached style maps drive rendering.
+     */
+    @TestVisible
+    private static List<Map<String, Object>> loadFrozenMergeData(String frozenJson) {
+        if (String.isBlank(frozenJson)) {
+            return null;
+        }
+        try {
+            Map<String, Object> snap = (Map<String, Object>) JSON.deserializeUntyped(frozenJson);
+            Object docsObj = snap.get('docs');
+            if (!(docsObj instanceof List<Object>)) {
+                return null;
+            }
+            String templateType = (String) snap.get('templateType');
+            List<Map<String, Object>> out = new List<Map<String, Object>>();
+            for (Object dObj : (List<Object>) docsObj) {
+                if (!(dObj instanceof Map<String, Object>)) {
+                    continue;
+                }
+                Map<String, Object> d = (Map<String, Object>) dObj;
+                String body = (String) d.get('combinedDocumentXml');
+                out.add(
+                    new Map<String, Object>{
+                        'combinedDocumentXml' => body,
+                        'documentXml' => body,
+                        'relsXml' => (String) d.get('relsXml'),
+                        'contentTypesXml' => (String) d.get('contentTypesXml'),
+                        'templateType' => templateType,
+                        'docTitle' => (String) d.get('docTitle'),
+                        'stylesXml' => (String) d.get('stylesXml'),
+                        'numberingXml' => (String) d.get('numberingXml'),
+                        'pdfImageMap' => new Map<String, String>()
+                    }
+                );
+            }
+            return out.isEmpty() ? null : out;
+        } catch (Exception e) {
+            // Corrupt/unreadable snapshot — fall back to live merge rather than fail signing.
+            System.debug(
+                LoggingLevel.WARN,
+                'DocGen: frozen snapshot unreadable, falling back to live merge: ' + e.getMessage()
+            );
+            return null;
+        }
+    }
+
+    /**
+     * Serializes per-template merge outputs into the Frozen_Document__c snapshot JSON
+     * captured at request creation. Stores only the static, point-in-time document body
+     * (combinedDocumentXml/relsXml/contentTypesXml/docTitle + styles/numbering) — the
+     * part that reflects live record data and must not drift before signing. Returns
+     * null when the snapshot would exceed the field limit, so the caller leaves it
+     * unset and the sign path live-merges (logged by the caller). `global`/`public`
+     * visibility kept minimal: callers are in the same namespace.
+     */
+    public static String buildFrozenDocumentJson(List<Map<String, Object>> mergeOutputs, List<Id> templateIds) {
+        if (mergeOutputs == null || mergeOutputs.isEmpty()) {
+            return null;
+        }
+        String templateType = null;
+        List<Object> docs = new List<Object>();
+        for (Integer i = 0; i < mergeOutputs.size(); i++) {
+            Map<String, Object> m = mergeOutputs[i];
+            if (m == null) {
+                return null;
+            }
+            if (templateType == null) {
+                templateType = (String) m.get('templateType');
+            }
+            String body = (String) m.get('combinedDocumentXml');
+            if (String.isBlank(body)) {
+                body = (String) m.get('documentXml');
+            }
+            docs.add(
+                new Map<String, Object>{
+                    'templateId' => (templateIds != null &&
+                        i < templateIds.size())
+                        ? String.valueOf(templateIds[i])
+                        : null,
+                    'combinedDocumentXml' => body,
+                    'relsXml' => (String) m.get('relsXml'),
+                    'contentTypesXml' => (String) m.get('contentTypesXml'),
+                    'docTitle' => (String) m.get('docTitle'),
+                    'stylesXml' => (String) m.get('stylesXml'),
+                    'numberingXml' => (String) m.get('numberingXml')
+                }
+            );
+        }
+        String frozenJson = JSON.serialize(
+            new Map<String, Object>{ 'v' => 1, 'templateType' => templateType, 'docs' => docs }
+        );
+        // Graceful fallback: a body larger than the LongTextArea limit is not frozen
+        // (returns null → live-merge at sign time) rather than throwing or truncating.
+        if (frozenJson.length() > 131072) {
+            return null;
+        }
+        return frozenJson;
+    }
+
+    /**
+     * SHA-256 hex of the frozen snapshot JSON — stored on the request and surfaced on the
+     * certificate so the audit proves the signed document equals what the signer reviewed.
+     */
+    public static String hashFrozenDocument(String frozenJson) {
+        if (String.isBlank(frozenJson)) {
+            return null;
+        }
+        return EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', Blob.valueOf(frozenJson)));
     }
 
     /**
@@ -968,7 +1134,31 @@ public without sharing class DocGenSignatureService {
          * No DOCX intermediate — pure XML → HTML → PDF.
          */
         private Blob renderTemplateSignaturePdf(Id reqId, Id templateId, String recordId) {
-            Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, recordId);
+            // Load the request cache: the frozen document body (point-in-time snapshot
+            // captured at creation) + the image/style maps. One query serves both.
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'Signature_Data__c', 'Frozen_Document__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            DocGen_Signature_Request__c reqData = [
+                SELECT Signature_Data__c, Frozen_Document__c
+                FROM DocGen_Signature_Request__c
+                WHERE Id = :reqId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+
+            // INTEGRITY: render from the frozen snapshot captured when the request was
+            // created, NOT a live re-merge of the current record. Without this the signed
+            // PDF reflects whatever the record says at sign time, which can differ from
+            // what the signer reviewed. Legacy/oversized requests (no snapshot) fall back
+            // to the live merge so nothing in-flight breaks.
+            List<Map<String, Object>> frozenDocs = loadFrozenMergeData(reqData.Frozen_Document__c);
+            Map<String, Object> mergeData = (frozenDocs != null && !frozenDocs.isEmpty())
+                ? frozenDocs[0]
+                : DocGenService.mergeTemplateForSignature(templateId, recordId);
+
             String documentXml = (String) mergeData.get('combinedDocumentXml');
             if (String.isBlank(documentXml)) {
                 documentXml = (String) mergeData.get('documentXml');
@@ -977,20 +1167,6 @@ public without sharing class DocGenSignatureService {
             String contentTypesXml = (String) mergeData.get('contentTypesXml');
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
             String templateType = (String) mergeData.get('templateType');
-
-            // Use pre-computed image map from request creation
-            DocGenFlsGuard.assertAccessible(
-                DocGen_Signature_Request__c.sObjectType,
-                new Set<String>{ 'Signature_Data__c' }
-            );
-            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-            DocGen_Signature_Request__c reqData = [
-                SELECT Signature_Data__c
-                FROM DocGen_Signature_Request__c
-                WHERE Id = :reqId
-                WITH SYSTEM_MODE
-                LIMIT 1
-            ];
             if (String.isNotBlank(reqData.Signature_Data__c)) {
                 Map<String, Object> cachedData = (Map<String, Object>) JSON.deserializeUntyped(
                     reqData.Signature_Data__c
@@ -1225,11 +1401,11 @@ public without sharing class DocGenSignatureService {
             // Get cached image map
             DocGenFlsGuard.assertAccessible(
                 DocGen_Signature_Request__c.sObjectType,
-                new Set<String>{ 'Signature_Data__c' }
+                new Set<String>{ 'Signature_Data__c', 'Frozen_Document__c' }
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             DocGen_Signature_Request__c reqData = [
-                SELECT Signature_Data__c
+                SELECT Signature_Data__c, Frozen_Document__c
                 FROM DocGen_Signature_Request__c
                 WHERE Id = :reqId
                 WITH SYSTEM_MODE
@@ -1248,11 +1424,19 @@ public without sharing class DocGenSignatureService {
                 }
             }
 
+            // INTEGRITY: each document renders from its frozen snapshot (captured at
+            // creation), not a live re-merge. Aligned to templateIds by index. Null when
+            // no snapshot exists (legacy/oversized packet) → per-doc live-merge fallback.
+            List<Map<String, Object>> frozenDocs = loadFrozenMergeData(reqData.Frozen_Document__c);
+
             // Merge and stamp each document
             List<String> htmlParts = new List<String>();
             for (Integer docIdx = 0; docIdx < templateIds.size(); docIdx++) {
                 Id tid = templateIds[docIdx];
-                Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(tid, recordId);
+                Map<String, Object> mergeData = (frozenDocs != null &&
+                    docIdx < frozenDocs.size())
+                    ? frozenDocs[docIdx]
+                    : DocGenService.mergeTemplateForSignature(tid, recordId);
                 String documentXml = (String) mergeData.get('combinedDocumentXml');
                 if (String.isBlank(documentXml)) {
                     documentXml = (String) mergeData.get('documentXml');
