@@ -2033,7 +2033,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     if (xmlName == 'word/styles.xml') {
                         htmlMr.processedXmlEntries.put(xmlName, xmlEntries.get(xmlName));
                     } else if (xmlName.startsWith('word/header') || xmlName.startsWith('word/footer')) {
-                        htmlMr.processedXmlEntries.put(xmlName, xmlEntries.get(xmlName));
+                        htmlMr.processedXmlEntries.put(xmlName, mergeRunsInTags(xmlEntries.get(xmlName)));
                     }
                 }
 

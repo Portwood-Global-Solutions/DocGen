@@ -5992,6 +5992,25 @@ private class DocGenMiscTests {
     }
 
     @IsTest
+    static void testMergeRunsFooterTagSplitAcrossBraceRuns() {
+        String footerXml =
+            '<w:ftr xmlns:w="x"><w:p>' +
+            '<w:r><w:t>Premium Text short codes </w:t></w:r>' +
+            '<w:r><w:t>{</w:t></w:r>' +
+            '<w:r><w:t>Date_for_merge_document__c</w:t></w:r>' +
+            '<w:r><w:t>}</w:t></w:r>' +
+            '</w:p></w:ftr>';
+
+        String result = DocGenService.mergeRunsInTagsForTest(footerXml);
+
+        System.assert(
+            result.contains('{Date_for_merge_document__c}'),
+            'Footer/header tags split across brace runs must be merged before giant-query HTML snapshot conversion: ' +
+            result
+        );
+    }
+
+    @IsTest
     static void testNestedTableOuterCellOwnTcPrStillRespected() {
         // Outer cell has its own <w:tcPr> with shading; nested cells have their
         // own tcPr. Outer must use ITS OWN shading, not the inner cell's.

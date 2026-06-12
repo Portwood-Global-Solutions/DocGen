@@ -1,5 +1,38 @@
 # Changelog
 
+## v3.10.0 — Large-template Snapshot Fidelity (`04tVx000000nOh7IAE`, build `3.10.0-1`, promoted 2026-06-12)
+
+This release fixes the follow-up large-template rendering issue reported from Slack. Non-admin users could generate the document after v3.09.0, but large/giant-query output could still lose template chrome and render as a bare data table when the internal pre-baked HTML snapshot was not visible from the queueable's sharing context.
+
+Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+
+### 1. Giant-query output preserves headers, footers, and embedded template images
+
+`DocGenGiantQueryAssembler` now loads the pre-baked HTML snapshot through the template-version-linked internal ContentVersion helper before falling back to the legacy title-only lookup. This keeps the large-template path aligned with DocGen's internal part sharing model and prevents the bare-table fallback from dropping document titles, table headers, footers, and embedded Word-template images.
+
+The customer-provided DOCX used an embedded `word/media/image1.jpeg` logo, not a `{%ImageField}` merge image. The fix preserves that image by preserving the whole pre-baked snapshot/part payload for the giant-query renderer.
+
+### 2. Split footer merge tags are normalized before snapshot creation
+
+Pre-baked HTML snapshot creation now merges Word runs in header/footer XML before storing those entries, matching the normal render path. This covers templates where Word splits a footer tag across runs, such as `{`, `Date_for_merge_document__c`, and `}`.
+
+### 3. Regression coverage for the actual failure shape
+
+Giant-query chrome preservation tests now assert that snapshot title/header/footer content and an image marker survive assembly. Footer-run regression coverage verifies split-brace merge tags normalize before merge processing.
+
+### Release validation
+
+- Package version create: `08cVx000000iNH3IAM` succeeded; package coverage 76%; subscriber package `04tVx000000nOh7IAE`
+- Promoted package: `04tVx000000nOh7IAE` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOh7IAE) · [Sandbox Install URL](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOh7IAE)
+- Release landing config updated in production: `DocGen_Landing_Config__mdt.Current` → version `3.10.0`, package `04tVx000000nOh7IAE`
+- Full e2e suite in `triage-sumit-footer`: e2e-01 through e2e-08 PASS/FAIL0
+- Full Apex validation in `triage-sumit-footer`: `RunLocalTests` completed with 0 failures, org coverage 76% (`05mcf000001WhinAAC`)
+- Focused Apex validation in `triage-sumit-footer`: `DocGenGiantQueryTest` plus footer split-tag regression passed 48/48 (`707cf00000zQuQE`)
+- Code Analyzer: Security + AppExchange selectors, 0 violations
+- `npm run format:check`: pass
+- `git diff --check`: pass
+- Customer data note: validation used synthetic scratch-org data; the customer-provided template was inspected only as local DOCX structure to identify embedded media/merge-tag shape
+
 ## v3.09.0 — Non-admin Large-template Access (`04tVx000000nOdtIAE`, build `3.9.0-1`, promoted 2026-06-11)
 
 This release completes the non-admin large-template support fix reported from Slack. Users with the DocGen User permission set could see shared templates and start generation, but large/giant-query jobs still failed because the job record needed to store internal generation context in fields that were not editable by non-admin users.
