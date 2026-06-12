@@ -91,7 +91,11 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             throw new DocGenException('Invalid object: ' + baseObject);
         }
 
-        String sanitizedCondition = sanitizeCondition(condition);
+        // Consolidated: both bulk entry paths (controller + batch) validate filters
+        // through ONE sanitizer so behavior is identical. The shared version also
+        // normalizes whitespace before keyword matching, closing a tab/newline
+        // bypass (e.g. "SELECT\t") that this class's former local copy missed.
+        String sanitizedCondition = DocGenBulkController.sanitizeCondition(condition);
         String query = 'SELECT Id FROM ' + baseObject;
         if (String.isNotBlank(sanitizedCondition)) {
             query += ' WHERE ' + sanitizedCondition;
@@ -186,42 +190,6 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             dataCacheCvId = null;
             cachedDataJson = null;
         }
-    }
-
-    /**
-     * Basic sanitization of dynamic WHERE conditions to prevent SOQL injection.
-     */
-    private static String sanitizeCondition(String condition) {
-        if (String.isBlank(condition)) {
-            return condition;
-        }
-        // Reject dangerous characters (statement termination, comments)
-        if (condition.contains(';') || condition.contains('--') || condition.contains('/*')) {
-            throw new DocGenException('Invalid filter condition.');
-        }
-        String upper = condition.toUpperCase().trim();
-        List<String> disallowed = new List<String>{
-            'SELECT ',
-            'INSERT ',
-            'UPDATE ',
-            'DELETE ',
-            'MERGE ',
-            'UNDELETE ',
-            'WITH ',
-            'GROUP BY ',
-            'ORDER BY ',
-            'LIMIT ',
-            'OFFSET ',
-            'FOR UPDATE',
-            'HAVING ',
-            'TYPEOF '
-        };
-        for (String keyword : disallowed) {
-            if (upper.contains(keyword)) {
-                throw new DocGenException('Invalid filter condition.');
-            }
-        }
-        return condition;
     }
 
     /**

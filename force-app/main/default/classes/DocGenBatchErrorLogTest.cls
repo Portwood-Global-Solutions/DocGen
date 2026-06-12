@@ -79,4 +79,25 @@ private class DocGenBatchErrorLogTest {
         DocGenBatch batch = new DocGenBatch(jobId);
         System.assertEquals(null, batch.buildErrorLog(), 'No failures → null (Error_Log__c stays empty)');
     }
+
+    @isTest
+    static void consolidatedSanitizerClosesTabBypass() {
+        // The bulk batch now validates filters through DocGenBulkController.sanitizeCondition
+        // (one shared sanitizer for both bulk entry paths). It normalizes whitespace, so a
+        // keyword smuggled past the old batch copy with a tab ("SELECT\t") is now rejected.
+        Boolean rejected = false;
+        try {
+            DocGenBulkController.sanitizeCondition('Name != null AND\tSELECT\tId');
+        } catch (Exception e) {
+            rejected = true;
+        }
+        System.assert(rejected, 'Tab-separated SELECT must be rejected by the shared sanitizer');
+
+        // A clean filter still passes through unchanged.
+        System.assertEquals(
+            'Industry = \'Tech\'',
+            DocGenBulkController.sanitizeCondition('Industry = \'Tech\''),
+            'A valid filter is returned unchanged'
+        );
+    }
 }
