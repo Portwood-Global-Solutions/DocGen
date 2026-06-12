@@ -329,8 +329,20 @@
                 }
 
                 /* ===== PDF VIEW LAYOUT ===== */
+                /* .page-wrapper is a centered flex column (align-items: center), so its
+                   state children shrink to content width. The PDF state must stretch
+                   full-width and re-center its child, or .pdf-wrapper's max-width below
+                   collapses to the shrink-to-fit content width. */
+                #state-pdf {
+                    width: 100%;
+                    display: flex;
+                    justify-content: center;
+                }
                 .pdf-wrapper {
-                    max-width: 900px;
+                    /* Wide enough to inspect a full-size document on desktop; still
+                       fluid (width:100%) so it fills smaller screens, and the
+                       max-width: 640px media query below governs phones. */
+                    max-width: 1600px;
                     width: 100%;
                     display: flex;
                     flex-direction: column;
@@ -751,7 +763,10 @@
                             var iframe = document.createElement('iframe');
                             iframe.title = 'Document to sign';
                             iframe.setAttribute('type', 'application/pdf');
-                            iframe.src = activeObjectUrl;
+                            // #view=FitH asks the native PDF viewer to fit the page to the
+                            // width of the (now full-width) viewer box so the document is
+                            // large and easy to inspect, rather than a centered column.
+                            iframe.src = activeObjectUrl + '#view=FitH';
                             containerEl.appendChild(iframe);
                         }
                     };
