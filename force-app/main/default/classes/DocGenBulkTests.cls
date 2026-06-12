@@ -143,6 +143,8 @@ private class DocGenBulkTests {
         PermissionSet userPermSet = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_User' LIMIT 1];
         FieldPermissions labelPerm;
         FieldPermissions mergeOnlyPerm;
+        FieldPermissions parentRecordPerm;
+        FieldPermissions giantConfigPerm;
         for (FieldPermissions fp : [
             SELECT Field, PermissionsEdit, PermissionsRead
             FROM FieldPermissions
@@ -152,6 +154,10 @@ private class DocGenBulkTests {
                 labelPerm = fp;
             } else if (isFieldPermission(fp.Field, 'DocGen_Job__c', 'Merge_Only__c')) {
                 mergeOnlyPerm = fp;
+            } else if (isFieldPermission(fp.Field, 'DocGen_Job__c', 'Parent_Record_Id__c')) {
+                parentRecordPerm = fp;
+            } else if (isFieldPermission(fp.Field, 'DocGen_Job__c', 'Giant_Query_Config__c')) {
+                giantConfigPerm = fp;
             }
         }
 
@@ -174,6 +180,26 @@ private class DocGenBulkTests {
             true,
             mergeOnlyPerm.PermissionsEdit,
             'DocGen_User must be able to create Merge_Only__c because submitJob writes it before SYSTEM_MODE insert.'
+        );
+        System.assertNotEquals(
+            null,
+            parentRecordPerm,
+            'DocGen_User must declare DocGen_Job__c.Parent_Record_Id__c FLS for giant-query job creation.'
+        );
+        System.assertEquals(
+            true,
+            parentRecordPerm.PermissionsEdit,
+            'DocGen_User must be able to create Parent_Record_Id__c because giant-query launch writes it before SYSTEM_MODE insert.'
+        );
+        System.assertNotEquals(
+            null,
+            giantConfigPerm,
+            'DocGen_User must declare DocGen_Job__c.Giant_Query_Config__c FLS for giant-query job creation.'
+        );
+        System.assertEquals(
+            true,
+            giantConfigPerm.PermissionsEdit,
+            'DocGen_User must be able to create Giant_Query_Config__c because the controller giant-query launch writes it before SYSTEM_MODE insert.'
         );
     }
 
