@@ -1008,9 +1008,23 @@ public with sharing class DocGenSignatureSenderController {
             );
         }
 
+        // Parse signer inputs once — reused for the preview render below and for
+        // signer creation at the end of this method.
+        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
+        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
+        for (Object item : rawInputs) {
+            signerInputs.add((Map<String, Object>) item);
+        }
+
         // Generate the viewing PDF from the SAME snapshot so the signer sees exactly
-        // what the completion finalizer will re-render.
-        Map<String, Object> gen = DocGenService.generatePdfBlobFromData(templateId, snapshot);
+        // what the completion finalizer will re-render. M3 — the viewing render gets a
+        // COPY of the snapshot with the pending {#Signatures} loop rows injected, so the
+        // signer previews the signature layout (invited names, "Pending" status). The
+        // stored snapshot (snapshotJson) stays record-data-only; the finalizer injects
+        // the signed rows at completion.
+        Map<String, Object> viewData = new Map<String, Object>(snapshot);
+        viewData.put('Signatures', DocGenSignatureService.buildPendingSignerLoopData(signerInputs));
+        Map<String, Object> gen = DocGenService.generatePdfBlobFromData(templateId, viewData);
         Blob viewingBlob = (Blob) gen.get('blob');
         String genTitle = (String) gen.get('title');
         String fileTitle = String.isNotBlank(genTitle) ? genTitle : tpl.Name;
@@ -1052,13 +1066,8 @@ public with sharing class DocGenSignatureSenderController {
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(req, AccessLevel.SYSTEM_MODE);
 
-        // Create signer records + emails, URLs at the flat-PDF page.
+        // Create signer records + emails, URLs at the flat-PDF page (signerInputs parsed above).
         // templateId=null → skip {@Signature} placement creation (snapshot signing has no tags).
-        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
-        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
-        for (Object item : rawInputs) {
-            signerInputs.add((Map<String, Object>) item);
-        }
         return createSignersAndNotify(req.Id, null, fileTitle, signerInputs, true, getSigningPdfPagePath());
     }
 

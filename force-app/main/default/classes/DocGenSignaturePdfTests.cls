@@ -686,4 +686,146 @@ private class DocGenSignaturePdfTests {
             'Certificate shows the invited name as "Registered as" when the typed name differs'
         );
     }
+
+    // =========================================================================
+    // M3 — signature loop block ({#Signatures})
+    // =========================================================================
+
+    @isTest
+    static void testBuildSignerLoopData_oneRowPerSignerWithTypedName() {
+        Account acc = new Account(Name = 'Loop Co');
+        insert acc;
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Related_Record_Id__c = acc.Id,
+            Status__c = 'Signed'
+        );
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+        DocGen_Signer__c s1 = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Ada Buyer',
+            Signer_Email__c = 'ada@test.com',
+            Role_Name__c = 'Buyer',
+            Secure_Token__c = '4444444444444444444444444444444444444444444444444444444444444444',
+            Status__c = 'Signed',
+            Signature_Data__c = 'Ada B. Buyer', // typed e-signature differs from the invited name
+            Sort_Order__c = 1
+        );
+        DocGen_Signer__c s2 = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Ben Seller',
+            Signer_Email__c = 'ben@test.com',
+            Role_Name__c = 'Seller',
+            Secure_Token__c = '5555555555555555555555555555555555555555555555555555555555555555',
+            Status__c = 'Signed',
+            Sort_Order__c = 2 // no typed name → falls back to the invited name
+        );
+        Database.insert(new List<DocGen_Signer__c>{ s1, s2 }, AccessLevel.SYSTEM_MODE);
+        Database.insert(
+            new DocGen_Signature_Audit__c(
+                Signature_Request__c = req.Id,
+                Signer__c = s1.Id,
+                Signer_Name__c = 'Ada Buyer',
+                Signer_Email__c = 'ada@test.com',
+                Signed_Date__c = System.now()
+            ),
+            AccessLevel.SYSTEM_MODE
+        );
+
+        Test.startTest();
+        List<Map<String, Object>> rows = DocGenSignatureService.buildSignerLoopData(req.Id);
+        Test.stopTest();
+
+        System.assertEquals(2, rows.size(), 'One row per signer');
+        // Ordered by Sort_Order__c.
+        System.assertEquals('Ada B. Buyer', rows[0].get('Name'), 'Row 0 shows the typed e-signature');
+        System.assertEquals('Ada Buyer', rows[0].get('RegisteredName'), 'Row 0 keeps the invited name');
+        System.assertEquals('Buyer', rows[0].get('Role'));
+        System.assertEquals('ada@test.com', rows[0].get('Email'));
+        System.assert(
+            String.isNotBlank((String) rows[0].get('SignedDate')),
+            'Row 0 has a signed date from the audit record'
+        );
+        System.assertEquals(
+            'Ben Seller',
+            rows[1].get('Name'),
+            'Row 1 falls back to the invited name (no typed signature captured)'
+        );
+        System.assertEquals('Seller', rows[1].get('Role'));
+        System.assertEquals('', rows[1].get('SignedDate'), 'Row 1 has no audit → blank signed date');
+    }
+
+    @isTest
+    static void testSignaturesLoop_rendersOneBlockPerSigner() {
+        // The reserved {#Signatures} loop block renders once per injected signer row —
+        // one authored layout, any signer count, no per-count templates.
+        String template = '<w:t>{#Signatures}</w:t><w:t>Signed by {Name} ({Role})</w:t><w:t>{/Signatures}</w:t>';
+
+        List<Map<String, Object>> twoSigners = DocGenSignatureService.buildPendingSignerLoopData(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{
+                    'signerName' => 'Ada Buyer',
+                    'signerEmail' => 'ada@test.com',
+                    'roleName' => 'Buyer'
+                },
+                new Map<String, Object>{
+                    'signerName' => 'Ben Seller',
+                    'signerEmail' => 'ben@test.com',
+                    'roleName' => 'Seller'
+                }
+            }
+        );
+        String two = DocGenService.processXmlForTest(template, new Map<String, Object>{ 'Signatures' => twoSigners });
+        System.assert(two.contains('Ada Buyer') && two.contains('(Buyer)'), 'First signer block rendered');
+        System.assert(two.contains('Ben Seller') && two.contains('(Seller)'), 'Second signer block rendered');
+
+        // Same template, a single signer → exactly one block.
+        List<Map<String, Object>> oneSigner = DocGenSignatureService.buildPendingSignerLoopData(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{
+                    'signerName' => 'Solo Signer',
+                    'signerEmail' => 'solo@test.com',
+                    'roleName' => 'Signer'
+                }
+            }
+        );
+        String one = DocGenService.processXmlForTest(template, new Map<String, Object>{ 'Signatures' => oneSigner });
+        System.assert(one.contains('Solo Signer'), 'Single signer block rendered from the same template');
+        System.assert(!one.contains('Ada Buyer'), 'Only the one injected signer renders');
+    }
+
+    @isTest
+    static void testSignaturesLoop_backwardsCompatible() {
+        // Backwards-compat guarantee #1: a template with NO {#Signatures} marker renders
+        // exactly as before, even when a Signatures collection is present in the data map.
+        String plain = '<w:t>Agreement for {Name}</w:t>';
+        String out = DocGenService.processXmlForTest(
+            plain,
+            new Map<String, Object>{
+                'Name' => 'World',
+                'Signatures' => DocGenSignatureService.buildPendingSignerLoopData(
+                    new List<Map<String, Object>>{
+                        new Map<String, Object>{
+                            'signerName' => 'Ghost',
+                            'signerEmail' => 'g@test.com',
+                            'roleName' => 'Signer'
+                        }
+                    }
+                )
+            }
+        );
+        System.assert(out.contains('Agreement for World'), 'No {#Signatures} marker → existing merge is unchanged');
+        System.assert(!out.contains('Ghost'), 'Signer rows are never emitted without a {#Signatures} block');
+
+        // Backwards-compat guarantee #2: an empty signer collection collapses cleanly —
+        // the block emits nothing and never leaks the raw {#Signatures}/{Name} tags.
+        String withBlock = '<w:t>{#Signatures}</w:t><w:t>{Name}</w:t><w:t>{/Signatures}</w:t>';
+        String empty = DocGenService.processXmlForTest(
+            withBlock,
+            new Map<String, Object>{ 'Signatures' => new List<Object>() }
+        );
+        System.assert(
+            !empty.contains('{#Signatures}') && !empty.contains('{Name}'),
+            'Empty Signatures collection collapses cleanly with no leaked tags'
+        );
+    }
 }

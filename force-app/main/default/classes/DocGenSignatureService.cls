@@ -189,7 +189,11 @@ public without sharing class DocGenSignatureService {
             // Signature name + Role. The name the signer actually typed at signing
             // (Signature_Data__c) is their electronic signature; fall back to the
             // invited name (Signer_Name__c) when no typed value was captured.
-            String signatureName = String.isNotBlank(s.Signature_Data__c) ? s.Signature_Data__c : s.Signer_Name__c;
+            // Read Signature_Data__c defensively: this method is public/global and a
+            // caller may pass signers queried without that field — getPopulatedFieldsAsMap
+            // returns null rather than throwing SObjectException when it wasn't selected.
+            String typedSig = (String) s.getPopulatedFieldsAsMap().get('Signature_Data__c');
+            String signatureName = String.isNotBlank(typedSig) ? typedSig : s.Signer_Name__c;
             html += '<span style="font-weight:bold;font-size:10pt;">' + signatureName.escapeHtml4() + '</span>';
             html +=
                 ' <span style="background:' +
@@ -202,7 +206,7 @@ public without sharing class DocGenSignatureService {
             html += '<span style="color:#555;">' + s.Signer_Email__c.escapeHtml4() + '</span><br/>';
 
             // If the signer amended their name at signing, also show the invited name.
-            if (String.isNotBlank(s.Signature_Data__c) && s.Signature_Data__c != s.Signer_Name__c) {
+            if (String.isNotBlank(typedSig) && typedSig != s.Signer_Name__c) {
                 html += '<span style="color:#555;">Registered as: ' + s.Signer_Name__c.escapeHtml4() + '</span><br/>';
             }
 
@@ -253,6 +257,142 @@ public without sharing class DocGenSignatureService {
 
         html += '</table></div>';
         return html;
+    }
+
+    /**
+     * M3 — signature loop block.
+     *
+     * Builds the per-signer collection injected under the reserved {#Signatures}
+     * render-data key. A template author writes ONE signature layout wrapped in
+     * {#Signatures}...{/Signatures} (anywhere in the document) and it renders once
+     * per signer, for any signer count — no per-count templates and no orphan role
+     * tags. Each row exposes:
+     *   {Name}           the typed e-signature (Signature_Data__c) or, if none was
+     *                    captured, the invited name (Signer_Name__c)
+     *   {RegisteredName} the invited name
+     *   {Role}           Role_Name__c (defaults to "Signer")
+     *   {Email}          Signer_Email__c
+     *   {SignedDate}     formatted signed date from the audit record (blank if unsigned)
+     *   {Status}         Status__c
+     *
+     * Purely additive: this list is only present when the finalizer/sender inject it,
+     * so templates without a {#Signatures} block are unaffected and role-tag
+     * ({@Signature_Role}) stamping is untouched. This is the completion (signed)
+     * variant; buildPendingSignerLoopData builds the pre-signing preview variant.
+     */
+    public static List<Map<String, Object>> buildSignerLoopData(Id requestId) {
+        List<Map<String, Object>> rows = new List<Map<String, Object>>();
+
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Signer_Name__c',
+                'Signature_Data__c',
+                'Signer_Email__c',
+                'Role_Name__c',
+                'Status__c',
+                'Signature_Request__c',
+                'Sort_Order__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> signers = [
+            SELECT Id, Signer_Name__c, Signature_Data__c, Signer_Email__c, Role_Name__c, Status__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__c = :requestId
+            WITH SYSTEM_MODE
+            ORDER BY Sort_Order__c ASC
+        ];
+        if (signers.isEmpty()) {
+            return rows;
+        }
+
+        // Signed dates come from the audit records — the same source the certificate
+        // block uses (one audit per signer; keep the earliest signed timestamp).
+        Map<Id, Datetime> signedDates = new Map<Id, Datetime>();
+        try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Signature_Audit__c.sObjectType,
+                new Set<String>{ 'Signer__c', 'Signed_Date__c', 'Signature_Request__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            List<DocGen_Signature_Audit__c> audits = [
+                SELECT Signer__c, Signed_Date__c
+                FROM DocGen_Signature_Audit__c
+                WHERE Signature_Request__c = :requestId AND Signer__c != NULL
+                WITH SYSTEM_MODE
+            ];
+            for (DocGen_Signature_Audit__c a : audits) {
+                if (a.Signed_Date__c != null && !signedDates.containsKey(a.Signer__c)) {
+                    signedDates.put(a.Signer__c, a.Signed_Date__c);
+                }
+            }
+        } catch (Exception e) {
+            // Signed-date enrichment is best-effort — fall back to blank dates.
+        }
+
+        for (DocGen_Signer__c s : signers) {
+            rows.add(
+                buildSignerLoopRow(
+                    String.isNotBlank(s.Signature_Data__c) ? s.Signature_Data__c : s.Signer_Name__c,
+                    s.Signer_Name__c,
+                    s.Role_Name__c,
+                    s.Signer_Email__c,
+                    signedDates.get(s.Id),
+                    s.Status__c
+                )
+            );
+        }
+        return rows;
+    }
+
+    /**
+     * M3 — pre-signing preview variant of the {#Signatures} loop collection. Built
+     * from the raw signer inputs (signerName/signerEmail/roleName) at send-time,
+     * before any DocGen_Signer__c rows exist, so the viewing PDF shows the signature
+     * layout with the invited signers and a "Pending" status (no typed name/date yet).
+     */
+    public static List<Map<String, Object>> buildPendingSignerLoopData(List<Map<String, Object>> signerInputs) {
+        List<Map<String, Object>> rows = new List<Map<String, Object>>();
+        if (signerInputs == null) {
+            return rows;
+        }
+        for (Map<String, Object> input : signerInputs) {
+            String name = (String) input.get('signerName');
+            rows.add(
+                buildSignerLoopRow(
+                    name, // pending: no typed signature yet → show the invited name
+                    name,
+                    (String) input.get('roleName'),
+                    (String) input.get('signerEmail'),
+                    null,
+                    'Pending'
+                )
+            );
+        }
+        return rows;
+    }
+
+    /**
+     * Shared row shape for the {#Signatures} loop so the signed (completion) and
+     * pending (preview) variants always expose identical field keys.
+     */
+    private static Map<String, Object> buildSignerLoopRow(
+        String name,
+        String registeredName,
+        String role,
+        String email,
+        Datetime signedDate,
+        String status
+    ) {
+        return new Map<String, Object>{
+            'Name' => String.isNotBlank(name) ? name : '',
+            'RegisteredName' => String.isNotBlank(registeredName) ? registeredName : '',
+            'Role' => String.isNotBlank(role) ? role : 'Signer',
+            'Email' => String.isNotBlank(email) ? email : '',
+            'SignedDate' => signedDate != null ? signedDate.format('MMMM d, yyyy') : '',
+            'Status' => String.isNotBlank(status) ? status : ''
+        };
     }
 
     /**
@@ -846,6 +986,12 @@ public without sharing class DocGenSignatureService {
                     Map<String, Object> snap = (Map<String, Object>) JSON.deserializeUntyped(
                         req.Render_Data_Snapshot__c
                     );
+                    // M3 — inject the signed-signer loop collection under the reserved
+                    // {#Signatures} key. The stored snapshot stays record-data-only, so
+                    // these signed rows are re-derived fresh at finalize (keeps M2's
+                    // deterministic re-render). Templates without a {#Signatures} block
+                    // simply ignore the extra key.
+                    snap.put('Signatures', buildSignerLoopData(requestId));
                     pdfBlob = renderTemplateSignaturePdf(requestId, req.Template__c, null, snap);
                 } else if (String.isNotBlank(req.Template_Ids__c)) {
                     // Multi-template packet

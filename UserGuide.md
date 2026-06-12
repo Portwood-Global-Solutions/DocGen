@@ -1689,6 +1689,40 @@ See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:
 
 Pre-signing, tags are preserved in the output (not replaced). Post-signing, they're stamped with the signer's typed name or signed date + a subtle "Electronically signed by X on DATE" verification line.
 
+#### Signature loop block — `{#Signatures}` (variable signer count)
+
+Role tags above pin each signer to a **fixed spot** — perfect when you know the parties (Buyer + Seller). But when the **number of signers varies** (a quote signed by one person today, three next week), you'd otherwise need a separate template per count, and any unused role tag leaks as literal text.
+
+The `{#Signatures}` loop block solves this: author **one** signature layout and it repeats **once per signer**, for any count, wherever you place it in the document.
+
+```
+{#Signatures}
+  ______________________________
+  {Name}
+  Electronically signed on {SignedDate}
+  {Role} · {Email}
+{/Signatures}
+```
+
+Per-row fields available inside the block:
+
+| Field              | Value                                                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| `{Name}`           | The name the signer typed at signing (their e-signature); the invited name if none was captured |
+| `{RegisteredName}` | The name the signer was invited under                                                           |
+| `{Role}`           | The signer's role (defaults to `Signer`)                                                        |
+| `{Email}`          | The signer's email                                                                              |
+| `{SignedDate}`     | The date they signed (blank before signing)                                                     |
+| `{Status}`         | `Pending` before signing, `Signed` after                                                        |
+
+**Styling is yours.** The block is plain template content, so style `{Name}` however you like — a cursive web font for a handwritten look, a bordered box, a two-column table of signers, etc. (HTML templates have full CSS control within the Flying Saucer CSS 2.1 subset; Word templates can style the line too.)
+
+Notes:
+
+- **Backwards-compatible and additive.** Role tags (`{@Signature_Role}`) are unchanged and continue to work exactly as before — use them when you want signatures in fixed, scattered positions. A template **without** a `{#Signatures}` block renders identically to previous releases. You can even combine both in one template.
+- **Where it applies.** The loop is populated by the snapshot/PDF-viewer signing flow (the flow that re-renders the document from a send-time data snapshot and attaches the completed PDF + certificate to the record). Before signing, the block previews the invited signers with a `Pending` status; on completion it shows each signer's typed signature and signed date.
+- **Typed-name signatures** today (drawn-signature images are a planned future enhancement; the loop already supports per-row image fields for when that lands).
+
 ### 7.10 Rich text fields
 
 When a field value contains HTML (`<p>`, `<div>`, `<br>`, `<b>`, `<i>`, `<u>`, `<strong>`, `<em>`, `<span>`, `<img>`, `<a>`), DocGen preserves the formatting in the output — paragraphs, line breaks, bold/italic/underline, hyperlinks, and embedded images all carry through. Works in **Word templates** (DOCX or PDF output) and **HTML templates** (PDF output). PowerPoint strips HTML to plain text.
