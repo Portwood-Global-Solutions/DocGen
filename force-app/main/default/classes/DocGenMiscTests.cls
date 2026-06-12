@@ -9250,9 +9250,55 @@ private class DocGenMiscTests {
     // with a source-text assertion that catches any future revert to USER_MODE.
     // =========================================================================
     @IsTest
+    static void testInternalContentVersionLoaderWorksForNonAdminUser() {
+        Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
+        User stdUser = new User(
+            Alias = 'dgload',
+            Email = 'docgen-loader@example.com',
+            EmailEncodingKey = 'UTF-8',
+            LastName = 'Loader',
+            LanguageLocaleKey = 'en_US',
+            LocaleSidKey = 'en_US',
+            ProfileId = p.Id,
+            TimeZoneSidKey = 'America/Los_Angeles',
+            UserName = 'docgen.loader.' + System.currentTimeMillis() + '@example.com'
+        );
+        User currentUser = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(currentUser) {
+            insert stdUser;
+        }
+
+        DocGen_Template_Version__c version = TestDataFactory.getTestTemplateVersion();
+        String title = 'docgen_tmpl_xml_' + version.Id + '_word__document.xml';
+        insert new ContentVersion(
+            Title = title,
+            PathOnClient = title + '.xml',
+            VersionData = Blob.valueOf('<w:document>{#Contacts}<w:t>{LastName}</w:t>{/Contacts}</w:document>'),
+            FirstPublishLocationId = version.Id,
+            IsMajorVersion = true
+        );
+
+        System.runAs(stdUser) {
+            Test.startTest();
+            List<ContentVersion> loaded = DocGenService.loadInternalContentVersionsForVersionByTitle(version.Id, title);
+            Test.stopTest();
+
+            System.assertEquals(
+                1,
+                loaded.size(),
+                'Non-admin user should load package-internal CV through the template version link'
+            );
+            System.assert(
+                loaded[0].VersionData.toString().contains('{#Contacts}'),
+                'Loaded CV should include the pre-decomposed template body'
+            );
+        }
+    }
+
+    @IsTest
     static void testIssue114NoUserModeOnPreDecompCvLookups() {
         List<String> classNames = new List<String>{ 'DocGenService', 'DocGenController', 'DocGenGiantQueryFlowAction' };
-        for (ApexClass ac : [SELECT Name, Body FROM ApexClass WHERE Name IN :classNames AND NamespacePrefix = NULL]) {
+        for (ApexClass ac : [SELECT Name, Body FROM ApexClass WHERE Name IN :classNames]) {
             String body = ac.Body;
             Integer cursor = 0;
             Integer hits = 0;
@@ -9310,7 +9356,13 @@ private class DocGenMiscTests {
         for (ApexClass ac : [
             SELECT Name, Body
             FROM ApexClass
-            WHERE Name IN ('DocGenController', 'DocGenGiantQueryAssembler', 'DocGenGiantQueryStitchJob')
+            WHERE
+                Name IN (
+                    'DocGenController',
+                    'DocGenGiantQueryAssembler',
+                    'DocGenGiantQueryStitchJob',
+                    'DocGenGiantQueryFlowAction'
+                )
         ]) {
             classesByName.put(ac.Name, ac);
         }
@@ -9373,6 +9425,20 @@ private class DocGenMiscTests {
             'DocGenGiantQueryStitchJob',
             'docgen_part_',
             'No PDF parts found'
+        );
+
+        String flowActionBody = classesByName.get('DocGenGiantQueryFlowAction').Body;
+        assertGiantLauncherUsesInternalLoader(controllerBody, 'DocGenController');
+        assertGiantLauncherUsesInternalLoader(flowActionBody, 'DocGenGiantQueryFlowAction');
+    }
+
+    private static void assertGiantLauncherUsesInternalLoader(String body, String className) {
+        Integer idx = body.indexOf('docgen_tmpl_xml_');
+        System.assert(idx >= 0, className + ' should reference pre-decomposed template XML.');
+        Integer loaderIdx = body.indexOf('DocGenService.loadInternalContentVersionsForVersionByTitle', idx);
+        System.assert(
+            loaderIdx > idx,
+            className + ' must use the without-sharing internal ContentVersion loader for giant-query pre-decomp reads.'
         );
     }
 

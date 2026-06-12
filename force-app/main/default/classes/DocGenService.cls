@@ -98,6 +98,33 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * so bypassing sharing is safe. Template access is still gated by DocGen_Admin/User
      * permsets at the upstream entry points. (#28)
      */
+    public static List<ContentVersion> loadInternalContentVersionsByTitle(String title) {
+        return new PreDecompXmlLoader().loadByTitles(new Set<String>{ title });
+    }
+
+    public static List<ContentVersion> loadInternalContentVersionsByTitles(Set<String> titles) {
+        return new PreDecompXmlLoader().loadByTitles(titles);
+    }
+
+    public static List<ContentVersion> loadInternalContentVersionsByTitlePrefix(String titlePrefix) {
+        return new PreDecompXmlLoader().loadByTitlePrefix(titlePrefix);
+    }
+
+    public static List<ContentVersion> loadInternalContentVersionsForVersionByTitle(Id versionId, String title) {
+        return new PreDecompXmlLoader().loadForLinkedEntityByTitles(versionId, new Set<String>{ title });
+    }
+
+    public static List<ContentVersion> loadInternalContentVersionsForVersionByTitles(Id versionId, Set<String> titles) {
+        return new PreDecompXmlLoader().loadForLinkedEntityByTitles(versionId, titles);
+    }
+
+    public static List<ContentVersion> loadInternalContentVersionsForVersionByTitlePrefix(
+        Id versionId,
+        String titlePrefix
+    ) {
+        return new PreDecompXmlLoader().loadForLinkedEntityByTitlePrefix(versionId, titlePrefix);
+    }
+
     private without sharing class PreDecompXmlLoader {
         public List<ContentVersion> loadByTitlePrefix(String titlePrefix) {
             String likePattern = titlePrefix + '%';
@@ -112,6 +139,75 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 WHERE Title LIKE :likePattern AND IsLatest = TRUE
                 WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts
             ];
+        }
+
+        public List<ContentVersion> loadByTitles(Set<String> titles) {
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'Title', 'VersionData', 'IsLatest' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            return [
+                SELECT Id, Title, VersionData
+                FROM ContentVersion
+                WHERE Title IN :titles AND IsLatest = TRUE
+                WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts
+            ];
+        }
+
+        public List<ContentVersion> loadForLinkedEntityByTitlePrefix(Id linkedEntityId, String titlePrefix) {
+            Set<Id> docIds = getLinkedContentDocumentIds(linkedEntityId);
+            if (docIds.isEmpty()) {
+                return new List<ContentVersion>();
+            }
+            String likePattern = titlePrefix + '%';
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'ContentDocumentId', 'Title', 'VersionData', 'IsLatest' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            return [
+                SELECT Id, ContentDocumentId, Title, VersionData
+                FROM ContentVersion
+                WHERE ContentDocumentId IN :docIds AND Title LIKE :likePattern AND IsLatest = TRUE
+                WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts linked to template version
+            ];
+        }
+
+        public List<ContentVersion> loadForLinkedEntityByTitles(Id linkedEntityId, Set<String> titles) {
+            Set<Id> docIds = getLinkedContentDocumentIds(linkedEntityId);
+            if (docIds.isEmpty()) {
+                return new List<ContentVersion>();
+            }
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'ContentDocumentId', 'Title', 'VersionData', 'IsLatest' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            return [
+                SELECT Id, ContentDocumentId, Title, VersionData
+                FROM ContentVersion
+                WHERE ContentDocumentId IN :docIds AND Title IN :titles AND IsLatest = TRUE
+                WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts linked to template version
+            ];
+        }
+
+        private Set<Id> getLinkedContentDocumentIds(Id linkedEntityId) {
+            DocGenFlsGuard.assertAccessible(
+                ContentDocumentLink.sObjectType,
+                new Set<String>{ 'LinkedEntityId', 'ContentDocumentId' }
+            );
+            Set<Id> docIds = new Set<Id>();
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (ContentDocumentLink link : [
+                SELECT ContentDocumentId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :linkedEntityId
+                WITH SYSTEM_MODE // NOPMD — package-internal files linked to template version
+            ]) {
+                docIds.add(link.ContentDocumentId);
+            }
+            return docIds;
         }
     }
 
@@ -715,7 +811,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // still can't see these ContentVersions due to Salesforce's ContentVersion
             // sharing quirk — the user has no ContentDocumentLink rows. Bypass sharing
             // for this internal package-metadata read. (#28)
-            List<ContentVersion> xmlCvs = new PreDecompXmlLoader().loadByTitlePrefix(xmlPrefix);
+            List<ContentVersion> xmlCvs = new PreDecompXmlLoader()
+                .loadForLinkedEntityByTitlePrefix(activeVersions[0].Id, xmlPrefix);
 
             if (xmlCvs.isEmpty()) {
                 return null;
@@ -1342,14 +1439,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String rawDocumentXml = null;
         String capturedStylesXml = null;
 
-        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'VersionData' });
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<ContentVersion> xmlCvs = [
-            SELECT Title, VersionData
-            FROM ContentVersion
-            WHERE Title IN (:docKey, :stylesKey)
-            WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts; access gated by DocGen permission sets via the parent template (#114)
-        ];
+        List<ContentVersion> xmlCvs = new PreDecompXmlLoader()
+            .loadForLinkedEntityByTitles(activeVersions[0].Id, new Set<String>{ docKey, stylesKey });
         for (ContentVersion cv : xmlCvs) {
             if (cv.Title == docKey) {
                 rawDocumentXml = cv.VersionData.toString();
@@ -1521,17 +1612,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // returned empty in that context, which is why the signed PDF path lost table-style
         // borders for guest-triggered signatures (#28). Template access is already gated by
         // DocGen permission sets; reading the pre-decomposed artifacts in system mode is safe.
-        DocGenFlsGuard.assertAccessible(
-            ContentVersion.sObjectType,
-            new Set<String>{ 'Title', 'VersionData', 'IsLatest' }
-        );
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<ContentVersion> xmlCvs = [
-            SELECT Title, VersionData
-            FROM ContentVersion
-            WHERE Title LIKE :(xmlPrefix + '%') AND IsLatest = TRUE
-            WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts
-        ];
+        List<ContentVersion> xmlCvs = new PreDecompXmlLoader()
+            .loadForLinkedEntityByTitlePrefix(activeVersions[0].Id, xmlPrefix);
 
         String rawDocumentXml = null;
         for (ContentVersion cv : xmlCvs) {

@@ -285,7 +285,7 @@
         <apexPage>DocGenVerify</apexPage>
         <enabled>true</enabled>
     </pageAccesses>
-    <label>DocGen Guest Signature</label>
+    <label>Portwood DocGen Guest Signature</label>
     <objectPermissions>
         <allowCreate>true</allowCreate>
         <allowDelete>false</allowDelete>

@@ -629,7 +629,7 @@
         <readable>true</readable>
     </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>DocGen User</label>
+    <label>Portwood DocGen User</label>
     <pageAccesses>
         <apexPage>DocGenGuide</apexPage>
         <enabled>true</enabled>

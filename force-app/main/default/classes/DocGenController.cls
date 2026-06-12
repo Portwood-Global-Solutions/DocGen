@@ -1034,18 +1034,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     if (!Schema.sObjectType.ContentVersion.isAccessible()) {
                         throw new DocGenException('ContentVersion access denied.');
                     }
-                    DocGenFlsGuard.assertAccessible(
-                        ContentVersion.sObjectType,
-                        new Set<String>{ 'VersionData', 'Title' }
+                    List<ContentVersion> xmlCvs = DocGenService.loadInternalContentVersionsForVersionByTitle(
+                        activeVersions[0].Id,
+                        xmlKey
                     );
-                    /* code-analyzer-suppress ApexFlsViolation */
-                    List<ContentVersion> xmlCvs = [
-                        SELECT VersionData
-                        FROM ContentVersion
-                        WHERE Title = :xmlKey
-                        WITH SYSTEM_MODE
-                        LIMIT 1
-                    ];
                     if (!xmlCvs.isEmpty()) {
                         documentXml = xmlCvs[0].VersionData.toString();
                     }
@@ -1386,12 +1378,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (templateType == 'HTML') {
                 if (!activeVersions.isEmpty() && String.isNotBlank(activeVersions[0].Content_Version_Id__c)) {
                     Id bodyCvId = (Id) activeVersions[0].Content_Version_Id__c;
+                    DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
                     /* code-analyzer-suppress ApexFlsViolation */
                     List<ContentVersion> htmlCvs = [
                         SELECT VersionData
                         FROM ContentVersion
                         WHERE Id = :bodyCvId
-                        WITH USER_MODE
+                        WITH SYSTEM_MODE
                         LIMIT 1
                     ];
                     if (!htmlCvs.isEmpty()) {
@@ -1410,18 +1403,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     if (!Schema.sObjectType.ContentVersion.isAccessible()) {
                         throw new DocGenException('ContentVersion access denied.');
                     }
-                    DocGenFlsGuard.assertAccessible(
-                        ContentVersion.sObjectType,
-                        new Set<String>{ 'VersionData', 'Title' }
+                    List<ContentVersion> xmlCvs = DocGenService.loadInternalContentVersionsForVersionByTitle(
+                        activeVersions[0].Id,
+                        xmlKey
                     );
-                    /* code-analyzer-suppress ApexFlsViolation */
-                    List<ContentVersion> xmlCvs = [
-                        SELECT VersionData
-                        FROM ContentVersion
-                        WHERE Title = :xmlKey
-                        WITH SYSTEM_MODE
-                        LIMIT 1
-                    ];
                     if (!xmlCvs.isEmpty()) {
                         documentXml = xmlCvs[0].VersionData.toString();
                     }

@@ -731,7 +731,7 @@
         <readable>true</readable>
     </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>DocGen Admin</label>
+    <label>Portwood DocGen Admin</label>
     <pageAccesses>
         <apexPage>DocGenGuide</apexPage>
         <enabled>true</enabled>
