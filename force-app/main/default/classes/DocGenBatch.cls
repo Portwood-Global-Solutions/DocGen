@@ -10,6 +10,15 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
     public Integer successCount = 0;
     public Integer failCount = 0;
 
+    // Per-record failure diagnostics (Stateful — accumulates across execute() chunks).
+    // Previously failures were silently counted with no record Id or reason; this captures
+    // both so a job's failures are actionable. Capped to keep heap + the field bounded.
+    @TestVisible
+    private List<String> errorLog = new List<String>();
+    @TestVisible
+    private Integer heapFailCount = 0;
+    private static final Integer MAX_ERROR_LINES = 200;
+
     // Bulk data cache — populated in start(), read in execute()
     public Id dataCacheCvId;
     public String cachedDataJson;
@@ -303,6 +312,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
                 successCount++;
             } catch (Exception e) {
                 failCount++;
+                recordFailure(rec.Id, e);
             }
         }
 
@@ -310,8 +320,72 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         update new DocGen_Job__c( // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
             Id = jobId,
             Success_Count__c = successCount,
-            Error_Count__c = failCount
+            Error_Count__c = failCount,
+            Error_Log__c = buildErrorLog()
         );
+    }
+
+    /**
+     * Records a per-record failure with its reason instead of silently counting it.
+     * Oversized records (the giant-query condition — too many related rows to render in
+     * one transaction) are detected and flagged with actionable guidance, since the bulk
+     * batch cannot itself launch the giant-query Batchable. Capped at MAX_ERROR_LINES.
+     */
+    @TestVisible
+    private void recordFailure(Id recordId, Exception e) {
+        String reason;
+        if (e instanceof HeapPressureException || isHeapError(e)) {
+            heapFailCount++;
+            reason =
+                'too large for standard bulk generation (too many related rows) — ' +
+                'generate this record individually so it routes through the giant-query path';
+        } else {
+            reason = e.getTypeName() + ': ' + e.getMessage();
+        }
+        if (errorLog.size() < MAX_ERROR_LINES) {
+            errorLog.add(String.valueOf(recordId) + ' — ' + reason);
+        }
+    }
+
+    /**
+     * Heap-pressure errors from Blob.toPdf() surface as generic exceptions (the platform
+     * heap LimitException itself is uncatchable; what reaches here is the catchable
+     * wrapper/secondary). Mirrors DocGenController.isHeapError, which is private there.
+     */
+    private static Boolean isHeapError(Exception e) {
+        String msg = e.getMessage();
+        return String.isNotBlank(msg) && msg.toLowerCase().contains('heap');
+    }
+
+    /**
+     * Serializes the captured failures into the Error_Log__c field, prefixing an
+     * oversized-record summary when present and appending a "+N more" note so a capped
+     * log never reads as "these were the only failures".
+     */
+    @TestVisible
+    private String buildErrorLog() {
+        if (errorLog.isEmpty()) {
+            return null;
+        }
+        List<String> lines = new List<String>();
+        if (heapFailCount > 0) {
+            lines.add(
+                heapFailCount +
+                    ' record(s) were too large for standard bulk generation — generate those ' +
+                    'individually to use the giant-query path. Details below.'
+            );
+        }
+        lines.addAll(errorLog);
+        Integer extra = failCount - errorLog.size();
+        if (extra > 0) {
+            lines.add('… and ' + extra + ' more failure(s) not shown.');
+        }
+        String log = String.join(lines, '\n');
+        // Hard cap to the field length (32,768) — trim from the end, keeping the summary.
+        if (log.length() > 32000) {
+            log = log.substring(0, 32000) + '\n… (log truncated)';
+        }
+        return log;
     }
 
     /**
@@ -417,6 +491,9 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
                 successCount +
                     ' documents generated' +
                     (failCount > 0 ? ', ' + failCount + ' failed' : '') +
+                    (heapFailCount > 0
+                        ? ' (' + heapFailCount + ' too large — generate individually for giant-query)'
+                        : '') +
                     '. Tap to view.'
             );
             notification.send(new Set<String>{ job.CreatedById });
