@@ -76,6 +76,49 @@ private class DocGenSignaturePdfTests {
         ];
     }
 
+    /**
+     * An active Guest user to exercise true guest context, or null if the org
+     * has no Site (some package-build orgs). Callers fall back to the current
+     * user so the test never fails merely for lack of a guest user.
+     */
+    private static User getGuestUser() {
+        List<User> guests = [SELECT Id FROM User WHERE UserType = 'Guest' AND IsActive = TRUE LIMIT 1];
+        return guests.isEmpty() ? null : guests[0];
+    }
+
+    // =========================================================================
+    // Guest-context regression
+    // validateToken on the PDF (Source_Document_Id__c) path must NOT fail when
+    // the optional public preview link can't be created. getOrCreatePublicLink
+    // inserts a ContentDistribution, which a guest user cannot create — that's a
+    // user permission, NOT bypassed by SYSTEM_MODE. Before the validateSignerToken
+    // try/catch, this threw and surfaced as the page's "no longer active" error
+    // for every guest. Strongest where a real guest user exists (scratch/Site
+    // orgs); harmless where one doesn't.
+    // =========================================================================
+    @isTest
+    static void testGuestContext_validateToken_pdfPath_survivesPublicLinkFailure() {
+        DocGenSignatureController.SignatureInitResponse res;
+        User guest = getGuestUser();
+
+        Test.startTest();
+        if (guest != null) {
+            System.runAs(guest) {
+                res = DocGenSignatureController.validateToken(SIGNER_TOKEN);
+            }
+        } else {
+            res = DocGenSignatureController.validateToken(SIGNER_TOKEN);
+        }
+        Test.stopTest();
+
+        System.assertEquals(
+            true,
+            res.isValid,
+            'PDF-path token must validate even when the public preview link cannot be created (guest cannot insert ContentDistribution)'
+        );
+        System.assertEquals('Pat Signer', res.signerName);
+    }
+
     // =========================================================================
     // A1 — getSourcePdfBase64
     // =========================================================================
