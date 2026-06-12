@@ -47,7 +47,7 @@ private class DocGenAuthenticatorControllerTest {
     }
 
     private static DocGen_Signature_Request__c getRequest() {
-        return [SELECT Id FROM DocGen_Signature_Request__c LIMIT 1];
+        return [SELECT Id, Secure_Token__c FROM DocGen_Signature_Request__c LIMIT 1];
     }
 
     // =========================================================================
@@ -168,24 +168,40 @@ private class DocGenAuthenticatorControllerTest {
     // =========================================================================
 
     @isTest
-    static void testVerifyByRequestId_valid18() {
+    static void testVerifyByRequestId_validToken() {
         DocGen_Signature_Request__c req = getRequest();
-        // Salesforce 18-char Id — req.Id is already 18 chars in Apex
-        System.assertEquals(18, String.valueOf(req.Id).length(), 'Id should be 18 chars');
+        // Capability is now the request's unguessable 64-hex Secure_Token__c.
+        System.assertEquals(64, req.Secure_Token__c.length(), 'Request token should be 64 hex chars');
 
         Test.startTest();
         List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyByRequestId(
-            req.Id
+            req.Secure_Token__c
         );
         Test.stopTest();
 
-        System.assertEquals(1, results.size(), 'Should find the one inserted audit');
+        System.assertEquals(1, results.size(), 'Should find the one inserted audit via request token');
         DocGenAuthenticatorController.VerificationResult r = results[0];
         System.assertEquals(true, r.isValid);
         System.assertEquals('Auth Signer', r.signerName);
         System.assertEquals('Buyer', r.roleName, 'Role from Signer__r should be populated');
         System.assertEquals(VALID_HASH, r.documentHash);
         System.assertEquals('Signature verified', r.message);
+    }
+
+    @isTest
+    static void testVerifyByRequestId_rawIdIsRejected() {
+        // SECURITY REGRESSION GUARD: the old IDOR returned signer PII for any
+        // guessed record Id. The endpoint must now reject a raw Signature_Request
+        // Id (15/18-char, not 64-hex) and disclose nothing.
+        DocGen_Signature_Request__c req = getRequest();
+
+        Test.startTest();
+        List<DocGenAuthenticatorController.VerificationResult> byId = DocGenAuthenticatorController.verifyByRequestId(
+            req.Id
+        );
+        Test.stopTest();
+
+        System.assertEquals(0, byId.size(), 'A raw record Id must NOT return any signer data');
     }
 
     @isTest
@@ -196,17 +212,17 @@ private class DocGenAuthenticatorControllerTest {
         );
         System.assertEquals(0, r1.size(), '14-char input must return empty');
 
-        // 19 chars (too long)
+        // 65 chars (too long for a SHA-256 hex token)
         List<DocGenAuthenticatorController.VerificationResult> r2 = DocGenAuthenticatorController.verifyByRequestId(
-            '0011223344556677889'
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0'
         );
-        System.assertEquals(0, r2.size(), '19-char input must return empty');
+        System.assertEquals(0, r2.size(), '65-char input must return empty');
 
-        // 18 chars with special characters (not alphanumeric)
+        // 64 chars with non-hex characters
         List<DocGenAuthenticatorController.VerificationResult> r3 = DocGenAuthenticatorController.verifyByRequestId(
-            '001122334455667!@#'
+            'ghijklmnopqrstuvwxyz0123456789abcdef0123456789abcdef0123456789abcd'.substring(0, 64)
         );
-        System.assertEquals(0, r3.size(), 'Special chars must return empty');
+        System.assertEquals(0, r3.size(), 'Non-hex chars must return empty');
 
         // null
         List<DocGenAuthenticatorController.VerificationResult> r4 = DocGenAuthenticatorController.verifyByRequestId(
@@ -217,20 +233,14 @@ private class DocGenAuthenticatorControllerTest {
         // empty string
         List<DocGenAuthenticatorController.VerificationResult> r5 = DocGenAuthenticatorController.verifyByRequestId('');
         System.assertEquals(0, r5.size(), 'Empty must return empty');
-
-        // SOQL injection attempt — ' OR ' in the middle, length matched to 18
-        List<DocGenAuthenticatorController.VerificationResult> r6 = DocGenAuthenticatorController.verifyByRequestId(
-            '001\' OR Id != \'X'
-        );
-        System.assertEquals(0, r6.size(), 'Injection attempt must be rejected by validator');
     }
 
     @isTest
     static void testVerifyByRequestId_notFound() {
-        // Well-formed but unused 15-char alphanumeric Id
+        // Well-formed 64-hex token that matches no request
         Test.startTest();
         List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyByRequestId(
-            'a0B000000000ABC'
+            'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
         );
         Test.stopTest();
 

@@ -11,6 +11,7 @@ Id tmplId;
 Id sigReqId;
 Id signerId;
 String signerToken;
+String requestToken;
 
 // ===== Look up test data =====
 try {
@@ -48,10 +49,14 @@ if (acctId == null || tmplId == null) {
 // ===== Create Signature Request =====
 try {
     signerToken = EncodingUtil.convertToHex(Crypto.generateAesKey(256));
+    // Request-level verification token — the capability for verifyByRequestId
+    // (the certificate verify link now carries ?token= this value, not the Id).
+    requestToken = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', Crypto.generateAesKey(256)));
     DocGen_Signature_Request__c sr = new DocGen_Signature_Request__c(
         Status__c = 'Sent',
         Related_Record_Id__c = acctId,
         Template__c = tmplId,
+        Secure_Token__c = requestToken,
         Signer_Name__c = 'Alice Johnson',
         Signer_Email__c = 'alice@e2etest.example.com'
     );
@@ -172,14 +177,14 @@ try {
     System.debug('AUDIT RECORD: FAIL — ' + e.getMessage());
 }
 
-// ===== Verify By Request ID =====
+// ===== Verify By Request Token (capability = unguessable Secure_Token__c) =====
 try {
     List<DocGenAuthenticatorController.VerificationResult> vrs = DocGenAuthenticatorController.verifyByRequestId(
-        String.valueOf(sigReqId)
+        requestToken
     );
     if (vrs != null && !vrs.isEmpty()) {
         pass++;
-        System.debug('VERIFY BY REQUEST ID: PASS — ' + vrs.size() + ' results');
+        System.debug('VERIFY BY REQUEST TOKEN: PASS — ' + vrs.size() + ' results');
         // Check first result has expected data
         DocGenAuthenticatorController.VerificationResult vr = vrs[0];
         if (vr.signerName == 'Alice Johnson') {
@@ -191,11 +196,24 @@ try {
         }
     } else {
         fail++;
-        System.debug('VERIFY BY REQUEST ID: FAIL — empty or null');
+        System.debug('VERIFY BY REQUEST TOKEN: FAIL — empty or null');
+    }
+
+    // SECURITY REGRESSION GUARD: a raw record Id must NOT disclose signer data
+    // (the closed IDOR). Passing the request Id returns empty.
+    List<DocGenAuthenticatorController.VerificationResult> byId = DocGenAuthenticatorController.verifyByRequestId(
+        String.valueOf(sigReqId)
+    );
+    if (byId == null || byId.isEmpty()) {
+        pass++;
+        System.debug('VERIFY REJECTS RAW ID (IDOR closed): PASS');
+    } else {
+        fail++;
+        System.debug('VERIFY REJECTS RAW ID (IDOR closed): FAIL — leaked ' + byId.size() + ' results');
     }
 } catch (Exception e) {
     fail++;
-    System.debug('VERIFY BY REQUEST ID: FAIL — ' + e.getMessage());
+    System.debug('VERIFY BY REQUEST TOKEN: FAIL — ' + e.getMessage());
 }
 
 // ===== Settings: getSettings =====

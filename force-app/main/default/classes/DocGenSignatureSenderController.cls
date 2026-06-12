@@ -464,6 +464,18 @@ public with sharing class DocGenSignatureSenderController {
         return createTemplateSignerRequestWithOrder(templateId, relatedRecordId, signersJson, 'Parallel');
     }
 
+    /**
+     * Mints an unguessable 64-hex request-level verification token (256-bit CSPRNG
+     * via Crypto.generateAesKey, SHA-256 digested). Used as the capability on the
+     * certificate's post-signing verification link (?token=). It is NOT a signing
+     * token — it only gates read access to the signature audit roster.
+     */
+    private static String generateRequestVerificationToken() {
+        Blob randomBytes = Crypto.generateAesKey(256);
+        Blob hash = Crypto.generateDigest('SHA-256', randomBytes);
+        return EncodingUtil.convertToHex(hash);
+    }
+
     @AuraEnabled
     public static List<SignerResult> createTemplateSignerRequestWithOrder(
         Id templateId,
@@ -512,6 +524,10 @@ public with sharing class DocGenSignatureSenderController {
         if (String.isNotBlank(documentTitleFormat)) {
             req.Document_Title_Format__c = documentTitleFormat;
         }
+        // SECURITY: unguessable request-level token used as the capability for the
+        // post-signing verification link (?token=) printed on the certificate.
+        // Distinct from signer signing tokens — this only gates audit-roster reads.
+        req.Secure_Token__c = generateRequestVerificationToken();
         // Package-internal object — CRUD controlled by DocGen permission sets
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.assertCreateable(
@@ -521,7 +537,8 @@ public with sharing class DocGenSignatureSenderController {
                 'Related_Record_Id__c',
                 'Status__c',
                 'Signing_Order__c',
-                'Document_Title_Format__c'
+                'Document_Title_Format__c',
+                'Secure_Token__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation */
@@ -648,6 +665,9 @@ public with sharing class DocGenSignatureSenderController {
         if (String.isNotBlank(documentTitleFormat)) {
             req.Document_Title_Format__c = documentTitleFormat;
         }
+        // SECURITY: unguessable request-level verification-link capability — see
+        // createTemplateSignerRequestWithOrder for rationale.
+        req.Secure_Token__c = generateRequestVerificationToken();
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.assertCreateable(
             req,
@@ -657,7 +677,8 @@ public with sharing class DocGenSignatureSenderController {
                 'Related_Record_Id__c',
                 'Status__c',
                 'Signing_Order__c',
-                'Document_Title_Format__c'
+                'Document_Title_Format__c',
+                'Secure_Token__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation */

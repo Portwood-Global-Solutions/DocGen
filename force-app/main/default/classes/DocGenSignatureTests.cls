@@ -1143,8 +1143,9 @@ private class DocGenSignatureTests {
         );
         Database.insert(audit, AccessLevel.SYSTEM_MODE);
         Test.startTest();
+        // Capability is the request's unguessable Secure_Token__c, not the raw Id.
         List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyByRequestId(
-            req.Id
+            req.Secure_Token__c
         );
         Test.stopTest();
 
@@ -1157,8 +1158,9 @@ private class DocGenSignatureTests {
     @isTest
     static void testVerifyByRequestId_noAudits() {
         Test.startTest();
+        // 64-hex token that matches no request → empty
         List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyByRequestId(
-            '001000000000000AAA'
+            '00000000000000000000000000000000000000000000000000000000000000aa'
         );
         Test.stopTest();
         System.assertEquals(0, results.size());

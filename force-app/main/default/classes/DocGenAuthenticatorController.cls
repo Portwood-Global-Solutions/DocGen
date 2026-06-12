@@ -1,8 +1,8 @@
 public without sharing class DocGenAuthenticatorController {
-    // SHA-256 hex digest = 64 lowercase/uppercase hex characters
+    // SHA-256 hex digest = 64 lowercase/uppercase hex characters.
+    // Both capabilities in this class are 64-hex: the document hash (verifyDocument)
+    // and the request verification token (verifyByRequestId).
     private static final Pattern SHA256_HEX = Pattern.compile('^[a-fA-F0-9]{64}$');
-    // Salesforce Id = 15 or 18 alphanumeric characters
-    private static final Pattern SF_ID = Pattern.compile('^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$');
 
     /**
      * Verifies a document by its SHA-256 hash.
@@ -89,31 +89,36 @@ public without sharing class DocGenAuthenticatorController {
     }
 
     /**
-     * Looks up all audit records for a signature request by ID.
-     * Used by the verification page when accessed via request ID link.
-     *
-     * Note: the request Id IS the verification capability — this endpoint is meant to
-     * let recipients verify their audit trail via a public-link flow. We therefore do
-     * NOT gate on caller identity, but we DO strictly validate the input shape and
-     * return only fields that are part of the verification contract.
+     * Looks up all audit records for a signature request via the request's
+     * unguessable Secure_Token__c (the verify link printed on the certificate
+     * carries ?token=...). The token IS the capability — possession of the
+     * signed document (which displays the link) is what authorizes viewing the
+     * audit roster. The previous version keyed on the raw record Id, which is
+     * enumerable, allowing anonymous PII harvest; that IDOR is closed here.
+     * The method name is retained for managed-package/binary compatibility.
      */
     @AuraEnabled
     @RemoteAction
-    public static List<VerificationResult> verifyByRequestId(String requestId) {
+    public static List<VerificationResult> verifyByRequestId(String requestToken) {
         List<VerificationResult> results = new List<VerificationResult>();
 
-        // Strict input validation: must be a well-formed 15- or 18-char alphanumeric Salesforce Id.
-        // Reject early with empty list if malformed — never reach SOQL.
+        // SECURITY (hotfix): the capability is now the request's unguessable
+        // 64-hex Secure_Token__c, NOT the raw Signature_Request__c Id. Salesforce
+        // record Ids are enumerable (fixed key-prefix, appear in URLs, partially
+        // sequential), so the previous Id-keyed lookup let any anonymous guest
+        // harvest every signer's name/email/IP for a guessed request. The verify
+        // link printed on the certificate now carries this token (?token=...).
+        // Legacy ?id= links (15/18-char Ids) fail this 64-hex check and return
+        // empty — those documents are still verifiable by upload (verifyDocument).
         if (
-            String.isBlank(requestId) ||
-            (requestId.length() != 15 &&
-            requestId.length() != 18) ||
-            !SF_ID.matcher(requestId).matches()
+            String.isBlank(requestToken) ||
+            requestToken.length() != 64 ||
+            !SHA256_HEX.matcher(requestToken).matches()
         ) {
             return results;
         }
 
-        // Public verifier — capability is holding the Signature_Request__c Id.
+        // Public verifier — capability is holding the request Secure_Token__c.
         // Describe check below is the explicit CRUD/FLS enforcement signal
         // documented in DocGenSignatureGuestSecurity.
         DocGenSignatureGuestSecurity.assertAuditReadable();
@@ -152,7 +157,7 @@ public without sharing class DocGenAuthenticatorController {
                 Document_Hash_SHA256__c,
                 Signer__r.Role_Name__c
             FROM DocGen_Signature_Audit__c
-            WHERE Signature_Request__c = :requestId AND Signer_Name__c != 'SYSTEM'
+            WHERE Signature_Request__r.Secure_Token__c = :requestToken AND Signer_Name__c != 'SYSTEM'
             WITH SYSTEM_MODE
             ORDER BY Signed_Date__c ASC
         ];

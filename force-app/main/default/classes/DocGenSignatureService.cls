@@ -238,13 +238,43 @@ public without sharing class DocGenSignatureService {
             String verifyPage = (String.isNotBlank(ns) && ns != 'DocGenSignatureService')
                 ? '/apex/' + ns + '__DocGenVerify'
                 : '/apex/DocGenVerify';
-            String verifyUrl = siteUrl + verifyPage + '?id=' + String.valueOf(requestId);
-            html += 'Verify at: ' + verifyUrl.escapeHtml4();
+            // SECURITY: the verification link carries the request's unguessable
+            // Secure_Token__c, not the enumerable record Id. The endpoint
+            // (verifyByRequestId) requires this 64-hex token before returning any
+            // signer audit data. Only emit the link when the token is present.
+            String verifyToken = lookupRequestVerificationToken(requestId);
+            if (String.isNotBlank(verifyToken)) {
+                String verifyUrl = siteUrl + verifyPage + '?token=' + verifyToken;
+                html += 'Verify at: ' + verifyUrl.escapeHtml4();
+            }
         }
         html += '</td></tr>';
 
         html += '</table></div>';
         return html;
+    }
+
+    /**
+     * Returns the request's unguessable verification token (Secure_Token__c) used
+     * as the capability on the certificate verify link. Runs in the async
+     * (Automated Process) finalize context, so SYSTEM_MODE is required. Returns
+     * null when absent (e.g. legacy requests created before this hotfix) — the
+     * caller then omits the link, leaving document-upload verification intact.
+     */
+    private static String lookupRequestVerificationToken(Id requestId) {
+        if (requestId == null) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Secure_Token__c' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signature_Request__c> reqs = [
+            SELECT Secure_Token__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        return reqs.isEmpty() ? null : reqs[0].Secure_Token__c;
     }
 
     /**
