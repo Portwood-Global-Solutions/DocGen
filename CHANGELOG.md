@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.09.0 — Non-admin Large-template Access (`04tVx000000nOdtIAE`, build `3.9.0-1`, promoted 2026-06-11)
+
+This release completes the non-admin large-template support fix reported from Slack. Users with the DocGen User permission set could see shared templates and start generation, but large/giant-query jobs still failed because the job record needed to store internal generation context in fields that were not editable by non-admin users.
+
+Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+
+### 1. DocGen users can generate giant-query documents
+
+`DocGen_User` now grants editable access to `DocGen_Job__c.Parent_Record_Id__c` and `DocGen_Job__c.Giant_Query_Config__c`, matching the fields the controller writes when it creates a large-template generation job. This keeps non-admin generation gated by normal DocGen permissions while allowing the server-side giant-query pipeline to persist its own job state.
+
+### 2. Regression coverage for non-admin job creation
+
+Bulk-controller permission tests now assert that a DocGen User can create jobs with the fields required by the giant-query generation path. The affected test fixture also links its synthetic pre-decomposed internal ContentVersion to the template version, matching how the fixed loader discovers package-managed parts.
+
+### Release validation
+
+- Package version create: `08cVx000000iNDpIAM` succeeded; package coverage 76%; subscriber package `04tVx000000nOdtIAE`
+- Promoted package: `04tVx000000nOdtIAE` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOdtIAE) · [Sandbox Install URL](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOdtIAE)
+- Full e2e suite in `triage-sumit-footer`: e2e-01 through e2e-08 PASS/FAIL0
+- Full Apex validation in `triage-sumit-footer`: `RunLocalTests` 1474/1474, org coverage 76% (`707cf00000zPzdYAAS`)
+- Code Analyzer: Security + AppExchange selectors, 0 violations
+- Browser proof in `triage-sumit-footer`: standard non-admin user generated a 2,105-contact giant-query PDF from the real runner button and received the success toast
+- Test data note: validation used synthetic scratch-org data only; the manual proof fixture was removed after validation
+
 ## v3.08.0 — Signature Images and Generation Access (`04tVx000000nOFhIAM`, build `3.8.0-1`, promoted 2026-06-11)
 
 This release closes two field-reported support issues: HTML e-signature templates with embedded Salesforce Files images now render those images in signer-facing previews, and non-admin users who can access a template can generate large/giant-query documents without needing DocGen Admin just to read DocGen's internal generated parts.
