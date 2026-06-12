@@ -133,7 +133,7 @@
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
-        <editable>false</editable>
+        <editable>true</editable>
         <field>DocGen_Job__c.Giant_Query_Config__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -153,7 +153,7 @@
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
-        <editable>false</editable>
+        <editable>true</editable>
         <field>DocGen_Job__c.Parent_Record_Id__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -629,7 +629,7 @@
         <readable>true</readable>
     </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>DocGen User</label>
+    <label>Portwood DocGen User</label>
     <pageAccesses>
         <apexPage>DocGenGuide</apexPage>
         <enabled>true</enabled>

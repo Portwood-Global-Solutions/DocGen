@@ -44,7 +44,8 @@ public with sharing class DocGenBulkControllerTest {
         ContentVersion xmlCv = new ContentVersion(
             Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
             PathOnClient = 'document.xml',
-            VersionData = Blob.valueOf(docXml)
+            VersionData = Blob.valueOf(docXml),
+            FirstPublishLocationId = ver.Id
         );
         insert xmlCv;
     }

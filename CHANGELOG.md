@@ -1,5 +1,169 @@
 # Changelog
 
+## v3.11.0 — Shared Template Image Rendering (`04tVx000000nPGbIAM`, build `3.11.0-1`, promoted 2026-06-12)
+
+This release fixes the follow-up shared-template image issue reported from Slack. Non-admin users could generate both HTML and Word/giant-query PDFs, but template-owned images referenced by `/sfc/servlet.shepherd/version/download/<ContentVersionId>` could render as broken when the running user did not own or otherwise have file access to the image file.
+
+Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+
+### 1. Non-admin PDF renders can fetch referenced template image assets
+
+`Blob.toPdf()` fetches relative shepherd image URLs as the running user. Before PDF rendering, DocGen now extracts the referenced ContentVersion IDs from the final HTML and links only the current template's DocGen-managed image assets to the source record as Viewer / AllUsers.
+
+The fix applies to normal HTML-template PDFs, Word-to-PDF rendering, and the giant-query final PDF path.
+
+### 2. The access handoff is scoped to template-owned assets
+
+The helper filters candidate files by DocGen template image title prefixes for the active template/version, so it does not broaden access to arbitrary customer files or row-level image data. It also preserves the zero-heap PDF image behavior: images remain relative shepherd URLs and no `VersionData` is loaded for PDF rendering.
+
+### 3. Regression coverage and non-admin visual proof
+
+Regression coverage verifies that a referenced template image file is linked to the source record before PDF rendering. Browser proof in the release validation scratch org used the actual Lightning runner button as a standard DocGen user and generated both HTML and Word giant-query PDFs with the embedded image visible.
+
+### Release validation
+
+- Package version create: `08cVx000000iNP7IAM` succeeded; package coverage 76%; subscriber package `04tVx000000nPGbIAM`
+- Promoted package: `04tVx000000nPGbIAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nPGbIAM) · [Sandbox Install URL](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nPGbIAM)
+- Release landing config updated in production: `DocGen_Landing_Config__mdt.Current` → version `3.11.0`, package `04tVx000000nPGbIAM`
+- Full e2e suite in `triage-sumit-footer`: e2e-01 through e2e-08 PASS/FAIL0
+- Full Apex validation in `triage-sumit-footer`: `RunLocalTests` completed with 0 failures, org coverage 76% (`707cf00000zV0iE`)
+- Focused Apex validation in `triage-sumit-footer`: `DocGenMiscTests.testTemplateAssetImageAccessLinkedForPdfRender` passed
+- Browser proof in `triage-sumit-footer`: standard non-admin user generated HTML and Word giant-query PDFs from the real runner button; both showed rendered template images
+- Visual artifacts: `outputs/proof-images/html-giant-nonadmin.png`, `outputs/proof-images/word-giant-nonadmin.png`
+- Code Analyzer: Security + AppExchange selectors completed with 0 emitted unsuppressed violations
+- `npm run format:check`: pass
+- Customer data note: validation used synthetic scratch-org data; the customer-provided template was inspected locally only to identify document structure and embedded image behavior
+
+## v3.10.0 — Large-template Snapshot Fidelity (`04tVx000000nOh7IAE`, build `3.10.0-1`, promoted 2026-06-12)
+
+This release fixes the follow-up large-template rendering issue reported from Slack. Non-admin users could generate the document after v3.09.0, but large/giant-query output could still lose template chrome and render as a bare data table when the internal pre-baked HTML snapshot was not visible from the queueable's sharing context.
+
+Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+
+### 1. Giant-query output preserves headers, footers, and embedded template images
+
+`DocGenGiantQueryAssembler` now loads the pre-baked HTML snapshot through the template-version-linked internal ContentVersion helper before falling back to the legacy title-only lookup. This keeps the large-template path aligned with DocGen's internal part sharing model and prevents the bare-table fallback from dropping document titles, table headers, footers, and embedded Word-template images.
+
+The customer-provided DOCX used an embedded `word/media/image1.jpeg` logo, not a `{%ImageField}` merge image. The fix preserves that image by preserving the whole pre-baked snapshot/part payload for the giant-query renderer.
+
+### 2. Split footer merge tags are normalized before snapshot creation
+
+Pre-baked HTML snapshot creation now merges Word runs in header/footer XML before storing those entries, matching the normal render path. This covers templates where Word splits a footer tag across runs, such as `{`, `Date_for_merge_document__c`, and `}`.
+
+### 3. Regression coverage for the actual failure shape
+
+Giant-query chrome preservation tests now assert that snapshot title/header/footer content and an image marker survive assembly. Footer-run regression coverage verifies split-brace merge tags normalize before merge processing.
+
+### Release validation
+
+- Package version create: `08cVx000000iNH3IAM` succeeded; package coverage 76%; subscriber package `04tVx000000nOh7IAE`
+- Promoted package: `04tVx000000nOh7IAE` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOh7IAE) · [Sandbox Install URL](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOh7IAE)
+- Release landing config updated in production: `DocGen_Landing_Config__mdt.Current` → version `3.10.0`, package `04tVx000000nOh7IAE`
+- Full e2e suite in `triage-sumit-footer`: e2e-01 through e2e-08 PASS/FAIL0
+- Full Apex validation in `triage-sumit-footer`: `RunLocalTests` completed with 0 failures, org coverage 76% (`05mcf000001WhinAAC`)
+- Focused Apex validation in `triage-sumit-footer`: `DocGenGiantQueryTest` plus footer split-tag regression passed 48/48 (`707cf00000zQuQE`)
+- Code Analyzer: Security + AppExchange selectors, 0 violations
+- `npm run format:check`: pass
+- `git diff --check`: pass
+- Customer data note: validation used synthetic scratch-org data; the customer-provided template was inspected only as local DOCX structure to identify embedded media/merge-tag shape
+
+## v3.09.0 — Non-admin Large-template Access (`04tVx000000nOdtIAE`, build `3.9.0-1`, promoted 2026-06-11)
+
+This release completes the non-admin large-template support fix reported from Slack. Users with the DocGen User permission set could see shared templates and start generation, but large/giant-query jobs still failed because the job record needed to store internal generation context in fields that were not editable by non-admin users.
+
+Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+
+### 1. DocGen users can generate giant-query documents
+
+`DocGen_User` now grants editable access to `DocGen_Job__c.Parent_Record_Id__c` and `DocGen_Job__c.Giant_Query_Config__c`, matching the fields the controller writes when it creates a large-template generation job. This keeps non-admin generation gated by normal DocGen permissions while allowing the server-side giant-query pipeline to persist its own job state.
+
+### 2. Regression coverage for non-admin job creation
+
+Bulk-controller permission tests now assert that a DocGen User can create jobs with the fields required by the giant-query generation path. The affected test fixture also links its synthetic pre-decomposed internal ContentVersion to the template version, matching how the fixed loader discovers package-managed parts.
+
+### Release validation
+
+- Package version create: `08cVx000000iNDpIAM` succeeded; package coverage 76%; subscriber package `04tVx000000nOdtIAE`
+- Promoted package: `04tVx000000nOdtIAE` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOdtIAE) · [Sandbox Install URL](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOdtIAE)
+- Full e2e suite in `triage-sumit-footer`: e2e-01 through e2e-08 PASS/FAIL0
+- Full Apex validation in `triage-sumit-footer`: `RunLocalTests` 1474/1474, org coverage 76% (`707cf00000zPzdYAAS`)
+- Code Analyzer: Security + AppExchange selectors, 0 violations
+- Browser proof in `triage-sumit-footer`: standard non-admin user generated a 2,105-contact giant-query PDF from the real runner button and received the success toast
+- Test data note: validation used synthetic scratch-org data only; the manual proof fixture was removed after validation
+
+## v3.08.0 — Signature Images and Generation Access (`04tVx000000nOFhIAM`, build `3.8.0-1`, promoted 2026-06-11)
+
+This release closes two field-reported support issues: HTML e-signature templates with embedded Salesforce Files images now render those images in signer-facing previews, and non-admin users who can access a template can generate large/giant-query documents without needing DocGen Admin just to read DocGen's internal generated parts.
+
+Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152), [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+
+### 1. HTML signature previews can render template images
+
+HTML signature preview generation now creates public distribution URLs for Salesforce Files images referenced by HTML template bodies. The cached signer preview HTML rewrites `/sfc/servlet.shepherd/version/download/068...` image sources to those distribution URLs so signer-facing browser previews can load the images, while final PDF rendering keeps the relative `/sfc/...` path required by Salesforce's PDF renderer.
+
+### 2. Non-admin users can generate large templates when internal parts are private
+
+Giant-query generation now reads DocGen-managed internal `docgen_%` / `docgen_giant_%` ContentVersion artifacts with the established FLS guard + `SYSTEM_MODE` pattern after the user's template/job access has already been gated. This fixes the support-thread symptom where a non-admin could see a shared template but generation failed with "Pre-decomposed template parts not found", while admins could generate the same document.
+
+### Release validation
+
+- Package version create: `08cVx000000iKvtIAE` succeeded; package coverage 76%; subscriber package `04tVx000000nOFhIAM`
+- Promoted package: `04tVx000000nOFhIAM` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOFhIAM) · [Sandbox Install URL](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nOFhIAM)
+- Full e2e suite in `triage-sumit-footer`: e2e-01 through e2e-08 PASS/FAIL0
+- Full Apex validation in `triage-sumit-footer`: `RunLocalTests` 1487/1487, org coverage 76% (`707cf00000zNB7s`)
+- Code Analyzer: Security + AppExchange selectors, 0 violations
+- Focused proof in `triage-sumit-footer`: `DocGenSignatureTests` HTML image assertions + giant-query internal content guard passed (`707cf00000zMYTW`)
+- Broader focused Apex validation in `triage-sumit-footer`: `DocGenSignatureTests` 277/277, `DocGenGiantQueryTest` 46/46, `DocGenControllerTests` 223/223
+
+## v3.07.0 — HTML Signature Rendering (`04tVx000000nLOHIA2`, build `3.7.0-1`, promoted 2026-06-11)
+
+This release completes HTML-template e-signature support. v3.06 fixed sender-side signature placement detection, but HTML signature previews and completed signed PDFs could still render blank because the signing flow sent already-rendered HTML through the Word-to-HTML renderer.
+
+Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152)
+
+### 1. HTML signature previews render the merged HTML directly
+
+Signature preview generation now carries the template type through the merge result. HTML templates use the merged HTML body directly, while Word templates continue through the existing DOCX XML renderer with header/footer handling.
+
+### 2. Completed HTML signature PDFs stamp tags in HTML
+
+Final signed PDF rendering now uses an HTML-safe stamping path for HTML templates and keeps the existing XML-safe stamping path for Word templates. Signed values are HTML-escaped before replacement.
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Promoted package: `04tVx000000nLOHIA2` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nLOHIA2)
+- Package build coverage: 76%, code coverage check passed
+- Focused Apex validation in `triage-sumit-footer`: `DocGenSignatureTests`, 274/274 tests passed
+- Visual E2E in `triage-sumit-footer`: sender LWC PDF preview, signer preview, completed signed PDF, and verification certificate all rendered successfully for an HTML signature template
+- Full e2e suite on `triage-sumit-footer`: PASS/FAIL0 across `e2e-01` through `e2e-08`
+- Full Apex suite: `RunLocalTests`, 1469 tests, 100% pass rate, 76% org-wide coverage
+- `sf code-analyzer` Security + AppExchange: 0 violations; SFGE printed internal timeout diagnostics on existing large controller paths before returning a clean summary
+
+## v3.06.0 — HTML Signature Placement Detection (`04tVx000000nIv4IAE`, build `3.6.0-1`, promoted 2026-06-11)
+
+This release fixes HTML-template signature sending. HTML templates that contained valid signature tags such as `{@Signature_Customer}` or `{@Signature_Customer:1:Date}` could render the tag text in generated output but still show **No Signature Placements Found** in the signature sender component.
+
+Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152)
+
+### 1. HTML signature tags are detected by the sender
+
+Signature placement discovery now reads the active HTML template body when the template type is HTML. Word templates continue to use the existing pre-decomposed `word/document.xml` path.
+
+The parser behavior is unchanged: bare tags like `{@Signature_Customer}` still default to a full-signature placement, and v3 tags like `{@Signature_Customer:1:Date}` keep their explicit order/type.
+
+### Release validation
+
+- Package version create: validated build, `ValidationSkipped = false`
+- Promoted package: `04tVx000000nIv4IAE` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nIv4IAE)
+- Package build coverage: 76%, code coverage check passed
+- Focused Apex validation in `triage-sumit-footer`: `DocGenSignatureTests`, 270/270 tests passed
+- Full e2e suite on `triage-sumit-footer`: PASS/FAIL0 across `e2e-01` through `e2e-08`
+- Full Apex suite: `RunLocalTests`, 1465 tests, 100% pass rate, 76% org-wide coverage
+- `sf code-analyzer` Security + AppExchange: 0 violations; SFGE printed internal timeout diagnostics on existing large controller/service paths before returning a clean summary
+- `npm run format:check`: pass
+- `git diff --check`
+
 ## v3.05.0 — Signature Template Fidelity (`04tVx000000nI5RIAU`, build `3.5.0-1`, promoted 2026-06-11)
 
 This release tightens the e-signature path so Word-authored template branding survives from preview through the final signed PDF, and updates the bundled permission sets for signature Flow and reminder features.

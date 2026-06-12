@@ -238,13 +238,43 @@ public without sharing class DocGenSignatureService {
             String verifyPage = (String.isNotBlank(ns) && ns != 'DocGenSignatureService')
                 ? '/apex/' + ns + '__DocGenVerify'
                 : '/apex/DocGenVerify';
-            String verifyUrl = siteUrl + verifyPage + '?id=' + String.valueOf(requestId);
-            html += 'Verify at: ' + verifyUrl.escapeHtml4();
+            // SECURITY: the verification link carries the request's unguessable
+            // Secure_Token__c, not the enumerable record Id. The endpoint
+            // (verifyByRequestId) requires this 64-hex token before returning any
+            // signer audit data. Only emit the link when the token is present.
+            String verifyToken = lookupRequestVerificationToken(requestId);
+            if (String.isNotBlank(verifyToken)) {
+                String verifyUrl = siteUrl + verifyPage + '?token=' + verifyToken;
+                html += 'Verify at: ' + verifyUrl.escapeHtml4();
+            }
         }
         html += '</td></tr>';
 
         html += '</table></div>';
         return html;
+    }
+
+    /**
+     * Returns the request's unguessable verification token (Secure_Token__c) used
+     * as the capability on the certificate verify link. Runs in the async
+     * (Automated Process) finalize context, so SYSTEM_MODE is required. Returns
+     * null when absent (e.g. legacy requests created before this hotfix) — the
+     * caller then omits the link, leaving document-upload verification intact.
+     */
+    private static String lookupRequestVerificationToken(Id requestId) {
+        if (requestId == null) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Secure_Token__c' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signature_Request__c> reqs = [
+            SELECT Secure_Token__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        return reqs.isEmpty() ? null : reqs[0].Secure_Token__c;
     }
 
     /**
@@ -323,6 +353,23 @@ public without sharing class DocGenSignatureService {
         }
 
         return new StampResult(documentXml, relsXml, contentTypesXml, signatureImageUrls);
+    }
+
+    @TestVisible
+    private static String stampSignaturesInHtml(String html, List<DocGen_Signature_Placement__c> placements) {
+        if (String.isBlank(html) || placements == null || placements.isEmpty()) {
+            return html;
+        }
+
+        for (DocGen_Signature_Placement__c plc : placements) {
+            if (plc.Status__c != 'Signed' || String.isBlank(plc.Tag_Text__c))
+                continue;
+
+            if (html.contains(plc.Tag_Text__c)) {
+                html = html.replaceFirst(Pattern.quote(plc.Tag_Text__c), buildPlacementText(plc).escapeHtml4());
+            }
+        }
+        return html;
     }
 
     /**
@@ -929,6 +976,7 @@ public without sharing class DocGenSignatureService {
             String relsXml = (String) mergeData.get('relsXml');
             String contentTypesXml = (String) mergeData.get('contentTypesXml');
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+            String templateType = (String) mergeData.get('templateType');
 
             // Use pre-computed image map from request creation
             DocGenFlsGuard.assertAccessible(
@@ -1045,16 +1093,27 @@ public without sharing class DocGenSignatureService {
                 ORDER BY Document_Index__c ASC, Sequence_Order__c ASC
             ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
-            // Stamp typed-name signatures into merged XML
-            StampResult stamped = stampSignaturesInXml(documentXml, relsXml, contentTypesXml, signerImages, placements);
+            String html;
+            if (templateType == 'HTML') {
+                html = stampSignaturesInHtml(documentXml, placements);
+            } else {
+                // Stamp typed-name signatures into merged XML
+                StampResult stamped = stampSignaturesInXml(
+                    documentXml,
+                    relsXml,
+                    contentTypesXml,
+                    signerImages,
+                    placements
+                );
 
-            // Re-prime the HTML renderer context immediately before convertToHtml.
-            DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
-            DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
-            DocGenService.applyWatermarkOverride(templateId);
+                // Re-prime the HTML renderer context immediately before convertToHtml.
+                DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
+                DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
+                DocGenService.applyWatermarkOverride(templateId);
 
-            // Render PDF with template images only (no signature images needed)
-            String html = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
+                // Render PDF with template images only (no signature images needed)
+                html = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
+            }
 
             // Append verification certificate block before closing body
             DocGenFlsGuard.assertAccessible(
@@ -1201,6 +1260,7 @@ public without sharing class DocGenSignatureService {
                 String relsXml = (String) mergeData.get('relsXml');
                 String contentTypesXml = (String) mergeData.get('contentTypesXml');
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+                String templateType = (String) mergeData.get('templateType');
                 pdfImageMap.putAll(cachedImageMap);
 
                 // Filter placements for this document
@@ -1210,19 +1270,24 @@ public without sharing class DocGenSignatureService {
                         docPlacements.add(p);
                 }
 
-                StampResult stamped = stampSignaturesInXml(
-                    documentXml,
-                    relsXml,
-                    contentTypesXml,
-                    signerImages,
-                    docPlacements
-                );
-                // Re-prime renderer context for this document (see #28 — statics don't survive
-                // intermediate calls reliably in async context).
-                DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
-                DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
-                DocGenService.applyWatermarkOverride(tid);
-                String docHtml = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
+                String docHtml;
+                if (templateType == 'HTML') {
+                    docHtml = stampSignaturesInHtml(documentXml, docPlacements);
+                } else {
+                    StampResult stamped = stampSignaturesInXml(
+                        documentXml,
+                        relsXml,
+                        contentTypesXml,
+                        signerImages,
+                        docPlacements
+                    );
+                    // Re-prime renderer context for this document (see #28 — statics don't survive
+                    // intermediate calls reliably in async context).
+                    DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
+                    DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
+                    DocGenService.applyWatermarkOverride(tid);
+                    docHtml = DocGenHtmlRenderer.convertToHtml(stamped.documentXml, pdfImageMap);
+                }
 
                 if (docIdx > 0) {
                     htmlParts.add('<div style="page-break-before:always"></div>');

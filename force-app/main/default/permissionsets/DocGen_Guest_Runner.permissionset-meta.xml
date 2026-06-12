@@ -3,5 +3,5 @@
     <description
     >Deprecated. The Experience Cloud guest render path has been removed from DocGen; this permission set is retained only for upgrade compatibility and grants no access. Safe to unassign from site guest users.</description>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>DocGen Guest Runner (deprecated)</label>
+    <label>Portwood DocGen Guest Runner (deprecated)</label>
 </PermissionSet>

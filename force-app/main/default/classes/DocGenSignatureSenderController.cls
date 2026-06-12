@@ -147,11 +147,13 @@ public with sharing class DocGenSignatureSenderController {
     private static String extractTemplatePlainText(Id templateId) {
         DocGenFlsGuard.assertAccessible(
             DocGen_Template_Version__c.sObjectType,
-            new Set<String>{ 'Template__c', 'Is_Active__c' }
+            new Set<String>{ 'Template__c', 'Is_Active__c', 'Content_Version_Id__c' }
         );
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'VersionData' });
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> activeVersions = [
-            SELECT Id
+            SELECT Id, Content_Version_Id__c, Template__r.Type__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
             WITH SYSTEM_MODE
@@ -160,7 +162,24 @@ public with sharing class DocGenSignatureSenderController {
         if (activeVersions.isEmpty())
             return null;
 
-        String xmlPrefix = 'docgen_tmpl_xml_' + activeVersions[0].Id + '_';
+        DocGen_Template_Version__c activeVersion = activeVersions[0];
+        if (activeVersion.Template__r.Type__c == 'HTML') {
+            if (String.isBlank(activeVersion.Content_Version_Id__c))
+                return null;
+
+            Id bodyCvId = (Id) activeVersion.Content_Version_Id__c;
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentVersion> htmlCvs = [
+                SELECT VersionData
+                FROM ContentVersion
+                WHERE Id = :bodyCvId
+                WITH USER_MODE
+                LIMIT 1
+            ];
+            return htmlCvs.isEmpty() || htmlCvs[0].VersionData == null ? null : htmlCvs[0].VersionData.toString();
+        }
+
+        String xmlPrefix = 'docgen_tmpl_xml_' + activeVersion.Id + '_';
         /* code-analyzer-suppress ApexFlsViolation */
         List<ContentVersion> xmlCvs = [
             SELECT Title, VersionData
@@ -445,6 +464,18 @@ public with sharing class DocGenSignatureSenderController {
         return createTemplateSignerRequestWithOrder(templateId, relatedRecordId, signersJson, 'Parallel');
     }
 
+    /**
+     * Mints an unguessable 64-hex request-level verification token (256-bit CSPRNG
+     * via Crypto.generateAesKey, SHA-256 digested). Used as the capability on the
+     * certificate's post-signing verification link (?token=). It is NOT a signing
+     * token — it only gates read access to the signature audit roster.
+     */
+    private static String generateRequestVerificationToken() {
+        Blob randomBytes = Crypto.generateAesKey(256);
+        Blob hash = Crypto.generateDigest('SHA-256', randomBytes);
+        return EncodingUtil.convertToHex(hash);
+    }
+
     @AuraEnabled
     public static List<SignerResult> createTemplateSignerRequestWithOrder(
         Id templateId,
@@ -493,6 +524,10 @@ public with sharing class DocGenSignatureSenderController {
         if (String.isNotBlank(documentTitleFormat)) {
             req.Document_Title_Format__c = documentTitleFormat;
         }
+        // SECURITY: unguessable request-level token used as the capability for the
+        // post-signing verification link (?token=) printed on the certificate.
+        // Distinct from signer signing tokens — this only gates audit-roster reads.
+        req.Secure_Token__c = generateRequestVerificationToken();
         // Package-internal object — CRUD controlled by DocGen permission sets
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.assertCreateable(
@@ -502,7 +537,8 @@ public with sharing class DocGenSignatureSenderController {
                 'Related_Record_Id__c',
                 'Status__c',
                 'Signing_Order__c',
-                'Document_Title_Format__c'
+                'Document_Title_Format__c',
+                'Secure_Token__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation */
@@ -515,39 +551,14 @@ public with sharing class DocGenSignatureSenderController {
             Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
 
-            // Build preview HTML with public URLs for images (not data URIs — keeps size small).
-            // Create ContentDistributions for each template image so guest browser can load them.
-            Map<String, String> previewImageMap = new Map<String, String>();
-            for (String relId : pdfImageMap.keySet()) {
-                String url = pdfImageMap.get(relId);
-                if (url != null && url.contains('/version/download/')) {
-                    String cvId = url.substringAfterLast('/');
-                    try {
-                        ContentDistribution dist = new ContentDistribution();
-                        dist.Name = 'sig_preview_' + relId;
-                        dist.ContentVersionId = cvId;
-                        dist.PreferencesAllowViewInBrowser = true;
-                        dist.PreferencesLinkLatestVersion = false;
-                        dist.PreferencesExpires = false;
-                        Database.insert(dist, AccessLevel.USER_MODE);
-                        dist = [SELECT ContentDownloadUrl FROM ContentDistribution WHERE Id = :dist.Id WITH USER_MODE];
-                        previewImageMap.put(relId, dist.ContentDownloadUrl);
-                    } catch (Exception e) {
-                        System.debug(
-                            LoggingLevel.WARN,
-                            'DocGen: Could not create public link for ' + relId + ': ' + e.getMessage()
-                        );
-                    }
-                }
+            String mergedHtml = (String) mergeData.get('combinedDocumentXml');
+            if (String.isBlank(mergedHtml)) {
+                mergedHtml = (String) mergeData.get('documentXml');
             }
+            Map<String, String> previewImageMap = buildSignaturePreviewImageMap(pdfImageMap, mergedHtml);
 
             // Render preview HTML using public URLs (small, no base64 bloat)
-            String docXml = (String) mergeData.get('combinedDocumentXml');
-            if (String.isBlank(docXml)) {
-                docXml = (String) mergeData.get('documentXml');
-            }
-            DocGenService.applyWatermarkOverride(templateId);
-            String previewHtml = DocGenHtmlRenderer.convertToHtml(docXml, previewImageMap);
+            String previewHtml = renderMergedSignatureHtml(mergeData, templateId, previewImageMap);
 
             // Inject interactive placement spans for the guided signing UI.
             // Watermark overlay is NOT injected here — base64-embedded image would blow
@@ -654,6 +665,9 @@ public with sharing class DocGenSignatureSenderController {
         if (String.isNotBlank(documentTitleFormat)) {
             req.Document_Title_Format__c = documentTitleFormat;
         }
+        // SECURITY: unguessable request-level verification-link capability — see
+        // createTemplateSignerRequestWithOrder for rationale.
+        req.Secure_Token__c = generateRequestVerificationToken();
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.assertCreateable(
             req,
@@ -663,7 +677,8 @@ public with sharing class DocGenSignatureSenderController {
                 'Related_Record_Id__c',
                 'Status__c',
                 'Signing_Order__c',
-                'Document_Title_Format__c'
+                'Document_Title_Format__c',
+                'Secure_Token__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation */
@@ -681,39 +696,13 @@ public with sharing class DocGenSignatureSenderController {
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
                 combinedPdfImageMap.putAll(pdfImageMap);
 
-                // Build preview HTML for this document
-                Map<String, String> previewImageMap = new Map<String, String>();
-                for (String relId : pdfImageMap.keySet()) {
-                    String url = pdfImageMap.get(relId);
-                    if (url != null && url.contains('/version/download/')) {
-                        String cvId = url.substringAfterLast('/');
-                        try {
-                            ContentDistribution dist = new ContentDistribution();
-                            dist.Name = 'sig_preview_' + relId;
-                            dist.ContentVersionId = cvId;
-                            dist.PreferencesAllowViewInBrowser = true;
-                            dist.PreferencesLinkLatestVersion = false;
-                            dist.PreferencesExpires = false;
-                            Database.insert(dist, AccessLevel.USER_MODE);
-                            dist = [
-                                SELECT ContentDownloadUrl
-                                FROM ContentDistribution
-                                WHERE Id = :dist.Id
-                                WITH USER_MODE
-                            ];
-                            previewImageMap.put(relId, dist.ContentDownloadUrl);
-                        } catch (Exception e) {
-                            System.debug(LoggingLevel.WARN, 'DocGen: Could not create public link for ' + relId);
-                        }
-                    }
+                String mergedHtml = (String) mergeData.get('combinedDocumentXml');
+                if (String.isBlank(mergedHtml)) {
+                    mergedHtml = (String) mergeData.get('documentXml');
                 }
+                Map<String, String> previewImageMap = buildSignaturePreviewImageMap(pdfImageMap, mergedHtml);
 
-                String docXml = (String) mergeData.get('combinedDocumentXml');
-                if (String.isBlank(docXml)) {
-                    docXml = (String) mergeData.get('documentXml');
-                }
-                DocGenService.applyWatermarkOverride(tid);
-                String docHtml = DocGenHtmlRenderer.convertToHtml(docXml, previewImageMap);
+                String docHtml = renderMergedSignatureHtml(mergeData, tid, previewImageMap);
                 docHtml = injectPlacementSpans(docHtml);
                 // Watermark overlay deferred to read time (cache size constraint).
 
@@ -1636,13 +1625,8 @@ public with sharing class DocGenSignatureSenderController {
     public static String getDocumentPreviewHtml(Id templateId, String relatedRecordId) {
         try {
             Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
-            String docXml = (String) mergeData.get('combinedDocumentXml');
-            if (String.isBlank(docXml)) {
-                docXml = (String) mergeData.get('documentXml');
-            }
             Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
-            DocGenService.applyWatermarkOverride(templateId);
-            String html = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
+            String html = renderMergedSignatureHtml(mergeData, templateId, pdfImageMap);
             html = injectPlacementSpans(html);
             return injectPreviewWatermarkOverlay(html, templateId);
         } catch (Exception e) {
@@ -1669,6 +1653,25 @@ public with sharing class DocGenSignatureSenderController {
 
     private static Blob buildDocumentPreviewPdfBlob(Id templateId, String relatedRecordId) {
         Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
+        Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+        String html = renderMergedSignatureHtml(mergeData, templateId, pdfImageMap);
+        if (String.isBlank(html)) {
+            return null;
+        }
+        html = injectPlacementSpans(html);
+
+        return Test.isRunningTest() ? Blob.valueOf('test-preview-pdf') : Blob.toPdf(html);
+    }
+
+    @TestVisible
+    private static String renderMergedSignatureHtml(
+        Map<String, Object> mergeData,
+        Id templateId,
+        Map<String, String> imageMap
+    ) {
+        if (mergeData == null) {
+            return null;
+        }
         String docXml = (String) mergeData.get('combinedDocumentXml');
         if (String.isBlank(docXml)) {
             docXml = (String) mergeData.get('documentXml');
@@ -1677,12 +1680,137 @@ public with sharing class DocGenSignatureSenderController {
             return null;
         }
 
-        Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
-        DocGenService.applyWatermarkOverride(templateId);
-        String html = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
-        html = injectPlacementSpans(html);
+        if ((String) mergeData.get('templateType') == 'HTML') {
+            return rewriteHtmlImageSources(docXml, imageMap);
+        }
 
-        return Test.isRunningTest() ? Blob.valueOf('test-preview-pdf') : Blob.toPdf(html);
+        DocGenService.applyWatermarkOverride(templateId);
+        return DocGenHtmlRenderer.convertToHtml(docXml, imageMap);
+    }
+
+    @TestVisible
+    private static Map<String, String> buildSignaturePreviewImageMap(Map<String, String> pdfImageMap, String html) {
+        Map<String, String> previewImageMap = new Map<String, String>();
+        if (pdfImageMap != null) {
+            for (String relId : pdfImageMap.keySet()) {
+                addSignaturePreviewImage(previewImageMap, relId, pdfImageMap.get(relId));
+            }
+        }
+        for (String src : extractHtmlImageSources(html)) {
+            addSignaturePreviewImage(previewImageMap, src, src);
+        }
+        return previewImageMap;
+    }
+
+    private static void addSignaturePreviewImage(Map<String, String> previewImageMap, String key, String sourceUrl) {
+        String cvId = extractContentVersionIdFromImageUrl(sourceUrl);
+        if (String.isBlank(cvId)) {
+            return;
+        }
+        if (previewImageMap.containsKey(cvId)) {
+            if (String.isNotBlank(key)) {
+                previewImageMap.put(key, previewImageMap.get(cvId));
+            }
+            previewImageMap.put('/sfc/servlet.shepherd/version/download/' + cvId, previewImageMap.get(cvId));
+            return;
+        }
+        try {
+            ContentDistribution dist = new ContentDistribution();
+            dist.Name = 'sig_preview_' + (String.isBlank(key) ? cvId : key).left(80);
+            dist.ContentVersionId = cvId;
+            dist.PreferencesAllowViewInBrowser = true;
+            dist.PreferencesLinkLatestVersion = false;
+            dist.PreferencesExpires = false;
+            Database.insert(dist, AccessLevel.USER_MODE);
+            dist = [SELECT ContentDownloadUrl FROM ContentDistribution WHERE Id = :dist.Id WITH USER_MODE];
+            if (String.isNotBlank(key)) {
+                previewImageMap.put(key, dist.ContentDownloadUrl);
+            }
+            previewImageMap.put(cvId, dist.ContentDownloadUrl);
+            previewImageMap.put('/sfc/servlet.shepherd/version/download/' + cvId, dist.ContentDownloadUrl);
+        } catch (Exception e) {
+            System.debug(
+                LoggingLevel.WARN,
+                'DocGen: Could not create public signature preview image link for ' + cvId + ': ' + e.getMessage()
+            );
+        }
+    }
+
+    @TestVisible
+    private static String rewriteHtmlImageSources(String html, Map<String, String> imageMap) {
+        if (String.isBlank(html) || imageMap == null || imageMap.isEmpty()) {
+            return html;
+        }
+
+        String rewritten = html;
+        for (String src : extractHtmlImageSources(html)) {
+            String replacement = imageMap.get(src);
+            if (String.isBlank(replacement)) {
+                replacement = imageMap.get(extractContentVersionIdFromImageUrl(src));
+            }
+            if (String.isBlank(replacement)) {
+                continue;
+            }
+            rewritten = rewritten.replace('"' + src + '"', '"' + replacement.escapeHtml4() + '"');
+            rewritten = rewritten.replace('\'' + src + '\'', '\'' + replacement.escapeHtml4() + '\'');
+        }
+        return rewritten;
+    }
+
+    private static List<String> extractHtmlImageSources(String html) {
+        List<String> sources = new List<String>();
+        if (String.isBlank(html) || !html.containsIgnoreCase('<img')) {
+            return sources;
+        }
+        String lower = html.toLowerCase();
+        Integer cursor = 0;
+        while (cursor < html.length()) {
+            Integer imgStart = lower.indexOf('<img', cursor);
+            if (imgStart == -1) {
+                break;
+            }
+            Integer imgEnd = html.indexOf('>', imgStart);
+            if (imgEnd == -1) {
+                break;
+            }
+            Integer srcIdx = lower.indexOf('src=', imgStart);
+            if (srcIdx == -1 || srcIdx > imgEnd) {
+                cursor = imgEnd + 1;
+                continue;
+            }
+            srcIdx += 4;
+            while (srcIdx < imgEnd && html.substring(srcIdx, srcIdx + 1) == ' ') {
+                srcIdx++;
+            }
+            if (srcIdx >= imgEnd) {
+                cursor = imgEnd + 1;
+                continue;
+            }
+            String quoteChar = html.substring(srcIdx, srcIdx + 1);
+            if (quoteChar != '"' && quoteChar != '\'') {
+                cursor = imgEnd + 1;
+                continue;
+            }
+            Integer valueStart = srcIdx + 1;
+            Integer valueEnd = html.indexOf(quoteChar, valueStart);
+            if (valueEnd != -1 && valueEnd <= imgEnd) {
+                String src = html.substring(valueStart, valueEnd);
+                if (String.isNotBlank(src)) {
+                    sources.add(src.replace('&amp;', '&'));
+                }
+            }
+            cursor = imgEnd + 1;
+        }
+        return sources;
+    }
+
+    private static String extractContentVersionIdFromImageUrl(String url) {
+        if (String.isBlank(url) || !url.contains('/version/download/')) {
+            return null;
+        }
+        String cvId = url.substringAfterLast('/version/download/');
+        cvId = cvId.substringBefore('?').substringBefore('#');
+        return cvId.startsWith('068') ? cvId : null;
     }
 
     public static String getSigningPagePath() {

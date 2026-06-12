@@ -5992,6 +5992,25 @@ private class DocGenMiscTests {
     }
 
     @IsTest
+    static void testMergeRunsFooterTagSplitAcrossBraceRuns() {
+        String footerXml =
+            '<w:ftr xmlns:w="x"><w:p>' +
+            '<w:r><w:t>Premium Text short codes </w:t></w:r>' +
+            '<w:r><w:t>{</w:t></w:r>' +
+            '<w:r><w:t>Date_for_merge_document__c</w:t></w:r>' +
+            '<w:r><w:t>}</w:t></w:r>' +
+            '</w:p></w:ftr>';
+
+        String result = DocGenService.mergeRunsInTagsForTest(footerXml);
+
+        System.assert(
+            result.contains('{Date_for_merge_document__c}'),
+            'Footer/header tags split across brace runs must be merged before giant-query HTML snapshot conversion: ' +
+            result
+        );
+    }
+
+    @IsTest
     static void testNestedTableOuterCellOwnTcPrStillRespected() {
         // Outer cell has its own <w:tcPr> with shading; nested cells have their
         // own tcPr. Outer must use ITS OWN shading, not the inner cell's.
@@ -9250,9 +9269,55 @@ private class DocGenMiscTests {
     // with a source-text assertion that catches any future revert to USER_MODE.
     // =========================================================================
     @IsTest
+    static void testInternalContentVersionLoaderWorksForNonAdminUser() {
+        Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
+        User stdUser = new User(
+            Alias = 'dgload',
+            Email = 'docgen-loader@example.com',
+            EmailEncodingKey = 'UTF-8',
+            LastName = 'Loader',
+            LanguageLocaleKey = 'en_US',
+            LocaleSidKey = 'en_US',
+            ProfileId = p.Id,
+            TimeZoneSidKey = 'America/Los_Angeles',
+            UserName = 'docgen.loader.' + System.currentTimeMillis() + '@example.com'
+        );
+        User currentUser = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(currentUser) {
+            insert stdUser;
+        }
+
+        DocGen_Template_Version__c version = TestDataFactory.getTestTemplateVersion();
+        String title = 'docgen_tmpl_xml_' + version.Id + '_word__document.xml';
+        insert new ContentVersion(
+            Title = title,
+            PathOnClient = title + '.xml',
+            VersionData = Blob.valueOf('<w:document>{#Contacts}<w:t>{LastName}</w:t>{/Contacts}</w:document>'),
+            FirstPublishLocationId = version.Id,
+            IsMajorVersion = true
+        );
+
+        System.runAs(stdUser) {
+            Test.startTest();
+            List<ContentVersion> loaded = DocGenService.loadInternalContentVersionsForVersionByTitle(version.Id, title);
+            Test.stopTest();
+
+            System.assertEquals(
+                1,
+                loaded.size(),
+                'Non-admin user should load package-internal CV through the template version link'
+            );
+            System.assert(
+                loaded[0].VersionData.toString().contains('{#Contacts}'),
+                'Loaded CV should include the pre-decomposed template body'
+            );
+        }
+    }
+
+    @IsTest
     static void testIssue114NoUserModeOnPreDecompCvLookups() {
         List<String> classNames = new List<String>{ 'DocGenService', 'DocGenController', 'DocGenGiantQueryFlowAction' };
-        for (ApexClass ac : [SELECT Name, Body FROM ApexClass WHERE Name IN :classNames AND NamespacePrefix = NULL]) {
+        for (ApexClass ac : [SELECT Name, Body FROM ApexClass WHERE Name IN :classNames]) {
             String body = ac.Body;
             Integer cursor = 0;
             Integer hits = 0;
@@ -9302,5 +9367,186 @@ private class DocGenMiscTests {
                     ' — test may need updating if the prefix was renamed.'
             );
         }
+    }
+
+    @IsTest
+    static void testGiantQueryInternalContentReadsUseSystemMode() {
+        Map<String, ApexClass> classesByName = new Map<String, ApexClass>();
+        for (ApexClass ac : [
+            SELECT Name, Body
+            FROM ApexClass
+            WHERE
+                Name IN (
+                    'DocGenController',
+                    'DocGenGiantQueryAssembler',
+                    'DocGenGiantQueryStitchJob',
+                    'DocGenGiantQueryFlowAction'
+                )
+        ]) {
+            classesByName.put(ac.Name, ac);
+        }
+
+        String assemblerBody = classesByName.get('DocGenGiantQueryAssembler').Body;
+        Integer giantPrefixIdx = assemblerBody.indexOf('String prefix = \'docgen_giant_\' + jobId + \'_\';');
+        Integer assemblerLoopIdx = assemblerBody.indexOf('for (ContentVersion cv : frags)', giantPrefixIdx);
+        System.assert(giantPrefixIdx >= 0 && assemblerLoopIdx > giantPrefixIdx, 'Assembler fragment lookup moved.');
+        String assemblerSlice = assemblerBody.substring(giantPrefixIdx, assemblerLoopIdx);
+        System.assert(
+            assemblerSlice.contains('WITH SYSTEM_MODE'),
+            'DocGenGiantQueryAssembler must read internal docgen_giant_ fragments WITH SYSTEM_MODE.'
+        );
+        System.assert(
+            !assemblerSlice.contains('WITH USER_MODE'),
+            'DocGenGiantQueryAssembler must not read internal docgen_giant_ fragments WITH USER_MODE.'
+        );
+
+        String controllerBody = classesByName.get('DocGenController').Body;
+        Integer htmlBodyIdx = controllerBody.indexOf('Id bodyCvId = (Id) activeVersions[0].Content_Version_Id__c;');
+        Integer htmlMissingIdx = controllerBody.indexOf('HTML template has no active version body.', htmlBodyIdx);
+        System.assert(htmlBodyIdx >= 0 && htmlMissingIdx > htmlBodyIdx, 'Giant HTML launch body lookup moved.');
+        String htmlBodySlice = controllerBody.substring(htmlBodyIdx, htmlMissingIdx);
+        System.assert(
+            htmlBodySlice.contains('WITH SYSTEM_MODE'),
+            'Giant-query HTML launch must read the active template body ContentVersion WITH SYSTEM_MODE.'
+        );
+        System.assert(
+            !htmlBodySlice.contains('WITH USER_MODE'),
+            'Giant-query HTML launch must not read the active template body ContentVersion WITH USER_MODE.'
+        );
+
+        Integer managedFallbackIdx = controllerBody.indexOf('WHERE Id = :contentVersionId AND Title LIKE \'docgen_%\'');
+        Integer managedFallbackEnd = controllerBody.indexOf(
+            'throw DocGenService.ahe(\'Access denied or content not found.\');'
+        );
+        System.assert(
+            managedFallbackIdx >= 0 && managedFallbackEnd > managedFallbackIdx,
+            'Managed ContentVersion fallback lookup moved.'
+        );
+        String managedFallbackSlice = controllerBody.substring(managedFallbackIdx, managedFallbackEnd);
+        System.assert(
+            managedFallbackSlice.contains('WITH SYSTEM_MODE'),
+            'Managed docgen_% ContentVersion fallback must use SYSTEM_MODE after the USER_MODE sharing check fails.'
+        );
+        System.assert(
+            !managedFallbackSlice.contains('WITH USER_MODE'),
+            'Managed docgen_% ContentVersion fallback must not keep using USER_MODE after sharing access fails.'
+        );
+
+        String stitchBody = classesByName.get('DocGenGiantQueryStitchJob').Body;
+        assertInternalContentQueryUsesSystemMode(
+            stitchBody,
+            'DocGenGiantQueryStitchJob',
+            'docgen_giant_',
+            'FRAGMENTS_PER_PDF'
+        );
+        assertInternalContentQueryUsesSystemMode(
+            stitchBody,
+            'DocGenGiantQueryStitchJob',
+            'docgen_part_',
+            'No PDF parts found'
+        );
+
+        String flowActionBody = classesByName.get('DocGenGiantQueryFlowAction').Body;
+        assertGiantLauncherUsesInternalLoader(controllerBody, 'DocGenController');
+        assertGiantLauncherUsesInternalLoader(flowActionBody, 'DocGenGiantQueryFlowAction');
+    }
+
+    @IsTest
+    static void testTemplateAssetImageAccessLinkedForPdfRender() {
+        Account acc = new Account(Name = 'Template Asset Image Access');
+        insert acc;
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Template Asset Image Access',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Query_Config__c = 'Name'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Query_Config__c = 'Name',
+            Type__c = 'Word',
+            Base_Object_API__c = 'Account',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        ContentVersion img = new ContentVersion(
+            Title = 'docgen_tmpl_img_' + ver.Id + '_rIdLogo',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('PNG'),
+            FirstPublishLocationId = ver.Id
+        );
+        insert img;
+        img = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :img.Id];
+
+        String html = '<html><body><img src="/sfc/servlet.shepherd/version/download/' + img.Id + '" /></body></html>';
+
+        Test.startTest();
+        DocGenService.ensureTemplateAssetImageAccessForPdf(tpl.Id, acc.Id, html);
+        Test.stopTest();
+
+        List<ContentDocumentLink> links = [
+            SELECT Id, Visibility, ShareType
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :img.ContentDocumentId
+        ];
+        System.assertEquals(
+            1,
+            links.size(),
+            'Template image file should be linked to the source record for PDF fetch.'
+        );
+        System.assertEquals('AllUsers', links[0].Visibility, 'PDF fetch link should be visible to internal users.');
+        System.assertEquals('V', links[0].ShareType, 'PDF fetch link should grant viewer access only.');
+    }
+
+    private static void assertGiantLauncherUsesInternalLoader(String body, String className) {
+        Integer idx = body.indexOf('docgen_tmpl_xml_');
+        System.assert(idx >= 0, className + ' should reference pre-decomposed template XML.');
+        Integer loaderIdx = body.indexOf('DocGenService.loadInternalContentVersionsForVersionByTitle', idx);
+        System.assert(
+            loaderIdx > idx,
+            className + ' must use the without-sharing internal ContentVersion loader for giant-query pre-decomp reads.'
+        );
+    }
+
+    private static void assertInternalContentQueryUsesSystemMode(
+        String body,
+        String className,
+        String titlePrefix,
+        String afterMarker
+    ) {
+        Integer cursor = 0;
+        Integer hits = 0;
+        while (true) {
+            Integer idx = body.indexOf(titlePrefix, cursor);
+            if (idx == -1) {
+                break;
+            }
+            Integer close = body.indexOf(afterMarker, idx);
+            if (close == -1) {
+                close = body.indexOf('];', idx);
+            }
+            if (close != -1) {
+                String slice = body.substring(idx, close);
+                if (slice.contains('FROM ContentVersion')) {
+                    hits++;
+                    System.assert(
+                        slice.contains('WITH SYSTEM_MODE'),
+                        className + ' must read internal ' + titlePrefix + ' ContentVersion rows WITH SYSTEM_MODE.'
+                    );
+                    System.assert(
+                        !slice.contains('WITH USER_MODE'),
+                        className + ' must not read internal ' + titlePrefix + ' ContentVersion rows WITH USER_MODE.'
+                    );
+                }
+            }
+            cursor = idx + titlePrefix.length();
+        }
+        System.assert(hits > 0, 'Sanity: expected internal ' + titlePrefix + ' ContentVersion reads in ' + className);
     }
 }

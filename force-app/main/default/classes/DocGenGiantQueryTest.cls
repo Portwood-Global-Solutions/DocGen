@@ -294,6 +294,7 @@ private class DocGenGiantQueryTest {
             String snapshotHtml =
                 '<html><body>' +
                 '<h1>GQ_CHROME_TITLE</h1>' +
+                '<p><img src="/sfc/servlet.shepherd/version/download/068000000000000AAA" alt="GQ_CHROME_LOGO"/></p>' +
                 '<table>' +
                 '<tr><th>GQ_CHROME_HEADER</th></tr>' +
                 '<tr>{#Contacts}<td>{FirstName}</td>{/Contacts}</tr>' +
@@ -304,7 +305,8 @@ private class DocGenGiantQueryTest {
                 Title = 'docgen_tmpl_html_' + ver.Id,
                 PathOnClient = 'snapshot.html',
                 VersionData = Blob.valueOf(snapshotHtml),
-                IsMajorVersion = false
+                IsMajorVersion = false,
+                FirstPublishLocationId = ver.Id
             );
 
             DocGen_Job__c job = new DocGen_Job__c(
@@ -343,6 +345,7 @@ private class DocGenGiantQueryTest {
             );
             System.assert(assembled.contains('GQ_CHROME_HEADER'), 'Column-header chrome must survive');
             System.assert(assembled.contains('GQ_CHROME_FOOTER'), 'Footer chrome must survive');
+            System.assert(assembled.contains('GQ_CHROME_LOGO'), 'Embedded template image HTML must survive');
         }
     }
 

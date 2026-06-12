@@ -50,6 +50,21 @@ public without sharing class DocGenSignatureController {
      */
     @TestVisible
     private static String resolveClientIp(String supplied) {
+        // SECURITY (audit integrity): prefer the server-observed IP and never let
+        // the client-supplied `ipAddress` argument override it. Previously the
+        // caller-passed value won unconditionally, so a signer could forge the IP
+        // recorded on their own tamper-evident audit / certificate. The client
+        // hint is now used ONLY as a last resort when the server has no IP at all
+        // (e.g. a guest LWR context with no infrastructure header) — recorded as
+        // best-effort, not authoritative.
+        // NOTE: captureClientIp() still reads X-Forwarded-For, whose leftmost hop
+        // can be client-influenced behind some proxy configs. Validating the
+        // trusted-hop selection requires a live Experience Cloud guest test before
+        // hardening further.
+        String serverIp = captureClientIp();
+        if (String.isNotBlank(serverIp) && serverIp != 'Unknown') {
+            return serverIp;
+        }
         if (String.isNotBlank(supplied)) {
             String trimmed = supplied.trim();
             // Cheap sanity: length cap + only chars valid in IPv4/IPv6.
@@ -58,7 +73,7 @@ public without sharing class DocGenSignatureController {
                 return trimmed;
             }
         }
-        return captureClientIp();
+        return 'Unknown';
     }
 
     /**
@@ -834,8 +849,13 @@ public without sharing class DocGenSignatureController {
                 }
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
                 if (String.isNotBlank(docXml)) {
-                    DocGenService.applyWatermarkOverride(templateId);
-                    String liveHtml = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
+                    String liveHtml;
+                    if ((String) mergeData.get('templateType') == 'HTML') {
+                        liveHtml = docXml;
+                    } else {
+                        DocGenService.applyWatermarkOverride(templateId);
+                        liveHtml = DocGenHtmlRenderer.convertToHtml(docXml, pdfImageMap);
+                    }
                     liveHtml = DocGenSignatureSenderController.injectPreviewWatermarkOverlay(liveHtml, templateId);
                     res.templateBase64 = prepareSigningPreviewHtml(liveHtml);
                     return res;

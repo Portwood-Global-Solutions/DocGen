@@ -9,20 +9,22 @@ export default class DocGenAuthenticator extends LightningElement {
     @track hasRequestId = false;
 
     connectedCallback() {
-        // Check URL for request ID parameter
+        // Check URL for the verification token. The certificate link now carries
+        // an unguessable 64-hex token (?token=) instead of the enumerable record
+        // Id — see DocGenAuthenticatorController.verifyByRequestId.
         const params = new URLSearchParams(window.location.search);
-        const reqId = params.get('id');
-        // CxSAST: DOM XSS mitigation — validate ID matches Salesforce ID pattern before use
-        if (reqId && /^[a-zA-Z0-9]{15,18}$/.test(reqId)) {
+        const token = params.get('token');
+        // DOM XSS mitigation — validate the token is a 64-char hex string before use.
+        if (token && /^[a-fA-F0-9]{64}$/.test(token)) {
             this.hasRequestId = true;
-            this.loadRequestAudit(reqId);
+            this.loadRequestAudit(token);
         }
     }
 
-    async loadRequestAudit(requestId) {
+    async loadRequestAudit(requestToken) {
         this.isProcessing = true;
         try {
-            this.requestResults = await verifyByRequestId({ requestId });
+            this.requestResults = await verifyByRequestId({ requestToken });
         } catch (error) {
             this.requestResults = [];
             this.result = {

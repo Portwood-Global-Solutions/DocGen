@@ -64,7 +64,14 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
         this.templateName = tmpl.Name;
 
         String prefix = 'docgen_giant_' + jobId + '_';
-        Integer fragmentCount = [SELECT COUNT() FROM ContentVersion WHERE Title LIKE :(prefix + '%') WITH USER_MODE];
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        Integer fragmentCount = [
+            SELECT COUNT()
+            FROM ContentVersion
+            WHERE Title LIKE :(prefix + '%')
+            WITH SYSTEM_MODE
+        ];
 
         if (fragmentCount == 0) {
             update new DocGen_Job__c(Id = jobId, Status__c = 'Failed', Label__c = 'No fragments found'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
@@ -87,11 +94,13 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
             Integer groupIdx = Integer.valueOf(groupDescriptor.substringAfter(':'));
 
             String prefix = 'docgen_giant_' + jobId + '_';
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
+            /* code-analyzer-suppress ApexFlsViolation */
             List<ContentVersion> allHeaders = [
                 SELECT Id, Title
                 FROM ContentVersion
                 WHERE Title LIKE :(prefix + '%')
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 ORDER BY Title
             ];
 
@@ -105,11 +114,13 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
             }
 
             String combinedHtml = '';
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData', 'Title' });
+            /* code-analyzer-suppress ApexFlsViolation */
             for (ContentVersion cv : [
                 SELECT VersionData, Title
                 FROM ContentVersion
                 WHERE Id IN :groupIds
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 ORDER BY Title
             ]) {
                 combinedHtml += cv.VersionData.toString();
@@ -166,11 +177,16 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
             // Clean up HTML fragments (no longer needed)
             String fragPrefix = 'docgen_giant_' + jobId + '_';
             Set<Id> fragmentDocIds = new Set<Id>();
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'ContentDocumentId', 'Title' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             for (ContentVersion cv : [
                 SELECT ContentDocumentId
                 FROM ContentVersion
                 WHERE Title LIKE :(fragPrefix + '%')
-                WITH USER_MODE
+                WITH SYSTEM_MODE
             ]) {
                 fragmentDocIds.add(cv.ContentDocumentId);
             }
@@ -180,11 +196,16 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
 
             // Load all part PDFs — ~15KB each, 20 parts = ~300KB total, trivially within heap
             String partPrefix = 'docgen_part_' + jobId + '_';
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'VersionData', 'ContentDocumentId', 'Title' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
             List<ContentVersion> parts = [
                 SELECT Id, VersionData, ContentDocumentId
                 FROM ContentVersion
                 WHERE Title LIKE :(partPrefix + '%')
-                WITH USER_MODE
+                WITH SYSTEM_MODE
                 ORDER BY Title
             ];
 

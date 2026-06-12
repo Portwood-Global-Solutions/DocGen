@@ -68,6 +68,33 @@ private class DocGenSignatureTests {
         return [SELECT Id, Status__c, Secure_Token__c FROM DocGen_Signature_Request__c LIMIT 1];
     }
 
+    private static Id createHtmlSignatureTemplate(String bodyHtml) {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'HTML Signature Template ' + Datetime.now().getTime(),
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name, Industry',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        insert tmpl;
+
+        ContentVersion bodyCv = new ContentVersion(
+            Title = tmpl.Name + ' Body',
+            PathOnClient = 'template.html',
+            VersionData = Blob.valueOf(bodyHtml),
+            FirstPublishLocationId = tmpl.Id
+        );
+        insert bodyCv;
+        bodyCv = [SELECT Id FROM ContentVersion WHERE Id = :bodyCv.Id LIMIT 1];
+
+        insert new DocGen_Template_Version__c(
+            Template__c = tmpl.Id,
+            Is_Active__c = true,
+            Content_Version_Id__c = bodyCv.Id
+        );
+        return tmpl.Id;
+    }
+
     // =========================================================================
     // Token Validation
     // =========================================================================
@@ -1116,8 +1143,9 @@ private class DocGenSignatureTests {
         );
         Database.insert(audit, AccessLevel.SYSTEM_MODE);
         Test.startTest();
+        // Capability is the request's unguessable Secure_Token__c, not the raw Id.
         List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyByRequestId(
-            req.Id
+            req.Secure_Token__c
         );
         Test.stopTest();
 
@@ -1130,8 +1158,9 @@ private class DocGenSignatureTests {
     @isTest
     static void testVerifyByRequestId_noAudits() {
         Test.startTest();
+        // 64-hex token that matches no request → empty
         List<DocGenAuthenticatorController.VerificationResult> results = DocGenAuthenticatorController.verifyByRequestId(
-            '001000000000000AAA'
+            '00000000000000000000000000000000000000000000000000000000000000aa'
         );
         Test.stopTest();
         System.assertEquals(0, results.size());
@@ -5003,6 +5032,184 @@ private class DocGenSignatureTests {
         System.assertNotEquals(null, seller, 'Seller v3 placement parsed');
         System.assertEquals(1, seller.sequence, 'v3 sequence captured');
         System.assertEquals('Full', seller.placementType, 'v3 type captured');
+    }
+
+    @isTest
+    static void testGetTemplateSignaturePlacements_htmlTemplateBody() {
+        String html =
+            '<table class="sig-table"><tr>' +
+            '<td><div class="sig-line">{@Signature_Customer}</div></td>' +
+            '<td><div class="sig-line">{@Signature_Customer:1:Date}</div></td>' +
+            '</tr></table>';
+        Id tmplId = createHtmlSignatureTemplate(html);
+
+        Test.startTest();
+        List<DocGenSignatureSenderController.PlacementInfo> placements = DocGenSignatureSenderController.getTemplateSignaturePlacements(
+            tmplId
+        );
+        Test.stopTest();
+
+        System.assertEquals(2, placements.size(), 'HTML body signature tags should be detected');
+        System.assertEquals('Customer', placements[0].role, 'Bare HTML role parsed');
+        System.assertEquals('Full', placements[0].placementType, 'Bare HTML tag defaults to Full');
+        System.assertEquals('Customer', placements[1].role, 'Date HTML role parsed');
+        System.assertEquals('Date', placements[1].placementType, 'Date HTML tag parsed');
+    }
+
+    @isTest
+    static void testMergeTemplateForSignature_htmlTemplateReturnsReadyHtml() {
+        Account acc = [SELECT Id, Name FROM Account LIMIT 1];
+        Id tmplId = createHtmlSignatureTemplate(
+            '<html><body><h1>{Name}</h1><div>{@Signature_Customer}</div></body></html>'
+        );
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.mergeTemplateForSignature(tmplId, acc.Id);
+        Test.stopTest();
+
+        System.assertEquals('HTML', result.get('templateType'), 'Signature merge should retain HTML template type');
+        String combinedHtml = (String) result.get('combinedDocumentXml');
+        System.assertNotEquals(null, combinedHtml, 'HTML signature merge should return rendered HTML');
+        System.assert(combinedHtml.contains('<html'), 'HTML signature merge should not be converted as DOCX XML');
+        System.assert(combinedHtml.contains(acc.Name), 'HTML signature merge should resolve merge fields');
+        System.assert(
+            combinedHtml.contains('{@Signature_Customer}'),
+            'HTML signature merge should preserve signature tags for preview/final stamping'
+        );
+    }
+
+    @isTest
+    static void testGetDocumentPreviewHtml_htmlTemplateDoesNotBlank() {
+        Account acc = [SELECT Id, Name FROM Account LIMIT 1];
+        Id tmplId = createHtmlSignatureTemplate(
+            '<html><body><p>Agreement for {Name}</p><div>{@Signature_Customer}</div></body></html>'
+        );
+
+        Test.startTest();
+        String html = DocGenSignatureSenderController.getDocumentPreviewHtml(tmplId, acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, html, 'HTML signature preview should not render blank');
+        System.assert(html.contains(acc.Name), 'HTML signature preview should contain merged record data');
+        System.assert(html.contains('docgen-sig'), 'HTML signature preview should inject placement spans');
+    }
+
+    @isTest
+    static void testRenderMergedSignatureHtml_htmlTemplateRewritesImageSources() {
+        String cvId = '068000000000001AAA';
+        String sourceUrl = '/sfc/servlet.shepherd/version/download/' + cvId;
+        String publicUrl = 'https://example.file.force.com/sfc/dist/version/download/' + cvId;
+        Map<String, Object> mergeData = new Map<String, Object>{
+            'templateType' => 'HTML',
+            'combinedDocumentXml' => '<html><body><img src="' +
+            sourceUrl +
+            '"/><div>{@Signature_Customer}</div></body></html>'
+        };
+
+        Test.startTest();
+        String html = DocGenSignatureSenderController.renderMergedSignatureHtml(
+            mergeData,
+            null,
+            new Map<String, String>{ sourceUrl => publicUrl }
+        );
+        Test.stopTest();
+
+        System.assert(html.contains('src="' + publicUrl + '"'), 'HTML signature preview should use public image URLs');
+        System.assert(!html.contains('src="' + sourceUrl + '"'), 'Raw /sfc image URL should be rewritten for preview');
+        System.assert(html.contains('{@Signature_Customer}'), 'Signature tag should remain for placement injection');
+    }
+
+    @isTest
+    static void testRewriteHtmlImageSources_matchesContentVersionIdFallback() {
+        String cvId = '068000000000002AAA';
+        String sourceUrl = '/sfc/servlet.shepherd/version/download/' + cvId + '?operationContext=S1';
+        String publicUrl = 'https://example.file.force.com/sfc/dist/version/download/' + cvId;
+
+        Test.startTest();
+        String html = DocGenSignatureSenderController.rewriteHtmlImageSources(
+            '<html><body><img alt="Logo" src="' + sourceUrl + '"/></body></html>',
+            new Map<String, String>{ cvId => publicUrl }
+        );
+        Test.stopTest();
+
+        System.assert(html.contains('src="' + publicUrl + '"'), 'CV-id keyed preview map should rewrite HTML img src');
+        System.assert(!html.contains(sourceUrl), 'Original private image src should not remain in signer preview HTML');
+    }
+
+    @isTest
+    static void testBuildSignaturePreviewImageMap_createsPublicLinkForHtmlImageSource() {
+        String tinyPngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        ContentVersion imgCv = new ContentVersion(
+            Title = 'html_signature_logo',
+            PathOnClient = 'logo.png',
+            VersionData = EncodingUtil.base64Decode(tinyPngB64)
+        );
+        insert imgCv;
+        imgCv = [SELECT Id FROM ContentVersion WHERE Id = :imgCv.Id LIMIT 1];
+        String sourceUrl = '/sfc/servlet.shepherd/version/download/' + imgCv.Id;
+
+        Test.startTest();
+        Map<String, String> previewMap = DocGenSignatureSenderController.buildSignaturePreviewImageMap(
+            new Map<String, String>(),
+            '<html><body><img src="' + sourceUrl + '"/>{@Signature_Customer}</body></html>'
+        );
+        Test.stopTest();
+
+        System.assert(previewMap.containsKey(sourceUrl), 'HTML image source should be mapped for signer preview');
+        System.assert(
+            String.isNotBlank(previewMap.get(sourceUrl)) && previewMap.get(sourceUrl).startsWith('http'),
+            'Signer preview image should use a public ContentDistribution URL'
+        );
+        System.assertEquals(
+            1,
+            [SELECT COUNT() FROM ContentDistribution WHERE ContentVersionId = :imgCv.Id],
+            'A public distribution should be created for the HTML template image'
+        );
+    }
+
+    @isTest
+    static void testGetDocumentPreviewPdfBase64_htmlTemplateDoesNotBlank() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        Id tmplId = createHtmlSignatureTemplate(
+            '<html><body><p>Preview PDF</p><div>{@Signature_Customer:1:Date}</div></body></html>'
+        );
+
+        Test.startTest();
+        String pdfBase64 = DocGenSignatureSenderController.getDocumentPreviewPdfBase64(tmplId, acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(
+            EncodingUtil.base64Encode(Blob.valueOf('test-preview-pdf')),
+            pdfBase64,
+            'HTML signature PDF preview should return a base64 PDF payload'
+        );
+    }
+
+    @isTest
+    static void testStampSignaturesInHtml_escapesSignedValue() {
+        DocGen_Signer__c signer = getTestSigner();
+        DocGen_Signature_Request__c req = getTestRequest();
+        DocGen_Signature_Placement__c plc = new DocGen_Signature_Placement__c(
+            Signer__c = signer.Id,
+            Signature_Request__c = req.Id,
+            Placement_Type__c = 'Full',
+            Status__c = 'Signed',
+            Signed_Value__c = 'Jane <Doe>',
+            Signed_At__c = Datetime.newInstance(2026, 6, 11, 10, 0, 0),
+            Tag_Text__c = '{@Signature_Customer}'
+        );
+        insert plc;
+
+        Test.startTest();
+        String html = DocGenSignatureService.stampSignaturesInHtml(
+            '<html><body><div>{@Signature_Customer}</div></body></html>',
+            new List<DocGen_Signature_Placement__c>{ plc }
+        );
+        Test.stopTest();
+
+        System.assert(!html.contains('{@Signature_Customer}'), 'HTML signature tag should be replaced');
+        System.assert(html.contains('Jane &lt;Doe&gt;'), 'Signed value should be HTML escaped');
+        System.assert(html.contains('Electronically signed by'), 'Full placement should include legal text');
     }
 
     // =========================================================================

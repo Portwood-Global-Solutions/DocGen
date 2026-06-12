@@ -196,15 +196,10 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
             // Visibility=InternalUsers on fresh upload (subscriber-org artifact of
             // the platform behavior). Access is gated upstream by the active
             // template version USER_MODE query.
-            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData', 'Title' });
-            /* code-analyzer-suppress ApexFlsViolation */
-            List<ContentVersion> xmlCvs = [
-                SELECT VersionData
-                FROM ContentVersion
-                WHERE Title = :xmlKey
-                WITH SYSTEM_MODE
-                LIMIT 1
-            ];
+            List<ContentVersion> xmlCvs = DocGenService.loadInternalContentVersionsForVersionByTitle(
+                activeVersions[0].Id,
+                xmlKey
+            );
             if (!xmlCvs.isEmpty()) {
                 documentXml = xmlCvs[0].VersionData.toString();
             }

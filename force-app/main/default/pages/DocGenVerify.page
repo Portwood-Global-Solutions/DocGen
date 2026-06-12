@@ -293,15 +293,17 @@
                         }
                     }
 
-                    // Check for request ID in URL
+                    // Check for the verification token in the URL. The certificate
+                    // link now carries an unguessable 64-hex token (?token=) instead
+                    // of the enumerable record Id.
                     var params = new URLSearchParams(window.location.search);
-                    var reqId = params.get('id');
+                    var verifyToken = params.get('token');
 
-                    // CxSAST: DOM XSS mitigation — validate ID matches Salesforce ID pattern before use
-                    if (reqId && /^[a-zA-Z0-9]{15,18}$/.test(reqId)) {
+                    // DOM XSS mitigation — validate the token is a 64-char hex string before use
+                    if (verifyToken && /^[a-fA-F0-9]{64}$/.test(verifyToken)) {
                         Visualforce.remoting.Manager.invokeAction(
                             '{!$RemoteAction.DocGenAuthenticatorController.verifyByRequestId}',
-                            reqId,
+                            verifyToken,
                             function (results, event) {
                                 var container = document.getElementById('request-results');
                                 clearNode(container);
