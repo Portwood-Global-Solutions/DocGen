@@ -278,6 +278,10 @@
         <enabled>true</enabled>
     </pageAccesses>
     <pageAccesses>
+        <apexPage>DocGenSignaturePdf</apexPage>
+        <enabled>true</enabled>
+    </pageAccesses>
+    <pageAccesses>
         <apexPage>DocGenSign</apexPage>
         <enabled>true</enabled>
     </pageAccesses>

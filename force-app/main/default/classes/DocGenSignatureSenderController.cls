@@ -881,6 +881,69 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     /**
+     * Milestone 1 — "send an already-generated document for signature".
+     *
+     * Creates a Template__c-null signature request bound directly to a
+     * pre-generated ContentVersion (Source_Document_Id__c). The signer URLs
+     * point at the new flat-PDF signing page (getSigningPdfPagePath), which
+     * renders the real PDF and captures a name+consent signature → audit +
+     * Status='Signed'. No template merge, no placements (Template__c is null,
+     * so createPlacementsForSigners early-returns cleanly), no DOCX-XML
+     * stamping.
+     *
+     * signersJson: [{signerName, signerEmail, roleName, contactId}, ...]
+     */
+    @AuraEnabled
+    public static List<SignerResult> createRequestFromContentVersion(
+        Id contentVersionId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat
+    ) {
+        if (contentVersionId == null) {
+            throw new AuraHandledException('A source document (ContentVersion Id) is required.');
+        }
+
+        // Parse signers JSON
+        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
+        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
+        for (Object item : rawInputs) {
+            signerInputs.add((Map<String, Object>) item);
+        }
+
+        // Create parent request bound to the pre-generated CV (no Template__c)
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
+        req.Source_Document_Id__c = contentVersionId;
+        req.Template__c = null;
+        req.Related_Record_Id__c = relatedRecordId;
+        req.Status__c = 'Sent';
+        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
+        if (String.isNotBlank(documentTitleFormat)) {
+            req.Document_Title_Format__c = documentTitleFormat;
+        }
+        // Package-internal object — CRUD controlled by DocGen permission sets
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.assertCreateable(
+            req,
+            new Set<String>{
+                'Source_Document_Id__c',
+                'Related_Record_Id__c',
+                'Status__c',
+                'Signing_Order__c',
+                'Document_Title_Format__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+
+        // Create signer records + send emails, pointing URLs at the flat-PDF page.
+        // templateId=null → createPlacementsForSigners is skipped (no tags to place).
+        String documentTitle = getDocumentTitle(contentVersionId);
+        return createSignersAndNotify(req.Id, null, documentTitle, signerInputs, true, getSigningPdfPagePath());
+    }
+
+    /**
      * Legacy single-signer request creation (backward compat).
      */
     @AuraEnabled
@@ -1302,6 +1365,26 @@ public with sharing class DocGenSignatureSenderController {
         List<Map<String, Object>> signerInputs,
         Boolean sendEmails
     ) {
+        // Default to the legacy DOCX/HTML signing page. The flat-PDF path
+        // (createRequestFromContentVersion) calls the pagePath overload below.
+        return createSignersAndNotify(
+            requestId,
+            templateId,
+            documentTitle,
+            signerInputs,
+            sendEmails,
+            getSigningPagePath()
+        );
+    }
+
+    private static List<SignerResult> createSignersAndNotify(
+        Id requestId,
+        Id templateId,
+        String documentTitle,
+        List<Map<String, Object>> signerInputs,
+        Boolean sendEmails,
+        String pagePath
+    ) {
         String siteUrl = getSiteBaseUrl();
         List<DocGen_Signer__c> signerRecords = new List<DocGen_Signer__c>();
         List<SignerResult> results = new List<SignerResult>();
@@ -1337,7 +1420,7 @@ public with sharing class DocGenSignatureSenderController {
             sr.signerName = signerName;
             sr.roleName = roleName;
             sr.signerEmail = signerEmail;
-            sr.signerUrl = siteUrl + getSigningPagePath() + '?token=' + token;
+            sr.signerUrl = siteUrl + pagePath + '?token=' + token;
             results.add(sr);
         }
 
@@ -1799,6 +1882,19 @@ public with sharing class DocGenSignatureSenderController {
             return '/apex/' + ns + '__DocGenSignature';
         }
         return '/apex/DocGenSignature';
+    }
+
+    /**
+     * Milestone 1 — path to the new flat-PDF signing page (DocGenSignaturePdf.page).
+     * Same namespace-prefix rule as getSigningPagePath; used only by the
+     * "send existing ContentVersion" path (createRequestFromContentVersion).
+     */
+    public static String getSigningPdfPagePath() {
+        String ns = DocGenSignatureSenderController.class.getName().substringBefore('.');
+        if (String.isNotBlank(ns) && ns != 'DocGenSignatureSenderController') {
+            return '/apex/' + ns + '__DocGenSignaturePdf';
+        }
+        return '/apex/DocGenSignaturePdf';
     }
 
     public static String getSiteBaseUrl() {

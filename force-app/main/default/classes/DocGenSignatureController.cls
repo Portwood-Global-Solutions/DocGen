@@ -42,6 +42,22 @@ public without sharing class DocGenSignatureController {
     }
 
     /**
+     * Result for the flat-PDF signing path (savePdfSignature). Mirrors
+     * SaveSignatureResult but carries an explicit `success` flag — the PDF page's
+     * modal needs an unambiguous success signal that does not depend on
+     * isComplete (a single-signer of a multi-signer envelope succeeds with
+     * isComplete=false).
+     */
+    public class SavePdfSignatureResult {
+        @AuraEnabled
+        public Boolean success;
+        @AuraEnabled
+        public Boolean isComplete;
+        @AuraEnabled
+        public Integer remaining;
+    }
+
+    /**
      * Prefers the client-supplied IP (browser fetched it from a public service)
      * over header inspection. The client path is more reliable for guest signers
      * because Sites/Site CDNs don't always set X-Forwarded-For consistently.
@@ -578,7 +594,14 @@ public without sharing class DocGenSignatureController {
             ];
             if (!cvs.isEmpty()) {
                 res.documentTitle = cvs[0].Title;
-                res.documentUrl = getOrCreatePublicLink(cvs[0]);
+                // The PDF signing flow renders the document via getSourcePdfBase64, so this
+                // public preview link is optional. ContentDistribution creation is not permitted
+                // in guest context, so never let it break token validation.
+                try {
+                    res.documentUrl = getOrCreatePublicLink(cvs[0]);
+                } catch (Exception e) {
+                    System.debug(LoggingLevel.WARN, 'DocGen: public preview link unavailable — ' + e.getMessage());
+                }
             } else {
                 res.documentTitle = 'Confidential Document';
             }
@@ -2100,5 +2123,259 @@ public without sharing class DocGenSignatureController {
     public static void finishSignatureUpload(String token, String base64Pdf, String fileName) {
         // PDF is now generated and saved server-side in stampAndReturnSource.
         // This method is retained as a no-op for backward compatibility with the VF page flow.
+    }
+
+    /**
+     * Milestone 1 — flat-PDF signing page (DocGenSignaturePdf.page).
+     *
+     * Returns the request's pre-generated source PDF as base64 so the guest VF
+     * page can render the REAL document in an iframe/blob (guests can't hit
+     * /sfc/servlet.shepherd/ file URLs). The ContentVersion is resolved
+     * server-side from the token-bound request's Source_Document_Id__c — NO CV
+     * id is accepted from the client, so there is no IDOR surface (unlike
+     * getImageBase64, which takes a CV id and must gate it via
+     * isAuthorizedSignatureImage). Mirrors the getImageBase64 security pattern:
+     * token format check → assertSignerReadable → per-field FLS guard →
+     * WITH SYSTEM_MODE.
+     */
+    @AuraEnabled
+    @RemoteAction
+    public static Map<String, String> getSourcePdfBase64(String token) {
+        Map<String, String> result = new Map<String, String>();
+
+        if (String.isBlank(token) || token.length() != 64 || !Pattern.matches('[a-fA-F0-9]{64}', token)) {
+            result.put('error', 'Invalid token');
+            return result;
+        }
+
+        // Guest CRUD/FLS gate — read scope on DocGen_Signer__c + token-scoped
+        // request lookup. The CV served is bound to this token's request, so
+        // no client-supplied CV id (and thus no IDOR check) is needed here.
+        DocGenSignatureGuestSecurity.assertSignerReadable(token);
+
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'CreatedDate', 'Signature_Request__c', 'Secure_Token__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> signers = [
+            SELECT Id, CreatedDate, Signature_Request__r.Source_Document_Id__c
+            FROM DocGen_Signer__c
+            WHERE Secure_Token__c = :token
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+
+        if (signers.isEmpty() || signers[0].CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+            result.put('error', 'Invalid or expired token');
+            return result;
+        }
+
+        Id sourceDocId = signers[0].Signature_Request__r != null
+            ? signers[0].Signature_Request__r.Source_Document_Id__c
+            : null;
+        if (sourceDocId == null) {
+            result.put('error', 'No source document for this signing session');
+            return result;
+        }
+
+        try {
+            // SYSTEM_MODE required: guest profile has no DocGen/ContentVersion CRUD by
+            // design; access is gated by the token-bound Source_Document_Id__c above.
+            DocGenFlsGuard.guestAssertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData', 'Title' });
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            ContentVersion cv = [
+                SELECT VersionData, Title
+                FROM ContentVersion
+                WHERE Id = :sourceDocId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD ApexCRUDViolation - ContentVersion accessed for token-bound signature document render
+
+            result.put('base64', EncodingUtil.base64Encode(cv.VersionData));
+            result.put('fileName', String.isNotBlank(cv.Title) ? cv.Title : 'Document');
+            result.put('mimeType', 'application/pdf');
+        } catch (Exception e) {
+            result.put('error', 'Document not found');
+        }
+
+        return result;
+    }
+
+    /**
+     * Milestone 1 — flat-PDF signing page save path.
+     *
+     * Records the signature audit row + flips signer/request status only. This
+     * is the dedicated PDF-path save: it does NOT reuse saveSignature (which
+     * publishes DocGen_Signature_PDF__e and kicks the DOCX-XML stamping
+     * queueable — wrong for a flat PDF). NO platform event, NO stamping; the
+     * certificate/audit page is Milestone 2 and out of scope here.
+     *
+     * Returns { success, isComplete, remaining }.
+     */
+    @AuraEnabled
+    @RemoteAction
+    public static SavePdfSignatureResult savePdfSignature(
+        String token,
+        String typedName,
+        Boolean consentGiven,
+        String ipAddress,
+        String userAgent
+    ) {
+        SavePdfSignatureResult result = new SavePdfSignatureResult();
+        result.success = false;
+
+        // Validate token format
+        if (String.isBlank(token) || token.length() != 64 || !Pattern.matches('[a-fA-F0-9]{64}', token)) {
+            throw new AuraHandledException('Invalid security token.');
+        }
+
+        if (String.isBlank(typedName)) {
+            throw new AuraHandledException('Please type your name to sign.');
+        }
+
+        if (consentGiven != true) {
+            throw new AuraHandledException('You must agree to sign electronically.');
+        }
+
+        // Guest CRUD/FLS gate — write allowlist (Signer.Status__c,
+        // Signer.Signature_Data__c) + audit creation. See guard helper.
+        DocGenSignatureGuestSecurity.assertSignerWritableFields(token);
+        DocGenSignatureGuestSecurity.assertAuditCreateable(token);
+
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Signature_Request__c',
+                'Role_Name__c',
+                'Contact__c',
+                'CreatedDate',
+                'PIN_Verified_At__c',
+                'Consent_Captured__c',
+                'Secure_Token__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> signers = [
+            SELECT
+                Id,
+                Status__c,
+                Signer_Name__c,
+                Signer_Email__c,
+                Signature_Request__c,
+                Role_Name__c,
+                Contact__c,
+                CreatedDate,
+                PIN_Verified_At__c,
+                Consent_Captured__c
+            FROM DocGen_Signer__c
+            WHERE Secure_Token__c = :token
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+
+        if (signers.isEmpty()) {
+            throw new AuraHandledException('Signer not found.');
+        }
+
+        DocGen_Signer__c signer = signers[0];
+        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+            throw new AuraHandledException('This signature link has expired.');
+        }
+        if (signer.Status__c == 'Signed') {
+            throw new AuraHandledException('You have already signed this document.');
+        }
+
+        // Require PIN verification before allowing signature
+        if (signer.PIN_Verified_At__c == null) {
+            throw new AuraHandledException('Email verification is required before signing.');
+        }
+
+        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // Store typed name and mark as signed
+        signer.Signature_Data__c = typedName;
+        signer.Status__c = 'Signed';
+        signer.Consent_Captured__c = true;
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.guestAssertUpdateable(
+            signer,
+            new Set<String>{ 'Signature_Data__c', 'Status__c', 'Consent_Captured__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.update(signer, false, AccessLevel.SYSTEM_MODE);
+
+        // Create audit trail immediately with all available data (mirrors saveSignature)
+        DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c();
+        audit.Signature_Request__c = signer.Signature_Request__c;
+        audit.Signer__c = signer.Id;
+        audit.Signer_Name__c = signer.Signer_Name__c;
+        audit.Signer_Email__c = signer.Signer_Email__c;
+        audit.Contact__c = signer.Contact__c;
+        audit.Signed_Date__c = System.now();
+        audit.IP_Address__c = resolveClientIp(ipAddress);
+        audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
+        audit.Consent_Captured__c = true;
+        audit.PIN_Verified_At__c = signer.PIN_Verified_At__c;
+        // No Document_Hash_SHA256__c — there is no stamped output in Milestone 1.
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
+        DocGenFlsGuard.guestAssertCreateable(
+            audit,
+            new Set<String>{
+                'Signature_Request__c',
+                'Signer__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Contact__c',
+                'Signed_Date__c',
+                'IP_Address__c',
+                'User_Agent__c',
+                'Consent_Captured__c',
+                'PIN_Verified_At__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(new List<DocGen_Signature_Audit__c>{ audit }, false, AccessLevel.SYSTEM_MODE);
+
+        // Check if all signers are now complete
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Status__c', 'Signature_Request__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> allSigners = [
+            SELECT Status__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__c = :signer.Signature_Request__c
+            WITH SYSTEM_MODE
+        ];
+
+        Integer remaining = 0;
+        for (DocGen_Signer__c s : allSigners) {
+            if (s.Status__c != 'Signed')
+                remaining++;
+        }
+
+        result.remaining = remaining;
+        result.isComplete = (remaining == 0);
+
+        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // Update parent request status — 'Signed' once every signer is done, else 'In Progress'.
+        DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
+        parentReq.Status__c = result.isComplete ? 'Signed' : 'In Progress';
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.guestAssertUpdateable(parentReq, new Set<String>{ 'Status__c' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
+
+        // INTENTIONALLY NO DocGen_Signature_PDF__e publish and NO stamping here.
+        // The flat-PDF path records audit + status and STOPS. Publishing the event
+        // would enqueue the DOCX-XML stamping queueable — wrong for a flat PDF.
+        // Stamping / certificate page is Milestone 2 (out of scope).
+
+        result.success = true;
+        return result;
     }
 }

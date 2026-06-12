@@ -453,6 +453,90 @@ try {
     System.debug('SETUP VALIDATION: FAIL — ' + e.getMessage());
 }
 
+// ===== Send Existing ContentVersion (flat-PDF signing path, Milestone 1) =====
+try {
+    // A pre-generated document stored as a ContentVersion (what the signer will see).
+    ContentVersion srcCv = new ContentVersion(
+        Title = 'E2E Generated Agreement',
+        PathOnClient = 'e2e-agreement.pdf',
+        VersionData = Blob.valueOf('%PDF-1.7 e2e source document bytes')
+    );
+    insert srcCv;
+    srcCv = [SELECT Id FROM ContentVersion WHERE Id = :srcCv.Id LIMIT 1];
+
+    String pdfSignersJson = '[{"signerName":"Carol Existing","signerEmail":"carol@e2etest.example.com","roleName":"Signer","contactId":""}]';
+
+    List<DocGenSignatureSenderController.SignerResult> pdfResults = DocGenSignatureSenderController.createRequestFromContentVersion(
+        srcCv.Id,
+        acctId,
+        pdfSignersJson,
+        'Parallel',
+        null
+    );
+
+    // One signer whose URL targets the NEW flat-PDF page (not /DocGenSignature).
+    Boolean urlOk =
+        pdfResults != null &&
+        pdfResults.size() == 1 &&
+        pdfResults[0].signerUrl != null &&
+        pdfResults[0].signerUrl.contains('DocGenSignaturePdf');
+    if (urlOk) {
+        pass++;
+        System.debug('SEND EXISTING CV — SIGNER URL: PASS');
+    } else {
+        fail++;
+        System.debug('SEND EXISTING CV — SIGNER URL: FAIL');
+    }
+
+    // The created request is Template__c-null and bound to the source CV.
+    DocGen_Signer__c pdfSigner = [
+        SELECT
+            Secure_Token__c,
+            Signature_Request__c,
+            Signature_Request__r.Source_Document_Id__c,
+            Signature_Request__r.Template__c,
+            Signature_Request__r.Status__c
+        FROM DocGen_Signer__c
+        WHERE Signer_Email__c = 'carol@e2etest.example.com'
+        ORDER BY CreatedDate DESC
+        LIMIT 1
+    ];
+    Boolean reqOk =
+        pdfSigner.Signature_Request__r.Source_Document_Id__c == srcCv.Id &&
+        pdfSigner.Signature_Request__r.Template__c == null &&
+        pdfSigner.Signature_Request__r.Status__c == 'Sent';
+    if (reqOk) {
+        pass++;
+        System.debug('SEND EXISTING CV — TEMPLATE-NULL REQUEST: PASS');
+    } else {
+        fail++;
+        System.debug('SEND EXISTING CV — TEMPLATE-NULL REQUEST: FAIL');
+    }
+
+    // The signer's token round-trips through getSourcePdfBase64 → serves the bound PDF.
+    Map<String, String> pdfBytes = DocGenSignatureController.getSourcePdfBase64(pdfSigner.Secure_Token__c);
+    if (
+        pdfBytes.get('error') == null &&
+        pdfBytes.get('mimeType') == 'application/pdf' &&
+        pdfBytes.get('base64') == EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 e2e source document bytes'))
+    ) {
+        pass++;
+        System.debug('SEND EXISTING CV — getSourcePdfBase64 ROUND-TRIP: PASS');
+    } else {
+        fail++;
+        System.debug('SEND EXISTING CV — getSourcePdfBase64 ROUND-TRIP: FAIL — ' + pdfBytes.get('error'));
+    }
+
+    // Cleanup the request, signer, and source document created here.
+    Id pdfReqId = pdfSigner.Signature_Request__c;
+    delete [SELECT Id FROM DocGen_Signer__c WHERE Signature_Request__c = :pdfReqId];
+    delete [SELECT Id FROM DocGen_Signature_Request__c WHERE Id = :pdfReqId];
+    delete [SELECT Id FROM ContentDocument WHERE LatestPublishedVersionId = :srcCv.Id];
+} catch (Exception e) {
+    fail++;
+    System.debug('SEND EXISTING CV: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-06 SIGNATURES — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')
