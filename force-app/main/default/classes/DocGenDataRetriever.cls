@@ -1926,7 +1926,24 @@ public with sharing class DocGenDataRetriever {
                         new Map<String, Object>{ 'latitude' => loc.getLatitude(), 'longitude' => loc.getLongitude() }
                     );
                 } else {
-                    data.put(key, value);
+                    // DATE-field timezone fix: Salesforce returns a Date field via untyped
+                    // get()/getPopulatedFieldsAsMap() as a GMT-midnight Datetime. The merge
+                    // formatter renders Datetimes in the running user's local time zone, so a
+                    // user behind UTC sees the date rolled back a day (the "dates off by one"
+                    // bug). Apex instanceof can't tell Date from Datetime at runtime (both
+                    // match Datetime), so we use the Schema field type: for DATE fields,
+                    // re-express the value as LOCAL midnight of the same calendar date, which
+                    // formats to the correct day. Datetime fields are left untouched — they
+                    // SHOULD render in local time.
+                    Object toStore = value;
+                    if (value instanceof Datetime) {
+                        Schema.SObjectField sof = fieldMap.get(key.toLowerCase());
+                        if (sof != null && sof.getDescribe().getType() == Schema.DisplayType.DATE) {
+                            Date dg = ((Datetime) value).dateGmt();
+                            toStore = Datetime.newInstance(dg.year(), dg.month(), dg.day(), 0, 0, 0);
+                        }
+                    }
+                    data.put(key, toStore);
                     String label = resolvePicklistLabel(fieldMap, key, value);
                     if (label != null) {
                         picklistLabels.put(key, label);
