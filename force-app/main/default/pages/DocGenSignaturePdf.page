@@ -928,8 +928,11 @@
                             clearContainer(containerEl);
 
                             var bytes = base64ToBytes(base64);
+                            // isEvalSupported:false disables PDF.js's Function-constructor
+                            // font path — the vector for CVE-2024-4367 (arbitrary JS via a
+                            // crafted PDF). Required mitigation while on the 2.x build.
                             return pdfjsLib
-                                .getDocument({ data: bytes })
+                                .getDocument({ data: bytes, isEvalSupported: false })
                                 .promise.then(function (pdf) {
                                     var chain = Promise.resolve();
                                     for (var p = 1; p <= pdf.numPages; p++) {
