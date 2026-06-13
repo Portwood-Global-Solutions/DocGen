@@ -1726,7 +1726,12 @@
                         page.drawText('Signers', { x: 54, y: y, size: 12, font: helvBold });
                         y -= 18;
                         (cert.signers || []).forEach(function (s) {
-                            var when = s.isMe && !s.signedAt ? meStamp : s.signedAt || 'Pending';
+                            var signedNow = s.isMe && !s.signedAt;
+                            var when = signedNow ? meStamp : s.signedAt || 'Pending';
+                            // The completing signer's audit row is written immediately after
+                            // this, so use the IP captured client-side for their line.
+                            var ip = s.ip || (signedNow ? capturedIp : '') || '—';
+                            var consent = s.consent || s.isMe ? 'Accepted' : '—';
                             var nameLine = (s.name || 'Signer') + (s.role ? '  (' + s.role + ')' : '');
                             page.drawText(nameLine, { x: 60, y: y, size: 10, font: helvBold });
                             y -= 13;
@@ -1735,6 +1740,14 @@
                                 y -= 12;
                             }
                             page.drawText('Signed: ' + when + '      Email verified: ' + (s.verified ? 'Yes' : 'No'), {
+                                x: 60,
+                                y: y,
+                                size: 9,
+                                font: helv,
+                                color: gray
+                            });
+                            y -= 12;
+                            page.drawText('IP address: ' + ip + '      Consent: ' + consent, {
                                 x: 60,
                                 y: y,
                                 size: 9,

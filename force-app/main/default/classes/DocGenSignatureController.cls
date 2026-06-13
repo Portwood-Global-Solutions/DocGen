@@ -2669,22 +2669,29 @@ public without sharing class DocGenSignatureController {
             ORDER BY Sort_Order__c ASC
         ];
 
-        // Signed timestamps live on the audit rows (DocGen_Signer__c has no signed-at).
+        // The audit rows carry the signing-event evidence (DocGen_Signer__c has none of it):
+        // signed timestamp, IP address, and consent capture.
         DocGenFlsGuard.guestAssertAccessible(
             DocGen_Signature_Audit__c.sObjectType,
-            new Set<String>{ 'Signer__c', 'Signed_Date__c', 'Signature_Request__c' }
+            new Set<String>{
+                'Signer__c',
+                'Signed_Date__c',
+                'IP_Address__c',
+                'Consent_Captured__c',
+                'Signature_Request__c'
+            }
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Audit__c> audits = [
-            SELECT Signer__c, Signed_Date__c
+            SELECT Signer__c, Signed_Date__c, IP_Address__c, Consent_Captured__c
             FROM DocGen_Signature_Audit__c
             WHERE Signature_Request__c = :reqId
             WITH SYSTEM_MODE
         ];
-        Map<Id, Datetime> signedMap = new Map<Id, Datetime>();
+        Map<Id, DocGen_Signature_Audit__c> auditMap = new Map<Id, DocGen_Signature_Audit__c>();
         for (DocGen_Signature_Audit__c a : audits) {
-            if (a.Signer__c != null && a.Signed_Date__c != null) {
-                signedMap.put(a.Signer__c, a.Signed_Date__c);
+            if (a.Signer__c != null) {
+                auditMap.put(a.Signer__c, a);
             }
         }
 
@@ -2694,14 +2701,19 @@ public without sharing class DocGenSignatureController {
             if (s.Id != myId && s.Status__c != 'Signed') {
                 othersUnsigned++;
             }
-            Datetime sat = signedMap.get(s.Id);
+            DocGen_Signature_Audit__c a = auditMap.get(s.Id);
             roster.add(
                 new Map<String, Object>{
                     'name' => s.Signer_Name__c,
                     'role' => s.Role_Name__c,
                     'email' => s.Signer_Email__c,
                     'status' => s.Status__c,
-                    'signedAt' => sat != null ? sat.format('MMMM d, yyyy h:mm a z') : null,
+                    'signedAt' => (a != null &&
+                        a.Signed_Date__c != null)
+                        ? a.Signed_Date__c.format('MMMM d, yyyy h:mm a z')
+                        : null,
+                    'ip' => a != null ? a.IP_Address__c : null,
+                    'consent' => a != null ? a.Consent_Captured__c == true : false,
                     'verified' => s.PIN_Verified_At__c != null,
                     'isMe' => s.Id == myId
                 }
