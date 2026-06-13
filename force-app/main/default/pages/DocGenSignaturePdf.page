@@ -1679,17 +1679,41 @@
                         });
                     }
 
+                    // Build a timestamp matching the server audit format
+                    // ('MMMM d, yyyy h:mm a z') so the completing signer's cert line reads
+                    // consistently with the other signers' server-formatted lines (no
+                    // locale "at", includes a timezone abbreviation).
                     function nowStamp() {
+                        var d = new Date();
                         try {
-                            return new Date().toLocaleString(undefined, {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: 'numeric',
-                                minute: '2-digit'
-                            });
+                            var month = d.toLocaleString('en-US', { month: 'long' });
+                            var hours = d.getHours();
+                            var ampm = hours >= 12 ? 'PM' : 'AM';
+                            var h12 = hours % 12 === 0 ? 12 : hours % 12;
+                            var mins = ('0' + d.getMinutes()).slice(-2);
+                            var tz = '';
+                            try {
+                                var parts = d.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ');
+                                tz = parts[parts.length - 1];
+                            } catch (e2) {
+                                /* tz best-effort */
+                            }
+                            return (
+                                month +
+                                ' ' +
+                                d.getDate() +
+                                ', ' +
+                                d.getFullYear() +
+                                ' ' +
+                                h12 +
+                                ':' +
+                                mins +
+                                ' ' +
+                                ampm +
+                                (tz ? ' ' + tz : '')
+                            );
                         } catch (e) {
-                            return new Date().toString();
+                            return d.toString();
                         }
                     }
 
