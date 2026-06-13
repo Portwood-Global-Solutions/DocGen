@@ -1143,6 +1143,203 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     /**
+     * Creates a GUIDED PDF-signing request from a template that carries
+     * {@Signature_Role:Order:Type} placement tags. The signer reviews a flat PDF
+     * in the PDF.js viewer with positioned sign-spot chips (vs. the classic HTML
+     * signing page).
+     *
+     * Each placement tag is swapped to a UNIQUE invisible sentinel (@@SIG-n@@):
+     *  - VIEWING body wraps it white (invisible on the page) but PDF.js can still
+     *    extract it from the text layer to position a chip;
+     *  - FROZEN body keeps the bare sentinel, and the placement's Tag_Text__c is
+     *    that sentinel, so the completion finalizer's stampSignaturesInHtml
+     *    replaces it with the signed value in the authoritative PDF.
+     *
+     * Scope: HTML templates (the recommended signature format). DOCX tags can
+     * split across runs and need a different substitution strategy — deferred (#167).
+     */
+    @AuraEnabled
+    public static List<SignerResult> createGuidedPdfSignatureRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat
+    ) {
+        List<DocGen_Template__c> tpls = [
+            SELECT Id, Name
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (tpls.isEmpty()) {
+            throw new AuraHandledException('Template not found.');
+        }
+
+        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
+        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
+        for (Object item : rawInputs) {
+            signerInputs.add((Map<String, Object>) item);
+        }
+
+        // Merge the template against the live record (point-in-time body).
+        Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
+        String templateType = (String) mergeData.get('templateType');
+        if (templateType != 'HTML') {
+            throw new AuraHandledException(
+                'Guided PDF signing currently supports HTML templates. ' +
+                'Convert the template to HTML or use the classic signing flow.'
+            );
+        }
+        String body = (String) mergeData.get('combinedDocumentXml');
+        if (String.isBlank(body)) {
+            body = (String) mergeData.get('documentXml');
+        }
+
+        List<PlacementInfo> placements = getTemplateSignaturePlacements(templateId);
+        if (placements.isEmpty()) {
+            throw new AuraHandledException('This template has no {@Signature_...} placement tags.');
+        }
+
+        // FROZEN body: replace each placement's tag (in document order) with a
+        // unique bare sentinel — what the finalizer later stamps.
+        String frozenBody = body;
+        List<String> sentinels = new List<String>();
+        for (Integer i = 0; i < placements.size(); i++) {
+            String sentinel = '@@SIG-' + i + '@@';
+            sentinels.add(sentinel);
+            frozenBody = frozenBody.replaceFirst(Pattern.quote(placements[i].tagText), sentinel);
+        }
+
+        // VIEWING body: wrap each sentinel so it occupies layout space (correct
+        // chip position) but renders white/invisible on the page.
+        String viewingBody = frozenBody;
+        for (String sentinel : sentinels) {
+            viewingBody = viewingBody.replace(sentinel, '<span style="color:#ffffff">' + sentinel + '</span>');
+        }
+
+        // Freeze the sentinel body so completion re-renders + stamps it.
+        Map<String, Object> frozenMerge = new Map<String, Object>(mergeData);
+        frozenMerge.put('combinedDocumentXml', frozenBody);
+        frozenMerge.put('documentXml', frozenBody);
+        String frozenJson = DocGenSignatureService.buildFrozenDocumentJson(
+            new List<Map<String, Object>>{ frozenMerge },
+            new List<Id>{ templateId }
+        );
+
+        // Render the viewing PDF (invisible sentinels) → standalone ContentVersion.
+        Blob viewingBlob = Blob.toPdf(viewingBody);
+        String fileTitle = tpls[0].Name;
+        ContentVersion viewCv = new ContentVersion();
+        viewCv.Title = fileTitle;
+        viewCv.PathOnClient = fileTitle + '.pdf';
+        viewCv.VersionData = viewingBlob;
+        DocGenFlsGuard.assertCreateable(viewCv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(viewCv, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
+        req.Template__c = templateId;
+        req.Related_Record_Id__c = relatedRecordId;
+        req.Source_Document_Id__c = viewCv.Id;
+        req.Status__c = 'Sent';
+        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
+        if (String.isNotBlank(documentTitleFormat)) {
+            req.Document_Title_Format__c = documentTitleFormat;
+        }
+        req.Secure_Token__c = generateRequestVerificationToken();
+        Set<String> reqFields = new Set<String>{
+            'Template__c',
+            'Related_Record_Id__c',
+            'Source_Document_Id__c',
+            'Status__c',
+            'Signing_Order__c',
+            'Document_Title_Format__c',
+            'Secure_Token__c'
+        };
+        if (String.isNotBlank(frozenJson)) {
+            req.Frozen_Document__c = frozenJson;
+            req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(frozenJson);
+            req.Snapshot_Taken_At__c = System.now();
+            reqFields.addAll(new Set<String>{ 'Frozen_Document__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' });
+        }
+        DocGenFlsGuard.assertCreateable(req, reqFields);
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+
+        // Create signers at the PDF-viewer page (templateId=null skips the classic
+        // placement creation — we create sentinel-keyed placements below).
+        List<SignerResult> results = createSignersAndNotify(
+            req.Id,
+            null,
+            fileTitle,
+            signerInputs,
+            true,
+            getSigningPdfPagePath()
+        );
+
+        // Map placements → signers by role (fallback: first signer), Tag_Text__c = sentinel.
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Role_Name__c', 'Signature_Request__c', 'Sort_Order__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Signer__c> signerRecs = [
+            SELECT Id, Role_Name__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__c = :req.Id
+            WITH SYSTEM_MODE
+            ORDER BY Sort_Order__c ASC
+        ];
+        Map<String, DocGen_Signer__c> roleSignerMap = new Map<String, DocGen_Signer__c>();
+        for (DocGen_Signer__c s : signerRecs) {
+            if (String.isNotBlank(s.Role_Name__c)) {
+                roleSignerMap.put(s.Role_Name__c, s);
+            }
+        }
+        DocGen_Signer__c fallbackSigner = signerRecs.isEmpty() ? null : signerRecs[0];
+
+        List<DocGen_Signature_Placement__c> placementRecords = new List<DocGen_Signature_Placement__c>();
+        for (Integer i = 0; i < placements.size(); i++) {
+            PlacementInfo p = placements[i];
+            DocGen_Signer__c signer = roleSignerMap.containsKey(p.role) ? roleSignerMap.get(p.role) : fallbackSigner;
+            if (signer == null) {
+                continue;
+            }
+            placementRecords.add(
+                new DocGen_Signature_Placement__c(
+                    Signer__c = signer.Id,
+                    Signature_Request__c = req.Id,
+                    Document_Index__c = 0,
+                    Sequence_Order__c = p.sequence,
+                    Placement_Type__c = p.placementType,
+                    Status__c = 'Pending',
+                    Tag_Text__c = sentinels[i]
+                )
+            );
+        }
+        if (!placementRecords.isEmpty()) {
+            DocGenFlsGuard.assertCreateable(
+                placementRecords,
+                new Set<String>{
+                    'Signer__c',
+                    'Signature_Request__c',
+                    'Document_Index__c',
+                    'Sequence_Order__c',
+                    'Placement_Type__c',
+                    'Status__c',
+                    'Tag_Text__c'
+                }
+            );
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            Database.insert(placementRecords, AccessLevel.SYSTEM_MODE);
+        }
+
+        return results;
+    }
+
+    /**
      * Legacy single-signer request creation (backward compat).
      */
     @AuraEnabled

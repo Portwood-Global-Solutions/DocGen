@@ -16,6 +16,9 @@
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
             <title>Document Signature</title>
             <apex:slds />
+            <!-- PDF.js (legacy UMD build) — client-side render + text layer for
+                 sign-spot positioning. Bundled as a static resource (no callout). -->
+            <apex:includeScript value="{!URLFOR($Resource.pdfjs, 'pdf.min.js')}" />
 
             <style>
                 * {
@@ -374,26 +377,120 @@
                 /* Document viewer area — DocGenPdfViewer.render() owns the inside of this box */
                 .pdf-viewer {
                     flex: 1;
-                    overflow: hidden;
+                    overflow: auto;
                     background: #525659;
                     border-left: 1px solid #e5e5e5;
                     border-right: 1px solid #e5e5e5;
                     min-height: 360px;
                     position: relative;
+                    text-align: center;
                 }
-                /* The viewer module renders an iframe (native impl) filling the area. */
-                .pdf-viewer iframe,
-                .pdf-viewer embed,
-                .pdf-viewer object,
-                .pdf-viewer canvas {
-                    width: 100%;
-                    height: 100%;
-                    border: 0;
+                /* PDF.js impl: one positioned wrap per page holding its canvas + chips. */
+                .pdf-viewer .dg-page-wrap {
+                    position: relative;
+                    margin: 12px auto;
+                    background: #fff;
+                    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+                }
+                .pdf-viewer .dg-page-wrap canvas {
                     display: block;
                 }
                 .pdf-viewer .spinner-container {
                     position: absolute;
                     inset: 0;
+                }
+
+                /* ===== SIGN-SPOT OVERLAY CHIPS ===== */
+                .spot-chip {
+                    position: absolute;
+                    box-sizing: border-box;
+                    /* Opaque so the underlying sentinel (@@SIG-n@@) is fully masked. */
+                    background: #fff8c5;
+                    border: 2px dashed #f59e0b;
+                    border-radius: 3px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: #92400e;
+                    z-index: 5;
+                    overflow: visible;
+                    transition:
+                        box-shadow 0.15s ease,
+                        background 0.15s ease;
+                }
+                .spot-chip:hover {
+                    background: #fdf0a8;
+                }
+                .spot-chip .tab {
+                    position: absolute;
+                    left: -2px;
+                    top: -20px;
+                    background: #f59e0b;
+                    color: #fff;
+                    padding: 1px 7px;
+                    border-radius: 3px;
+                    white-space: nowrap;
+                    font-size: 10px;
+                    font-weight: 700;
+                }
+                .spot-chip.current {
+                    border-color: #0176d3;
+                    background: #e8f2fc;
+                    box-shadow: 0 0 0 3px rgba(1, 118, 211, 0.25);
+                    animation: spotPulse 1.4s ease-in-out infinite;
+                }
+                .spot-chip.current .tab {
+                    background: #0176d3;
+                }
+                /* Signed: applied ink, not a fill box. Opaque white masks the
+                   sentinel; the value sits on a green signature line. */
+                .spot-chip.signed {
+                    background: #ffffff;
+                    border: none;
+                    border-bottom: 1.5px solid #2e844a;
+                    border-radius: 0;
+                    color: #161616;
+                    cursor: default;
+                    animation: none;
+                    box-shadow: none;
+                    justify-content: flex-start;
+                    align-items: flex-end;
+                    height: auto;
+                    min-height: 20px;
+                    padding: 0 3px 1px 3px;
+                    white-space: nowrap;
+                    overflow: visible;
+                }
+                .spot-chip.signed .tab {
+                    background: #2e844a;
+                    top: -18px;
+                }
+                /* The stamped value. Script face for signatures/initials; plain
+                   for dates. */
+                .spot-chip .sig-value {
+                    font-family: 'Segoe Script', 'Brush Script MT', 'Snell Roundhand', cursive;
+                    font-size: 17px;
+                    font-weight: 400;
+                    line-height: 1.1;
+                    color: #16324f;
+                }
+                .spot-chip .sig-value.plain {
+                    font-family: inherit;
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #161616;
+                }
+                @keyframes spotPulse {
+                    0%,
+                    100% {
+                        box-shadow: 0 0 0 3px rgba(1, 118, 211, 0.25);
+                    }
+                    50% {
+                        box-shadow: 0 0 0 6px rgba(1, 118, 211, 0.12);
+                    }
                 }
 
                 /* Bottom action bar with the Sign button */
@@ -713,10 +810,26 @@
             -->
             <script>
                 var DocGenPdfViewer = (function () {
-                    // --- Private engine state (never exposed) ---
-                    // Track the most recent object URL so we can revoke it before creating a
-                    // new one, avoiding a blob-URL leak across re-renders.
-                    var activeObjectUrl = null;
+                    // ============================================================
+                    // ENGINE: PDF.js (Milestone 3). base64 -> pdf.js document ->
+                    // one canvas-backed page wrap per page, with the text layer
+                    // captured so sign-spot anchors can be located and overlaid.
+                    //
+                    // Beyond the original contract, this engine also exposes a
+                    // small positioning API used by the guided-signing overlay:
+                    //   locateAnchors(needles) -> [{needle, box, wrapEl, page}]
+                    //   addChip(hit, label, cssClass) -> chip element
+                    //   scrollToChip(chipEl)
+                    //   isReady()
+                    // The state machine / save flow still only depend on render();
+                    // the overlay is additive and degrades gracefully if a spot
+                    // can't be located.
+                    // ============================================================
+                    var WORKER_SRC = "{!URLFOR($Resource.pdfjs, 'pdf.worker.min.js')}";
+                    var MAX_SCALE = 1.6;
+
+                    var pages = []; // { pageNum, viewport, textContent, wrapEl }
+                    var ready = false;
 
                     function base64ToBytes(base64) {
                         var binary = atob(base64);
@@ -734,40 +847,183 @@
                         }
                     }
 
+                    function showMessage(containerEl, text) {
+                        clearContainer(containerEl);
+                        var msg = document.createElement('p');
+                        msg.style.cssText = 'color:#fff;text-align:center;padding:2rem;';
+                        msg.textContent = text;
+                        containerEl.appendChild(msg);
+                    }
+
+                    // Fit page width to the viewer box (minus a small gutter), capped so
+                    // small pages don't blow up past native resolution.
+                    function fitScale(page, containerEl) {
+                        var base = page.getViewport({ scale: 1 });
+                        var avail = Math.max(320, (containerEl.clientWidth || 640) - 28);
+                        return Math.min(MAX_SCALE, avail / base.width);
+                    }
+
+                    function renderOnePage(pdf, pageNum, containerEl) {
+                        return pdf.getPage(pageNum).then(function (page) {
+                            var viewport = page.getViewport({ scale: fitScale(page, containerEl) });
+                            var wrap = document.createElement('div');
+                            wrap.className = 'dg-page-wrap';
+                            wrap.style.width = viewport.width + 'px';
+                            wrap.style.height = viewport.height + 'px';
+                            var canvas = document.createElement('canvas');
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            wrap.appendChild(canvas);
+                            containerEl.appendChild(wrap);
+                            return page
+                                .render({ canvasContext: canvas.getContext('2d'), viewport: viewport })
+                                .promise.then(function () {
+                                    return page.getTextContent();
+                                })
+                                .then(function (tc) {
+                                    pages.push({
+                                        pageNum: pageNum,
+                                        viewport: viewport,
+                                        textContent: tc,
+                                        wrapEl: wrap
+                                    });
+                                });
+                        });
+                    }
+
+                    // Compose a text item's transform with the page viewport transform to
+                    // get its device-space (top-left origin) bounding box.
+                    function itemDeviceBox(item, viewport) {
+                        var tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                        var fontHeight = Math.hypot(item.transform[2], item.transform[3]) * viewport.scale;
+                        var width = item.width * viewport.scale;
+                        return { x: tx[4], y: tx[5] - fontHeight, w: width, h: fontHeight };
+                    }
+                    function unionBox(a, b) {
+                        var x1 = Math.min(a.x, b.x),
+                            y1 = Math.min(a.y, b.y);
+                        var x2 = Math.max(a.x + a.w, b.x + b.w),
+                            y2 = Math.max(a.y + a.h, b.y + b.h);
+                        return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+                    }
+
                     return {
                         // render(base64, containerEl) — see contract header above.
+                        // Returns a Promise that resolves when every page is painted.
                         render: function (base64, containerEl) {
+                            ready = false;
+                            pages = [];
                             if (!containerEl) {
-                                return;
+                                return Promise.resolve();
                             }
                             if (!base64) {
-                                clearContainer(containerEl);
-                                var msg = document.createElement('p');
-                                msg.style.cssText = 'color:#fff;text-align:center;padding:2rem;';
-                                msg.textContent = 'Document unavailable.';
-                                containerEl.appendChild(msg);
-                                return;
+                                showMessage(containerEl, 'Document unavailable.');
+                                return Promise.resolve();
                             }
-
-                            // Revoke the previous blob URL if we are re-rendering.
-                            if (activeObjectUrl) {
-                                URL.revokeObjectURL(activeObjectUrl);
-                                activeObjectUrl = null;
+                            if (typeof pdfjsLib === 'undefined') {
+                                showMessage(containerEl, 'Viewer failed to load. Please refresh.');
+                                return Promise.reject(new Error('pdfjsLib not loaded'));
                             }
+                            pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+                            clearContainer(containerEl);
 
                             var bytes = base64ToBytes(base64);
-                            var blob = new Blob([bytes], { type: 'application/pdf' });
-                            activeObjectUrl = URL.createObjectURL(blob);
+                            return pdfjsLib
+                                .getDocument({ data: bytes })
+                                .promise.then(function (pdf) {
+                                    var chain = Promise.resolve();
+                                    for (var p = 1; p <= pdf.numPages; p++) {
+                                        (function (pageNum) {
+                                            chain = chain.then(function () {
+                                                return renderOnePage(pdf, pageNum, containerEl);
+                                            });
+                                        })(p);
+                                    }
+                                    return chain;
+                                })
+                                .then(function () {
+                                    // pages may resolve out of order under the chain; keep ascending.
+                                    pages.sort(function (a, b) {
+                                        return a.pageNum - b.pageNum;
+                                    });
+                                    ready = true;
+                                })
+                                .catch(function (err) {
+                                    showMessage(containerEl, 'Unable to display this document.');
+                                    throw err;
+                                });
+                        },
 
-                            clearContainer(containerEl);
-                            var iframe = document.createElement('iframe');
-                            iframe.title = 'Document to sign';
-                            iframe.setAttribute('type', 'application/pdf');
-                            // #view=FitH asks the native PDF viewer to fit the page to the
-                            // width of the (now full-width) viewer box so the document is
-                            // large and easy to inspect, rather than a centered column.
-                            iframe.src = activeObjectUrl + '#view=FitH';
-                            containerEl.appendChild(iframe);
+                        isReady: function () {
+                            return ready;
+                        },
+
+                        // Find EVERY occurrence of each needle across all pages, tolerating
+                        // a match split across text runs. Occurrences are returned in
+                        // document order so callers can map duplicate needles to records.
+                        locateAnchors: function (needles) {
+                            var hits = [];
+                            for (var pi = 0; pi < pages.length; pi++) {
+                                var pg = pages[pi];
+                                var combined = '';
+                                var ranges = [];
+                                var items = pg.textContent.items;
+                                for (var i = 0; i < items.length; i++) {
+                                    var s = combined.length;
+                                    combined += items[i].str;
+                                    ranges.push({ item: items[i], start: s, end: combined.length });
+                                }
+                                for (var n = 0; n < needles.length; n++) {
+                                    var needle = needles[n];
+                                    if (!needle) continue;
+                                    var from = 0;
+                                    var at;
+                                    while ((at = combined.indexOf(needle, from)) >= 0) {
+                                        var matchEnd = at + needle.length;
+                                        var box = null;
+                                        for (var r = 0; r < ranges.length; r++) {
+                                            var rg = ranges[r];
+                                            if (rg.end <= at || rg.start >= matchEnd) continue;
+                                            var b = itemDeviceBox(rg.item, pg.viewport);
+                                            box = box ? unionBox(box, b) : b;
+                                        }
+                                        if (box) {
+                                            hits.push({
+                                                needle: needle,
+                                                box: box,
+                                                wrapEl: pg.wrapEl,
+                                                page: pg.pageNum
+                                            });
+                                        }
+                                        from = matchEnd;
+                                    }
+                                }
+                            }
+                            return hits;
+                        },
+
+                        // Draw a chip over a located hit. Returns the chip element.
+                        addChip: function (hit, label, cssClass) {
+                            var chip = document.createElement('div');
+                            chip.className = 'spot-chip' + (cssClass ? ' ' + cssClass : '');
+                            chip.style.left = hit.box.x + 'px';
+                            chip.style.top = hit.box.y + 'px';
+                            chip.style.width = Math.max(hit.box.w, 48) + 'px';
+                            chip.style.height = Math.max(hit.box.h, 20) + 'px';
+                            if (label) {
+                                var tab = document.createElement('span');
+                                tab.className = 'tab';
+                                tab.textContent = label;
+                                chip.appendChild(tab);
+                            }
+                            hit.wrapEl.appendChild(chip);
+                            return chip;
+                        },
+
+                        scrollToChip: function (chipEl) {
+                            if (chipEl && chipEl.scrollIntoView) {
+                                chipEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
                         }
                     };
                 })();
@@ -818,6 +1074,14 @@
                     var isMultiSigner = false;
                     var resendTimer = null;
                     var capturedIp = '';
+                    // Guided-signing state (null = no placements → fall back to the
+                    // single-modal flow). spots[] are the located, ordered sign-spots.
+                    var guided = null;
+                    // Which behaviour btn-sign-submit drives: 'pdf' (single typed name,
+                    // legacy flat flow), 'spot' (capture one placement), 'final'
+                    // (consent + finalize after all spots are signed).
+                    var modalMode = 'pdf';
+                    var activeSpot = null;
 
                     // ===== CLIENT-SIDE IP CAPTURE =====
                     // The signing page is hosted on a Salesforce Site, so signers are Guest users.
@@ -1028,14 +1292,259 @@
                             function (result, event) {
                                 if (event.status && result && result.base64) {
                                     // The viewer module owns rendering — the page never touches
-                                    // blobs/iframes/PDF.js directly.
-                                    DocGenPdfViewer.render(result.base64, containerEl);
+                                    // blobs/iframes/PDF.js directly. Once painted, try to set up
+                                    // the guided sign-spot overlay (no-op when there are no
+                                    // placements — the single-modal flow stays in effect).
+                                    DocGenPdfViewer.render(result.base64, containerEl)
+                                        .then(function () {
+                                            initGuidedOverlay();
+                                        })
+                                        .catch(function () {
+                                            /* render error already shown by the viewer */
+                                        });
                                 } else {
                                     DocGenPdfViewer.render(null, containerEl);
                                 }
                             },
                             { escape: false, buffer: false, timeout: 120000 }
                         );
+                    }
+
+                    // ===== GUIDED SIGN-SPOT OVERLAY =====
+                    // Maps this signer's placements to located positions in the PDF and
+                    // walks them field-to-field. Degrades to the single-modal flow if the
+                    // signer has no placements or none can be located in the document.
+                    function labelForType(type) {
+                        if (type === 'Initials') return 'INITIAL HERE';
+                        if (type === 'Date' || type === 'DatePick') return 'DATE';
+                        return 'SIGN HERE';
+                    }
+
+                    function initGuidedOverlay() {
+                        Visualforce.remoting.Manager.invokeAction(
+                            '{!$RemoteAction.DocGenSignatureController.getSignerPlacements}',
+                            token,
+                            function (placements, event) {
+                                if (!event.status || !placements || !placements.length) {
+                                    return; // no placements — keep the single-modal flow
+                                }
+                                buildGuidedSpots(placements);
+                            },
+                            { escape: false }
+                        );
+                    }
+
+                    function buildGuidedSpots(placements) {
+                        // Group placements by anchor text, preserving server order, so that
+                        // duplicate anchors map to their Nth located occurrence in order.
+                        var byNeedle = {};
+                        var needles = [];
+                        for (var i = 0; i < placements.length; i++) {
+                            var p = placements[i];
+                            if (!p.tagText) continue;
+                            if (!byNeedle[p.tagText]) {
+                                byNeedle[p.tagText] = [];
+                                needles.push(p.tagText);
+                            }
+                            byNeedle[p.tagText].push(p);
+                        }
+                        if (!needles.length) return;
+
+                        var hits = DocGenPdfViewer.locateAnchors(needles);
+                        // Bucket hits by needle in document order (locateAnchors already
+                        // returns them page-ascending, then left-to-right within a page).
+                        var hitsByNeedle = {};
+                        for (var h = 0; h < hits.length; h++) {
+                            var nd = hits[h].needle;
+                            (hitsByNeedle[nd] = hitsByNeedle[nd] || []).push(hits[h]);
+                        }
+
+                        var spots = [];
+                        for (var k = 0; k < needles.length; k++) {
+                            var needle = needles[k];
+                            var plcs = byNeedle[needle];
+                            var hitList = hitsByNeedle[needle] || [];
+                            for (var j = 0; j < plcs.length; j++) {
+                                var hit = hitList[j];
+                                if (!hit) continue; // unlocated placement — skip (no chip)
+                                var plc = plcs[j];
+                                var isSigned = plc.status === 'Signed';
+                                var chip = DocGenPdfViewer.addChip(hit, labelForType(plc.type), null);
+                                if (isSigned) {
+                                    renderSignedChip(chip, plc.signedValue, plc.type);
+                                }
+                                spots.push({ placement: plc, chip: chip, signed: isSigned });
+                            }
+                        }
+                        if (!spots.length) return;
+
+                        // Order the walk by sequence (then document position is implicit).
+                        spots.sort(function (a, b) {
+                            return (a.placement.sequence || 0) - (b.placement.sequence || 0);
+                        });
+                        guided = { spots: spots };
+
+                        // Wire chip clicks (pending spots only).
+                        spots.forEach(function (spot) {
+                            spot.chip.addEventListener('click', function () {
+                                if (spot.signed) return;
+                                openPlacementCapture(spot);
+                            });
+                        });
+
+                        // Repurpose the action bar for guided signing.
+                        var btn = document.getElementById('btn-open-sign');
+                        btn.textContent = 'Start Signing';
+                        // Replace the single-modal click with guided navigation.
+                        var freshBtn = btn.cloneNode(true);
+                        btn.parentNode.replaceChild(freshBtn, btn);
+                        freshBtn.addEventListener('click', advanceGuided);
+
+                        refreshGuidedStatus();
+                    }
+
+                    // Turn a chip into its "signed" state: opaque, masking the
+                    // sentinel, with the captured value stamped on the line.
+                    function renderSignedChip(chip, value, type) {
+                        chip.classList.remove('current');
+                        // Keep covering AT LEAST the sentinel's width so no tail (e.g. the
+                        // trailing "@@") leaks out from under a short value like initials.
+                        var sentinelWidth = chip.offsetWidth;
+                        chip.classList.add('signed');
+                        // Let a longer value grow the chip, but never shrink below the
+                        // sentinel it replaces; pin it to the located left edge.
+                        chip.style.width = 'auto';
+                        chip.style.minWidth = sentinelWidth + 'px';
+                        chip.style.height = 'auto';
+                        while (chip.firstChild) chip.removeChild(chip.firstChild);
+                        var tab = document.createElement('span');
+                        tab.className = 'tab';
+                        tab.textContent = '✓'; // check mark
+                        chip.appendChild(tab);
+                        var val = document.createElement('span');
+                        var isDate = type === 'Date' || type === 'DatePick';
+                        val.className = 'sig-value' + (isDate ? ' plain' : '');
+                        val.textContent = value || '';
+                        chip.appendChild(val);
+                    }
+
+                    function signedCount() {
+                        if (!guided) return 0;
+                        var c = 0;
+                        for (var i = 0; i < guided.spots.length; i++) if (guided.spots[i].signed) c++;
+                        return c;
+                    }
+
+                    function firstPendingIndex() {
+                        if (!guided) return -1;
+                        for (var i = 0; i < guided.spots.length; i++) if (!guided.spots[i].signed) return i;
+                        return -1;
+                    }
+
+                    function refreshGuidedStatus() {
+                        if (!guided) return;
+                        var total = guided.spots.length;
+                        var done = signedCount();
+                        var info = document.getElementById('pdf-progress-info');
+                        info.textContent = ' — ' + done + ' of ' + total + ' fields completed';
+                        info.style.display = 'inline';
+
+                        var btn = document.getElementById('btn-open-sign');
+                        var pending = firstPendingIndex();
+                        // Clear the "current" highlight, then re-mark the next pending spot.
+                        for (var i = 0; i < guided.spots.length; i++) {
+                            guided.spots[i].chip.classList.remove('current');
+                        }
+                        if (pending < 0) {
+                            btn.textContent = 'Finish & Submit';
+                        } else {
+                            guided.spots[pending].chip.classList.add('current');
+                            btn.textContent =
+                                done === 0 ? 'Start Signing' : 'Next Field (' + (done + 1) + ' of ' + total + ')';
+                        }
+                    }
+
+                    // Scroll to and (for non-Date types) open capture for the next pending spot.
+                    function advanceGuided() {
+                        if (!guided) return;
+                        var pending = firstPendingIndex();
+                        if (pending < 0) {
+                            openFinalSubmit();
+                            return;
+                        }
+                        var spot = guided.spots[pending];
+                        DocGenPdfViewer.scrollToChip(spot.chip);
+                        openPlacementCapture(spot);
+                    }
+
+                    function openPlacementCapture(spot) {
+                        activeSpot = spot;
+                        var type = spot.placement.type;
+                        var titleEl = document.querySelector('#sign-modal .modal-header h2');
+                        var subEl = document.querySelector('#sign-modal .modal-subtitle');
+                        var nameGroup = document.getElementById('modal-typed-name').parentNode;
+                        var nameInput = document.getElementById('modal-typed-name');
+                        var nameLabel = document.querySelector('label[for="modal-typed-name"]');
+                        var consentRow = document.getElementById('modal-consent-checkbox').parentNode;
+
+                        // Per-spot capture: no consent here (collected once at final submit).
+                        consentRow.style.display = 'none';
+                        showModalMsg('', 'info');
+
+                        if (type === 'Date') {
+                            modalMode = 'spot';
+                            titleEl.textContent = 'Add Date';
+                            subEl.textContent = "Today's date will be stamped here.";
+                            nameGroup.style.display = 'none';
+                            document.getElementById('btn-sign-submit').disabled = false;
+                        } else {
+                            modalMode = 'spot';
+                            nameGroup.style.display = '';
+                            if (type === 'Initials') {
+                                titleEl.textContent = 'Add Initials';
+                                subEl.textContent = 'Type your initials for this field.';
+                                nameLabel.textContent = 'Your initials';
+                                nameInput.placeholder = 'e.g., JS';
+                                nameInput.value = '';
+                            } else if (type === 'DatePick') {
+                                titleEl.textContent = 'Select a Date';
+                                subEl.textContent = 'Type the date for this field.';
+                                nameLabel.textContent = 'Date';
+                                nameInput.placeholder = 'e.g., January 1, 2026';
+                                nameInput.value = '';
+                            } else {
+                                titleEl.textContent = 'Sign Here';
+                                subEl.textContent = 'Type your full name to sign this field.';
+                                nameLabel.textContent = 'Type your full name to sign';
+                                nameInput.placeholder = 'e.g., John Smith';
+                                nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
+                            }
+                            updateSignSubmitState();
+                        }
+                        document.getElementById('sign-modal').style.display = '';
+                        setTimeout(function () {
+                            if (nameGroup.style.display !== 'none') nameInput.focus();
+                        }, 50);
+                    }
+
+                    function openFinalSubmit() {
+                        modalMode = 'final';
+                        activeSpot = null;
+                        document.querySelector('#sign-modal .modal-header h2').textContent = 'Complete Signing';
+                        document.querySelector('#sign-modal .modal-subtitle').textContent =
+                            'Confirm your name and consent to finalize all fields.';
+                        var nameGroup = document.getElementById('modal-typed-name').parentNode;
+                        var nameLabel = document.querySelector('label[for="modal-typed-name"]');
+                        nameGroup.style.display = '';
+                        nameLabel.textContent = 'Type your full name to sign';
+                        var nameInput = document.getElementById('modal-typed-name');
+                        nameInput.placeholder = 'e.g., John Smith';
+                        nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
+                        document.getElementById('modal-consent-checkbox').parentNode.style.display = '';
+                        document.getElementById('modal-consent-checkbox').checked = false;
+                        showModalMsg('', 'info');
+                        updateSignSubmitState();
+                        document.getElementById('sign-modal').style.display = '';
                     }
 
                     // ===== SIGNING MODAL =====
@@ -1069,11 +1578,45 @@
                     function updateSignSubmitState() {
                         var nameVal = document.getElementById('modal-typed-name').value.trim();
                         var consentVal = document.getElementById('modal-consent-checkbox').checked;
-                        // Sign stays disabled until consent is checked (and a name is present).
-                        document.getElementById('btn-sign-submit').disabled = !(nameVal && consentVal);
+                        var btn = document.getElementById('btn-sign-submit');
+                        if (modalMode === 'spot') {
+                            // Per-spot capture: a value is enough (Date types pre-enable).
+                            btn.disabled = !nameVal;
+                        } else {
+                            // 'pdf' (legacy single) and 'final': require name + consent.
+                            btn.disabled = !(nameVal && consentVal);
+                        }
+                    }
+
+                    // Sync guided spot signed-state from a server placement list.
+                    // The server is the source of truth for the stamped value (e.g.
+                    // Date types are filled server-side), so render from it.
+                    function syncGuidedFromPlacements(placements) {
+                        if (!guided || !placements) return;
+                        var byId = {};
+                        for (var i = 0; i < placements.length; i++) {
+                            byId[placements[i].id] = placements[i];
+                        }
+                        guided.spots.forEach(function (spot) {
+                            var p = byId[spot.placement.id];
+                            if (p && p.status === 'Signed' && !spot.signed) {
+                                spot.signed = true;
+                                spot.placement.signedValue = p.signedValue;
+                                renderSignedChip(spot.chip, p.signedValue, spot.placement.type);
+                            }
+                        });
                     }
 
                     function handleSignSubmit() {
+                        if (modalMode === 'spot') {
+                            handleSpotSubmit();
+                            return;
+                        }
+                        if (modalMode === 'final') {
+                            handleFinalSubmit();
+                            return;
+                        }
+
                         var typedName = document.getElementById('modal-typed-name').value.trim();
                         var consentGiven = document.getElementById('modal-consent-checkbox').checked;
                         if (!typedName || !consentGiven) return;
@@ -1098,6 +1641,90 @@
                                 if (!event.status || !result || result.success === false) {
                                     showModalMsg(
                                         'Save failed: ' +
+                                            ((result && result.message) || event.message || 'Unknown error'),
+                                        'error'
+                                    );
+                                    return;
+                                }
+                                closeSignModal();
+                                if (result.isComplete) {
+                                    showState('success');
+                                } else {
+                                    var rem = result.remaining || 0;
+                                    document.getElementById('waiting-message').textContent =
+                                        'Your signature has been recorded. Waiting for ' +
+                                        rem +
+                                        ' more signer' +
+                                        (rem > 1 ? 's' : '') +
+                                        ' to complete.';
+                                    showState('waiting');
+                                }
+                            },
+                            { escape: false, buffer: false, timeout: 120000 }
+                        );
+                    }
+
+                    // Guided: persist one placement, mark its chip signed, advance.
+                    function handleSpotSubmit() {
+                        if (!activeSpot) return;
+                        var type = activeSpot.placement.type;
+                        var value = type === 'Date' ? '' : document.getElementById('modal-typed-name').value.trim();
+                        if (type !== 'Date' && !value) return;
+
+                        var btn = document.getElementById('btn-sign-submit');
+                        btn.disabled = true;
+                        btn.textContent = 'Saving...';
+
+                        Visualforce.remoting.Manager.invokeAction(
+                            '{!$RemoteAction.DocGenSignatureController.signPlacement}',
+                            token,
+                            activeSpot.placement.id,
+                            value,
+                            function (placements, event) {
+                                btn.disabled = false;
+                                btn.textContent = 'Sign';
+                                if (!event.status) {
+                                    showModalMsg('Save failed: ' + (event.message || 'Unknown error'), 'error');
+                                    return;
+                                }
+                                syncGuidedFromPlacements(placements);
+                                closeSignModal();
+                                refreshGuidedStatus();
+                                // Auto-walk: scroll to the next pending field so the signer
+                                // always sees where to go next.
+                                var nextIdx = firstPendingIndex();
+                                if (nextIdx >= 0) {
+                                    DocGenPdfViewer.scrollToChip(guided.spots[nextIdx].chip);
+                                }
+                            },
+                            { escape: false }
+                        );
+                    }
+
+                    // Guided: all spots done — capture consent + finalize the signature.
+                    function handleFinalSubmit() {
+                        var typedName = document.getElementById('modal-typed-name').value.trim();
+                        var consentGiven = document.getElementById('modal-consent-checkbox').checked;
+                        if (!typedName || !consentGiven) return;
+
+                        var btn = document.getElementById('btn-sign-submit');
+                        btn.disabled = true;
+                        btn.textContent = 'Submitting...';
+                        var userAgent = navigator.userAgent || 'Unknown';
+
+                        Visualforce.remoting.Manager.invokeAction(
+                            '{!$RemoteAction.DocGenSignatureController.saveSignature}',
+                            token,
+                            typedName,
+                            consentGiven,
+                            capturedIp,
+                            userAgent,
+                            function (result, event) {
+                                btn.disabled = false;
+                                btn.textContent = 'Sign';
+                                if (!event.status || !result || result.success === false) {
+                                    showModalMsg(
+                                        'Submit failed: ' +
                                             ((result && result.message) || event.message || 'Unknown error'),
                                         'error'
                                     );

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<StaticResource xmlns="http://soap.sforce.com/2006/04/metadata">
+    <cacheControl>Public</cacheControl>
+    <contentType>application/zip</contentType>
+    <description>PDF.js 2.16.105 (legacy UMD build) — client-side PDF rendering + text layer for guided signature sign-spot positioning. pdf.min.js exposes the pdfjsLib global; pdf.worker.min.js is the worker. Bundled as a build-time asset (no runtime callout).</description>
+</StaticResource>
