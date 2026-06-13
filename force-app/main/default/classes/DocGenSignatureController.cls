@@ -2418,4 +2418,195 @@ public without sharing class DocGenSignatureController {
         result.success = true;
         return result;
     }
+
+    /**
+     * Guided-signing finalize for the client-composited path (#163).
+     *
+     * The browser composites the signer's drawn/typed fields onto the PDF with
+     * pdf-lib (server-side image embedding is blocked — Blob.toPdf can't fetch a
+     * fresh CV and rejects data URIs), then posts the finished PDF here. Unlike
+     * savePdfSignature this does NOT publish the platform event / re-render —
+     * the supplied PDF IS the authoritative output.
+     *
+     * Multi-signer: when signers remain, the composited PDF becomes the new
+     * Source_Document so the next signer composites on top of it (chain). When
+     * none remain, it's attached to the related record as the final signed doc.
+     */
+    @AuraEnabled
+    @RemoteAction
+    public static SavePdfSignatureResult saveCompositedSignedPdf(
+        String token,
+        String base64Pdf,
+        Boolean consentGiven,
+        String ipAddress,
+        String userAgent
+    ) {
+        SavePdfSignatureResult result = new SavePdfSignatureResult();
+        result.success = false;
+
+        if (String.isBlank(token) || token.length() != 64 || !Pattern.matches('[a-fA-F0-9]{64}', token)) {
+            throw new AuraHandledException('Invalid security token.');
+        }
+        if (String.isBlank(base64Pdf)) {
+            throw new AuraHandledException('No signed document was provided.');
+        }
+        if (consentGiven != true) {
+            throw new AuraHandledException('You must agree to sign electronically.');
+        }
+
+        DocGenSignatureGuestSecurity.assertSignerWritableFields(token);
+        DocGenSignatureGuestSecurity.assertAuditCreateable(token);
+
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Signature_Request__c',
+                'Role_Name__c',
+                'Contact__c',
+                'CreatedDate',
+                'PIN_Verified_At__c',
+                'Consent_Captured__c',
+                'Secure_Token__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> signers = [
+            SELECT
+                Id,
+                Status__c,
+                Signer_Name__c,
+                Signer_Email__c,
+                Signature_Request__c,
+                Signature_Request__r.Related_Record_Id__c,
+                Signature_Request__r.Template__r.Name,
+                Role_Name__c,
+                Contact__c,
+                CreatedDate,
+                PIN_Verified_At__c,
+                Consent_Captured__c
+            FROM DocGen_Signer__c
+            WHERE Secure_Token__c = :token
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (signers.isEmpty()) {
+            throw new AuraHandledException('Signer not found.');
+        }
+
+        DocGen_Signer__c signer = signers[0];
+        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+            throw new AuraHandledException('This signature link has expired.');
+        }
+        if (signer.Status__c == 'Signed') {
+            throw new AuraHandledException('You have already signed this document.');
+        }
+        if (signer.PIN_Verified_At__c == null) {
+            throw new AuraHandledException('Email verification is required before signing.');
+        }
+
+        signer.Signature_Data__c = 'Signed (composited)';
+        signer.Status__c = 'Signed';
+        signer.Consent_Captured__c = true;
+        DocGenFlsGuard.guestAssertUpdateable(
+            signer,
+            new Set<String>{ 'Signature_Data__c', 'Status__c', 'Consent_Captured__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.update(signer, false, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c();
+        audit.Signature_Request__c = signer.Signature_Request__c;
+        audit.Signer__c = signer.Id;
+        audit.Signer_Name__c = signer.Signer_Name__c;
+        audit.Signer_Email__c = signer.Signer_Email__c;
+        audit.Contact__c = signer.Contact__c;
+        audit.Signed_Date__c = System.now();
+        audit.IP_Address__c = resolveClientIp(ipAddress);
+        audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
+        audit.Consent_Captured__c = true;
+        audit.PIN_Verified_At__c = signer.PIN_Verified_At__c;
+        DocGenFlsGuard.guestAssertCreateable(
+            audit,
+            new Set<String>{
+                'Signature_Request__c',
+                'Signer__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Contact__c',
+                'Signed_Date__c',
+                'IP_Address__c',
+                'User_Agent__c',
+                'Consent_Captured__c',
+                'PIN_Verified_At__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(new List<DocGen_Signature_Audit__c>{ audit }, false, AccessLevel.SYSTEM_MODE);
+
+        // Remaining signers?
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Status__c', 'Signature_Request__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> allSigners = [
+            SELECT Status__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__c = :signer.Signature_Request__c
+            WITH SYSTEM_MODE
+        ];
+        Integer remaining = 0;
+        for (DocGen_Signer__c s : allSigners) {
+            if (s.Status__c != 'Signed')
+                remaining++;
+        }
+        result.remaining = remaining;
+        result.isComplete = (remaining == 0);
+
+        // Persist the composited PDF.
+        String baseName = (signer.Signature_Request__r != null &&
+            signer.Signature_Request__r.Template__r != null)
+            ? signer.Signature_Request__r.Template__r.Name
+            : 'Document';
+        Id relatedRecordId = signer.Signature_Request__r != null
+            ? (Id) signer.Signature_Request__r.Related_Record_Id__c
+            : null;
+
+        ContentVersion cv = new ContentVersion();
+        cv.VersionData = EncodingUtil.base64Decode(base64Pdf);
+        if (result.isComplete) {
+            // Final signed document — attach to the related record.
+            cv.Title = baseName + ' - Signed';
+            cv.PathOnClient = baseName + ' - Signed.pdf';
+            if (relatedRecordId != null) {
+                cv.FirstPublishLocationId = relatedRecordId;
+            }
+        } else {
+            // Intermediate — becomes the base the next signer composites onto.
+            cv.Title = baseName + ' - In Progress';
+            cv.PathOnClient = baseName + ' - In Progress.pdf';
+        }
+        DocGenFlsGuard.guestAssertCreateable(cv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
+        parentReq.Status__c = result.isComplete ? 'Signed' : 'In Progress';
+        Set<String> reqUpd = new Set<String>{ 'Status__c' };
+        if (!result.isComplete) {
+            // Point the next signer's viewer at the just-composited PDF.
+            Id newCvId = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id WITH SYSTEM_MODE LIMIT 1].Id;
+            parentReq.Source_Document_Id__c = newCvId;
+            reqUpd.add('Source_Document_Id__c');
+        }
+        DocGenFlsGuard.guestAssertUpdateable(parentReq, reqUpd);
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
+
+        result.success = true;
+        return result;
+    }
 }
