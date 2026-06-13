@@ -2095,6 +2095,19 @@ Guided, mobile-friendly. States: PIN verify → signing → review → submit.
 - **Typed-name page** (`DocGenSignature`, the default) — the placement-driven experience described above, used by the **Create Signature Request** action and the bundled "Send for Signature" component. Signatures are stamped at `{@Signature_Role}` tag positions.
 - **PDF-viewer page** (`DocGenSignaturePdf`) — renders the **real generated PDF** in the browser and guides the signer through a modal. Used by the **Send Existing Document for Signature** action (see [§11.7](#117-recipe--send-a-document-for-signature-on-the-pdf-viewer-page)). On a template-snapshot send it also supports the [`{#Signatures}` loop block](#signature-loop-block--signatures-variable-signer-count) and, on completion, re-renders the document from the send-time data snapshot, appends the certificate page, and attaches the signed PDF to the related record.
 
+### 10.7.1 Guided sign-spot signing on the PDF viewer (drawn or typed)
+
+For templates that use `{@Signature_Role:Order:Type}` placement tags, the PDF-viewer page can walk signers field-to-field **on the real rendered PDF** (DocuSign-style), with hand-drawn or typed signatures:
+
+- The actual generated PDF renders in the browser. Each of the signer's sign-spots gets a positioned chip — **SIGN HERE**, **INITIAL HERE**, or **DATE** — with a "field _N_ of _M_" counter, the current field highlighted, and auto-scroll to the next one.
+- At each spot the signer can **draw** a signature/initials (mouse or finger) **or type** them; date fields auto-stamp. Submission is gated until every required field is done.
+- On completion the captured values are composited onto the PDF **in the browser**, each signature carries a small attribution caption (signer name + date), and a **Certificate of Completion** page is appended — per signer: name, role, email, signed timestamp, email-verified status, **IP address**, consent, plus a **SHA-256 hash** of the signed content and an ESIGN/UETA attestation. The final PDF is attached to the related record.
+- **Multi-signer**: each signer sees only their own spots; the document chains signer-to-signer (each party's marks are baked in before the next signs), and the certificate lists all parties.
+
+Created via `createGuidedPdfSignatureRequest` (HTML templates).
+
+> **Authoring tip — give signature fields room.** A mark stamps exactly where its tag sits, so place `{@Signature_Role:Order:Type}` tags **on their own line or in a right-hand cell** with whitespace around them — not inline mid-paragraph — or the mark will overlap nearby text. For initials, use a dedicated line like `Initials: {@Signature_Buyer:1:Initials}`. This mirrors how every e-sign tool reserves space for a signature block.
+
 ### 10.8 Reminders
 
 Enable in signature settings. A scheduled job runs hourly and sends one reminder to any pending signer whose request is older than the configured threshold (`Signature_Reminder_Hours__c`, default 24h).

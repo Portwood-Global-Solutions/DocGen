@@ -189,7 +189,7 @@ Records with **2,000 to 50,000+ child records** are detected automatically. Same
 
 ### E-Signatures
 
-Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided step-by-step signing, initials, date stamps, document packets, sequential signing, decline flow, and sender notifications — all 100% native.
+Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided field-to-field signing **on the actual PDF** — **draw or type** signatures and initials — date stamps, document packets, sequential and multi-signer flows, decline flow, sender notifications, and a **Certificate of Completion** (signed timestamps, IP, consent, document hash) — all 100% native.
 
 **Signature tag syntax:** `{@Signature_Role:Order:Type}`
 
