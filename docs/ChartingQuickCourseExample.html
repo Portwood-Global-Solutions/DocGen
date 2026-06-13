@@ -1,0 +1,279 @@
+<!doctype html>
+<!--
+  Portwood DocGen - Charting Quick Course Example
+
+  Upload this as an HTML template against a parent record with a
+  Survey_Responses__r child relationship. Swap the relationship and field
+  names for your own Salesforce schema.
+-->
+<html>
+    <head>
+        <style>
+            @page {
+                size: Letter;
+                margin: 0.7in;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                color: #1f2937;
+                font-size: 10pt;
+                line-height: 1.45;
+                margin: 0;
+            }
+            h1 {
+                color: #1e3a8a;
+                font-size: 24pt;
+                margin: 0 0 6pt 0;
+            }
+            h2 {
+                color: #1e3a8a;
+                font-size: 14pt;
+                margin: 22pt 0 8pt 0;
+                padding-bottom: 4pt;
+                border-bottom: 2pt solid #f59e0b;
+            }
+            p.lede {
+                color: #4b5563;
+                font-size: 11pt;
+                margin: 0 0 18pt 0;
+            }
+            p.note {
+                color: #4b5563;
+                font-size: 9pt;
+                margin: 6pt 0 12pt 0;
+            }
+            div.chart-slot {
+                margin: 10pt 0 18pt 0;
+            }
+            table.summary {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 0 0 16pt 0;
+            }
+            table.summary td {
+                border: 1pt solid #d1d5db;
+                padding: 8pt;
+                vertical-align: top;
+            }
+            table.summary .metric {
+                color: #1e3a8a;
+                font-size: 18pt;
+                font-weight: bold;
+                display: block;
+            }
+            table.chart-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 8pt 0 18pt 0;
+            }
+            table.chart-table th {
+                background-color: #1e3a8a;
+                color: #ffffff;
+                padding: 6pt;
+                text-align: left;
+                font-size: 9pt;
+            }
+            table.chart-table td {
+                border-bottom: 1pt solid #e5e7eb;
+                padding: 6pt;
+                vertical-align: middle;
+            }
+            td.label {
+                width: 28%;
+                font-weight: bold;
+            }
+            td.bar {
+                width: 52%;
+            }
+            td.figures {
+                width: 20%;
+                text-align: right;
+                white-space: nowrap;
+                color: #4b5563;
+            }
+            div.bar-track {
+                width: 100%;
+                height: 14pt;
+                background-color: #eef2f7;
+                border: 1pt solid #d1d5db;
+            }
+            div.bar-fill {
+                height: 14pt;
+                font-size: 1pt;
+                line-height: 1pt;
+            }
+            div.pivot {
+                display: table;
+                width: 100%;
+                border-collapse: collapse;
+                margin: 8pt 0 18pt 0;
+            }
+            div.pivot-row {
+                display: table-row;
+            }
+            div.pivot-head div {
+                background-color: #1e3a8a;
+                color: #ffffff;
+                font-weight: bold;
+            }
+            div.pivot-cell {
+                display: table-cell;
+                padding: 6pt;
+                border-bottom: 1pt solid #e5e7eb;
+                vertical-align: middle;
+            }
+            div.pivot-label {
+                width: 24%;
+                font-weight: bold;
+            }
+            div.pivot-bar {
+                background-color: #eef2f7;
+                height: 10pt;
+                margin-top: 3pt;
+                width: 100%;
+            }
+            div.pivot-fill {
+                background-color: #10b981;
+                height: 10pt;
+                font-size: 1pt;
+                line-height: 1pt;
+            }
+            div.empty {
+                padding: 8pt;
+                color: #6b7280;
+                background-color: #f9fafb;
+                border: 1pt solid #e5e7eb;
+                font-style: italic;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+            .footer {
+                margin-top: 24pt;
+                padding-top: 8pt;
+                border-top: 1pt solid #e5e7eb;
+                color: #6b7280;
+                font-size: 8pt;
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>{Name}</h1>
+        <p class="lede">Survey charting starter report generated {TODAY:date:MMMM d, yyyy}.</p>
+
+        <table class="summary">
+            <tr>
+                <td>
+                    <span class="metric">{COUNT:Survey_Responses__r}</span>
+                    Total responses
+                </td>
+                <td>
+                    <span class="metric">4</span>
+                    Chart patterns in this template
+                </td>
+                <td>
+                    <span class="metric">HTML</span>
+                    Recommended source format
+                </td>
+            </tr>
+        </table>
+
+        <h2>1. Fast Shorthand Chart</h2>
+        <p class="note">Use one `{Chart:...}` tag when you want DocGen to choose the markup for you.</p>
+        <div class="chart-slot">
+            {Chart:Survey_Responses__r:Selected_Answer__c:bar:title=Overall Answer Distribution}
+        </div>
+
+        <h2 class="page-break">2. Custom Bar Rows</h2>
+        <p class="note">Use `{#ChartBucket...}` when you want to control the table, colors, labels, and empty state.</p>
+        <table class="chart-table">
+            <tr>
+                <th>Answer</th>
+                <th>Share</th>
+                <th>Responses</th>
+            </tr>
+            {#ChartBucket:Survey_Responses__r:Selected_Answer__c:colors=#1e3a8a,#f59e0b,#10b981,#ef4444}
+            <tr>
+                <td class="label">{key_label}</td>
+                <td class="bar">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: {percent}%; background-color: {color};">&nbsp;</div>
+                    </div>
+                </td>
+                <td class="figures">{count} ({percent}%)</td>
+            </tr>
+            {:else}
+            <tr>
+                <td colspan="3">
+                    <div class="empty">No response data is available.</div>
+                </td>
+            </tr>
+            {/ChartBucket}
+        </table>
+
+        <h2 class="page-break">3. Department Pivot</h2>
+        <p class="note">Use `groupBy=` to create one row per answer and one nested column per department.</p>
+        <div class="pivot">
+            <div class="pivot-row pivot-head">
+                <div class="pivot-cell pivot-label">Answer</div>
+                <div class="pivot-cell">Engineering</div>
+                <div class="pivot-cell">Sales</div>
+                <div class="pivot-cell">Marketing</div>
+                <div class="pivot-cell">Support</div>
+                <div class="pivot-cell">Total</div>
+            </div>
+            {#ChartBucket:Survey_Responses__r:Selected_Answer__c:groupBy=Department__c&colSort=Engineering,Sales,Marketing,Support}
+            <div class="pivot-row">
+                <div class="pivot-cell pivot-label">{key_label}</div>
+                {#cols}
+                <div class="pivot-cell">
+                    {percent}% ({count})
+                    <div class="pivot-bar">
+                        <div class="pivot-fill" style="width: {percent}%;">&nbsp;</div>
+                    </div>
+                </div>
+                {/cols}
+            </div>
+            {:else}
+            <div class="pivot-row">
+                <div class="pivot-cell">
+                    <div class="empty">No response data is available.</div>
+                </div>
+            </div>
+            {/ChartBucket}
+        </div>
+
+        <h2 class="page-break">4. Filtered Multi-Select Reasons</h2>
+        <p class="note">
+            This chart filters to Drive respondents and splits semicolon-delimited reasons. Percentages may total more
+            than 100% because one response can pick multiple reasons.
+        </p>
+        <table class="chart-table">
+            <tr>
+                <th>Reason</th>
+                <th>Share</th>
+                <th>Responses</th>
+            </tr>
+            {#ChartBucket:Survey_Responses__r:Reasons__c:where=Mode__c='Drive'&split=;&colors=#7c3aed,#0f766e,#ea580c}
+            <tr>
+                <td class="label">{key_label}</td>
+                <td class="bar">
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: {percent}%; background-color: {color};">&nbsp;</div>
+                    </div>
+                </td>
+                <td class="figures">{count} ({percent}%)</td>
+            </tr>
+            {:else}
+            <tr>
+                <td colspan="3">
+                    <div class="empty">No matching Drive reasons were found.</div>
+                </td>
+            </tr>
+            {/ChartBucket}
+        </table>
+
+        <p class="footer">Portwood DocGen charting example - no external services or callouts.</p>
+    </body>
+</html>

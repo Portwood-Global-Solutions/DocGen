@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>OneCommute demo workspace for reviewing commuter program data before generating the DocGen chart report.</description>
+    <formFactors>Large</formFactors>
+    <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
+    <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
+    <isNavTabPersistenceDisabled>false</isNavTabPersistenceDisabled>
+    <isOmniPinnedViewEnabled>false</isOmniPinnedViewEnabled>
+    <label>OneCommute Demo</label>
+    <navType>Standard</navType>
+    <tabs>OneCommute_Site__c</tabs>
+    <tabs>OneCommute_Employer__c</tabs>
+    <tabs>OneCommute_Survey_Response__c</tabs>
+    <tabs>OneCommute_Trip_Count__c</tabs>
+    <tabs>DocGen_Template__c</tabs>
+    <tabs>DocGen_Job__c</tabs>
+    <uiType>Lightning</uiType>
+</CustomApplication>

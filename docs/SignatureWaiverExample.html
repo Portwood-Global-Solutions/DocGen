@@ -1,0 +1,133 @@
+<!--
+  Portwood DocGen — end-to-end signature + date test template (HTML).
+  Flying Saucer / Blob.toPdf safe: table layout, solid colors, no flex/grid/calc/CSS vars.
+  Signature: classic role tag {@Signature_Participant}. Date-fix check: {Birthdate:MM/dd/yyyy}.
+  Base object: Contact. Query Config: Name, Birthdate, Email, Account.Name
+-->
+<html>
+  <head>
+    <style>
+      @page {
+        size: letter;
+        margin: 0.75in;
+      }
+      body {
+        font-family: Helvetica, Arial, sans-serif;
+        color: #2b2b2b;
+        font-size: 11pt;
+        line-height: 1.5;
+      }
+      .header {
+        border-bottom: 3px solid #0176d3;
+        padding-bottom: 10px;
+        margin-bottom: 18px;
+      }
+      .header h1 {
+        color: #0176d3;
+        font-size: 20pt;
+        margin: 0;
+      }
+      .header .sub {
+        color: #706e6b;
+        font-size: 10pt;
+      }
+      table.fields {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0 20px 0;
+      }
+      table.fields td {
+        padding: 6px 8px;
+        border: 1px solid #e0e0e0;
+        font-size: 10.5pt;
+      }
+      table.fields td.label {
+        background: #f4f6f9;
+        font-weight: bold;
+        color: #444;
+        width: 32%;
+      }
+      .section-title {
+        font-weight: bold;
+        font-size: 12pt;
+        color: #0176d3;
+        margin: 18px 0 6px 0;
+      }
+      .terms {
+        font-size: 10pt;
+        color: #333;
+        text-align: justify;
+      }
+      table.sig {
+        width: 100%;
+        margin-top: 36px;
+        border-collapse: collapse;
+      }
+      table.sig td {
+        width: 50%;
+        vertical-align: bottom;
+        padding: 0 16px;
+      }
+      .sig-line {
+        border-top: 1px solid #333;
+        padding-top: 4px;
+        font-size: 9pt;
+        color: #706e6b;
+      }
+      .sig-value {
+        font-size: 13pt;
+        color: #161616;
+        min-height: 22px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Participant Liability Waiver</h1>
+      <div class="sub">{Account.Name} &middot; Generated {Today:MM/dd/yyyy}</div>
+    </div>
+
+    <table class="fields">
+      <tr>
+        <td class="label">Participant Name</td>
+        <td>{FirstName} {LastName}</td>
+      </tr>
+      <tr>
+        <td class="label">Date of Birth</td>
+        <td>{Birthdate:MM/dd/yyyy}</td>
+      </tr>
+      <tr>
+        <td class="label">Email</td>
+        <td>{Email}</td>
+      </tr>
+      <tr>
+        <td class="label">Organization</td>
+        <td>{Account.Name}</td>
+      </tr>
+    </table>
+
+    <div class="section-title">Agreement</div>
+    <div class="terms">
+      I, the undersigned participant (or parent/guardian named above), acknowledge that I have read and understand
+      this waiver. I confirm the date of birth shown above is accurate, and I voluntarily agree to the terms and
+      release of liability for activities organized by {Account.Name}. This agreement is effective as of the date of
+      signature below.
+    </div>
+
+    <div class="section-title">Signatures</div>
+    {#Signatures}
+    <table class="sig">
+      <tr>
+        <td>
+          <div class="sig-value">{Name}</div>
+          <div class="sig-line">{Role} signature</div>
+        </td>
+        <td>
+          <div class="sig-value">{RegisteredName}</div>
+          <div class="sig-line">{Status} {SignedDate}</div>
+        </td>
+      </tr>
+    </table>
+    {/Signatures}
+  </body>
+</html>

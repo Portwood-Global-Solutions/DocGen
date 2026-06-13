@@ -57,8 +57,8 @@ You should see `PASS: 23  FAIL: 0  ALL TESTS PASSED`.
 - **Read CLAUDE.md** before making changes to the merge engine or PDF pipeline. It documents critical constraints (relative image URLs, zero-heap rendering, no VersionData in PDF queries).
 - **Run the E2E test script** after every change. If you add a feature, add a test for it.
 - **Run Code Analyzer:** `sf code-analyzer run --rule-selector "recommended" --target force-app` — 0 Critical, 0 High required.
-- **No external dependencies.** DocGen is 100% native Apex + LWC. No npm packages, no external APIs, no callouts.
-- **No e-signatures.** This was intentionally removed — see CLAUDE.md for the rationale.
+- **No external runtime dependencies.** DocGen runs 100% on-platform — no external services, APIs, or callouts, and document data never leaves the org. Client-side libraries (e.g., PDF.js for the signature viewer, pdf-lib for in-browser signature compositing) are **vendored as pinned static resources**, not pulled from npm at build time. If you add or update one, keep it patched (track CVEs), retain its license/NOTICE, and disclose it in the AppExchange security materials.
+- **E-signatures are native + first-party.** The signature workflow (guided signing, signer identity/PIN, audit, signed-PDF generation) ships in the package — no third-party signing or document-generation provider.
 - **Use `WITH USER_MODE`** or `Security.stripInaccessible()` for all SOQL/DML in user-facing code.
 - **Namespace awareness:** Source code does not use namespace prefixes. The platform resolves `portwoodglobal__` at compile time.
 

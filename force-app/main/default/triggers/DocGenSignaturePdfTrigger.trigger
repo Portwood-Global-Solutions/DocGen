@@ -22,6 +22,8 @@ trigger DocGenSignaturePdfTrigger on DocGen_Signature_PDF__e(after insert) {
                 Template_Ids__c,
                 Status__c,
                 Signing_Order__c,
+                Source_Document_Id__c,
+                Render_Data_Snapshot__c,
                 (
                     SELECT
                         Id,
@@ -135,11 +137,16 @@ trigger DocGenSignaturePdfTrigger on DocGen_Signature_PDF__e(after insert) {
                 if (req.Signing_Order__c == 'Sequential' && nextPendingSigner != null) {
                     try {
                         String siteUrl = DocGenSignatureSenderController.getSiteBaseUrl();
-                        String sigUrl =
-                            siteUrl +
-                            DocGenSignatureSenderController.getSigningPagePath() +
-                            '?token=' +
-                            nextPendingSigner.Secure_Token__c;
+                        // Route sequential signer 2+ to the SAME page the first signer got.
+                        // PDF-viewer requests (snapshot re-render or send-existing-CV) set
+                        // Render_Data_Snapshot__c or Source_Document_Id__c; the classic
+                        // typed-name flow sets neither. Without this, follow-up signers on a
+                        // PDF-viewer request were emailed the legacy /DocGenSignature page.
+                        Boolean isPdfViewer = req.Render_Data_Snapshot__c != null || req.Source_Document_Id__c != null;
+                        String signingPath = isPdfViewer
+                            ? DocGenSignatureSenderController.getSigningPdfPagePath()
+                            : DocGenSignatureSenderController.getSigningPagePath();
+                        String sigUrl = siteUrl + signingPath + '?token=' + nextPendingSigner.Secure_Token__c;
 
                         String docTitle = 'Document';
                         if (req.Template__c != null && templateNameMap.containsKey(req.Template__c)) {

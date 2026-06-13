@@ -134,6 +134,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>DocGen_Job__c.Error_Log__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Job__c.Giant_Query_Config__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -429,6 +434,21 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>DocGen_Signature_Request__c.Frozen_Document__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Signature_Request__c.Snapshot_Hash__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Signature_Request__c.Snapshot_Taken_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>DocGen_Signature_Request__c.Signature_Data__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -440,6 +460,11 @@
     <fieldPermissions>
         <editable>false</editable>
         <field>DocGen_Signature_Request__c.Signer_Name__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Signature_Request__c.Render_Data_Snapshot__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<StaticResource xmlns="http://soap.sforce.com/2006/04/metadata">
+    <cacheControl>Public</cacheControl>
+    <contentType>application/zip</contentType>
+    <description>pdf-lib 1.17.1 (UMD) — client-side PDF composition for drawn signatures (#163). Exposes PDFLib global. Build-time asset, no callout. See THIRD-PARTY-NOTICES.md.</description>
+</StaticResource>

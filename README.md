@@ -1,6 +1,6 @@
 # Portwood DocGen — Free Document Generation for Salesforce
 
-Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes and QR codes, compute totals — 100% native, zero external dependencies, 100% free forever. All features, all users, no paid tiers. PowerPoint and Excel coming soon.
+Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes and QR codes, compute totals — 100% native: no external services, no callouts, your data never leaves Salesforce. 100% free forever. All features, all users, no paid tiers. PowerPoint and Excel coming soon.
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
@@ -189,7 +189,7 @@ Records with **2,000 to 50,000+ child records** are detected automatically. Same
 
 ### E-Signatures
 
-Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided step-by-step signing, initials, date stamps, document packets, sequential signing, decline flow, and sender notifications — all 100% native.
+Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided field-to-field signing **on the actual PDF** — **draw or type** signatures and initials — date stamps, document packets, sequential and multi-signer flows, decline flow, sender notifications, and a **Certificate of Completion** (signed timestamps, IP, consent, document hash) — all 100% native.
 
 **Signature tag syntax:** `{@Signature_Role:Order:Type}`
 

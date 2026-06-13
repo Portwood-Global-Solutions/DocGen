@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Render_Data_Snapshot__c</fullName>
+    <description
+    >JSON snapshot of the template merge data captured at send-time (DocGenDataRetriever.getRecordData). When present, the completion finalizer re-renders the document from this snapshot instead of the live record, so the signed PDF matches what the signer reviewed even if the source record is edited before signing.</description>
+    <externalId>false</externalId>
+    <label>Render Data Snapshot</label>
+    <length>131072</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

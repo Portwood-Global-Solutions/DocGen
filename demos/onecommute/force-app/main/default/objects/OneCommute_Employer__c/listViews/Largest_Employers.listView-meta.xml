@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Largest_Employers</fullName>
+    <columns>NAME</columns>
+    <columns>Site__c</columns>
+    <columns>Employee_Count__c</columns>
+    <columns>Response_Count__c</columns>
+    <columns>Response_Rate__c</columns>
+    <filterScope>Everything</filterScope>
+    <label>Largest Employers</label>
+</ListView>

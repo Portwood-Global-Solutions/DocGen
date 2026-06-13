@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Error_Log__c</fullName>
+    <description
+    >Per-record failure details for a bulk job (record Id + reason), so failures are diagnosable instead of just counted. Oversized records (too many related rows for standard generation) are flagged with guidance to generate them individually via the giant-query path. Capped; a trailing note indicates any additional failures beyond the captured lines.</description>
+    <externalId>false</externalId>
+    <label>Error Log</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>6</visibleLines>
+</CustomField>

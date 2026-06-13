@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Shuttle_Interest</fullName>
+    <columns>NAME</columns>
+    <columns>Site__c</columns>
+    <columns>Employer__c</columns>
+    <columns>Shuttle_Interest__c</columns>
+    <columns>Commute_Mode__c</columns>
+    <columns>Survey_Year__c</columns>
+    <filterScope>Everything</filterScope>
+    <label>Shuttle Interest</label>
+</ListView>
