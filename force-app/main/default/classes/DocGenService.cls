@@ -3757,6 +3757,35 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         val = resolveValue(data, fieldName);
                     }
                     if (val != null) {
+                        // Snapshot/cache JSON round-trips turn Date/Datetime values into strings.
+                        // Re-type them so format suffixes still apply (otherwise the raw string
+                        // prints — the snapshot signed-PDF date bug):
+                        //  - "yyyy-MM-dd" (DATE field): format by literal calendar day in GMT so
+                        //    it never shifts by time zone (dateOnlyGmt).
+                        //  - ISO datetime string (DATETIME field): parse and format in local time.
+                        Boolean dateOnlyGmt = false;
+                        if (val instanceof String) {
+                            String dv = (String) val;
+                            if (Pattern.matches('\\d{4}-\\d{2}-\\d{2}', dv)) {
+                                val = DateTime.newInstanceGmt(
+                                    Integer.valueOf(dv.substring(0, 4)),
+                                    Integer.valueOf(dv.substring(5, 7)),
+                                    Integer.valueOf(dv.substring(8, 10)),
+                                    0,
+                                    0,
+                                    0
+                                );
+                                dateOnlyGmt = true;
+                            } else if (
+                                dv.length() >= 19 && Pattern.matches('\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*', dv)
+                            ) {
+                                try {
+                                    val = (Datetime) JSON.deserialize('"' + dv + '"', Datetime.class);
+                                } catch (Exception isoErr) {
+                                    // Not a parseable datetime — leave the original string untouched.
+                                }
+                            }
+                        }
                         String strVal;
                         // Apply formatting if a format specifier was provided
                         if (
@@ -3773,11 +3802,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                             DateTime dt = val instanceof DateTime
                                 ? (DateTime) val
                                 : DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
-                            strVal = dt.format(pattern);
+                            strVal = dateOnlyGmt ? dt.formatGmt(pattern) : dt.format(pattern);
                         } else if (dateFormat != null && dateFormat.toLowerCase().trim() == 'label') {
                             strVal = resolvePicklistLabel(data, fieldName, val);
                         } else if (dateFormat != null && val instanceof DateTime) {
-                            strVal = ((DateTime) val).format(dateFormat);
+                            strVal = dateOnlyGmt
+                                ? ((DateTime) val).formatGmt(dateFormat)
+                                : ((DateTime) val).format(dateFormat);
                         } else if (dateFormat != null && val instanceof Date) {
                             DateTime dt = DateTime.newInstance((Date) val, Time.newInstance(0, 0, 0, 0));
                             strVal = dt.format(dateFormat);
@@ -3790,6 +3821,10 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                             strVal = checked ? '[X]' : '[ ]';
                         } else if (dateFormat != null && isNumericFormat(dateFormat)) {
                             strVal = formatNumber(val, dateFormat);
+                        } else if (dateOnlyGmt) {
+                            // No format suffix on a DATE field — show a clean locale date (GMT,
+                            // no time component) rather than a Datetime's "00:00:00" tail.
+                            strVal = ((DateTime) val).formatGmt(getLocaleDatePattern(UserInfo.getLocale()));
                         } else {
                             strVal = String.valueOf(val);
                         }

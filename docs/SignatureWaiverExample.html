@@ -114,17 +114,20 @@
       signature below.
     </div>
 
+    <div class="section-title">Signatures</div>
+    {#Signatures}
     <table class="sig">
       <tr>
         <td>
-          <div class="sig-value">{@Signature_Participant}</div>
-          <div class="sig-line">Participant signature &amp; date</div>
+          <div class="sig-value">{Name}</div>
+          <div class="sig-line">{Role} &mdash; signed {SignedDate}</div>
         </td>
         <td>
-          <div class="sig-value">{FirstName} {LastName}</div>
-          <div class="sig-line">Printed name</div>
+          <div class="sig-value">{RegisteredName}</div>
+          <div class="sig-line">{Email}</div>
         </td>
       </tr>
     </table>
+    {/Signatures}
   </body>
 </html>
