@@ -1654,62 +1654,219 @@
                         chip.appendChild(img);
                     }
 
+                    // Fetch the certificate roster (all signers + whether this signer
+                    // completes the request). Resolves null on failure (cert is best-effort).
+                    function getCertificateData() {
+                        return new Promise(function (resolve) {
+                            Visualforce.remoting.Manager.invokeAction(
+                                '{!$RemoteAction.DocGenSignatureController.getSignatureCertificate}',
+                                token,
+                                function (data, event) {
+                                    resolve(event.status && data ? data : null);
+                                },
+                                { escape: false }
+                            );
+                        });
+                    }
+
+                    function sha256Hex(bytes) {
+                        if (!window.crypto || !crypto.subtle) return Promise.resolve(null);
+                        return crypto.subtle.digest('SHA-256', bytes).then(function (buf) {
+                            var a = new Uint8Array(buf);
+                            var h = '';
+                            for (var i = 0; i < a.length; i++) h += ('0' + a[i].toString(16)).slice(-2);
+                            return h;
+                        });
+                    }
+
+                    function nowStamp() {
+                        try {
+                            return new Date().toLocaleString(undefined, {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                            });
+                        } catch (e) {
+                            return new Date().toString();
+                        }
+                    }
+
+                    // Append a Certificate of Completion page (audit roster + document hash).
+                    function addCertificatePage(doc, helv, helvBold, cert, hashHex, meStamp) {
+                        var rgb = PDFLib.rgb;
+                        var gray = rgb(0.44, 0.43, 0.42);
+                        var brand = rgb(0.005, 0.27, 0.52);
+                        var page = doc.addPage([612, 792]);
+                        var y = 740;
+                        page.drawText('Certificate of Completion', {
+                            x: 54,
+                            y: y,
+                            size: 18,
+                            font: helvBold,
+                            color: brand
+                        });
+                        y -= 28;
+                        page.drawText('Document: ' + (cert.documentTitle || 'Document'), {
+                            x: 54,
+                            y: y,
+                            size: 10,
+                            font: helv
+                        });
+                        y -= 14;
+                        page.drawText('Request ID: ' + (cert.requestId || ''), {
+                            x: 54,
+                            y: y,
+                            size: 9,
+                            font: helv,
+                            color: gray
+                        });
+                        y -= 28;
+                        page.drawText('Signers', { x: 54, y: y, size: 12, font: helvBold });
+                        y -= 18;
+                        (cert.signers || []).forEach(function (s) {
+                            var when = s.isMe && !s.signedAt ? meStamp : s.signedAt || 'Pending';
+                            var nameLine = (s.name || 'Signer') + (s.role ? '  (' + s.role + ')' : '');
+                            page.drawText(nameLine, { x: 60, y: y, size: 10, font: helvBold });
+                            y -= 13;
+                            if (s.email) {
+                                page.drawText(s.email, { x: 60, y: y, size: 9, font: helv, color: gray });
+                                y -= 12;
+                            }
+                            page.drawText('Signed: ' + when + '      Email verified: ' + (s.verified ? 'Yes' : 'No'), {
+                                x: 60,
+                                y: y,
+                                size: 9,
+                                font: helv,
+                                color: gray
+                            });
+                            y -= 22;
+                        });
+                        y -= 6;
+                        if (hashHex) {
+                            page.drawText('Document hash (SHA-256):', { x: 54, y: y, size: 9, font: helvBold });
+                            y -= 12;
+                            page.drawText(hashHex, { x: 54, y: y, size: 7.5, font: helv, color: gray });
+                            y -= 20;
+                        }
+                        page.drawText(
+                            'This certificate evidences an electronic signature under the US ESIGN Act and UETA.',
+                            { x: 54, y: y, size: 8, font: helv, color: gray }
+                        );
+                    }
+
                     // Composite ALL captured fields (drawn images + typed text + dates) onto
-                    // the source PDF with pdf-lib, then finalize via saveCompositedSignedPdf.
-                    // Used whenever the request has at least one drawn field — produces the
-                    // authoritative signed PDF in-browser (no server re-render, no image-fetch
-                    // limitation). Returns a Promise.
+                    // the source PDF with pdf-lib, add signature attribution captions, and —
+                    // when this signer completes the request — a Certificate of Completion
+                    // page, then finalize via saveCompositedSignedPdf. In-browser; no server
+                    // re-render and no image-fetch limitation. Returns a Promise.
                     function compositeAndFinalize(typedName, consentGiven, btn) {
                         if (typeof PDFLib === 'undefined') {
                             return Promise.reject(new Error('PDFLib not loaded'));
                         }
-                        var bytes = b64ToBytes(sourcePdfBase64);
-                        return PDFLib.PDFDocument.load(bytes)
-                            .then(function (doc) {
-                                return doc.embedFont(PDFLib.StandardFonts.HelveticaOblique).then(function (oblique) {
-                                    var pages = doc.getPages();
-                                    var chain = Promise.resolve();
-                                    guided.spots.forEach(function (spot) {
-                                        chain = chain.then(function () {
-                                            var rect = DocGenPdfViewer.hitToPdfRect(spot.hit);
-                                            if (!rect || !pages[rect.pageIndex]) return;
-                                            var page = pages[rect.pageIndex];
-                                            if (spot.imageData) {
-                                                var isInitials = spot.placement.type === 'Initials';
-                                                return doc
-                                                    .embedPng(dataUrlToBytes(spot.imageData))
-                                                    .then(function (png) {
-                                                        // Size relative to the sign-spot's own line
-                                                        // height: an inline initials mark stays within
-                                                        // its line (no overrun into adjacent text);
-                                                        // a signature on its own line gets a larger,
-                                                        // signature-sized mark.
-                                                        var h = isInitials
-                                                            ? Math.min(Math.max(rect.h * 1.4, 12), 20)
-                                                            : 32;
-                                                        var maxW = isInitials ? 70 : 220;
-                                                        var w = Math.min(h * (png.width / png.height), maxW);
-                                                        page.drawImage(png, {
-                                                            x: rect.x,
-                                                            y: rect.yBottom,
-                                                            width: w,
-                                                            height: h
+                        var rgb = PDFLib.rgb;
+                        var capStamp = nowStamp();
+                        // Short date for the inline caption (full timestamp lives on the
+                        // certificate page) so the caption fits beside the signature without
+                        // bleeding into an adjacent column.
+                        var capShort = (function () {
+                            try {
+                                return new Date().toLocaleDateString(undefined, {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                });
+                            } catch (e) {
+                                return '';
+                            }
+                        })();
+                        return getCertificateData()
+                            .then(function (cert) {
+                                var bytes = b64ToBytes(sourcePdfBase64);
+                                return PDFLib.PDFDocument.load(bytes).then(function (doc) {
+                                    return Promise.all([
+                                        doc.embedFont(PDFLib.StandardFonts.HelveticaOblique),
+                                        doc.embedFont(PDFLib.StandardFonts.Helvetica),
+                                        doc.embedFont(PDFLib.StandardFonts.HelveticaBold)
+                                    ]).then(function (fonts) {
+                                        var oblique = fonts[0],
+                                            helv = fonts[1],
+                                            helvBold = fonts[2];
+                                        var pages = doc.getPages();
+                                        var chain = Promise.resolve();
+                                        guided.spots.forEach(function (spot) {
+                                            chain = chain.then(function () {
+                                                var rect = DocGenPdfViewer.hitToPdfRect(spot.hit);
+                                                if (!rect || !pages[rect.pageIndex]) return;
+                                                var page = pages[rect.pageIndex];
+                                                var markW = 0;
+                                                var p;
+                                                if (spot.imageData) {
+                                                    var isInitials = spot.placement.type === 'Initials';
+                                                    p = doc
+                                                        .embedPng(dataUrlToBytes(spot.imageData))
+                                                        .then(function (png) {
+                                                            var h = isInitials
+                                                                ? Math.min(Math.max(rect.h * 1.4, 12), 20)
+                                                                : 32;
+                                                            var maxW = isInitials ? 70 : 220;
+                                                            var w = Math.min(h * (png.width / png.height), maxW);
+                                                            markW = w;
+                                                            page.drawImage(png, {
+                                                                x: rect.x,
+                                                                y: rect.yBottom,
+                                                                width: w,
+                                                                height: h
+                                                            });
                                                         });
+                                                } else {
+                                                    var text = spot.value || spot.placement.signedValue || '';
+                                                    if (!text) return;
+                                                    var sz = Math.max(rect.h, 9);
+                                                    page.drawText(String(text), {
+                                                        x: rect.x,
+                                                        y: rect.yBottom + 1,
+                                                        size: sz,
+                                                        font: oblique
                                                     });
-                                            }
-                                            var text = spot.value || spot.placement.signedValue || '';
-                                            if (!text) return;
-                                            page.drawText(String(text), {
-                                                x: rect.x,
-                                                y: rect.yBottom + 1,
-                                                size: Math.max(rect.h, 9),
-                                                font: oblique
+                                                    markW = oblique.widthOfTextAtSize(String(text), sz);
+                                                    p = Promise.resolve();
+                                                }
+                                                return Promise.resolve(p).then(function () {
+                                                    // Attribution caption beside SIGNATURE marks (name +
+                                                    // time) so a drawn squiggle isn't anonymous. Initials
+                                                    // and dates don't get a caption.
+                                                    if (spot.placement.type === 'Full') {
+                                                        var who =
+                                                            signerData && signerData.signerName
+                                                                ? signerData.signerName
+                                                                : typedName || '';
+                                                        var cap = who + '  ·  ' + capShort;
+                                                        page.drawText(cap, {
+                                                            x: rect.x + markW + 10,
+                                                            y: rect.yBottom + 1,
+                                                            size: 6.5,
+                                                            font: helv,
+                                                            color: rgb(0.44, 0.43, 0.42)
+                                                        });
+                                                    }
+                                                });
                                             });
-                                            return null;
                                         });
-                                    });
-                                    return chain.then(function () {
-                                        return doc.save();
+                                        return chain.then(function () {
+                                            var iAmCompleting = cert && cert.othersAllSigned;
+                                            if (!iAmCompleting) {
+                                                return doc.save();
+                                            }
+                                            // Final signer: hash the signed content, then append cert.
+                                            return doc.save().then(function (preBytes) {
+                                                return sha256Hex(preBytes).then(function (hashHex) {
+                                                    addCertificatePage(doc, helv, helvBold, cert, hashHex, capStamp);
+                                                    return doc.save();
+                                                });
+                                            });
+                                        });
                                     });
                                 });
                             })

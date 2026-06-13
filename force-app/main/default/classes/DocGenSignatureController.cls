@@ -2609,4 +2609,110 @@ public without sharing class DocGenSignatureController {
         result.success = true;
         return result;
     }
+
+    /**
+     * Certificate-of-completion roster for the client-composited signing path (#163).
+     * Returns every signer on this token's request (name, role, email, signed time,
+     * verification) plus whether all OTHER signers are already signed — so the
+     * completing signer's browser knows to append the certificate page to the final
+     * PDF. Token-gated to a participant of the request (a completion certificate
+     * legitimately lists all parties, as DocuSign/Adobe do).
+     */
+    @AuraEnabled
+    @RemoteAction
+    public static Map<String, Object> getSignatureCertificate(String token) {
+        if (String.isBlank(token) || token.length() != 64 || !Pattern.matches('[a-fA-F0-9]{64}', token)) {
+            throw new AuraHandledException('Invalid security token.');
+        }
+        DocGenSignatureGuestSecurity.assertSignerReadable(token);
+
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{ 'Signature_Request__c', 'Secure_Token__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> me = [
+            SELECT Id, Signature_Request__c, Signature_Request__r.Template__r.Name
+            FROM DocGen_Signer__c
+            WHERE Secure_Token__c = :token
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (me.isEmpty()) {
+            throw new AuraHandledException('Signer not found.');
+        }
+        Id reqId = me[0].Signature_Request__c;
+        Id myId = me[0].Id;
+        String docTitle = (me[0].Signature_Request__r != null &&
+            me[0].Signature_Request__r.Template__r != null)
+            ? me[0].Signature_Request__r.Template__r.Name
+            : 'Document';
+
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Signer_Name__c',
+                'Role_Name__c',
+                'Signer_Email__c',
+                'Status__c',
+                'PIN_Verified_At__c',
+                'Sort_Order__c',
+                'Signature_Request__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> allSigners = [
+            SELECT Id, Signer_Name__c, Role_Name__c, Signer_Email__c, Status__c, PIN_Verified_At__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__c = :reqId
+            WITH SYSTEM_MODE
+            ORDER BY Sort_Order__c ASC
+        ];
+
+        // Signed timestamps live on the audit rows (DocGen_Signer__c has no signed-at).
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signature_Audit__c.sObjectType,
+            new Set<String>{ 'Signer__c', 'Signed_Date__c', 'Signature_Request__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signature_Audit__c> audits = [
+            SELECT Signer__c, Signed_Date__c
+            FROM DocGen_Signature_Audit__c
+            WHERE Signature_Request__c = :reqId
+            WITH SYSTEM_MODE
+        ];
+        Map<Id, Datetime> signedMap = new Map<Id, Datetime>();
+        for (DocGen_Signature_Audit__c a : audits) {
+            if (a.Signer__c != null && a.Signed_Date__c != null) {
+                signedMap.put(a.Signer__c, a.Signed_Date__c);
+            }
+        }
+
+        Integer othersUnsigned = 0;
+        List<Map<String, Object>> roster = new List<Map<String, Object>>();
+        for (DocGen_Signer__c s : allSigners) {
+            if (s.Id != myId && s.Status__c != 'Signed') {
+                othersUnsigned++;
+            }
+            Datetime sat = signedMap.get(s.Id);
+            roster.add(
+                new Map<String, Object>{
+                    'name' => s.Signer_Name__c,
+                    'role' => s.Role_Name__c,
+                    'email' => s.Signer_Email__c,
+                    'status' => s.Status__c,
+                    'signedAt' => sat != null ? sat.format('MMMM d, yyyy h:mm a z') : null,
+                    'verified' => s.PIN_Verified_At__c != null,
+                    'isMe' => s.Id == myId
+                }
+            );
+        }
+
+        return new Map<String, Object>{
+            'documentTitle' => docTitle,
+            'requestId' => reqId,
+            'othersAllSigned' => othersUnsigned == 0,
+            'signers' => roster
+        };
+    }
 }
