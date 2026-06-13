@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.11.0 — Shared Template Image Rendering",
-      "versionNumber": "3.11.0.NEXT",
-      "ancestorId": "04tVx000000nOh7IAE",
+      "versionName": "v3.13.0 — Signature flow (PDF viewer + snapshot) BETA",
+      "versionNumber": "3.13.0.NEXT",
+      "ancestorId": "04tVx000000nYTZIA2",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v3.11 improves image rendering for shared templates so non-admin users can generate PDFs with embedded template images intact. Free for all users."
+      "versionDescription": "BETA — internal testing only. Adds the in-browser PDF-viewer e-signature flow, the point-in-time document snapshot so signers sign exactly what they reviewed, and the {#Signatures} variable-signer loop. Builds on v3.12 (date fix + verification security)."
     }
   ],
   "name": "Portwood DocGen",
@@ -172,6 +172,7 @@
     "Portwood DocGen Managed@3.8.0-1": "04tVx000000nOFhIAM",
     "Portwood DocGen Managed@3.9.0-1": "04tVx000000nOdtIAE",
     "Portwood DocGen Managed@3.10.0-1": "04tVx000000nOh7IAE",
-    "Portwood DocGen Managed@3.11.0-1": "04tVx000000nPGbIAM"
+    "Portwood DocGen Managed@3.11.0-1": "04tVx000000nPGbIAM",
+    "Portwood DocGen Managed@3.12.0-1": "04tVx000000nYTZIA2"
   }
 }

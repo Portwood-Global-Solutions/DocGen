@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.12.0 — Date Field Fix + Verification Security (build pending)
+
+Two fixes, both reported from Slack:
+
+### 1. Date fields no longer shift one day (timezone off-by-one)
+
+Salesforce **Date** fields (e.g. Birthdate, custom date fields) rendered one calendar day **earlier** in generated documents than in the UI (5/29 → 5/28) for users in time zones behind UTC. The format suffix (`{Field:Date}`, `{Field:MM/dd/yyyy}`) didn't help; the workaround was a text formula field.
+
+Root cause: Salesforce returns a Date field via untyped `SObject.get()` / `getPopulatedFieldsAsMap()` as a **GMT-midnight Datetime**, and the merge formatter rendered Datetimes in the running user's local time zone — rolling the date back a day west of UTC. Apex `instanceof` cannot distinguish Date from Datetime at runtime (a Date is also `instanceof Datetime`), so the formatter's date branch never fired. `DocGenDataRetriever.mapSObject` now uses the **Schema field type**: DATE fields are re-expressed as local midnight of the same calendar date; DATETIME fields are untouched (they correctly stay in local time). Regression: `DocGenMiscTests.testDateFieldDoesNotShiftByTimezone`.
+
+### 2. Signature verification security (unauthenticated IDOR)
+
+The guest-reachable `verifyByRequestId` returned every signer's name/email/IP for any guessable `Signature_Request__c` Id — record Ids are enumerable, so signer PII could be harvested. The verification capability is now the request's unguessable 64-hex token (the verify link printed on the certificate carries `?token=`); a raw record Id discloses nothing. The audit IP is also hardened so a client can't forge the IP recorded on their own signature audit. Regression guards added to `DocGenAuthenticatorControllerTest` and `e2e-06`.
+
+Validation: RunLocalTests 1504/100%, e2e-01..08 PASS/FAIL0, `sf code-analyzer` 0.
+
 ## v3.11.0 — Shared Template Image Rendering (`04tVx000000nPGbIAM`, build `3.11.0-1`, promoted 2026-06-12)
 
 This release fixes the follow-up shared-template image issue reported from Slack. Non-admin users could generate both HTML and Word/giant-query PDFs, but template-owned images referenced by `/sfc/servlet.shepherd/version/download/<ContentVersionId>` could render as broken when the running user did not own or otherwise have file access to the image file.

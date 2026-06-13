@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Commute_Mode__c</fullName>
+    <label>Commute Mode</label>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>false</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value><fullName>Drive Alone</fullName><default>false</default><label>Drive Alone</label></value>
+            <value><fullName>Teleworked</fullName><default>false</default><label>Teleworked</label></value>
+            <value><fullName>Public transit/private shuttle</fullName><default>false</default><label>Public transit/private shuttle</label></value>
+            <value><fullName>Carpool</fullName><default>false</default><label>Carpool</label></value>
+            <value><fullName>Biked/scooter/e-bike</fullName><default>false</default><label>Biked/scooter/e-bike</label></value>
+            <value><fullName>Taxi/Uber/Lyft</fullName><default>false</default><label>Taxi/Uber/Lyft</label></value>
+            <value><fullName>Motorcycle</fullName><default>false</default><label>Motorcycle</label></value>
+            <value><fullName>Walk/Jog/skateboard</fullName><default>false</default><label>Walk/Jog/skateboard</label></value>
+            <value><fullName>Vanpool</fullName><default>false</default><label>Vanpool</label></value>
+            <value><fullName>Did not work this day</fullName><default>false</default><label>Did not work this day</label></value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

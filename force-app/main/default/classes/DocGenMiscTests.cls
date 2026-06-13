@@ -9549,4 +9549,21 @@ private class DocGenMiscTests {
         }
         System.assert(hits > 0, 'Sanity: expected internal ' + titlePrefix + ' ContentVersion reads in ' + className);
     }
+
+    @IsTest
+    static void testDateFieldDoesNotShiftByTimezone() {
+        // Regression for the "dates off by one" bug (Slack #bug-reports): Salesforce
+        // returns a Date field via untyped get()/getPopulatedFieldsAsMap() as a
+        // GMT-midnight Datetime, which the merge formatter renders in the running user's
+        // local time zone — so a user behind UTC saw the date roll back one day.
+        // getRecordData now re-expresses DATE fields (by Schema type) as local midnight.
+        Contact c = new Contact(LastName = 'TZ Date', Birthdate = Date.newInstance(2026, 5, 29));
+        insert c;
+        Map<String, Object> data = DocGenDataRetriever.getRecordData(c.Id, 'Contact', 'Birthdate');
+        System.assertEquals(
+            '05/29/2026',
+            DocGenService.processXmlForTest('{Birthdate:MM/dd/yyyy}', data),
+            'Date field must render the same calendar day, not shift back one (timezone off-by-one bug)'
+        );
+    }
 }
