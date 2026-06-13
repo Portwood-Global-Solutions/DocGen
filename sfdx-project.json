@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.11.0 — Shared Template Image Rendering",
-      "versionNumber": "3.11.0.NEXT",
-      "ancestorId": "04tVx000000nOh7IAE",
+      "versionName": "v3.12.0 — Date Field Fix + Verification Security",
+      "versionNumber": "3.12.0.NEXT",
+      "ancestorId": "04tVx000000nPGbIAM",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v3.11 improves image rendering for shared templates so non-admin users can generate PDFs with embedded template images intact. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record — 100% native, no external services or callouts. v3.12 fixes date fields so they always show the correct day in your documents (previously some date fields could appear one day off, depending on your time zone), and strengthens signature verification so signer details are only shared with the holder of the secure link. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
