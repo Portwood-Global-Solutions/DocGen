@@ -758,7 +758,9 @@ private class DocGenSignaturePdfTests {
     static void testSignaturesLoop_rendersOneBlockPerSigner() {
         // The reserved {#Signatures} loop block renders once per injected signer row —
         // one authored layout, any signer count, no per-count templates.
-        String template = '<w:t>{#Signatures}</w:t><w:t>Signed by {Name} ({Role})</w:t><w:t>{/Signatures}</w:t>';
+        // Pending rows leave {Name} (the signature line) BLANK until the signer signs;
+        // the invited/printed name is exposed as {RegisteredName}.
+        String template = '<w:t>{#Signatures}</w:t><w:t>Signed by {RegisteredName} ({Role})</w:t><w:t>{/Signatures}</w:t>';
 
         List<Map<String, Object>> twoSigners = DocGenSignatureService.buildPendingSignerLoopData(
             new List<Map<String, Object>>{

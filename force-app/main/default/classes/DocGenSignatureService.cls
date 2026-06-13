@@ -208,10 +208,17 @@ public without sharing class DocGenSignatureService {
             // Signature name + Role. The name the signer actually typed at signing
             // (Signature_Data__c) is their electronic signature; fall back to the
             // invited name (Signer_Name__c) when no typed value was captured.
-            // Read Signature_Data__c defensively: this method is public/global and a
-            // caller may pass signers queried without that field — getPopulatedFieldsAsMap
-            // returns null rather than throwing SObjectException when it wasn't selected.
-            String typedSig = (String) s.getPopulatedFieldsAsMap().get('Signature_Data__c');
+            // Read Signature_Data__c defensively AND namespace-safely: accessing the
+            // field directly lets Apex resolve the managed-package namespace (a hardcoded
+            // getPopulatedFieldsAsMap().get('Signature_Data__c') is null in a namespaced
+            // org, where the map keys are prefixed). The try/catch preserves the
+            // defensive behavior for callers that didn't query the field.
+            String typedSig;
+            try {
+                typedSig = s.Signature_Data__c;
+            } catch (System.SObjectException fieldNotQueried) {
+                typedSig = null;
+            }
             String signatureName = String.isNotBlank(typedSig) ? typedSig : s.Signer_Name__c;
             html += '<span style="font-weight:bold;font-size:10pt;">' + signatureName.escapeHtml4() + '</span>';
             html +=
