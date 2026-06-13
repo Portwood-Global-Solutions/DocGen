@@ -2678,12 +2678,13 @@ public without sharing class DocGenSignatureController {
                 'Signed_Date__c',
                 'IP_Address__c',
                 'Consent_Captured__c',
+                'User_Agent__c',
                 'Signature_Request__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Audit__c> audits = [
-            SELECT Signer__c, Signed_Date__c, IP_Address__c, Consent_Captured__c
+            SELECT Signer__c, Signed_Date__c, IP_Address__c, Consent_Captured__c, User_Agent__c
             FROM DocGen_Signature_Audit__c
             WHERE Signature_Request__c = :reqId
             WITH SYSTEM_MODE
@@ -2714,6 +2715,7 @@ public without sharing class DocGenSignatureController {
                         : null,
                     'ip' => a != null ? a.IP_Address__c : null,
                     'consent' => a != null ? a.Consent_Captured__c == true : false,
+                    'userAgent' => a != null ? a.User_Agent__c : null,
                     'verified' => s.PIN_Verified_At__c != null,
                     'isMe' => s.Id == myId
                 }

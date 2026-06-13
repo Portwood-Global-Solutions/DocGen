@@ -1754,6 +1754,14 @@
                                 font: helv,
                                 color: gray
                             });
+                            y -= 12;
+                            // Device / user agent (full string is retained in the audit
+                            // record; truncated here to fit one line).
+                            var ua = s.userAgent || (signedNow ? navigator.userAgent : '') || '';
+                            if (ua) {
+                                if (ua.length > 95) ua = ua.substring(0, 95) + '…';
+                                page.drawText('Device: ' + ua, { x: 60, y: y, size: 7.5, font: helv, color: gray });
+                            }
                             y -= 22;
                         });
                         y -= 6;
