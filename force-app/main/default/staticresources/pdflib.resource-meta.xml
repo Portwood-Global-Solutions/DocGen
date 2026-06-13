@@ -2,5 +2,5 @@
 <StaticResource xmlns="http://soap.sforce.com/2006/04/metadata">
     <cacheControl>Public</cacheControl>
     <contentType>application/zip</contentType>
-    <description>pdf-lib 1.17.1 (UMD min build) — client-side PDF composition for drawn signatures (#163). Draws signature images onto the existing signed PDF at located sign-spots, in the browser, avoiding the Blob.toPdf/Flying Saucer image-fetch limitation. Exposes the PDFLib global. Build-time asset, no callout.</description>
+    <description>pdf-lib 1.17.1 (UMD) — client-side PDF composition for drawn signatures (#163). Exposes PDFLib global. Build-time asset, no callout. See THIRD-PARTY-NOTICES.md.</description>
 </StaticResource>

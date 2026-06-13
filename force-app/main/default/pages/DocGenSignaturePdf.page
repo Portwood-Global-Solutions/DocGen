@@ -19,6 +19,9 @@
             <!-- PDF.js (legacy UMD build) — client-side render + text layer for
                  sign-spot positioning. Bundled as a static resource (no callout). -->
             <apex:includeScript value="{!URLFOR($Resource.pdfjs, 'pdf.min.js')}" />
+            <!-- pdf-lib — client-side composition of drawn/typed signatures onto the
+                 final PDF at the located sign-spots (#163). Bundled static resource. -->
+            <apex:includeScript value="{!URLFOR($Resource.pdflib, 'pdf-lib.min.js')}" />
 
             <style>
                 * {
@@ -753,6 +756,37 @@
                     </div>
                     <div class="modal-body">
                         <div id="modal-msg"></div>
+                        <!-- Draw-pad (#163): shown for signature/initials fields. The signer
+                             draws with mouse/finger; the strokes are composited onto the PDF
+                             with pdf-lib at finish. Falls back to the typed name below. -->
+                        <div class="form-group" id="modal-draw-group" style="display: none">
+                            <label>Draw your signature</label>
+                            <canvas
+                                id="modal-draw-canvas"
+                                width="440"
+                                height="150"
+                                style="
+                                    width: 100%;
+                                    height: 150px;
+                                    border: 1px dashed #b0adab;
+                                    border-radius: 4px;
+                                    background: #fff;
+                                    touch-action: none;
+                                    cursor: crosshair;
+                                "
+                            ></canvas>
+                            <div style="display: flex; justify-content: space-between; margin-top: 4px">
+                                <span style="font-size: 0.75rem; color: #706e6b">Draw above, or type below.</span>
+                                <button
+                                    id="modal-draw-clear"
+                                    type="button"
+                                    class="btn"
+                                    style="padding: 2px 10px; font-size: 0.75rem"
+                                >
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
                         <div class="form-group">
                             <label for="modal-typed-name">Type your full name to sign</label>
                             <input
@@ -1027,6 +1061,31 @@
                             if (chipEl && chipEl.scrollIntoView) {
                                 chipEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                             }
+                        },
+
+                        // Map a located hit (device box, top-left origin, render scale) to
+                        // pdf-lib coordinates (PDF points, bottom-left origin) for the page
+                        // it sits on. Returns null if the page isn't loaded.
+                        //   pageIndex : 0-based index for pdf-lib getPages()
+                        //   x, yBottom: bottom-left of the sentinel, in points
+                        //   w, h      : sentinel box size, in points
+                        hitToPdfRect: function (hit) {
+                            for (var i = 0; i < pages.length; i++) {
+                                if (pages[i].pageNum !== hit.page) {
+                                    continue;
+                                }
+                                var vp = pages[i].viewport;
+                                var s = vp.scale;
+                                var pageHpts = vp.height / s;
+                                return {
+                                    pageIndex: i,
+                                    x: hit.box.x / s,
+                                    yBottom: pageHpts - (hit.box.y + hit.box.h) / s,
+                                    w: hit.box.w / s,
+                                    h: hit.box.h / s
+                                };
+                            }
+                            return null;
                         }
                     };
                 })();
@@ -1085,6 +1144,9 @@
                     // (consent + finalize after all spots are signed).
                     var modalMode = 'pdf';
                     var activeSpot = null;
+                    // The source PDF bytes (base64), kept so we can composite signatures
+                    // onto them client-side with pdf-lib at finish (#163).
+                    var sourcePdfBase64 = null;
 
                     // ===== CLIENT-SIDE IP CAPTURE =====
                     // The signing page is hosted on a Salesforce Site, so signers are Guest users.
@@ -1294,6 +1356,8 @@
                             token,
                             function (result, event) {
                                 if (event.status && result && result.base64) {
+                                    // Keep the bytes for client-side compositing at finish.
+                                    sourcePdfBase64 = result.base64;
                                     // The viewer module owns rendering — the page never touches
                                     // blobs/iframes/PDF.js directly. Once painted, try to set up
                                     // the guided sign-spot overlay (no-op when there are no
@@ -1376,7 +1440,16 @@
                                 if (isSigned) {
                                     renderSignedChip(chip, plc.signedValue, plc.type);
                                 }
-                                spots.push({ placement: plc, chip: chip, signed: isSigned });
+                                // hit kept for client-side compositing; value/imageData
+                                // filled in as the signer captures each field.
+                                spots.push({
+                                    placement: plc,
+                                    chip: chip,
+                                    signed: isSigned,
+                                    hit: hit,
+                                    value: plc.signedValue || null,
+                                    imageData: null
+                                });
                             }
                         }
                         if (!spots.length) return;
@@ -1480,6 +1553,185 @@
                         openPlacementCapture(spot);
                     }
 
+                    // ===== byte helpers (base64 <-> Uint8Array) for pdf-lib =====
+                    function b64ToBytes(b64) {
+                        var bin = atob(b64);
+                        var a = new Uint8Array(bin.length);
+                        for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+                        return a;
+                    }
+                    function bytesToB64(bytes) {
+                        var bin = '';
+                        var chunk = 0x8000;
+                        for (var i = 0; i < bytes.length; i += chunk) {
+                            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+                        }
+                        return btoa(bin);
+                    }
+                    function dataUrlToBytes(d) {
+                        return b64ToBytes(d.split(',')[1]);
+                    }
+
+                    // ===== Draw-pad: free-hand signature capture (#163) =====
+                    var DrawPad = (function () {
+                        var canvas,
+                            ctx,
+                            drawing = false,
+                            inked = false;
+                        function pos(e) {
+                            var r = canvas.getBoundingClientRect();
+                            var cx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+                            var cy = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+                            return { x: cx * (canvas.width / r.width), y: cy * (canvas.height / r.height) };
+                        }
+                        function start(e) {
+                            drawing = true;
+                            var p = pos(e);
+                            ctx.beginPath();
+                            ctx.moveTo(p.x, p.y);
+                            if (e.cancelable) e.preventDefault();
+                        }
+                        function move(e) {
+                            if (!drawing) return;
+                            var p = pos(e);
+                            ctx.lineTo(p.x, p.y);
+                            ctx.stroke();
+                            inked = true;
+                            if (typeof updateSignSubmitState === 'function') updateSignSubmitState();
+                            if (e.cancelable) e.preventDefault();
+                        }
+                        function end() {
+                            drawing = false;
+                        }
+                        return {
+                            init: function () {
+                                canvas = document.getElementById('modal-draw-canvas');
+                                if (!canvas) return;
+                                ctx = canvas.getContext('2d');
+                                ctx.lineWidth = 2.5;
+                                ctx.lineCap = 'round';
+                                ctx.lineJoin = 'round';
+                                ctx.strokeStyle = '#16324f';
+                                canvas.addEventListener('mousedown', start);
+                                canvas.addEventListener('mousemove', move);
+                                window.addEventListener('mouseup', end);
+                                canvas.addEventListener('touchstart', start, { passive: false });
+                                canvas.addEventListener('touchmove', move, { passive: false });
+                                canvas.addEventListener('touchend', end);
+                                var clr = document.getElementById('modal-draw-clear');
+                                if (clr)
+                                    clr.addEventListener('click', function () {
+                                        DrawPad.clear();
+                                    });
+                            },
+                            clear: function () {
+                                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                inked = false;
+                                if (typeof updateSignSubmitState === 'function') updateSignSubmitState();
+                            },
+                            hasInk: function () {
+                                return inked;
+                            },
+                            toPng: function () {
+                                return canvas.toDataURL('image/png');
+                            }
+                        };
+                    })();
+
+                    // Render a signed chip showing the DRAWN signature image (vs. text).
+                    function renderSignedChipImage(chip, dataUrl) {
+                        chip.classList.remove('current');
+                        chip.classList.add('signed');
+                        chip.style.height = 'auto';
+                        while (chip.firstChild) chip.removeChild(chip.firstChild);
+                        var tab = document.createElement('span');
+                        tab.className = 'tab';
+                        tab.textContent = '✓';
+                        chip.appendChild(tab);
+                        var img = document.createElement('img');
+                        img.src = dataUrl;
+                        img.style.cssText = 'max-height:26px;width:auto;display:block;';
+                        chip.appendChild(img);
+                    }
+
+                    // Composite ALL captured fields (drawn images + typed text + dates) onto
+                    // the source PDF with pdf-lib, then finalize via saveCompositedSignedPdf.
+                    // Used whenever the request has at least one drawn field — produces the
+                    // authoritative signed PDF in-browser (no server re-render, no image-fetch
+                    // limitation). Returns a Promise.
+                    function compositeAndFinalize(typedName, consentGiven, btn) {
+                        if (typeof PDFLib === 'undefined') {
+                            return Promise.reject(new Error('PDFLib not loaded'));
+                        }
+                        var bytes = b64ToBytes(sourcePdfBase64);
+                        return PDFLib.PDFDocument.load(bytes)
+                            .then(function (doc) {
+                                return doc.embedFont(PDFLib.StandardFonts.HelveticaOblique).then(function (oblique) {
+                                    var pages = doc.getPages();
+                                    var chain = Promise.resolve();
+                                    guided.spots.forEach(function (spot) {
+                                        chain = chain.then(function () {
+                                            var rect = DocGenPdfViewer.hitToPdfRect(spot.hit);
+                                            if (!rect || !pages[rect.pageIndex]) return;
+                                            var page = pages[rect.pageIndex];
+                                            if (spot.imageData) {
+                                                return doc
+                                                    .embedPng(dataUrlToBytes(spot.imageData))
+                                                    .then(function (png) {
+                                                        var h = 30;
+                                                        var w = Math.min(h * (png.width / png.height), 200);
+                                                        page.drawImage(png, {
+                                                            x: rect.x,
+                                                            y: rect.yBottom,
+                                                            width: w,
+                                                            height: h
+                                                        });
+                                                    });
+                                            }
+                                            var text = spot.value || spot.placement.signedValue || '';
+                                            if (!text) return;
+                                            page.drawText(String(text), {
+                                                x: rect.x,
+                                                y: rect.yBottom + 1,
+                                                size: Math.max(rect.h, 9),
+                                                font: oblique
+                                            });
+                                            return null;
+                                        });
+                                    });
+                                    return chain.then(function () {
+                                        return doc.save();
+                                    });
+                                });
+                            })
+                            .then(function (outBytes) {
+                                var outB64 = bytesToB64(outBytes);
+                                var ua = navigator.userAgent || 'Unknown';
+                                return new Promise(function (resolve, reject) {
+                                    Visualforce.remoting.Manager.invokeAction(
+                                        '{!$RemoteAction.DocGenSignatureController.saveCompositedSignedPdf}',
+                                        token,
+                                        outB64,
+                                        consentGiven,
+                                        capturedIp,
+                                        ua,
+                                        function (result, event) {
+                                            if (!event.status || !result || result.success === false) {
+                                                reject(
+                                                    new Error(
+                                                        (result && result.message) || event.message || 'Save failed'
+                                                    )
+                                                );
+                                                return;
+                                            }
+                                            resolve(result);
+                                        },
+                                        { escape: false, buffer: false, timeout: 120000 }
+                                    );
+                                });
+                            });
+                    }
+
                     function openPlacementCapture(spot) {
                         activeSpot = spot;
                         var type = spot.placement.type;
@@ -1493,6 +1745,12 @@
                         // Per-spot capture: no consent here (collected once at final submit).
                         consentRow.style.display = 'none';
                         showModalMsg('', 'info');
+
+                        // Draw-pad: offer free-hand capture for signature + initials fields.
+                        var drawGroup = document.getElementById('modal-draw-group');
+                        var allowDraw = type === 'Full' || type === 'Initials';
+                        DrawPad.clear();
+                        drawGroup.style.display = allowDraw ? '' : 'none';
 
                         if (type === 'Date') {
                             modalMode = 'spot';
@@ -1533,6 +1791,7 @@
                     function openFinalSubmit() {
                         modalMode = 'final';
                         activeSpot = null;
+                        document.getElementById('modal-draw-group').style.display = 'none';
                         document.querySelector('#sign-modal .modal-header h2').textContent = 'Complete Signing';
                         document.querySelector('#sign-modal .modal-subtitle').textContent =
                             'Confirm your name and consent to finalize all fields.';
@@ -1559,9 +1818,11 @@
                             .addEventListener('change', updateSignSubmitState);
                         document.getElementById('modal-typed-name').addEventListener('input', updateSignSubmitState);
                         document.getElementById('btn-sign-submit').addEventListener('click', handleSignSubmit);
+                        DrawPad.init();
                     }
 
                     function openSignModal() {
+                        document.getElementById('modal-draw-group').style.display = 'none';
                         // Prefill the confirmed name from validateToken.signerName.
                         var nameInput = document.getElementById('modal-typed-name');
                         nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
@@ -1583,8 +1844,9 @@
                         var consentVal = document.getElementById('modal-consent-checkbox').checked;
                         var btn = document.getElementById('btn-sign-submit');
                         if (modalMode === 'spot') {
-                            // Per-spot capture: a value is enough (Date types pre-enable).
-                            btn.disabled = !nameVal;
+                            // Per-spot capture: a typed value OR a drawn signature is enough
+                            // (Date types pre-enable in openPlacementCapture).
+                            btn.disabled = !(nameVal || DrawPad.hasInk());
                         } else {
                             // 'pdf' (legacy single) and 'final': require name + consent.
                             btn.disabled = !(nameVal && consentVal);
@@ -1605,7 +1867,13 @@
                             if (p && p.status === 'Signed' && !spot.signed) {
                                 spot.signed = true;
                                 spot.placement.signedValue = p.signedValue;
-                                renderSignedChip(spot.chip, p.signedValue, spot.placement.type);
+                                // Show the drawn signature on the chip if one was captured;
+                                // otherwise the typed value / server-stamped text.
+                                if (spot.imageData) {
+                                    renderSignedChipImage(spot.chip, spot.imageData);
+                                } else {
+                                    renderSignedChip(spot.chip, p.signedValue, spot.placement.type);
+                                }
                             }
                         });
                     }
@@ -1671,8 +1939,28 @@
                     function handleSpotSubmit() {
                         if (!activeSpot) return;
                         var type = activeSpot.placement.type;
-                        var value = type === 'Date' ? '' : document.getElementById('modal-typed-name').value.trim();
-                        if (type !== 'Date' && !value) return;
+                        var typed = document.getElementById('modal-typed-name').value.trim();
+                        var drew = (type === 'Full' || type === 'Initials') && DrawPad.hasInk();
+
+                        if (type !== 'Date' && !drew && !typed) return;
+
+                        // Capture client-side for the final composite; mark signed server-side
+                        // with a value (drawn fields store a marker — the image lives in the
+                        // composited PDF, not in the 255-char Signed_Value__c field).
+                        var serverValue;
+                        if (type === 'Date') {
+                            activeSpot.imageData = null;
+                            activeSpot.value = '';
+                            serverValue = '';
+                        } else if (drew) {
+                            activeSpot.imageData = DrawPad.toPng();
+                            activeSpot.value = null;
+                            serverValue = 'Signed (drawn)';
+                        } else {
+                            activeSpot.imageData = null;
+                            activeSpot.value = typed;
+                            serverValue = typed;
+                        }
 
                         var btn = document.getElementById('btn-sign-submit');
                         btn.disabled = true;
@@ -1682,7 +1970,7 @@
                             '{!$RemoteAction.DocGenSignatureController.signPlacement}',
                             token,
                             activeSpot.placement.id,
-                            value,
+                            serverValue,
                             function (placements, event) {
                                 btn.disabled = false;
                                 btn.textContent = 'Sign';
@@ -1714,6 +2002,48 @@
                         btn.disabled = true;
                         btn.textContent = 'Submitting...';
                         var userAgent = navigator.userAgent || 'Unknown';
+
+                        // If any field was drawn, the authoritative PDF is built in-browser
+                        // (pdf-lib composite) and posted to saveCompositedSignedPdf — the
+                        // server can't embed the drawn image (Flying Saucer fetch limit).
+                        var hasDrawn = false;
+                        if (guided && guided.spots) {
+                            for (var i = 0; i < guided.spots.length; i++) {
+                                if (guided.spots[i].imageData) {
+                                    hasDrawn = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (hasDrawn && sourcePdfBase64) {
+                            compositeAndFinalize(typedName, consentGiven, btn)
+                                .then(function (result) {
+                                    btn.disabled = false;
+                                    btn.textContent = 'Sign';
+                                    closeSignModal();
+                                    if (result.isComplete) {
+                                        showState('success');
+                                    } else {
+                                        var rem = result.remaining || 0;
+                                        document.getElementById('waiting-message').textContent =
+                                            'Your signature has been recorded. Waiting for ' +
+                                            rem +
+                                            ' more signer' +
+                                            (rem > 1 ? 's' : '') +
+                                            ' to complete.';
+                                        showState('waiting');
+                                    }
+                                })
+                                .catch(function (err) {
+                                    btn.disabled = false;
+                                    btn.textContent = 'Sign';
+                                    showModalMsg(
+                                        'Submit failed: ' + (err && err.message ? err.message : 'Unknown error'),
+                                        'error'
+                                    );
+                                });
+                            return;
+                        }
 
                         Visualforce.remoting.Manager.invokeAction(
                             '{!$RemoteAction.DocGenSignatureController.saveSignature}',
