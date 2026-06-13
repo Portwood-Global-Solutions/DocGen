@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.13.0 — Guided e-signatures (draw/type on the PDF) + point-in-time snapshot",
-      "versionNumber": "3.13.0.NEXT",
-      "ancestorId": "04tVx000000nYTZIA2",
+      "versionName": "v3.14.0 — Guided signing from the Sender, for Word + HTML templates",
+      "versionNumber": "3.14.0.NEXT",
+      "ancestorId": "04tVx000000nYdFIAU",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.13 brings guided e-signatures: walk signers field-by-field through the actual PDF, capture typed or hand-drawn signatures, initials, and dates, and automatically attach the signed PDF with a Certificate of Completion (signer details, timestamps, IP, and verification). Point-in-time snapshots mean signers sign exactly what they reviewed, and multi-signer documents collect every party on one finished PDF. 100% native — no external services or callouts. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.14 extends the guided e-signature experience to the Signature Sender for both Word and HTML templates: send any template with signature tags and signers walk field-by-field through the real PDF — draw or type signatures, initials, and dates — with the signed document and a Certificate of Completion attached automatically. 100% native — no external services or callouts. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
