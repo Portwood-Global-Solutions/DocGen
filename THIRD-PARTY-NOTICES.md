@@ -9,18 +9,19 @@ are shipped inside the managed package (not pulled from npm at install time).
 This file is the component disclosure (SBOM) for those libraries. Keep it current
 when versions change, and disclose it in AppExchange security materials.
 
-| Component | Version                     | License            | Purpose                                                                                         | Source                             |
-| --------- | --------------------------- | ------------------ | ----------------------------------------------------------------------------------------------- | ---------------------------------- |
-| PDF.js    | 2.16.105 (legacy UMD build) | Apache License 2.0 | Renders the document + text layer in the guided signing viewer so sign-spots can be located.    | https://github.com/mozilla/pdf.js  |
-| pdf-lib   | 1.17.1 (UMD build)          | MIT                | Composites drawn/typed signatures onto the signed PDF in the browser at the located sign-spots. | https://github.com/Hopding/pdf-lib |
+| Component | Version                   | License            | Purpose                                                                                         | Source                             |
+| --------- | ------------------------- | ------------------ | ----------------------------------------------------------------------------------------------- | ---------------------------------- |
+| PDF.js    | 4.7.76 (legacy ESM build) | Apache License 2.0 | Renders the document + text layer in the guided signing viewer so sign-spots can be located.    | https://github.com/mozilla/pdf.js  |
+| pdf-lib   | 1.17.1 (UMD build)        | MIT                | Composites drawn/typed signatures onto the signed PDF in the browser at the located sign-spots. | https://github.com/Hopding/pdf-lib |
 
 ## Security notes
 
-- **PDF.js / CVE-2024-4367** — the 2.x line is affected by an arbitrary-JS-execution
-  vector via a crafted PDF's font path. DocGen mitigates it by calling
-  `getDocument({ ..., isEvalSupported: false })`, which disables the affected
-  Function-constructor path. Track this until the bundle is upgraded to a fixed
-  release (>= 4.2.67).
+- **PDF.js** is pinned to **4.7.76**, which is past the 4.2.67 fix for CVE-2024-4367
+  (arbitrary JS via a crafted PDF's font path). As defense-in-depth, the viewer also
+  calls `getDocument({ ..., isEvalSupported: false })`. No known-vulnerable version
+  ships in the package (verified by `sf code-analyzer` retire-js: 0 High).
+- The v4 build is ESM-only; the files are stored with a `.js` extension so Salesforce
+  serves them with a JavaScript MIME type, and the viewer dynamic-imports the module.
 - These libraries make **no network requests** and have **no external runtime
   dependency** — they operate only on PDF bytes already in the browser.
 

@@ -18,7 +18,6 @@
             <apex:slds />
             <!-- PDF.js (legacy UMD build) — client-side render + text layer for
                  sign-spot positioning. Bundled as a static resource (no callout). -->
-            <apex:includeScript value="{!URLFOR($Resource.pdfjs, 'pdf.min.js')}" />
             <!-- pdf-lib — client-side composition of drawn/typed signatures onto the
                  final PDF at the located sign-spots (#163). Bundled static resource. -->
             <apex:includeScript value="{!URLFOR($Resource.pdflib, 'pdf-lib.min.js')}" />
@@ -859,11 +858,35 @@
                     // the overlay is additive and degrades gracefully if a spot
                     // can't be located.
                     // ============================================================
-                    var WORKER_SRC = "{!URLFOR($Resource.pdfjs, 'pdf.worker.min.js')}";
+                    // PDF.js 4.x is ESM-only; we dynamic-import it from a static resource
+                    // (files named .js so Salesforce serves a JS MIME the module loader
+                    // accepts). v4.2.67+ fixes CVE-2024-4367. The module is loaded lazily
+                    // on first render and cached.
+                    var MODULE_URL = "{!URLFOR($Resource.pdfjs4, 'pdf.min.js')}";
+                    var WORKER_SRC = "{!URLFOR($Resource.pdfjs4, 'pdf.worker.min.js')}";
                     var MAX_SCALE = 1.6;
 
+                    var pdfjsLib = null; // resolved ESM module (cached after first import)
                     var pages = []; // { pageNum, viewport, textContent, wrapEl }
                     var ready = false;
+
+                    function ensurePdfjs(containerEl) {
+                        if (pdfjsLib) {
+                            return Promise.resolve(pdfjsLib);
+                        }
+                        return import(MODULE_URL)
+                            .then(function (mod) {
+                                pdfjsLib = mod;
+                                pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+                                return pdfjsLib;
+                            })
+                            .catch(function (err) {
+                                if (containerEl) {
+                                    showMessage(containerEl, 'Viewer failed to load. Please refresh.');
+                                }
+                                throw err;
+                            });
+                    }
 
                     function base64ToBytes(base64) {
                         var binary = atob(base64);
@@ -954,20 +977,17 @@
                                 showMessage(containerEl, 'Document unavailable.');
                                 return Promise.resolve();
                             }
-                            if (typeof pdfjsLib === 'undefined') {
-                                showMessage(containerEl, 'Viewer failed to load. Please refresh.');
-                                return Promise.reject(new Error('pdfjsLib not loaded'));
-                            }
-                            pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_SRC;
-                            clearContainer(containerEl);
 
                             var bytes = base64ToBytes(base64);
-                            // isEvalSupported:false disables PDF.js's Function-constructor
-                            // font path — the vector for CVE-2024-4367 (arbitrary JS via a
-                            // crafted PDF). Required mitigation while on the 2.x build.
-                            return pdfjsLib
-                                .getDocument({ data: bytes, isEvalSupported: false })
-                                .promise.then(function (pdf) {
+                            // Lazy-load the PDF.js ESM module, then render. isEvalSupported:false
+                            // keeps the CVE-2024-4367 font path disabled (defense-in-depth; the
+                            // 4.x build is already patched).
+                            return ensurePdfjs(containerEl)
+                                .then(function (lib) {
+                                    clearContainer(containerEl);
+                                    return lib.getDocument({ data: bytes, isEvalSupported: false }).promise;
+                                })
+                                .then(function (pdf) {
                                     var chain = Promise.resolve();
                                     for (var p = 1; p <= pdf.numPages; p++) {
                                         (function (pageNum) {
