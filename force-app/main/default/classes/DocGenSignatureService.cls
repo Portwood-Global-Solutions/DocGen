@@ -604,8 +604,8 @@ public without sharing class DocGenSignatureService {
             String name = (String) input.get('signerName');
             rows.add(
                 buildSignerLoopRow(
-                    name, // pending: no typed signature yet → show the invited name
-                    name,
+                    '', // pending: signature line stays BLANK until the signer actually signs
+                    name, // RegisteredName = the invited (printed) name
                     (String) input.get('roleName'),
                     (String) input.get('signerEmail'),
                     null,
