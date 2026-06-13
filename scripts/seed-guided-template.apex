@@ -27,7 +27,9 @@ String html =
     '<tr><td class="l">Email</td><td>{Email}</td></tr>' +
     '</table>' +
     '<div class="terms">The member named above agrees to the terms of this Membership Agreement. ' +
-    'Please initial to confirm you have reviewed the cancellation policy: {@Signature_Member:1:Initials}</div>' +
+    'Please initial to confirm you have reviewed the cancellation policy.</div>' +
+    // Initials on their own right-aligned line with room — not inline in the paragraph.
+    '<div style="text-align:right; margin:16px 0;">Initials: {@Signature_Member:1:Initials}</div>' +
     '<div class="gap"></div>' +
     '<div class="terms">By signing below, the member accepts the full terms as of the date of signature.</div>' +
     '<table class="sig"><tr>' +
