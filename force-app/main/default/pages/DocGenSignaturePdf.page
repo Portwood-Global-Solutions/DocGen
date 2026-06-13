@@ -1675,11 +1675,20 @@
                                             if (!rect || !pages[rect.pageIndex]) return;
                                             var page = pages[rect.pageIndex];
                                             if (spot.imageData) {
+                                                var isInitials = spot.placement.type === 'Initials';
                                                 return doc
                                                     .embedPng(dataUrlToBytes(spot.imageData))
                                                     .then(function (png) {
-                                                        var h = 30;
-                                                        var w = Math.min(h * (png.width / png.height), 200);
+                                                        // Size relative to the sign-spot's own line
+                                                        // height: an inline initials mark stays within
+                                                        // its line (no overrun into adjacent text);
+                                                        // a signature on its own line gets a larger,
+                                                        // signature-sized mark.
+                                                        var h = isInitials
+                                                            ? Math.min(Math.max(rect.h * 1.4, 12), 20)
+                                                            : 32;
+                                                        var maxW = isInitials ? 70 : 220;
+                                                        var w = Math.min(h * (png.width / png.height), maxW);
                                                         page.drawImage(png, {
                                                             x: rect.x,
                                                             y: rect.yBottom,
