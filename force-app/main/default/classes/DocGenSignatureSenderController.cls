@@ -1186,11 +1186,9 @@ public with sharing class DocGenSignatureSenderController {
         // Merge the template against the live record (point-in-time body).
         Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
         String templateType = (String) mergeData.get('templateType');
-        if (templateType != 'HTML') {
-            throw new AuraHandledException(
-                'Guided PDF signing currently supports HTML templates. ' +
-                'Convert the template to HTML or use the classic signing flow.'
-            );
+        // Word (DOCX) and HTML are both supported. PowerPoint has no signing surface.
+        if (templateType == 'PowerPoint') {
+            throw new AuraHandledException('Guided signing supports Word and HTML templates, not PowerPoint.');
         }
         String body = (String) mergeData.get('combinedDocumentXml');
         if (String.isBlank(body)) {
@@ -1202,8 +1200,10 @@ public with sharing class DocGenSignatureSenderController {
             throw new AuraHandledException('This template has no {@Signature_...} placement tags.');
         }
 
-        // FROZEN body: replace each placement's tag (in document order) with a
-        // unique bare sentinel — what the finalizer later stamps.
+        // FROZEN body: replace each placement's tag (in document order) with a unique
+        // bare sentinel. The tags are contiguous in both HTML and merged DOCX (the merge
+        // engine heals run-split tags — the same reason stampSignaturesInXml can find
+        // them), so one substitution covers both types. This is what the finalizer stamps.
         String frozenBody = body;
         List<String> sentinels = new List<String>();
         for (Integer i = 0; i < placements.size(); i++) {
@@ -1212,14 +1212,7 @@ public with sharing class DocGenSignatureSenderController {
             frozenBody = frozenBody.replaceFirst(Pattern.quote(placements[i].tagText), sentinel);
         }
 
-        // VIEWING body: wrap each sentinel so it occupies layout space (correct
-        // chip position) but renders white/invisible on the page.
-        String viewingBody = frozenBody;
-        for (String sentinel : sentinels) {
-            viewingBody = viewingBody.replace(sentinel, '<span style="color:#ffffff">' + sentinel + '</span>');
-        }
-
-        // Freeze the sentinel body so completion re-renders + stamps it.
+        // Freeze the sentinel body so completion re-renders + stamps it (per type).
         Map<String, Object> frozenMerge = new Map<String, Object>(mergeData);
         frozenMerge.put('combinedDocumentXml', frozenBody);
         frozenMerge.put('documentXml', frozenBody);
@@ -1228,8 +1221,32 @@ public with sharing class DocGenSignatureSenderController {
             new List<Id>{ templateId }
         );
 
+        // VIEWING render: produce the HTML the signer's PDF is rendered from. HTML
+        // templates ARE that HTML; Word/DOCX is converted through the same pipeline the
+        // signed-PDF finalizer uses. Either way the sentinels land as plain text in the
+        // HTML, which we then wrap white — invisible on the page, still extractable by the
+        // PDF.js text layer for sign-spot positioning.
+        Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
+        if (pdfImageMap == null) {
+            pdfImageMap = new Map<String, String>();
+        }
+        String viewingHtml;
+        if (templateType == 'HTML') {
+            viewingHtml = frozenBody;
+        } else {
+            // Re-prime the renderer context (mergeTemplateForSignature set it, but be
+            // explicit) and convert the sentinel-bearing DOCX body to HTML.
+            DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
+            DocGenHtmlRenderer.numberingXml = (String) mergeData.get('numberingXml');
+            DocGenService.applyWatermarkOverride(templateId);
+            viewingHtml = DocGenHtmlRenderer.convertToHtml(frozenBody, pdfImageMap);
+        }
+        for (String sentinel : sentinels) {
+            viewingHtml = viewingHtml.replace(sentinel, '<span style="color:#ffffff">' + sentinel + '</span>');
+        }
+
         // Render the viewing PDF (invisible sentinels) → standalone ContentVersion.
-        Blob viewingBlob = Blob.toPdf(viewingBody);
+        Blob viewingBlob = Blob.toPdf(viewingHtml);
         String fileTitle = tpls[0].Name;
         ContentVersion viewCv = new ContentVersion();
         viewCv.Title = fileTitle;
