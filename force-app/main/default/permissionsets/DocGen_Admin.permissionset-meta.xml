@@ -558,6 +558,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>DocGen_Signer__c.Field_Data_Json__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Signer__c.Secure_Token__c</field>
         <readable>true</readable>
     </fieldPermissions>

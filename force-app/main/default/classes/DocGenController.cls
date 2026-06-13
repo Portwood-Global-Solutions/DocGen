@@ -3840,6 +3840,44 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * Returns updateable fields for a given SObject type with label, API name, and type.
+     * The isUpdateable() variant of getObjectFields — used by the signer form-field
+     * admin UI so writeback-target dropdowns only offer fields the admin can write.
+     * @param objectName The SObject API name
+     * @return List of maps with 'label', 'value', and 'type' keys
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<Map<String, String>> getUpdateableObjectFields(String objectName) {
+        List<Option> sortedFields = new List<Option>();
+        Map<String, String> fieldTypes = new Map<String, String>();
+        SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+        if (objType == null) {
+            return new List<Map<String, String>>();
+        }
+
+        for (Schema.SObjectField field : objType.getDescribe().fields.getMap().values()) {
+            Schema.DescribeFieldResult describe = field.getDescribe();
+            if (describe.isUpdateable()) {
+                sortedFields.add(new Option(describe.getLabel() + ' (' + describe.getName() + ')', describe.getName()));
+                fieldTypes.put(describe.getName(), describe.getType().name());
+            }
+        }
+        sortedFields.sort();
+
+        List<Map<String, String>> fields = new List<Map<String, String>>();
+        for (Option opt : sortedFields) {
+            fields.add(
+                new Map<String, String>{
+                    'label' => opt.label,
+                    'value' => opt.value,
+                    'type' => fieldTypes.get(opt.value)
+                }
+            );
+        }
+        return fields;
+    }
+
+    /**
      * Returns child relationships for a given SObject type with relationship name and child object info.
      * @param objectName The parent SObject API name
      * @return List of maps with 'label', 'value', 'childObjectApiName', and 'lookupField' keys

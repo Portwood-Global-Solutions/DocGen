@@ -197,6 +197,35 @@
     width: 13%;
 }
 
+/* #161 — Signer Inputs tab: 9-column layout overrides the 5-column acroform widths. */
+.signer-fields__table th:nth-child(1) {
+    width: 20%;
+}
+.signer-fields__table th:nth-child(2) {
+    width: 11%;
+}
+.signer-fields__table th:nth-child(3) {
+    width: 20%;
+}
+.signer-fields__table th:nth-child(4) {
+    width: 8%;
+}
+.signer-fields__table th:nth-child(5) {
+    width: 8%;
+}
+.signer-fields__table th:nth-child(6) {
+    width: 9%;
+}
+.signer-fields__table th:nth-child(7) {
+    width: 12%;
+}
+.signer-fields__table th:nth-child(8) {
+    width: 7%;
+}
+.signer-fields__table th:nth-child(9) {
+    width: 5%;
+}
+
 .pdf-acroform-row_mapped {
     background: #f7fbff;
 }

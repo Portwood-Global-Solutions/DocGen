@@ -157,7 +157,8 @@ private class DocGenGuidedSigningTest {
             b64,
             true,
             '1.2.3.4',
-            'JUnit/1.0'
+            'JUnit/1.0',
+            '{}'
         );
         Test.stopTest();
 
@@ -204,7 +205,7 @@ private class DocGenGuidedSigningTest {
             a = true;
         }
         try {
-            DocGenSignatureController.saveCompositedSignedPdf('short', 'x', true, '1.1.1.1', 'ua');
+            DocGenSignatureController.saveCompositedSignedPdf('short', 'x', true, '1.1.1.1', 'ua', '{}');
         } catch (Exception e) {
             b = true;
         }

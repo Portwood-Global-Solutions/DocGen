@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — Signer Form Fields with Record Writeback (build pending)
+
+DocuSign-style signer **form fields** with optional base-record writeback. An admin configures extra input fields on a template (`DocGen_Template__c.Query_Config__c` → new top-level `formFields[]` array: `{key,label,fieldApiName,type,required,writeback,mergeTag,choices,listOnCertificate}`); the signer fills them in during e-signing; on completion the values are (a) merged into the **re-rendered** signed PDF at the admin's `{?key}` positions, (b) optionally listed on the signing certificate, and (c) optionally **written back** to the related record.
+
+- **Merge tag `{?key}`** (optional default `{?key|fallback}`): new `DocGenService.processXml` branch right after the `{@…}` preserve block, gated by a static `resolveFormFields` flag. Preserved verbatim at send-time / snapshot freeze (survives into the signed-doc template); resolved at finalize re-render via `resolveValue(data, '__formFields.' + key)` using the same DOCX/HTML output escaping as `{Field}`. Live-merge paths inject values through a one-shot `DocGenService.reservedMergeData`. **Known limitation:** the giant-query path (`DocGenGiantQueryAssembler`, >2000 child rows) skips `processXml`, and the classic _frozen-document_ render path is not re-merged, so `{?key}` renders literally there — form fields target the snapshot re-render path.
+- **Capture (no new guest endpoint):** `saveSignature` / `savePdfSignature` / `saveCompositedSignedPdf` each gain a trailing `String formFieldJson` param. Values are validated against the template config (`DocGenFieldWritebackService.parseConfig` — required enforced, types coerced, unknown keys dropped, config-ordered) and written to the new guest-writable field `DocGen_Signer__c.Field_Data_Json__c` (LongTextArea 32768) in SYSTEM_MODE, before the signer is finalized so a required-field failure aborts the save cleanly.
+- **Writeback subsystem (decoupled, system-context):** new platform event `DocGen_Field_Writeback__e` (`Request_Id__c`), published by `TemplateSignaturePdfQueueable` **only after the signed PDF ContentVersion is saved**, consumed by `DocGenFieldWritebackTrigger` (after insert) → `DocGenFieldWritebackService.performWriteback`. The writable-field allowlist is rebuilt **server-side from config** (`writeback==true`), re-checked with `isUpdateable()` per field, and written `Database.update(..., allOrNone=false, AccessLevel.USER_MODE)`. Failures are logged to `DocGen_Signature_Audit__c` and never re-thrown. A `global @InvocableMethod writeBackFields(List<WritebackRequest>)` lets admins route writeback through a record-triggered Flow instead.
+- **Read path:** `validateToken` now returns a `formFields` array exposing **only** `{key,label,type,required,choices}` (no writeback flags or base-field API names) for the signing pages to render inputs.
+- **Certificate:** `buildVerificationBlockHtml` gains a form-field-aware overload listing fields flagged `listOnCertificate==true`; the 2-arg signature delegates for back-compat.
+- **Admin picker:** `DocGenController.getUpdateableObjectFields(String)` — the `isUpdateable()` variant of `getObjectFields` so writeback-target dropdowns only offer writable fields.
+
+`Field_Data_Json__c` added to the DocGen Admin / User / Guest Signature permission sets (guest read-only — the token is the write capability) and to the `DocGenSignatureGuestSecurity.assertSignerWritableFields` documented allowlist. `SECURITY.md` updated for the new guest-writable field and the system-context writeback.
+
 ## v3.12.0 — Date Field Fix + Verification Security (build pending)
 
 Two fixes, both reported from Slack:

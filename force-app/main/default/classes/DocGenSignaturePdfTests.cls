@@ -196,7 +196,8 @@ private class DocGenSignaturePdfTests {
             'Pat Signer',
             true,
             '203.0.113.7',
-            'Mozilla/5.0'
+            'Mozilla/5.0',
+            '{}'
         );
         Test.stopTest();
 
@@ -241,7 +242,7 @@ private class DocGenSignaturePdfTests {
         Database.update(signer, AccessLevel.SYSTEM_MODE);
 
         Test.startTest();
-        DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', true, '203.0.113.7', 'UA');
+        DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', true, '203.0.113.7', 'UA', '{}');
         Integer enqueued = Limits.getAsyncCalls();
         Test.stopTest();
 
@@ -255,7 +256,7 @@ private class DocGenSignaturePdfTests {
         Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
-            DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', false, '1.1.1.1', 'UA');
+            DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', false, '1.1.1.1', 'UA', '{}');
             System.assert(false, 'Should have thrown without consent');
         } catch (Exception e) {
             // AuraHandledException
@@ -267,7 +268,7 @@ private class DocGenSignaturePdfTests {
     static void testSavePdfSignature_noPinVerification() {
         Test.startTest();
         try {
-            DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', true, '1.1.1.1', 'UA');
+            DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', true, '1.1.1.1', 'UA', '{}');
             System.assert(false, 'Should have thrown — PIN not verified');
         } catch (Exception e) {
             // AuraHandledException
@@ -279,7 +280,7 @@ private class DocGenSignaturePdfTests {
     static void testSavePdfSignature_invalidToken() {
         Test.startTest();
         try {
-            DocGenSignatureController.savePdfSignature('bad', 'Name', true, '1.1.1.1', 'UA');
+            DocGenSignatureController.savePdfSignature('bad', 'Name', true, '1.1.1.1', 'UA', '{}');
             System.assert(false, 'Should have thrown');
         } catch (Exception e) {
             // AuraHandledException
@@ -570,7 +571,8 @@ private class DocGenSignaturePdfTests {
             'Pat',
             true,
             '1.2.3.4',
-            'UA'
+            'UA',
+            '{}'
         );
 
         System.assertEquals(true, result.success);

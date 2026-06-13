@@ -314,7 +314,8 @@ private class DocGenSignatureTests {
             'John Smith',
             true,
             '192.168.1.1',
-            'Mozilla/5.0'
+            'Mozilla/5.0',
+            '{}'
         );
         Test.stopTest();
 
@@ -355,7 +356,8 @@ private class DocGenSignatureTests {
                 'John Smith',
                 false,
                 '1.2.3.4',
-                'Test'
+                'Test',
+                '{}'
             );
             System.assert(false, 'Should have thrown');
         } catch (Exception e) {
@@ -373,7 +375,8 @@ private class DocGenSignatureTests {
                 'John Smith',
                 true,
                 '1.2.3.4',
-                'Test'
+                'Test',
+                '{}'
             );
             System.assert(false, 'Should have thrown');
         } catch (Exception e) {
@@ -394,7 +397,8 @@ private class DocGenSignatureTests {
                 '',
                 true,
                 '1.2.3.4',
-                'Test'
+                'Test',
+                '{}'
             );
             System.assert(false, 'Should have thrown');
         } catch (Exception e) {
@@ -407,7 +411,7 @@ private class DocGenSignatureTests {
     static void testSaveSignature_invalidToken() {
         Test.startTest();
         try {
-            DocGenSignatureController.saveSignature('bad-token', 'Name', true, '1.1.1.1', 'UA');
+            DocGenSignatureController.saveSignature('bad-token', 'Name', true, '1.1.1.1', 'UA', '{}');
             System.assert(false, 'Should have thrown');
         } catch (Exception e) {
             // AuraHandledException — message not accessible in test context
@@ -612,7 +616,8 @@ private class DocGenSignatureTests {
             'Signer One Name',
             true,
             '1.1.1.1',
-            'Browser 1'
+            'Browser 1',
+            '{}'
         );
         Test.stopTest();
 
@@ -1630,7 +1635,8 @@ private class DocGenSignatureTests {
             'IP Test Signer',
             true,
             null,
-            null
+            null,
+            '{}'
         );
         Test.stopTest();
 
@@ -1725,7 +1731,8 @@ private class DocGenSignatureTests {
                 'Name',
                 true,
                 '1.1.1.1',
-                'UA'
+                'UA',
+                '{}'
             );
             System.assert(false, 'Should have thrown');
         } catch (Exception e) {
@@ -1747,7 +1754,8 @@ private class DocGenSignatureTests {
                 'Name',
                 true,
                 '1.1.1.1',
-                'UA'
+                'UA',
+                '{}'
             );
             System.assert(false, 'Should have thrown');
         } catch (Exception e) {
@@ -2151,7 +2159,8 @@ private class DocGenSignatureTests {
                 'Try Again',
                 true,
                 '10.0.0.1',
-                'Mozilla/5.0'
+                'Mozilla/5.0',
+                '{}'
             );
             System.assert(false, 'Should have thrown — already signed');
         } catch (Exception e) {
@@ -3552,7 +3561,8 @@ private class DocGenSignatureTests {
             'New Signer Name',
             true,
             '10.0.0.1',
-            'TestBrowser/1.0'
+            'TestBrowser/1.0',
+            '{}'
         );
         Test.stopTest();
 
@@ -5862,5 +5872,139 @@ private class DocGenSignatureTests {
             DocGenSignatureService.resolveSignedFileName(req, 'my-upload - Signed'),
             'No template and no title format → keep the source-title fallback'
         );
+    }
+
+    // =========================================================================
+    // Signer Form Fields — capture round-trip + decoupled writeback
+    // =========================================================================
+
+    private static final String FF_TOKEN = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+
+    /**
+     * Creates a template carrying the supplied formFields config, a request bound
+     * to it + the test Account, and a PIN-verified signer (token = FF_TOKEN) ready
+     * to call saveSignature. Returns the request Id.
+     */
+    private static Id setupFormFieldRequest(String formFieldsConfig) {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'FF Template ' + Datetime.now().getTime(),
+            Base_Object_API__c = 'Account',
+            Query_Config__c = formFieldsConfig,
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        insert tmpl;
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Status__c = 'Sent',
+            Template__c = tmpl.Id,
+            Related_Record_Id__c = acc.Id,
+            Secure_Token__c = 'b1b2c3d4e5f6b1b2c3d4e5f6b1b2c3d4e5f6b1b2c3d4e5f6b1b2c3d4e5f6b1b2',
+            Signer_Name__c = 'FF Signer',
+            Signer_Email__c = 'ff@test.com'
+        );
+        insert req;
+        DocGen_Signer__c signer = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'FF Signer',
+            Signer_Email__c = 'ff@test.com',
+            Role_Name__c = 'Signer',
+            Secure_Token__c = FF_TOKEN,
+            Status__c = 'Viewed',
+            Sort_Order__c = 1,
+            PIN_Verified_At__c = System.now()
+        );
+        insert signer;
+        return req.Id;
+    }
+
+    @IsTest
+    static void saveSignature_persistsValidatedFormFieldJson() {
+        String cfg = '{"formFields":[' + '{"key":"city","type":"text"},' + '{"key":"qty","type":"number"}]}';
+        setupFormFieldRequest(cfg);
+        Test.startTest();
+        DocGenSignatureController.saveSignature(
+            FF_TOKEN,
+            'FF Signer',
+            true,
+            '1.2.3.4',
+            'UA',
+            '{"city":" Boston ","qty":"12","junk":"DROP"}'
+        );
+        Test.stopTest();
+
+        DocGen_Signer__c after = [
+            SELECT Field_Data_Json__c
+            FROM DocGen_Signer__c
+            WHERE Secure_Token__c = :FF_TOKEN
+            LIMIT 1
+        ];
+        Map<String, Object> stored = (Map<String, Object>) JSON.deserializeUntyped(after.Field_Data_Json__c);
+        System.assertEquals('Boston', stored.get('city'), 'text trimmed + persisted');
+        System.assertEquals(12, stored.get('qty'), 'number coerced + persisted');
+        System.assert(!stored.containsKey('junk'), 'unknown guest key dropped before persist');
+    }
+
+    @IsTest
+    static void saveSignature_requiredFieldMissing_abortsSave() {
+        String cfg = '{"formFields":[{"key":"agree","label":"Agreement","type":"text","required":true}]}';
+        setupFormFieldRequest(cfg);
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveSignature(FF_TOKEN, 'FF Signer', true, '1.2.3.4', 'UA', '{}');
+        } catch (Exception e) {
+            threw = true;
+        }
+        Test.stopTest();
+        System.assert(threw, 'missing required form field aborts the save');
+        DocGen_Signer__c after = [SELECT Status__c FROM DocGen_Signer__c WHERE Secure_Token__c = :FF_TOKEN LIMIT 1];
+        System.assertNotEquals('Signed', after.Status__c, 'signer not finalized when required validation fails');
+    }
+
+    @IsTest
+    static void saveSignature_badTypeFormField_abortsSave() {
+        String cfg = '{"formFields":[{"key":"qty","type":"number"}]}';
+        setupFormFieldRequest(cfg);
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveSignature(
+                FF_TOKEN,
+                'FF Signer',
+                true,
+                '1.2.3.4',
+                'UA',
+                '{"qty":"not-a-number"}'
+            );
+        } catch (Exception e) {
+            threw = true;
+        }
+        Test.stopTest();
+        System.assert(threw, 'bad-type form field value aborts the save');
+    }
+
+    @IsTest
+    static void writeback_eventDrain_updatesBaseRecord() {
+        // End-to-end: persist Field_Data_Json__c, publish the writeback event, and
+        // assert the base Account's mapped field updates once the event is drained
+        // at Test.stopTest().
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        update new Account(Id = acc.Id, Description = null);
+        String cfg = '{"formFields":[{"key":"desc","fieldApiName":"Description","type":"text","writeback":true}]}';
+        Id reqId = setupFormFieldRequest(cfg);
+        update new DocGen_Signer__c(
+            Id = [SELECT Id FROM DocGen_Signer__c WHERE Secure_Token__c = :FF_TOKEN LIMIT 1]
+            .Id,
+            Field_Data_Json__c = '{"desc":"FROM EVENT"}'
+        );
+
+        Test.startTest();
+        DocGen_Field_Writeback__e evt = new DocGen_Field_Writeback__e(Request_Id__c = reqId);
+        EventBus.publish(evt);
+        Test.stopTest(); // platform-event subscriber (trigger) fires here
+
+        Account after = [SELECT Description FROM Account WHERE Id = :acc.Id];
+        System.assertEquals('FROM EVENT', after.Description, 'writeback event subscriber updated the base record');
     }
 }

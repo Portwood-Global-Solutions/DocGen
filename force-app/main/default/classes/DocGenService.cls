@@ -10,6 +10,20 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     private static String currentEntryName;
     @TestVisible
     private static String currentOutputFormat = 'Native'; // Set before processXml — PDF skips blob loading for images
+    // Signer form fields ({?key} tags): preserved verbatim during the send-time
+    // merge / snapshot freeze (so the placeholder survives into the signed-doc
+    // template), then resolved when the signature finalize re-render flips this
+    // flag true and injects collected values under data['__formFields']. Mirrors
+    // the {@Signature_*} preserve-then-stamp lifecycle.
+    @TestVisible
+    public static Boolean resolveFormFields = false;
+    // Reserved merge-data keys injected into the record data map for the
+    // duration of one mergeTemplate call (cleared after use). The signature
+    // finalizer uses this to surface collected signer form-field values under
+    // '__formFields' on the live-merge path, mirroring the snapshot path's
+    // snap.put('__formFields', …). Resolved by the {?key} branch above.
+    @TestVisible
+    public static Map<String, Object> reservedMergeData;
 
     /**
      * Sets the admin-uploaded watermark override on the renderer (if one exists
@@ -537,6 +551,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             recordDataMap = ((SObject) dataObj).getPopulatedFieldsAsMap();
         } else {
             throw new DocGenException('Invalid data format.');
+        }
+
+        // Inject any caller-reserved merge keys (e.g. '__formFields' from the
+        // signature finalizer) so they resolve as siblings of the record fields.
+        // One-shot: cleared after copy so it never leaks into a later merge.
+        if (reservedMergeData != null) {
+            for (String reservedKey : reservedMergeData.keySet()) {
+                recordDataMap.put(reservedKey, reservedMergeData.get(reservedKey));
+            }
+            reservedMergeData = null;
         }
 
         MergeResult mr = new MergeResult();
@@ -3303,6 +3327,47 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 // Preserve {@Signature_*} tags — handled by the signature service after merge
                 if (tagContent.startsWith('@')) {
                     output += '{' + rawTag + '}';
+                    cursor = tagClose + 1;
+                    continue;
+                }
+
+                // Signer form-field tags {?key} (optional default {?key|fallback}).
+                // Lifecycle mirrors {@Signature_*}: at send-time / snapshot freeze
+                // (resolveFormFields == false) we emit the tag verbatim so it
+                // survives into the signed-doc template; at finalize re-render
+                // (resolveFormFields == true) the signature service injects the
+                // collected values under '__formFields' and we resolve here using
+                // the SAME output-format escaping the plain {Field} branch uses.
+                if (tagContent.startsWith('?')) {
+                    if (!resolveFormFields) {
+                        // Preserve verbatim until the finalize re-render.
+                        output += '{' + rawTag + '}';
+                        cursor = tagClose + 1;
+                        continue;
+                    }
+                    String formSpec = tagContent.substring(1).trim();
+                    String formKey = formSpec;
+                    String formFallback = '';
+                    Integer pipePos = formSpec.indexOf('|');
+                    if (pipePos != -1) {
+                        formKey = formSpec.substring(0, pipePos).trim();
+                        formFallback = formSpec.substring(pipePos + 1);
+                    }
+                    Object formVal = resolveValue(data, '__formFields.' + formKey);
+                    String formStr = (formVal == null || String.isBlank(String.valueOf(formVal)))
+                        ? formFallback
+                        : String.valueOf(formVal);
+                    // Same plain-text escaping as the {Field} substitution branch
+                    // below (rich-text/HTML conversion is not needed — form-field
+                    // values are scalar text/number/date/checkbox/picklist).
+                    if (currentTemplateType == 'PowerPoint') {
+                        output += formStr.escapeXml();
+                    } else if (currentTemplateType == 'HTML') {
+                        output += formStr.replace('\r\n', '\n').replace('\r', '\n').escapeXml().replace('\n', '<br/>');
+                    } else {
+                        String rPr = extractCurrentRunProperties(output);
+                        output += convertMultilineToXml(formStr, rPr);
+                    }
                     cursor = tagClose + 1;
                     continue;
                 }

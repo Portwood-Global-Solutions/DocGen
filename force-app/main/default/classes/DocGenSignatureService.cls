@@ -87,9 +87,26 @@ public without sharing class DocGenSignatureService {
 
     /**
      * Builds the HTML verification block appended to the end of the signed PDF.
-     * Includes signer details, timestamps, and a verification URL.
+     * Includes signer details, timestamps, and a verification URL. Back-compat
+     * 2-arg signature — delegates to the form-field-aware overload with no fields.
      */
     public static String buildVerificationBlockHtml(Id requestId, List<DocGen_Signer__c> signers) {
+        return buildVerificationBlockHtml(requestId, signers, null, null);
+    }
+
+    /**
+     * Form-field-aware overload: additionally renders a "Form Field Responses"
+     * section listing every configured field where listOnCertificate==true, with
+     * the value collected during signing. Reuses the existing inline-style table.
+     * `certFields` may be null/empty (no extra section); `formValues` is the
+     * collected {key:value} map (DocGenFieldWritebackService.collectValues).
+     */
+    public static String buildVerificationBlockHtml(
+        Id requestId,
+        List<DocGen_Signer__c> signers,
+        List<DocGenFieldWritebackService.FormFieldDef> certFields,
+        Map<String, Object> formValues
+    ) {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         String siteUrl = settings.Experience_Site_Url__c;
         if (String.isBlank(siteUrl)) {
@@ -264,6 +281,40 @@ public without sharing class DocGenSignatureService {
             html += '</td></tr>';
         }
 
+        // Form Field Responses — list configured fields flagged listOnCertificate.
+        // Reuses the same inline-style table; one <tr> per field.
+        if (certFields != null && !certFields.isEmpty()) {
+            Map<String, Object> values = formValues != null ? formValues : new Map<String, Object>();
+            Boolean anyCertField = false;
+            String fieldRows = '';
+            for (DocGenFieldWritebackService.FormFieldDef def : certFields) {
+                if (def.listOnCertificate != true) {
+                    continue;
+                }
+                anyCertField = true;
+                Object raw = values.get(def.key);
+                String display;
+                if (def.type == 'checkbox') {
+                    Boolean checked = raw instanceof Boolean
+                        ? (Boolean) raw
+                        : (raw != null && String.valueOf(raw).equalsIgnoreCase('true'));
+                    display = checked ? 'Yes' : 'No';
+                } else {
+                    display = raw == null ? '' : String.valueOf(raw);
+                }
+                String fieldLabel = String.isNotBlank(def.label) ? def.label : def.key;
+                fieldRows +=
+                    '<tr><td style="width:140px;padding:3px 0;font-weight:bold;color:#555;vertical-align:top;">' +
+                    fieldLabel.escapeHtml4() +
+                    ':</td>';
+                fieldRows += '<td style="padding:3px 0;">' + display.escapeHtml4() + '</td></tr>';
+            }
+            if (anyCertField) {
+                html += '<tr><td colspan="2" style="padding-top:16px;padding-bottom:6px;font-size:10pt;font-weight:bold;border-bottom:1px solid #ddd;">Form Field Responses</td></tr>';
+                html += fieldRows;
+            }
+        }
+
         // Verification footer
         html += '<tr><td colspan="2" style="padding-top:16px;font-size:8pt;color:#706e6b;">';
         html += 'This document was electronically signed using ' + companyName.escapeHtml4() + '. ';
@@ -290,6 +341,34 @@ public without sharing class DocGenSignatureService {
 
         html += '</table></div>';
         return html;
+    }
+
+    /**
+     * Loads the parsed signer form-field config for a template (SYSTEM_MODE; async
+     * finalize context). Returns an empty list when the template has none or can't
+     * be read — the certificate then renders without a Form Field Responses section.
+     */
+    private static List<DocGenFieldWritebackService.FormFieldDef> loadCertFieldDefs(Id templateId) {
+        if (templateId == null) {
+            return new List<DocGenFieldWritebackService.FormFieldDef>();
+        }
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Query_Config__c' });
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            List<DocGen_Template__c> tmpls = [
+                SELECT Query_Config__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            if (!tmpls.isEmpty()) {
+                return DocGenFieldWritebackService.parseConfig(tmpls[0].Query_Config__c);
+            }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: cert field defs load failed: ' + e.getMessage());
+        }
+        return new List<DocGenFieldWritebackService.FormFieldDef>();
     }
 
     /**
@@ -1237,7 +1316,17 @@ public without sharing class DocGenSignatureService {
 
             DocGen_Signature_Request__c req = requests[0];
 
+            // Signer form fields: resolve preserved {?key} tokens at their template
+            // positions during this finalize re-render. The flag is process-static,
+            // so flip it true only for this execution and reset in finally (a leaked
+            // true would make a later send-time merge resolve {?key} too early). The
+            // collected values are aggregated once and injected into the merge data.
+            Boolean formFieldsResolvedHere = false;
+            Map<String, Object> formValues = DocGenFieldWritebackService.collectValues(requestId);
+
             try {
+                DocGenService.resolveFormFields = true;
+                formFieldsResolvedHere = true;
                 Blob pdfBlob;
                 if (Test.isRunningTest()) {
                     pdfBlob = Blob.toPdf('<html><body><p>Test PDF - Signed</p></body></html>');
@@ -1253,12 +1342,27 @@ public without sharing class DocGenSignatureService {
                     // deterministic re-render). Templates without a {#Signatures} block
                     // simply ignore the extra key.
                     snap.put('Signatures', buildSignerLoopData(requestId));
+                    // Signer form-field values resolve the preserved {?key} tokens at
+                    // their template positions in this re-render. Injected alongside
+                    // {#Signatures}; templates without {?key} tags ignore the key.
+                    snap.put('__formFields', formValues);
                     pdfBlob = renderTemplateSignaturePdf(requestId, req.Template__c, null, snap);
                 } else if (String.isNotBlank(req.Template_Ids__c)) {
                     // Multi-template packet
-                    pdfBlob = renderPacketSignaturePdf(requestId, req.Template_Ids__c, req.Related_Record_Id__c);
+                    pdfBlob = renderPacketSignaturePdf(
+                        requestId,
+                        req.Template_Ids__c,
+                        req.Related_Record_Id__c,
+                        formValues
+                    );
                 } else {
-                    pdfBlob = renderTemplateSignaturePdf(requestId, req.Template__c, req.Related_Record_Id__c);
+                    pdfBlob = renderTemplateSignaturePdf(
+                        requestId,
+                        req.Template__c,
+                        req.Related_Record_Id__c,
+                        null,
+                        formValues
+                    );
                 }
 
                 DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
@@ -1308,6 +1412,27 @@ public without sharing class DocGenSignatureService {
                     );
                     /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                     Database.insert(new List<ContentVersion>{ pdfCv }, false, AccessLevel.SYSTEM_MODE);
+
+                    // Signer form-field writeback: publish the decoupled event ONLY
+                    // after the signed PDF ContentVersion is saved, so writeback fires
+                    // once, post-completion, in the Automated Process context — never
+                    // from the guest request and never before the document is final.
+                    // The subscriber (DocGenFieldWritebackTrigger) re-derives the
+                    // writable allowlist from config and re-checks FLS per field; a
+                    // writeback failure is logged, never thrown into this finalize.
+                    if (formValues != null && !formValues.isEmpty()) {
+                        try {
+                            DocGen_Field_Writeback__e wbEvent = new DocGen_Field_Writeback__e();
+                            wbEvent.Request_Id__c = requestId;
+                            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                            EventBus.publish(wbEvent);
+                        } catch (Exception wbEx) {
+                            System.debug(
+                                LoggingLevel.WARN,
+                                'DocGen: field writeback event publish failed: ' + wbEx.getMessage()
+                            );
+                        }
+                    }
                 }
 
                 // Update document hash on existing audit records
@@ -1364,6 +1489,15 @@ public without sharing class DocGenSignatureService {
                 DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.update(req, false, AccessLevel.SYSTEM_MODE);
+            } finally {
+                // resolveFormFields is process-static — always reset so a later
+                // send-time merge in this transaction never resolves {?key} early.
+                if (formFieldsResolvedHere) {
+                    DocGenService.resolveFormFields = false;
+                }
+                // reservedMergeData is one-shot (cleared inside mergeTemplate) but
+                // reset defensively in case a render path threw before consuming it.
+                DocGenService.reservedMergeData = null;
             }
         }
 
@@ -1372,7 +1506,16 @@ public without sharing class DocGenSignatureService {
          * No DOCX intermediate — pure XML → HTML → PDF.
          */
         private Blob renderTemplateSignaturePdf(Id reqId, Id templateId, String recordId) {
-            return renderTemplateSignaturePdf(reqId, templateId, recordId, null);
+            return renderTemplateSignaturePdf(reqId, templateId, recordId, null, null);
+        }
+
+        private Blob renderTemplateSignaturePdf(
+            Id reqId,
+            Id templateId,
+            String recordId,
+            Map<String, Object> snapshotData
+        ) {
+            return renderTemplateSignaturePdf(reqId, templateId, recordId, snapshotData, null);
         }
 
         /**
@@ -1391,7 +1534,8 @@ public without sharing class DocGenSignatureService {
             Id reqId,
             Id templateId,
             String recordId,
-            Map<String, Object> snapshotData
+            Map<String, Object> snapshotData,
+            Map<String, Object> formValues
         ) {
             // Load the request cache: the frozen document body (classic-flow snapshot) +
             // the image/style maps. One query serves both.
@@ -1410,15 +1554,26 @@ public without sharing class DocGenSignatureService {
 
             Map<String, Object> mergeData;
             if (snapshotData != null) {
-                // PDF-viewer flow: re-merge from the send-time data snapshot.
+                // PDF-viewer flow: re-merge from the send-time data snapshot. The
+                // snapshot already carries '__formFields' (injected by the queueable),
+                // so the {?key} tokens resolve during this re-merge.
                 mergeData = DocGenService.mergeTemplateForSignatureFromData(templateId, snapshotData);
             } else {
                 // Classic flow: render the frozen document body with no re-merge; legacy/
                 // oversized requests (no Frozen_Document__c) fall back to a live merge.
                 List<Map<String, Object>> frozenDocs = loadFrozenMergeData(reqData.Frozen_Document__c);
-                mergeData = (frozenDocs != null && !frozenDocs.isEmpty())
-                    ? frozenDocs[0]
-                    : DocGenService.mergeTemplateForSignature(templateId, recordId);
+                if (frozenDocs != null && !frozenDocs.isEmpty()) {
+                    // Frozen body: {?key} tokens were preserved at send-time and the
+                    // frozen XML is not re-merged here, so they cannot resolve on this
+                    // path (documented limitation — form fields target the snapshot
+                    // re-render path).
+                    mergeData = frozenDocs[0];
+                } else {
+                    // Live re-merge: surface the collected form-field values under
+                    // '__formFields' for this one mergeTemplate call so {?key} resolves.
+                    DocGenService.reservedMergeData = formValues;
+                    mergeData = DocGenService.mergeTemplateForSignature(templateId, recordId);
+                }
             }
 
             String documentXml = (String) mergeData.get('combinedDocumentXml');
@@ -1575,7 +1730,12 @@ public without sharing class DocGenSignatureService {
                 WITH SYSTEM_MODE
                 ORDER BY Sort_Order__c ASC
             ];
-            String verifyBlock = buildVerificationBlockHtml(reqId, fullSigners);
+            String verifyBlock = buildVerificationBlockHtml(
+                reqId,
+                fullSigners,
+                loadCertFieldDefs(templateId),
+                formValues
+            );
             html = injectVerifyBlockBeforeLastBody(html, verifyBlock);
 
             return Blob.toPdf(html);
@@ -1585,7 +1745,12 @@ public without sharing class DocGenSignatureService {
          * Renders a multi-template packet as a single signed PDF.
          * Merges each template, stamps placements per document, concatenates HTML with page breaks.
          */
-        private Blob renderPacketSignaturePdf(Id reqId, String templateIdsJson, String recordId) {
+        private Blob renderPacketSignaturePdf(
+            Id reqId,
+            String templateIdsJson,
+            String recordId,
+            Map<String, Object> formValues
+        ) {
             List<Object> rawIds = (List<Object>) JSON.deserializeUntyped(templateIdsJson);
             List<Id> templateIds = new List<Id>();
             for (Object o : rawIds)
@@ -1696,10 +1861,17 @@ public without sharing class DocGenSignatureService {
             List<String> htmlParts = new List<String>();
             for (Integer docIdx = 0; docIdx < templateIds.size(); docIdx++) {
                 Id tid = templateIds[docIdx];
-                Map<String, Object> mergeData = (frozenDocs != null &&
-                    docIdx < frozenDocs.size())
-                    ? frozenDocs[docIdx]
-                    : DocGenService.mergeTemplateForSignature(tid, recordId);
+                Map<String, Object> mergeData;
+                if (frozenDocs != null && docIdx < frozenDocs.size()) {
+                    // Frozen body: {?key} preserved, not re-merged (documented limitation).
+                    mergeData = frozenDocs[docIdx];
+                } else {
+                    // Live re-merge for this template — inject form-field values so
+                    // {?key} resolves. reservedMergeData is one-shot (cleared inside
+                    // mergeTemplate), so set it fresh before each per-template merge.
+                    DocGenService.reservedMergeData = formValues;
+                    mergeData = DocGenService.mergeTemplateForSignature(tid, recordId);
+                }
                 String documentXml = (String) mergeData.get('combinedDocumentXml');
                 if (String.isBlank(documentXml)) {
                     documentXml = (String) mergeData.get('documentXml');
@@ -1766,7 +1938,14 @@ public without sharing class DocGenSignatureService {
                 WITH SYSTEM_MODE
                 ORDER BY Sort_Order__c ASC
             ]; // NOPMD
-            String verifyBlock = buildVerificationBlockHtml(reqId, fullSigners);
+            // Form fields are template-scoped — for a packet, list the first
+            // template's flagged fields on the single shared certificate.
+            String verifyBlock = buildVerificationBlockHtml(
+                reqId,
+                fullSigners,
+                loadCertFieldDefs(templateIds.isEmpty() ? null : templateIds[0]),
+                formValues
+            );
             // injectVerifyBlockBeforeLastBody handles the multi-</body> case —
             // packet HTML has one </body> per template, so String.replace would
             // drop the verification block after every template (the v1.77 bug).

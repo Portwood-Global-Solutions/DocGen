@@ -92,6 +92,29 @@
                 .form-input::placeholder {
                     color: #b0adab;
                 }
+                /* Signer form fields (#161) — required marker + inline validation error */
+                .form-required-marker {
+                    color: #ba0517;
+                    margin-left: 0.15rem;
+                }
+                .form-field-error {
+                    display: none;
+                    color: #ba0517;
+                    font-size: 0.75rem;
+                    margin-top: 0.25rem;
+                }
+                .form-input.form-input_invalid {
+                    border-color: #ba0517;
+                    box-shadow: 0 0 0 1px #ba0517;
+                }
+                .form-checkbox-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+                .form-checkbox-row label {
+                    margin-bottom: 0;
+                }
 
                 /* PIN */
                 .pin-input {
@@ -681,6 +704,13 @@
                             </div>
                         </div>
 
+                        <!-- Signer form fields (#161): admin-configured inputs shown after the
+                             last placement is signed and before the consent bar. Built from
+                             validateToken.formFields by renderFormFields / validateFormFields. -->
+                        <div class="guided-action-bar" id="guided-form-fields-bar" style="display: none">
+                            <div id="guided-form-fields"></div>
+                        </div>
+
                         <!-- Consent (shown after last placement) -->
                         <div class="guided-action-bar" id="guided-consent-bar" style="display: none">
                             <div class="consent-row" style="margin: 0">
@@ -932,6 +962,9 @@
                     var placements = [];
                     var currentStepIndex = 0;
                     var capturedIp = '';
+                    // Signer form fields (#161): collected values, keyed by field key.
+                    var collectedFormFields = {};
+                    var formFieldsRendered = false;
 
                     // ===== CLIENT-SIDE IP CAPTURE =====
                     // The signing page is hosted on a Salesforce Site, so signers are Guest users.
@@ -1134,10 +1167,10 @@
                             document.getElementById('btn-confirm-step').disabled = !this.value.trim();
                         });
 
-                        // Wire up consent
-                        document.getElementById('guided-consent-checkbox').addEventListener('change', function () {
-                            document.getElementById('btn-complete-signing').disabled = !this.checked;
-                        });
+                        // Wire up consent (gate also accounts for required signer form fields #161)
+                        document
+                            .getElementById('guided-consent-checkbox')
+                            .addEventListener('change', updateCompleteSigningState);
                         document
                             .getElementById('btn-complete-signing')
                             .addEventListener('click', handleCompleteSigning);
@@ -1209,6 +1242,194 @@
                         }
                     }
 
+                    // ===== SIGNER FORM FIELDS (#161) =====
+                    // Admin-configured inputs delivered on validateToken.formFields as
+                    // [{key,label,type,required,choices}]. Shown after the last placement is
+                    // signed and before the consent bar. (Helpers duplicated from
+                    // DocGenSignaturePdf.page — the two pages don't share JS.)
+                    function escapeHtml(s) {
+                        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                            return {
+                                '&': '&amp;',
+                                '<': '&lt;',
+                                '>': '&gt;',
+                                '"': '&quot;',
+                                "'": '&#39;'
+                            }[c];
+                        });
+                    }
+
+                    function renderFormFields(container, fields) {
+                        if (!container) return;
+                        if (!fields || !fields.length) {
+                            container.innerHTML = '';
+                            return;
+                        }
+                        if (formFieldsRendered) return;
+                        var html = '';
+                        for (var i = 0; i < fields.length; i++) {
+                            var f = fields[i];
+                            var inputId = 'ff-' + f.key;
+                            var req = f.required ? ' aria-required="true"' : '';
+                            var marker = f.required
+                                ? ' <span class="form-required-marker" aria-hidden="true">*</span>'
+                                : '';
+                            var type = f.type || 'text';
+                            if (type === 'checkbox') {
+                                html +=
+                                    '<div class="form-group">' +
+                                    '<div class="form-checkbox-row">' +
+                                    '<input id="' +
+                                    inputId +
+                                    '" type="checkbox" data-key="' +
+                                    escapeHtml(f.key) +
+                                    '" data-required="' +
+                                    (f.required ? '1' : '0') +
+                                    '"' +
+                                    req +
+                                    ' />' +
+                                    '<label for="' +
+                                    inputId +
+                                    '">' +
+                                    escapeHtml(f.label) +
+                                    marker +
+                                    '</label>' +
+                                    '</div>' +
+                                    '<span class="form-field-error" id="' +
+                                    inputId +
+                                    '-err" role="alert"></span>' +
+                                    '</div>';
+                            } else if (type === 'picklist') {
+                                var opts = '<option value=""></option>';
+                                var choices = f.choices || [];
+                                for (var c = 0; c < choices.length; c++) {
+                                    opts +=
+                                        '<option value="' +
+                                        escapeHtml(choices[c]) +
+                                        '">' +
+                                        escapeHtml(choices[c]) +
+                                        '</option>';
+                                }
+                                html +=
+                                    '<div class="form-group">' +
+                                    '<label for="' +
+                                    inputId +
+                                    '">' +
+                                    escapeHtml(f.label) +
+                                    marker +
+                                    '</label>' +
+                                    '<select id="' +
+                                    inputId +
+                                    '" class="form-input" data-key="' +
+                                    escapeHtml(f.key) +
+                                    '" data-required="' +
+                                    (f.required ? '1' : '0') +
+                                    '"' +
+                                    req +
+                                    '>' +
+                                    opts +
+                                    '</select>' +
+                                    '<span class="form-field-error" id="' +
+                                    inputId +
+                                    '-err" role="alert"></span>' +
+                                    '</div>';
+                            } else {
+                                var htmlType = type === 'number' ? 'number' : type === 'date' ? 'date' : 'text';
+                                html +=
+                                    '<div class="form-group">' +
+                                    '<label for="' +
+                                    inputId +
+                                    '">' +
+                                    escapeHtml(f.label) +
+                                    marker +
+                                    '</label>' +
+                                    '<input id="' +
+                                    inputId +
+                                    '" type="' +
+                                    htmlType +
+                                    '" class="form-input" data-key="' +
+                                    escapeHtml(f.key) +
+                                    '" data-required="' +
+                                    (f.required ? '1' : '0') +
+                                    '"' +
+                                    req +
+                                    ' />' +
+                                    '<span class="form-field-error" id="' +
+                                    inputId +
+                                    '-err" role="alert"></span>' +
+                                    '</div>';
+                            }
+                        }
+                        container.innerHTML = html;
+                        formFieldsRendered = true;
+                        var inputs = container.querySelectorAll('[data-key]');
+                        for (var k = 0; k < inputs.length; k++) {
+                            inputs[k].addEventListener('input', updateCompleteSigningState);
+                            inputs[k].addEventListener('change', updateCompleteSigningState);
+                        }
+                    }
+
+                    // Read current values + validate required fields. Returns
+                    // { valid, values }. Paints inline errors and stashes into
+                    // collectedFormFields.
+                    function validateFormFields() {
+                        var container = document.getElementById('guided-form-fields');
+                        var values = {};
+                        var valid = true;
+                        if (!container) return { valid: true, values: values };
+                        var inputs = container.querySelectorAll('[data-key]');
+                        for (var i = 0; i < inputs.length; i++) {
+                            var el = inputs[i];
+                            var key = el.getAttribute('data-key');
+                            var required = el.getAttribute('data-required') === '1';
+                            var errEl = document.getElementById(el.id + '-err');
+                            var val;
+                            var missing = false;
+                            if (el.type === 'checkbox') {
+                                val = el.checked;
+                                missing = required && !el.checked;
+                            } else {
+                                val = (el.value || '').trim();
+                                missing = required && !val;
+                            }
+                            values[key] = val;
+                            if (missing) {
+                                valid = false;
+                                if (errEl) {
+                                    errEl.textContent = 'This field is required.';
+                                    errEl.style.display = '';
+                                }
+                                if (el.classList) el.classList.add('form-input_invalid');
+                            } else {
+                                if (errEl) {
+                                    errEl.textContent = '';
+                                    errEl.style.display = 'none';
+                                }
+                                if (el.classList) el.classList.remove('form-input_invalid');
+                            }
+                        }
+                        collectedFormFields = values;
+                        return { valid: valid, values: values };
+                    }
+
+                    function showFormFields() {
+                        var fields = signerData && signerData.formFields ? signerData.formFields : null;
+                        var bar = document.getElementById('guided-form-fields-bar');
+                        if (!fields || !fields.length) {
+                            if (bar) bar.style.display = 'none';
+                            return;
+                        }
+                        renderFormFields(document.getElementById('guided-form-fields'), fields);
+                        if (bar) bar.style.display = '';
+                    }
+
+                    // Gate the Complete Signing button on consent + required form fields.
+                    function updateCompleteSigningState() {
+                        var consent = document.getElementById('guided-consent-checkbox').checked;
+                        var fieldsValid = validateFormFields().valid;
+                        document.getElementById('btn-complete-signing').disabled = !(consent && fieldsValid);
+                    }
+
                     function updateGuidedUI() {
                         var total = placements.length;
                         var signedCount = 0;
@@ -1216,14 +1437,17 @@
                             if (placements[i].status === 'Signed') signedCount++;
                         }
 
-                        // If all signed, show consent
+                        // If all signed, show signer form fields (#161) then consent
                         if (signedCount >= total) {
                             document.getElementById('guided-action-bar').style.display = 'none';
+                            showFormFields();
                             document.getElementById('guided-consent-bar').style.display = '';
                             document.getElementById('guided-step-counter').textContent = 'All placements signed';
                             document.getElementById('guided-progress-bar').style.width = '100%';
                             return;
                         }
+                        // Not yet at the final step — keep the form-fields bar hidden.
+                        document.getElementById('guided-form-fields-bar').style.display = 'none';
 
                         // Update progress
                         var pct = total > 0 ? Math.round((signedCount / total) * 100) : 0;
@@ -1418,6 +1642,13 @@
                     function handleCompleteSigning() {
                         var consentGiven = document.getElementById('guided-consent-checkbox').checked;
                         if (!consentGiven) return;
+                        // Validate + collect signer form fields (#161); bail if invalid.
+                        var ff = validateFormFields();
+                        if (!ff.valid) {
+                            updateCompleteSigningState();
+                            return;
+                        }
+                        var formFieldJson = JSON.stringify(collectedFormFields);
 
                         showState('processing');
                         document.getElementById('processing-status').textContent = 'Saving your signature...';
@@ -1440,6 +1671,7 @@
                             true,
                             capturedIp,
                             userAgent,
+                            formFieldJson,
                             function (result, event) {
                                 if (!event.status) {
                                     showError('Save failed: ' + (event.message || 'Unknown error'));
@@ -1573,6 +1805,8 @@
                                 consentGiven,
                                 capturedIp,
                                 userAgent,
+                                // Legacy (non-guided) screen has no signer form fields (#161).
+                                '{}',
                                 function (result, event) {
                                     if (!event.status) {
                                         showError('Save failed: ' + (event.message || 'Unknown error'));

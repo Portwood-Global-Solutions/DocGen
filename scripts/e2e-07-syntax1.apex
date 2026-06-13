@@ -634,6 +634,9 @@ try {
     System.debug('SECTION SYM: FAIL — ' + e.getMessage());
 }
 
+// NOTE: {?key} preserve-vs-resolve form-field coverage lives in e2e-07-syntax4
+// (this script is near the 20,000-char Anonymous Apex limit).
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX1 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

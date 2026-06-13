@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Field_Data_Json__c</fullName>
+    <description
+    >JSON object ({key:value}) of signer form-field values collected during e-signing. Validated server-side against the template's formFields config (required enforced, types coerced, unknown keys dropped) before write. Source for the finalize re-render ({?key} merge tags) and the decoupled record-writeback subsystem (DocGen_Field_Writeback__e). Guest write is gated by the one-shot Secure_Token__c capability, never by guest CRUD.</description>
+    <externalId>false</externalId>
+    <label>Field Data Json</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

@@ -97,6 +97,29 @@
                 .form-input::placeholder {
                     color: #b0adab;
                 }
+                /* Signer form fields (#161) — required marker + inline validation error */
+                .form-required-marker {
+                    color: #ba0517;
+                    margin-left: 0.15rem;
+                }
+                .form-field-error {
+                    display: none;
+                    color: #ba0517;
+                    font-size: 0.75rem;
+                    margin-top: 0.25rem;
+                }
+                .form-input.form-input_invalid {
+                    border-color: #ba0517;
+                    box-shadow: 0 0 0 1px #ba0517;
+                }
+                .form-checkbox-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+                .form-checkbox-row label {
+                    margin-bottom: 0;
+                }
 
                 /* PIN */
                 .pin-input {
@@ -796,6 +819,11 @@
                                 autocomplete="name"
                             />
                         </div>
+                        <!-- Signer form fields (#161): admin-configured inputs rendered at
+                             the final/consent step from validateToken.formFields. Hidden
+                             during per-spot capture. Built + validated by renderFormFields /
+                             validateFormFields. -->
+                        <div id="modal-form-fields" style="display: none"></div>
                         <div class="consent-row" style="margin: 0">
                             <input id="modal-consent-checkbox" type="checkbox" />
                             <label for="modal-consent-checkbox">
@@ -1826,7 +1854,7 @@
                     // when this signer completes the request — a Certificate of Completion
                     // page, then finalize via saveCompositedSignedPdf. In-browser; no server
                     // re-render and no image-fetch limitation. Returns a Promise.
-                    function compositeAndFinalize(typedName, consentGiven, btn) {
+                    function compositeAndFinalize(typedName, consentGiven, btn, formFieldJson) {
                         if (typeof PDFLib === 'undefined') {
                             return Promise.reject(new Error('PDFLib not loaded'));
                         }
@@ -1946,6 +1974,7 @@
                                         consentGiven,
                                         capturedIp,
                                         ua,
+                                        formFieldJson != null ? formFieldJson : '{}',
                                         function (result, event) {
                                             if (!event.status || !result || result.success === false) {
                                                 reject(
@@ -1975,6 +2004,8 @@
 
                         // Per-spot capture: no consent here (collected once at final submit).
                         consentRow.style.display = 'none';
+                        // Form fields are collected once at final submit, not per-spot.
+                        hideFormFields();
                         showModalMsg('', 'info');
 
                         // Draw-pad: offer free-hand capture for signature + initials fields.
@@ -2035,9 +2066,197 @@
                         nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
                         document.getElementById('modal-consent-checkbox').parentNode.style.display = '';
                         document.getElementById('modal-consent-checkbox').checked = false;
+                        showFormFields();
                         showModalMsg('', 'info');
                         updateSignSubmitState();
                         document.getElementById('sign-modal').style.display = '';
+                    }
+
+                    // ===== SIGNER FORM FIELDS (#161) =====
+                    // Admin-configured inputs delivered on validateToken.formFields as
+                    // [{key,label,type,required,choices}]. Rendered into #modal-form-fields
+                    // at the final/consent step only; the per-spot capture flow hides them.
+                    var formFieldsRendered = false;
+
+                    function escapeHtml(s) {
+                        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                            return {
+                                '&': '&amp;',
+                                '<': '&lt;',
+                                '>': '&gt;',
+                                '"': '&quot;',
+                                "'": '&#39;'
+                            }[c];
+                        });
+                    }
+
+                    // Build labelled inputs by type into `container`. Idempotent: only
+                    // builds once per page load (values persist if the modal reopens).
+                    function renderFormFields(container, fields) {
+                        if (!container) return;
+                        if (!fields || !fields.length) {
+                            container.style.display = 'none';
+                            container.innerHTML = '';
+                            return;
+                        }
+                        if (!formFieldsRendered) {
+                            var html = '';
+                            for (var i = 0; i < fields.length; i++) {
+                                var f = fields[i];
+                                var inputId = 'ff-' + f.key;
+                                var req = f.required ? ' aria-required="true"' : '';
+                                var marker = f.required
+                                    ? ' <span class="form-required-marker" aria-hidden="true">*</span>'
+                                    : '';
+                                var type = f.type || 'text';
+                                if (type === 'checkbox') {
+                                    html +=
+                                        '<div class="form-group">' +
+                                        '<div class="form-checkbox-row">' +
+                                        '<input id="' +
+                                        inputId +
+                                        '" type="checkbox" data-key="' +
+                                        escapeHtml(f.key) +
+                                        '" data-required="' +
+                                        (f.required ? '1' : '0') +
+                                        '"' +
+                                        req +
+                                        ' />' +
+                                        '<label for="' +
+                                        inputId +
+                                        '">' +
+                                        escapeHtml(f.label) +
+                                        marker +
+                                        '</label>' +
+                                        '</div>' +
+                                        '<span class="form-field-error" id="' +
+                                        inputId +
+                                        '-err" role="alert"></span>' +
+                                        '</div>';
+                                } else if (type === 'picklist') {
+                                    var opts = '<option value=""></option>';
+                                    var choices = f.choices || [];
+                                    for (var c = 0; c < choices.length; c++) {
+                                        opts +=
+                                            '<option value="' +
+                                            escapeHtml(choices[c]) +
+                                            '">' +
+                                            escapeHtml(choices[c]) +
+                                            '</option>';
+                                    }
+                                    html +=
+                                        '<div class="form-group">' +
+                                        '<label for="' +
+                                        inputId +
+                                        '">' +
+                                        escapeHtml(f.label) +
+                                        marker +
+                                        '</label>' +
+                                        '<select id="' +
+                                        inputId +
+                                        '" class="form-input" data-key="' +
+                                        escapeHtml(f.key) +
+                                        '" data-required="' +
+                                        (f.required ? '1' : '0') +
+                                        '"' +
+                                        req +
+                                        '>' +
+                                        opts +
+                                        '</select>' +
+                                        '<span class="form-field-error" id="' +
+                                        inputId +
+                                        '-err" role="alert"></span>' +
+                                        '</div>';
+                                } else {
+                                    var htmlType = type === 'number' ? 'number' : type === 'date' ? 'date' : 'text';
+                                    html +=
+                                        '<div class="form-group">' +
+                                        '<label for="' +
+                                        inputId +
+                                        '">' +
+                                        escapeHtml(f.label) +
+                                        marker +
+                                        '</label>' +
+                                        '<input id="' +
+                                        inputId +
+                                        '" type="' +
+                                        htmlType +
+                                        '" class="form-input" data-key="' +
+                                        escapeHtml(f.key) +
+                                        '" data-required="' +
+                                        (f.required ? '1' : '0') +
+                                        '"' +
+                                        req +
+                                        ' />' +
+                                        '<span class="form-field-error" id="' +
+                                        inputId +
+                                        '-err" role="alert"></span>' +
+                                        '</div>';
+                                }
+                            }
+                            container.innerHTML = html;
+                            formFieldsRendered = true;
+                            // Live re-validation + submit-state refresh as the signer types.
+                            var inputs = container.querySelectorAll('[data-key]');
+                            for (var k = 0; k < inputs.length; k++) {
+                                inputs[k].addEventListener('input', updateSignSubmitState);
+                                inputs[k].addEventListener('change', updateSignSubmitState);
+                            }
+                        }
+                        container.style.display = '';
+                    }
+
+                    // Read current values + validate required fields. Returns
+                    // { valid: Boolean, values: { key: value } }. Paints inline errors.
+                    function validateFormFields() {
+                        var container = document.getElementById('modal-form-fields');
+                        var values = {};
+                        var valid = true;
+                        if (!container) return { valid: true, values: values };
+                        var inputs = container.querySelectorAll('[data-key]');
+                        for (var i = 0; i < inputs.length; i++) {
+                            var el = inputs[i];
+                            var key = el.getAttribute('data-key');
+                            var required = el.getAttribute('data-required') === '1';
+                            var errEl = document.getElementById(el.id + '-err');
+                            var val;
+                            var missing = false;
+                            if (el.type === 'checkbox') {
+                                val = el.checked;
+                                missing = required && !el.checked;
+                            } else {
+                                val = (el.value || '').trim();
+                                missing = required && !val;
+                            }
+                            values[key] = val;
+                            if (missing) {
+                                valid = false;
+                                if (errEl) {
+                                    errEl.textContent = 'This field is required.';
+                                    errEl.style.display = '';
+                                }
+                                if (el.classList) el.classList.add('form-input_invalid');
+                            } else {
+                                if (errEl) {
+                                    errEl.textContent = '';
+                                    errEl.style.display = 'none';
+                                }
+                                if (el.classList) el.classList.remove('form-input_invalid');
+                            }
+                        }
+                        return { valid: valid, values: values };
+                    }
+
+                    function showFormFields() {
+                        renderFormFields(
+                            document.getElementById('modal-form-fields'),
+                            signerData && signerData.formFields ? signerData.formFields : null
+                        );
+                    }
+
+                    function hideFormFields() {
+                        var c = document.getElementById('modal-form-fields');
+                        if (c) c.style.display = 'none';
                     }
 
                     // ===== SIGNING MODAL =====
@@ -2058,6 +2277,7 @@
                         var nameInput = document.getElementById('modal-typed-name');
                         nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
                         document.getElementById('modal-consent-checkbox').checked = false;
+                        showFormFields();
                         showModalMsg('', 'info');
                         updateSignSubmitState();
                         document.getElementById('sign-modal').style.display = '';
@@ -2079,8 +2299,10 @@
                             // (Date types pre-enable in openPlacementCapture).
                             btn.disabled = !(nameVal || DrawPad.hasInk());
                         } else {
-                            // 'pdf' (legacy single) and 'final': require name + consent.
-                            btn.disabled = !(nameVal && consentVal);
+                            // 'pdf' (legacy single) and 'final': require name + consent +
+                            // all required signer form fields (#161).
+                            var fieldsValid = validateFormFields().valid;
+                            btn.disabled = !(nameVal && consentVal && fieldsValid);
                         }
                     }
 
@@ -2122,6 +2344,11 @@
                         var typedName = document.getElementById('modal-typed-name').value.trim();
                         var consentGiven = document.getElementById('modal-consent-checkbox').checked;
                         if (!typedName || !consentGiven) return;
+                        var ff = validateFormFields();
+                        if (!ff.valid) {
+                            updateSignSubmitState();
+                            return;
+                        }
 
                         var btn = document.getElementById('btn-sign-submit');
                         btn.disabled = true;
@@ -2137,6 +2364,7 @@
                             consentGiven,
                             capturedIp,
                             userAgent,
+                            JSON.stringify(ff.values),
                             function (result, event) {
                                 btn.disabled = false;
                                 btn.textContent = 'Sign';
@@ -2228,6 +2456,12 @@
                         var typedName = document.getElementById('modal-typed-name').value.trim();
                         var consentGiven = document.getElementById('modal-consent-checkbox').checked;
                         if (!typedName || !consentGiven) return;
+                        var ff = validateFormFields();
+                        if (!ff.valid) {
+                            updateSignSubmitState();
+                            return;
+                        }
+                        var formFieldJson = JSON.stringify(ff.values);
 
                         var btn = document.getElementById('btn-sign-submit');
                         btn.disabled = true;
@@ -2247,7 +2481,7 @@
                             }
                         }
                         if (hasDrawn && sourcePdfBase64) {
-                            compositeAndFinalize(typedName, consentGiven, btn)
+                            compositeAndFinalize(typedName, consentGiven, btn, formFieldJson)
                                 .then(function (result) {
                                     btn.disabled = false;
                                     btn.textContent = 'Sign';
@@ -2283,6 +2517,7 @@
                             consentGiven,
                             capturedIp,
                             userAgent,
+                            formFieldJson,
                             function (result, event) {
                                 btn.disabled = false;
                                 btn.textContent = 'Sign';
