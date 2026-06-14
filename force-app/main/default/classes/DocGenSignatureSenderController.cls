@@ -495,10 +495,13 @@ public with sharing class DocGenSignatureSenderController {
         String documentTitleFormat
     ) {
         // Validate template exists
-        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Name', 'Document_Title_Format__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> templates = [
-            SELECT Id, Name
+            SELECT Id, Name, Document_Title_Format__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
             WITH SYSTEM_MODE
@@ -506,6 +509,12 @@ public with sharing class DocGenSignatureSenderController {
         ];
         if (templates.isEmpty()) {
             throw new AuraHandledException('Template not found.');
+        }
+
+        // Inherit the template's document-naming pattern for the SIGNED PDF when the
+        // caller didn't pass an override, so signing matches normal generation (#2).
+        if (String.isBlank(documentTitleFormat) && String.isNotBlank(templates[0].Document_Title_Format__c)) {
+            documentTitleFormat = templates[0].Document_Title_Format__c;
         }
 
         // Parse signers JSON
@@ -1167,7 +1176,7 @@ public with sharing class DocGenSignatureSenderController {
         String documentTitleFormat
     ) {
         List<DocGen_Template__c> tpls = [
-            SELECT Id, Name
+            SELECT Id, Name, Document_Title_Format__c
             FROM DocGen_Template__c
             WHERE Id = :templateId
             WITH SYSTEM_MODE
@@ -1175,6 +1184,15 @@ public with sharing class DocGenSignatureSenderController {
         ];
         if (tpls.isEmpty()) {
             throw new AuraHandledException('Template not found.');
+        }
+
+        // Inherit the template's document-naming pattern so the SIGNED PDF follows the
+        // same name the template uses for normal generation (e.g. "Waiver - {Name}
+        // {Today: MM/DD/YYYY}"). Only when the caller didn't pass an explicit override.
+        // Without this, signed docs fell back to "<Template> - Signed" regardless of the
+        // template's configured name (Sarah's #2).
+        if (String.isBlank(documentTitleFormat) && String.isNotBlank(tpls[0].Document_Title_Format__c)) {
+            documentTitleFormat = tpls[0].Document_Title_Format__c;
         }
 
         List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);

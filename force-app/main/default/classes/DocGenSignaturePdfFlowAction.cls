@@ -144,7 +144,7 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
         // Runtime errors (DML failures, deleted CV) are caught and returned in Result
         try {
             String signingOrder = String.isNotBlank(req.signingOrder) ? req.signingOrder : 'Parallel';
-            if (signingOrder != 'Parallel' && signingOrder != 'Sequential') {
+            if (signingOrder != 'Parallel' && signingOrder != 'Sequential' && signingOrder != 'Single') {
                 signingOrder = 'Parallel';
             }
 

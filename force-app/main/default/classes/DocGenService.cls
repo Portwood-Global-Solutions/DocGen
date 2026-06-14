@@ -7452,7 +7452,21 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             Pattern p = Pattern.compile('\\{([^}]+)\\}');
             Matcher m = p.matcher(format);
             while (m.find()) {
-                fieldPaths.add(m.group(1));
+                String tok = m.group(1).trim();
+                // Skip built-in special tokens — {Today}, {Now}, {Today: MM/DD/YYYY},
+                // {Now: HH:mm} — which generateDocTitle resolves itself. They are NOT
+                // SObject fields; querying them broke the dynamic SOQL (the ':' in a date
+                // format threw "unexpected token: ':'", failing the whole load so {Name}
+                // never resolved — Sarah's "Waiver - Signed" fallback).
+                String head = (tok.contains(':') ? tok.substringBefore(':') : tok).trim();
+                if (head.equalsIgnoreCase('Today') || head.equalsIgnoreCase('Now')) {
+                    continue;
+                }
+                // Only real field paths (Name, Account.Name) are queryable.
+                if (!Pattern.matches('(?i)[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*', tok)) {
+                    continue;
+                }
+                fieldPaths.add(tok);
             }
         }
         if (fieldPaths.isEmpty()) {
@@ -7662,7 +7676,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                             : UserInfo.getLocale();
                         strVal = dt.format(getLocaleDatePattern(dateLocale));
                     } else {
-                        strVal = dt.format(dateFormat);
+                        // Forgive the common US-date convention: in Java SimpleDateFormat
+                        // uppercase D = day-of-YEAR and uppercase Y = week-YEAR, so an
+                        // author writing "MM/DD/YYYY" would otherwise get "06/164/2026".
+                        // They almost always mean day-of-month + calendar year, so
+                        // normalize D->d and Y->y (M stays uppercase — lowercase m = minutes).
+                        String fmt = dateFormat.replace('YYYY', 'yyyy')
+                            .replace('YY', 'yy')
+                            .replace('DD', 'dd')
+                            .replace('D', 'd');
+                        strVal = dt.format(fmt);
                     }
                 } else if (dateFormat != null && isNumericFormat(dateFormat)) {
                     strVal = formatNumber(val, dateFormat);
