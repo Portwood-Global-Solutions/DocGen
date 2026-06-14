@@ -85,8 +85,10 @@ private class DocGenGuidedSigningTest {
     }
 
     @IsTest
-    static void rejectsTemplateWithNoPlacementTags() {
-        // Template with no {@Signature_...} tags should be rejected.
+    static void synthesizesPlacementsForTaglessTemplate() {
+        // #170 option (b): a tag-less legacy template is no longer rejected — the guided
+        // path auto-appends a "Signatures" block (Full + Date per signer) so it signs
+        // through the one consolidated path with zero author change.
         DocGen_Template__c tmpl = new DocGen_Template__c(
             Name = 'NoTags ' + Datetime.now().getTime(),
             Type__c = 'HTML',
@@ -110,21 +112,81 @@ private class DocGenGuidedSigningTest {
         );
         Account a = [SELECT Id FROM Account LIMIT 1];
 
-        Boolean threw = false;
         Test.startTest();
-        try {
-            DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
-                tmpl.Id,
-                a.Id,
-                signersJson(),
-                'Parallel',
-                null
-            );
-        } catch (Exception e) {
-            threw = true;
-        }
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(tmpl.Id, a.Id, signersJson(), 'Parallel', null);
         Test.stopTest();
-        System.assert(threw, 'Should reject a template with no placement tags');
+
+        DocGen_Signature_Request__c req = [
+            SELECT Id, Source_Document_Id__c, Frozen_Document__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :tmpl.Id
+            LIMIT 1
+        ];
+        System.assertNotEquals(null, req.Source_Document_Id__c, 'Tag-less template should still produce a viewing PDF');
+        System.assertNotEquals(null, req.Frozen_Document__c, 'Frozen body should be captured');
+
+        List<DocGen_Signature_Placement__c> plcs = [
+            SELECT Tag_Text__c, Placement_Type__c
+            FROM DocGen_Signature_Placement__c
+            WHERE Signature_Request__c = :req.Id
+        ];
+        // One signer → synthesized Full + Date.
+        System.assertEquals(2, plcs.size(), 'Synthesized Full + Date placements for the one signer');
+        Set<String> types = new Set<String>();
+        for (DocGen_Signature_Placement__c p : plcs) {
+            types.add(p.Placement_Type__c);
+            System.assert(
+                p.Tag_Text__c != null && p.Tag_Text__c.startsWith('@@SIG-'),
+                'Synthesized placement keys on a sentinel: ' + p.Tag_Text__c
+            );
+        }
+        System.assert(types.contains('Full') && types.contains('Date'), 'Both Full and Date synthesized: ' + types);
+    }
+
+    @IsTest
+    static void createsGuidedPacketAcrossTwoTemplates() {
+        // #170 consolidation: multi-template packets sign through the guided path —
+        // one combined viewing PDF + cross-document sentinel placements (Document_Index).
+        Id t1 = createTaggedTemplate();
+        Id t2 = createTaggedTemplate();
+        Account a = [SELECT Id FROM Account LIMIT 1];
+        String idsJson = JSON.serialize(new List<Id>{ t1, t2 });
+
+        Test.startTest();
+        DocGenSignatureSenderController.createGuidedPacketSignatureRequest(
+            idsJson,
+            a.Id,
+            signersJson(),
+            'Parallel',
+            null
+        );
+        Test.stopTest();
+
+        DocGen_Signature_Request__c req = [
+            SELECT Id, Template_Ids__c, Source_Document_Id__c, Frozen_Document__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :t1
+            LIMIT 1
+        ];
+        System.assertNotEquals(null, req.Source_Document_Id__c, 'Combined viewing PDF should be stored');
+        System.assertNotEquals(null, req.Template_Ids__c, 'Template_Ids__c set for a packet');
+        System.assertNotEquals(null, req.Frozen_Document__c, 'Frozen multi-document body captured');
+
+        List<DocGen_Signature_Placement__c> plcs = [
+            SELECT Document_Index__c, Tag_Text__c
+            FROM DocGen_Signature_Placement__c
+            WHERE Signature_Request__c = :req.Id
+        ];
+        System.assertEquals(6, plcs.size(), '3 tags x 2 documents = 6 placements');
+        Set<Integer> docIdxs = new Set<Integer>();
+        for (DocGen_Signature_Placement__c p : plcs) {
+            docIdxs.add(Integer.valueOf(p.Document_Index__c));
+            System.assert(
+                p.Tag_Text__c != null && p.Tag_Text__c.startsWith('@@SIG-'),
+                'Packet placement keys on a unique sentinel: ' + p.Tag_Text__c
+            );
+        }
+        System.assert(docIdxs.contains(0) && docIdxs.contains(1), 'Placements span both documents: ' + docIdxs);
     }
 
     @IsTest
