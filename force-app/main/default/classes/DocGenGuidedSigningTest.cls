@@ -144,6 +144,52 @@ private class DocGenGuidedSigningTest {
     }
 
     @IsTest
+    static void createsGuidedPacketAcrossTwoTemplates() {
+        // #170 consolidation: multi-template packets sign through the guided path —
+        // one combined viewing PDF + cross-document sentinel placements (Document_Index).
+        Id t1 = createTaggedTemplate();
+        Id t2 = createTaggedTemplate();
+        Account a = [SELECT Id FROM Account LIMIT 1];
+        String idsJson = JSON.serialize(new List<Id>{ t1, t2 });
+
+        Test.startTest();
+        DocGenSignatureSenderController.createGuidedPacketSignatureRequest(
+            idsJson,
+            a.Id,
+            signersJson(),
+            'Parallel',
+            null
+        );
+        Test.stopTest();
+
+        DocGen_Signature_Request__c req = [
+            SELECT Id, Template_Ids__c, Source_Document_Id__c, Frozen_Document__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :t1
+            LIMIT 1
+        ];
+        System.assertNotEquals(null, req.Source_Document_Id__c, 'Combined viewing PDF should be stored');
+        System.assertNotEquals(null, req.Template_Ids__c, 'Template_Ids__c set for a packet');
+        System.assertNotEquals(null, req.Frozen_Document__c, 'Frozen multi-document body captured');
+
+        List<DocGen_Signature_Placement__c> plcs = [
+            SELECT Document_Index__c, Tag_Text__c
+            FROM DocGen_Signature_Placement__c
+            WHERE Signature_Request__c = :req.Id
+        ];
+        System.assertEquals(6, plcs.size(), '3 tags x 2 documents = 6 placements');
+        Set<Integer> docIdxs = new Set<Integer>();
+        for (DocGen_Signature_Placement__c p : plcs) {
+            docIdxs.add(Integer.valueOf(p.Document_Index__c));
+            System.assert(
+                p.Tag_Text__c != null && p.Tag_Text__c.startsWith('@@SIG-'),
+                'Packet placement keys on a unique sentinel: ' + p.Tag_Text__c
+            );
+        }
+        System.assert(docIdxs.contains(0) && docIdxs.contains(1), 'Placements span both documents: ' + docIdxs);
+    }
+
+    @IsTest
     static void compositeFinalizeAndCertificate() {
         Id tplId = createTaggedTemplate();
         Account a = [SELECT Id FROM Account LIMIT 1];
