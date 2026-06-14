@@ -2165,6 +2165,53 @@
                                                 return Promise.resolve(p);
                                             });
                                         });
+                                        // Stamp signer form-field values ({?key}) at their
+                                        // @@FF-<key>@@ sentinel positions. Drawn path only — the
+                                        // typed path resolves {?key} in the server re-render.
+                                        // Mirrors Date spots: locate the (white) sentinel in the
+                                        // text layer, draw the collected value on top in black.
+                                        chain = chain.then(function () {
+                                            var ffDefs =
+                                                signerData && signerData.formFields ? signerData.formFields : [];
+                                            if (!ffDefs.length) return;
+                                            var ffValues = {};
+                                            try {
+                                                ffValues = JSON.parse(formFieldJson || '{}') || {};
+                                            } catch (e) {
+                                                ffValues = {};
+                                            }
+                                            var ffNeedles = [];
+                                            var defByKey = {};
+                                            for (var fi = 0; fi < ffDefs.length; fi++) {
+                                                ffNeedles.push('@@FF-' + ffDefs[fi].key + '@@');
+                                                defByKey[ffDefs[fi].key] = ffDefs[fi];
+                                            }
+                                            var ffHits = DocGenPdfViewer.locateAnchors(ffNeedles);
+                                            for (var fh = 0; fh < ffHits.length; fh++) {
+                                                var fhit = ffHits[fh];
+                                                // strip "@@FF-" (5) ... "@@" (2) → the form-field key
+                                                var fkey = fhit.needle.substring(5, fhit.needle.length - 2);
+                                                var fdef = defByKey[fkey];
+                                                var fraw = ffValues[fkey];
+                                                var ftext;
+                                                if (fdef && fdef.type === 'checkbox') {
+                                                    ftext = fraw === true || fraw === 'true' ? 'Yes' : 'No';
+                                                } else {
+                                                    ftext = fraw == null ? '' : String(fraw);
+                                                }
+                                                if (!ftext) continue;
+                                                var frect = DocGenPdfViewer.hitToPdfRect(fhit);
+                                                if (!frect || !pages[frect.pageIndex]) continue;
+                                                var fpage = pages[frect.pageIndex];
+                                                var fsz = Math.max(Math.min(frect.h, 12), 8);
+                                                fpage.drawText(ftext, {
+                                                    x: frect.x,
+                                                    y: frect.yBottom + 1,
+                                                    size: fsz,
+                                                    font: helv
+                                                });
+                                            }
+                                        });
                                         return chain.then(function () {
                                             var iAmCompleting = cert && cert.othersAllSigned;
                                             if (!iAmCompleting) {

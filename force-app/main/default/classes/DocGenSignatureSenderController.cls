@@ -1055,6 +1055,26 @@ public with sharing class DocGenSignatureSenderController {
         return (bodyClose != -1) ? (body.substring(0, bodyClose) + para + body.substring(bodyClose)) : (body + para);
     }
 
+    /**
+     * Signer form-field tags {?key} (optional {?key|fallback}) on the guided PDF path.
+     * Rewrites them in the VIEWING html to white (invisible) @@FF-<key>@@ sentinels: the
+     * literal tag never shows to the signer, yet the PDF.js text layer can still locate the
+     * position so the drawn-signature client stamps the collected value there (mirrors the
+     * @@SIG-n@@ signature sentinels). The FROZEN body deliberately keeps the bare {?key}
+     * tag, so the typed-name finalize re-render resolves it server-side
+     * (DocGenService.resolveFormFields). Key grammar matches DocGenFieldWritebackService.
+     */
+    @TestVisible
+    private static String applyFormFieldViewingSentinels(String viewingHtml) {
+        if (String.isBlank(viewingHtml) || !viewingHtml.contains('{?')) {
+            return viewingHtml;
+        }
+        return viewingHtml.replaceAll(
+            '\\{\\?([A-Za-z0-9_]+)(?:\\|[^}]*)?\\}',
+            '<span style="color:#ffffff">@@FF-$1@@</span>'
+        );
+    }
+
     @AuraEnabled
     public static List<SignerResult> createGuidedPdfSignatureRequest(
         Id templateId,
@@ -1155,6 +1175,9 @@ public with sharing class DocGenSignatureSenderController {
         for (String sentinel : sentinels) {
             viewingHtml = viewingHtml.replace(sentinel, '<span style="color:#ffffff">' + sentinel + '</span>');
         }
+        // Signer form-field tags {?key}: hide the literal tag and leave a locatable
+        // @@FF-<key>@@ sentinel for the drawn-path client to stamp the value onto.
+        viewingHtml = applyFormFieldViewingSentinels(viewingHtml);
 
         // Render the viewing PDF (invisible sentinels) → standalone ContentVersion.
         Blob viewingBlob = Blob.toPdf(viewingHtml);
@@ -1391,6 +1414,8 @@ public with sharing class DocGenSignatureSenderController {
             for (String sentinel : docSentinels) {
                 docViewing = docViewing.replace(sentinel, '<span style="color:#ffffff">' + sentinel + '</span>');
             }
+            // Signer form-field tags {?key} → locatable white @@FF-<key>@@ sentinel (per doc).
+            docViewing = applyFormFieldViewingSentinels(docViewing);
             String titleHeader =
                 '<div style="background:#f8fafc;border:1px solid #e5e5e5;border-radius:6px;padding:12px 16px;margin-bottom:16px;text-align:center;">' +
                 '<strong style="font-size:14px;color:#3e3e3c;">Document ' +

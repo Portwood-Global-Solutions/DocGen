@@ -304,6 +304,67 @@ private class DocGenGuidedSigningTest {
     }
 
     @IsTest
+    static void formFieldViewingSentinels_hideTagLeaveLocatable() {
+        // The viewing PDF must NOT show the literal {?key} tag; it leaves a white,
+        // PDF.js-locatable @@FF-<key>@@ sentinel for the drawn-path client to stamp.
+        String html = '<p>Favorite color: {?favColor} and size {?size|M} done.</p>';
+        Test.startTest();
+        String out = DocGenSignatureSenderController.applyFormFieldViewingSentinels(html);
+        Test.stopTest();
+        System.assert(!out.contains('{?favColor}'), 'literal {?key} tag removed from viewing html: ' + out);
+        System.assert(!out.contains('{?size|M}'), 'literal {?key|fallback} tag removed');
+        System.assert(out.contains('@@FF-favColor@@'), 'locatable form-field sentinel present');
+        System.assert(out.contains('@@FF-size@@'), 'fallback variant reduces to the bare-key sentinel');
+        System.assert(out.contains('color:#ffffff'), 'sentinel wrapped white (invisible in the viewing PDF)');
+    }
+
+    @IsTest
+    static void guidedRequest_keepsFormFieldTagInFrozenBody() {
+        // The FROZEN body must keep the bare {?key} tag so the typed-name finalize
+        // re-render resolves it server-side (only the viewing render hides it).
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'FF Frozen ' + Datetime.now().getTime(),
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name',
+            Form_Fields_Config__c = '{"formFields":[{"key":"favColor","label":"Color","type":"text"}]}'
+        );
+        insert tmpl;
+        ContentVersion cv = new ContentVersion(
+            Title = tmpl.Name + ' Body',
+            PathOnClient = 'body.html',
+            VersionData = Blob.valueOf(
+                '<html><body><p>Color: {?favColor}</p><p>Sign: {@Signature_Signer:1:Full}</p></body></html>'
+            ),
+            FirstPublishLocationId = tmpl.Id
+        );
+        insert cv;
+        cv = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
+        insert new DocGen_Template_Version__c(
+            Template__c = tmpl.Id,
+            Content_Version_Id__c = cv.Id,
+            Is_Active__c = true
+        );
+        Account a = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(tmpl.Id, a.Id, signersJson(), 'Parallel', null);
+        Test.stopTest();
+
+        DocGen_Signature_Request__c req = [
+            SELECT Frozen_Document__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :tmpl.Id
+            LIMIT 1
+        ];
+        System.assert(
+            req.Frozen_Document__c != null && req.Frozen_Document__c.contains('{?favColor}'),
+            'Frozen body must retain the {?favColor} tag for the typed-path re-render'
+        );
+    }
+
+    @IsTest
     static void rejectsInvalidTokens() {
         Test.startTest();
         Boolean a = false, b = false;
