@@ -60,6 +60,18 @@ private class DocGenHtmlTemplateTest {
         );
         System.assert(rendered.contains('counter(page)'), 'counter(page) call expected for {PageNumber}');
         System.assert(rendered.contains('counter(pages)'), 'counter(pages) call expected for {TotalPages}');
+        // #160: counter margin boxes must declare font-family (Flying Saucer @page boxes
+        // don't inherit from body), else they render in default Times serif vs Arial body.
+        System.assert(
+            rendered.contains('@bottom-center { content:') || rendered.contains('@bottom-center {'),
+            '@bottom-center present'
+        );
+        Integer bc = rendered.indexOf('@bottom-center');
+        System.assert(
+            bc != -1 && rendered.substring(bc, Math.min(bc + 260, rendered.length())).contains('font-family'),
+            '#160: @bottom-center counter box must declare font-family: ' +
+            rendered.substring(bc, Math.min(bc + 260, rendered.length()))
+        );
         // Header text should survive into the CSS content string (with merged {Name} resolved).
         System.assert(
             rendered.contains('Hdr HTMLTpl Test Co'),

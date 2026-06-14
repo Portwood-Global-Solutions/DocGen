@@ -12,7 +12,74 @@ DocuSign-style signer **form fields** with optional base-record writeback. An ad
 - **Multi-signer:** record **writeback is single-signer only**. On a multi-signer request every signer fills the same template-scoped fields, so there is no unambiguous value to write — `performWriteback` skips the DML (logging the skip to `DocGen_Signature_Audit__c`) for any request with >1 signer; the values are still captured and shown per signer on the certificate. True per-field→signer assignment is a future enhancement.
 - **Admin picker:** `DocGenController.getUpdateableObjectFields(String)` — the `isUpdateable()` variant of `getObjectFields` so writeback-target dropdowns only offer writable fields.
 
-`Field_Data_Json__c` added to the DocGen Admin / User / Guest Signature permission sets (guest read-only — the token is the write capability) and to the `DocGenSignatureGuestSecurity.assertSignerWritableFields` documented allowlist. `SECURITY.md` updated for the new guest-writable field and the system-context writeback.
+`Field_Data_Json__c` added to the DocGen Admin / User / Guest Signature permission sets (guest read-only — the token is the write capability) and to the `DocGenSignatureGuestSecurity.assertSignerWritableFields` documented allowlist. `SECURITY.md` updated for the new guest-writable field and the system-context writeback. Built on the v3.16 single guided PDF path (`DocGenSignaturePdf.page` + `TemplateSignaturePdfQueueable`); the writeback event publishes after the v3.16-hardened signed-PDF `ContentVersion` save.
+
+## v3.16.0 — Consolidated guided signing + HTML page-counter font (build `3.16.0-1`, promoted 2026-06-14)
+
+Unifies electronic signing on the **one guided PDF path** and fixes the HTML page-counter font (#160).
+
+### Signing consolidation (#170)
+
+Previously, signing forked across paths: tag-templates used the guided field-by-field PDF experience, tag-less templates fell back to a classic typed-name page, and multi-template packets used yet another classic preview path. Each needed its own signer-input/writeback logic. Now **every** signing scenario flows through the guided path:
+
+- **Tag-less templates** no longer fall back to the classic page — a "Signatures" block (one Full + Date per signer) is auto-appended to the rendered document so they sign field-by-field with zero author change.
+- **Flow-triggered** signing and the **Signature Sender** both route all single-template signing to guided.
+- **Multi-template packets** render into one combined viewing PDF with cross-document sign-spots (`createGuidedPacketSignatureRequest`) and sign through the guided path; the classic packet preview is removed.
+
+This collapses the signing surface to one path (a single completion point for signer-input writeback) and removes a live-render integrity drift. The multi-template classic path is gone; the classic single-template page and `stampSignaturesIn*` remain only for legacy in-flight requests and the guided finalizer's sentinel stamping.
+
+### #160 — HTML page-counter font
+
+`@page` margin boxes for `{PageNumber}`/`{TotalPages}` headers/footers now declare `font-family` (Arial), so counter text renders in the document font instead of Flying Saucer's default Times serif.
+
+**Validation:** e2e-01..08 + 07-syntax1..4 PASS/FAIL0 · RunLocalTests 100% · `sf code-analyzer` 0 · guided single/tag-less/packet signing verified.
+
+## v3.15.0 — Barcodes & QR codes in HTML templates (`04tVx000000nZ33IAE`, build `3.15.0-1`, promoted 2026-06-14)
+
+`{*Field:code128}` and `{*Field:qr}` tags now render in **HTML templates**, not just Word — so HTML invoices can carry a QR pay-link, and HTML catalogs/price lists can carry a scannable barcode per row.
+
+**Root cause of the prior "Word-only" behavior:** the barcode tag is replaced during merge with a `##BARCODE:type:size:value##` sentinel, but the sentinel→CSS converter (`DocGenHtmlRenderer.renderBarcodeHtml`) was only invoked from the Word→HTML run-text path. A pure HTML template never passes through that path, so the marker survived as literal text. The rendering capability already existed (pure CSS bars / QR modules that `Blob.toPdf` renders perfectly) — it just wasn't wired into the HTML branch.
+
+**Fix:** new `DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(html)` swaps every `##BARCODE:…##` marker for inline CSS **without escaping the surrounding HTML** (the Word path's per-run helper escapes its plain-text surroundings, which is wrong for already-HTML content). `DocGenService.mergeHtmlTemplate` now runs it over the merged body, header, and footer before handing off to `Blob.toPdf`. Supported symbologies remain Code 128 and QR (Level Q error correction, ≤600 chars). No new dependencies; renders entirely in-platform.
+
+**Validation:** e2e-01..08 + 07-syntax1..4 PASS/FAIL0 (new `HTML BARCODE+QR` assertion in 07-syntax4), RunLocalTests 1547/100%/76%, `sf code-analyzer` 0 violations, real HTML→PDF render confirmed (QR invoice + per-row barcode price list).
+
+## v3.14.0 — Flow Signing Consolidation + Signed-Document Naming (`04tVx000000nYgTIAU`, build `3.14.0-2`, promoted 2026-06-14)
+
+Addresses four customer-reported issues from the Flow-triggered, single-signer signing flow — and the root-cause document-naming bug behind one of them. The theme is consolidation: Flow-triggered signing and the Signature Sender now behave identically.
+
+### 1. Flow-triggered signing uses the guided PDF path
+
+A signature request created from a Flow (the `DocGen: Create Signature Request` invocable) previously routed to the classic signing page and a server-side stamp/finalize step, while the Signature Sender LWC used the guided field-to-field experience with the reliable client-side composite. So Flow signers could see raw `{@Signature_…}` merge tags instead of the stamped signature/date. `DocGenSignatureFlowAction` now detects placement tags and routes those templates to the **guided path** (same as the Sender); tag-less legacy templates fall back to the classic page so existing Flows keep working.
+
+### 2. Signed documents follow the template's naming pattern
+
+Signed PDFs came out named `<Template> - Signed`, ignoring the template's `Document Title Format` (e.g. `Waiver - {Name} {Today: MM/DD/YYYY}`) even though normal generation respected it. **Root cause:** the title helper collected every `{…}` token as an SObject field, so `{Today: MM/DD/YYYY}` landed in the SOQL `SELECT` and threw `unexpected token ':'` — failing the whole record load, so `{Name}` never resolved and the name fell back. The helper now skips built-in `{Today}`/`{Now}` tokens and only queries real field paths. The template's format is also inherited onto the signature request (guided + classic) and applied in the guided composite save. Uppercase US-date mistakes are forgiven (`MM/DD/YYYY` → `06/13/2026`, not the SimpleDateFormat day-of-year `06/164/2026`).
+
+### 3. Signer completion email
+
+When all signers finish, the signers themselves now receive a branded completion confirmation (previously only the sender was notified).
+
+### 4. "Single" signing order
+
+A `Single` option on `Signing Order` for explicit one-signer requests (behaves like Parallel for delivery), surfaced in both Flow actions.
+
+### Also
+
+- **Whitespace-aware signature stamp cards** for drawn **and** typed signatures/initials — a polished stamp card (opaque backdrop, brand border, "Signed by … · date · Portwood DocGen" footer) that grows into the side of the field with clearance so it never covers neighboring text; degrades to a clean inline mark when a tag is dropped mid-prose. Authoring rule: place signature/initial tags in their own table cell or line, never inline in body text.
+- **Silent finalize hardened** — the template-PDF finalize swallowed a failed `ContentVersion` insert, leaving a request marked `Signed` with no attached document and no error; that failure is now surfaced.
+
+### Admin note (signature emails)
+
+Invitation and completion emails require an Org-Wide Email Address with **Allow All Profiles** enabled (guest signers trigger the send) and the sending **domain DKIM-authenticated** (Salesforce blocks unauthenticated custom-domain sends). This is per-org admin/DNS setup, the same as any Salesforce OWA.
+
+### Release validation
+
+e2e-01..08 PASS/FAIL0, RunLocalTests 1536 methods / 100% / 76% org-wide, `sf code-analyzer` 0 violations, new `DocGenSarahFixesTest` 8/8. Verified in scratch: Flow→guided routing, signed-doc naming (`Waiver - Jordan Rivera 06/13/2026`), `Single` order, and the completion-email send path through a verified OWA.
+
+## v3.13.0 — Guided PDF Signing: Draw or Type on the Real Document (`04tVx000000nYdFIAU`, build `3.13.0-3`, promoted 2026-06-13)
+
+The full guided-signing overhaul. Signers walk field-to-field through the actual PDF, **drawing (mouse/finger) or typing** their signature, initials, and date, with the marks composited into the finished document client-side (PDF.js + pdf-lib, vendored — no callouts, no data egress) and a **Certificate of Completion** appended (per-signer signed time, email-verified, IP, consent, device, plus a SHA-256 document hash). Point-in-time snapshot signing keeps the signed PDF faithful to what the signer reviewed. Issue [#167](https://github.com/Portwood-Global-Solutions/DocGen/issues/167); also closed [#163](https://github.com/Portwood-Global-Solutions/DocGen/issues/163) (drawn signatures). PDF.js upgraded to 4.7.76 to clear CVE-2024-4367; SBOM in `THIRD-PARTY-NOTICES.md`.
 
 ## v3.12.0 — Date Field Fix + Verification Security (build pending)
 
@@ -3308,7 +3375,7 @@ Huge thanks to **@josephedwards-png** for PR #46 — his analysis of the relId c
 
 - **Command Hub** — Single-tab UX replacing 7 tabs. Wizard-first onboarding, embedded bulk generator, contextual help.
 - **Deep Grandchild Relationships** — Multi-level query stitching: Account → Opportunities → Line Items → Schedules. One SOQL per level, stitched in Apex. Query builder UI supports "Add Related List" inside child cards.
-- **Signature Feature Removed** — E-signatures carry legal requirements a doc gen tool should not implement. Use dedicated providers (DocuSign, Adobe Sign).
+- **Signature Feature Removed** — E-signatures carry legal requirements a doc gen tool should not implement. Use a dedicated e-signature provider.
 - **Custom Font Upload Removed** — `Blob.toPdf()` does not support CSS `@font-face` (confirmed via data URIs, static resources, and ContentVersion URLs). PDF supports Helvetica, Times, Courier, Arial Unicode MS. DOCX preserves template fonts.
 - **Font Documentation** — PDF font limitations documented. DOCX recommended for custom fonts.
 - **DOCX Download Only** — Save to Record removed for DOCX output (Aura 4MB payload limit). Download works for any size.

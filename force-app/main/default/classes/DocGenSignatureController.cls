@@ -2573,6 +2573,7 @@ public without sharing class DocGenSignatureController {
                 Signature_Request__c,
                 Signature_Request__r.Related_Record_Id__c,
                 Signature_Request__r.Template__r.Name,
+                Signature_Request__r.Document_Title_Format__c,
                 Role_Name__c,
                 Contact__c,
                 CreatedDate,
@@ -2673,9 +2674,30 @@ public without sharing class DocGenSignatureController {
         ContentVersion cv = new ContentVersion();
         cv.VersionData = EncodingUtil.base64Decode(base64Pdf);
         if (result.isComplete) {
-            // Final signed document — attach to the related record.
-            cv.Title = baseName + ' - Signed';
-            cv.PathOnClient = baseName + ' - Signed.pdf';
+            // Final signed document — attach to the related record. Honor the template's
+            // document-naming pattern (Document_Title_Format__c, e.g. "Waiver - {Name}
+            // {Today: MM/DD/YYYY}") so the SIGNED file matches normal generation; fall back
+            // to "<base> - Signed" when no pattern is set or resolution fails (Sarah's #2).
+            String signedTitle = baseName + ' - Signed';
+            String titleFormat = signer.Signature_Request__r != null
+                ? signer.Signature_Request__r.Document_Title_Format__c
+                : null;
+            if (String.isNotBlank(titleFormat) && relatedRecordId != null) {
+                try {
+                    Map<String, Object> recordData = DocGenService.loadRecordDataForTitle(relatedRecordId, titleFormat);
+                    String resolved = DocGenService.generateDocTitle(
+                        titleFormat,
+                        recordData != null ? recordData : new Map<String, Object>()
+                    );
+                    if (String.isNotBlank(resolved)) {
+                        signedTitle = resolved.trim();
+                    }
+                } catch (Exception titleErr) {
+                    System.debug(LoggingLevel.WARN, 'DocGen: signed title format failed: ' + titleErr.getMessage());
+                }
+            }
+            cv.Title = signedTitle;
+            cv.PathOnClient = signedTitle + '.pdf';
             if (relatedRecordId != null) {
                 cv.FirstPublishLocationId = relatedRecordId;
             }

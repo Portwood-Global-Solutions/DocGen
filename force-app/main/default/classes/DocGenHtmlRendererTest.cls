@@ -915,6 +915,45 @@ private class DocGenHtmlRendererTest {
         }
     }
 
+    // --- HTML-template path: replaceBarcodeMarkersInHtml (v3.15) ---------------
+
+    @IsTest
+    static void testReplaceBarcodeMarkersInHtmlCode128() {
+        // Marker embedded in already-HTML content (e.g. an HTML template table cell).
+        String html = '<td class="x">SKU: ##BARCODE:code128:200x44:PWG-1001##</td>';
+        String out = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(html);
+        System.assert(!out.contains('##BARCODE:'), 'Marker must be converted, not left raw');
+        System.assert(out.contains('display:inline-block'), 'Should render Code 128 CSS bars');
+        // Surrounding HTML must be preserved unescaped (not &lt;td&gt;).
+        System.assert(out.contains('<td class="x">'), 'Surrounding HTML must not be escaped');
+        System.assert(out.contains('SKU:'), 'Surrounding text preserved');
+    }
+
+    @IsTest
+    static void testReplaceBarcodeMarkersInHtmlQr() {
+        String html = '<div>Scan: ##BARCODE:qr:160:https://verify.portwood.dev/c/ABC##</div>';
+        String out = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(html);
+        System.assert(!out.contains('##BARCODE:'), 'QR marker must be converted');
+        System.assert(out.contains('display:inline-block'), 'Should render QR CSS modules');
+        System.assert(out.contains('<div>'), 'Surrounding HTML preserved');
+    }
+
+    @IsTest
+    static void testReplaceBarcodeMarkersInHtmlMultipleAndNoMarker() {
+        // Two markers in one body (e.g. a loop) are both converted.
+        String html = '<tr><td>##BARCODE:code128::A1##</td><td>##BARCODE:qr::A1##</td></tr>';
+        String out = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(html);
+        System.assert(!out.contains('##BARCODE:'), 'All markers converted');
+        System.assert(
+            out.contains('<tr><td>') && out.contains('</td><td>'),
+            'Surrounding table HTML preserved around both markers'
+        );
+        // No marker / null / blank are passthrough.
+        System.assertEquals('<p>no codes</p>', DocGenHtmlRenderer.replaceBarcodeMarkersInHtml('<p>no codes</p>'));
+        System.assertEquals(null, DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(null));
+        System.assertEquals('', DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(''));
+    }
+
     @IsTest
     static void testRenderBarcodeCode128WithSize() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];

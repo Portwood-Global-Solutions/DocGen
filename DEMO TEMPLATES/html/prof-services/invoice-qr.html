@@ -1,0 +1,86 @@
+<!--
+  Portwood DocGen DEMO — Invoice with QR Pay-Link (HTML -> PDF)   [requires v3.15+]
+  Base object: Opportunity   Child loop: OpportunityLineItems
+  Showcases barcodes/QR in HTML templates (new in v3.15): {*Account.Website:qr}
+  renders as a scannable QR in the PDF. Also: line-item loop, SUM total, currency.
+  Flying Saucer CSS 2.1 safe.
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1a2b3c; font-size: 10.5pt; }
+      h1 { color: #14532d; font-size: 30pt; margin: 0; letter-spacing: 1px; }
+      .muted { color: #6b7280; font-size: 9pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .meta td { padding: 2px 0; vertical-align: top; }
+      .meta .k { color: #6b7280; width: 90px; }
+      .items th { background: #14532d; color: #fff; text-align: left; padding: 7px 9px; font-size: 9pt; }
+      .items td { padding: 6px 9px; border-bottom: 1px solid #e5e7eb; font-size: 10pt; }
+      .items tr:nth-child(even) td { background: #f4f7f5; }
+      .r { text-align: right; }
+      .total { font-size: 14pt; font-weight: bold; color: #14532d; }
+      .pay { border: 1px solid #cbd5d1; background: #f4f7f5; padding: 12px; }
+      .foot { margin-top: 20px; color: #9aa5b1; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #e5e7eb; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <table>
+      <tr>
+        <td><h1>INVOICE</h1><div class="muted">Portwood Global Solutions &middot; 100 Market Street, Boston, MA 02109 &middot; billing@portwood.dev</div></td>
+        <td class="r" style="vertical-align:top;">
+          <table class="meta" style="width:auto;float:right;">
+            <tr><td class="k">Invoice No.</td><td><strong>{Name}</strong></td></tr>
+            <tr><td class="k">Date</td><td>{CloseDate:MMMM d, yyyy}</td></tr>
+            <tr><td class="k">Terms</td><td>Net 30</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table style="margin-top:16px;"><tr>
+      <td style="width:60%;vertical-align:top;">
+        <div class="muted">BILL TO</div>
+        <div style="font-size:11pt;"><strong>{Account.Name}</strong><br/>
+          {Account.BillingStreet}<br/>
+          {Account.BillingCity}, {Account.BillingState} {Account.BillingPostalCode}<br/>
+          {Account.Phone}</div>
+      </td>
+      <td style="width:40%;vertical-align:top;">
+        <table class="pay"><tr>
+          <td style="vertical-align:middle;">{*Account.Website:qr:150}</td>
+          <td style="vertical-align:middle;padding-left:10px;">
+            <strong>Scan to pay online</strong><br/>
+            <span class="muted">Point your phone camera at the code to open the secure payment portal.</span>
+          </td>
+        </tr></table>
+      </td>
+    </tr></table>
+
+    <table class="items" style="margin-top:18px;">
+      <tr><th>Item</th><th>Description</th><th class="r">Qty</th><th class="r">Unit Price</th><th class="r">Amount</th></tr>
+      {#OpportunityLineItems}
+      <tr>
+        <td>{Product2.Name}</td>
+        <td>{Description}</td>
+        <td class="r">{Quantity:#,##0}</td>
+        <td class="r">{UnitPrice:currency}</td>
+        <td class="r">{TotalPrice:currency}</td>
+      </tr>
+      {/OpportunityLineItems}
+    </table>
+
+    <table style="margin-top:10px;"><tr>
+      <td style="width:65%;"></td>
+      <td style="width:35%;">
+        <table>
+          <tr><td class="muted">Subtotal</td><td class="r">{SUM:OpportunityLineItems.TotalPrice:currency}</td></tr>
+          <tr><td class="total" style="padding-top:6px;">Total Due</td><td class="r total" style="padding-top:6px;">{SUM:OpportunityLineItems.TotalPrice:currency}</td></tr>
+        </table>
+      </td>
+    </tr></table>
+
+    <div class="foot">Thank you for your business. Please reference invoice {Name} with your payment. &middot; Generated {Today:MMMM d, yyyy}</div>
+  </body>
+</html>

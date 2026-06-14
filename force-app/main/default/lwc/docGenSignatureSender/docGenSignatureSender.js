@@ -1,7 +1,7 @@
 import { LightningElement, api, wire, track } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getSignerRolePicklistValues from '@salesforce/apex/DocGenSignatureSenderController.getSignerRolePicklistValues';
-import createTemplateSignerRequest from '@salesforce/apex/DocGenSignatureSenderController.createTemplateSignerRequestWithTitle';
+import createGuidedPdfSignatureRequest from '@salesforce/apex/DocGenSignatureSenderController.createGuidedPdfSignatureRequest';
 import markSignerVerifiedInPerson from '@salesforce/apex/DocGenSignatureSenderController.markSignerVerifiedInPerson';
 import createPacketSignerRequest from '@salesforce/apex/DocGenSignatureSenderController.createPacketSignerRequestWithTitle';
 import getContactInfo from '@salesforce/apex/DocGenSignatureSenderController.getContactInfo';
@@ -545,9 +545,15 @@ export default class DocGenSignatureSender extends LightningElement {
 
             const titleFormat = (this.documentTitleFormat || '').trim() || null;
             if (this.selectedTemplates.length === 1) {
+                const single = this.selectedTemplates[0];
+                // Consolidated signing (#170): single-template signing always uses the
+                // guided PDF path — draw/type on the real PDF, walk field-to-field, with a
+                // Certificate of Completion. Templates with {@Signature_Role:Order:Type}
+                // tags position chips at those tags; tag-less legacy templates get an
+                // auto-appended "Signatures" block server-side (option b). One path for all.
                 // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-                this.signerResults = await createTemplateSignerRequest({
-                    templateId: this.selectedTemplates[0].templateId,
+                this.signerResults = await createGuidedPdfSignatureRequest({
+                    templateId: single.templateId,
                     relatedRecordId: this.recordId,
                     signersJson,
                     signingOrder: this.signingOrder,

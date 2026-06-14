@@ -991,6 +991,36 @@
                             y2 = Math.max(a.y + a.h, b.y + b.h);
                         return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
                     }
+                    // Vertical clearance (device px) from an anchor box to the nearest
+                    // text above and below it, limited to text that horizontally overlaps
+                    // the stamp's footprint. Lets a stamp grow into real whitespace instead
+                    // of covering the line above (body text) or below (a field label like
+                    // "Member Signature"). Defaults to the page edge when nothing is in the way.
+                    function clearanceAround(box, items, viewport) {
+                        var winL = box.x - 2;
+                        var winR = box.x + Math.max(box.w, 230 * viewport.scale);
+                        var top = box.y,
+                            bot = box.y + box.h;
+                        var above = top; // to top of page
+                        var below = viewport.height - bot; // to bottom of page
+                        for (var i = 0; i < items.length; i++) {
+                            var s = items[i].str;
+                            if (!s || !s.trim()) continue;
+                            var ib = itemDeviceBox(items[i], viewport);
+                            if (ib.w <= 0.5) continue;
+                            if (ib.x > winR || ib.x + ib.w < winL) continue; // no horizontal overlap
+                            var ibBot = ib.y + ib.h;
+                            if (ibBot > top + 1 && ib.y < bot - 1) continue; // the anchor's own line
+                            if (ibBot <= top + 1) {
+                                var ga = top - ibBot;
+                                if (ga < above) above = ga;
+                            } else if (ib.y >= bot - 1) {
+                                var gb = ib.y - bot;
+                                if (gb < below) below = gb;
+                            }
+                        }
+                        return { above: Math.max(0, above), below: Math.max(0, below) };
+                    }
 
                     return {
                         // render(base64, containerEl) — see contract header above.
@@ -1073,9 +1103,12 @@
                                             box = box ? unionBox(box, b) : b;
                                         }
                                         if (box) {
+                                            var clr = clearanceAround(box, items, pg.viewport);
                                             hits.push({
                                                 needle: needle,
                                                 box: box,
+                                                clearAbove: clr.above,
+                                                clearBelow: clr.below,
                                                 wrapEl: pg.wrapEl,
                                                 page: pg.pageNum
                                             });
@@ -1130,7 +1163,9 @@
                                     x: hit.box.x / s,
                                     yBottom: pageHpts - (hit.box.y + hit.box.h) / s,
                                     w: hit.box.w / s,
-                                    h: hit.box.h / s
+                                    h: hit.box.h / s,
+                                    clearAbove: (hit.clearAbove != null ? hit.clearAbove : 9999) / s,
+                                    clearBelow: (hit.clearBelow != null ? hit.clearBelow : 9999) / s
                                 };
                             }
                             return null;
@@ -1887,6 +1922,158 @@
                                             helv = fonts[1],
                                             helvBold = fonts[2];
                                         var pages = doc.getPages();
+                                        // Renders a DocuSign-style stamp card: an opaque backdrop +
+                                        // brand border so it reads as a deliberate stamp, the drawn ink
+                                        // (signature or initials), and a "<labelLine> · Portwood DocGen"
+                                        // footer. Whitespace-aware: it grows into whichever side of the
+                                        // field line has more clearance (rect.clearAbove/clearBelow, from
+                                        // the text layer) so it never covers the line above (body text)
+                                        // nor the label below (e.g. "Member Signature"); if neither side
+                                        // fully fits, the ink shrinks to the larger gap. sigH sets the
+                                        // ink height (20 = signature, 14 = initials). Returns its width.
+                                        // Inline fallback for a field with no surrounding whitespace
+                                        // (a tag dropped mid-prose): render just the ink at ~line height,
+                                        // no box/footer, so it never covers adjacent text. Width returned.
+                                        function drawInlineMark(page, ink, rect) {
+                                            var h = Math.min(Math.max(rect.h, 11), 16);
+                                            if (ink.png) {
+                                                var asp = ink.png.width / ink.png.height || 3;
+                                                var w = Math.min(h * asp, 90);
+                                                page.drawImage(ink.png, {
+                                                    x: rect.x,
+                                                    y: rect.yBottom,
+                                                    width: w,
+                                                    height: h
+                                                });
+                                                return w;
+                                            }
+                                            var sz = Math.min(Math.max(rect.h, 10), 15);
+                                            page.drawText(ink.text || '', {
+                                                x: rect.x,
+                                                y: rect.yBottom + 1,
+                                                size: sz,
+                                                font: oblique,
+                                                color: rgb(0.07, 0.11, 0.25)
+                                            });
+                                            return oblique.widthOfTextAtSize(ink.text || '', sz);
+                                        }
+                                        // ink = { png: <embedded PNG> } for a drawn mark, or
+                                        //       { text: <string> } for a typed signature/initials
+                                        //       (rendered in the oblique "signature" font).
+                                        function drawStampCard(page, ink, rect, sigH, labelLine) {
+                                            var blue = rgb(0.13, 0.36, 0.62);
+                                            var grayTxt = rgb(0.4, 0.4, 0.42);
+                                            var hair = rgb(0.8, 0.84, 0.9);
+                                            var pad = 4;
+                                            var sigW;
+                                            if (ink.png) {
+                                                var aspect = ink.png.width / ink.png.height || 3;
+                                                sigW = Math.max(Math.min(sigH * aspect, 200), 50);
+                                            } else {
+                                                sigW = Math.max(
+                                                    Math.min(oblique.widthOfTextAtSize(ink.text || '', sigH), 200),
+                                                    50
+                                                );
+                                            }
+                                            var labelSize = 6.5,
+                                                brandSize = 6;
+                                            var brand = 'Portwood DocGen';
+                                            var labelW = helv.widthOfTextAtSize(labelLine, labelSize);
+                                            var brandW = helvBold.widthOfTextAtSize(brand, brandSize);
+                                            var accent = 3;
+                                            var innerW = Math.max(sigW, labelW + 10 + brandW);
+                                            var cardW = accent + pad + innerW + pad;
+                                            var labelH = 9;
+                                            var cardH = pad + sigH + 4 + labelH + pad;
+                                            // Clearance to the nearest text above/below the field line.
+                                            var above = rect.clearAbove != null ? rect.clearAbove : 9999;
+                                            var below = rect.clearBelow != null ? rect.clearBelow : 9999;
+                                            // INLINE field (tag mid-prose, no whitespace either side): a
+                                            // boxed card would cover the surrounding text, so degrade to a
+                                            // clean inline mark instead. Author fix is to put the field in
+                                            // its own table cell / line (see UserGuide).
+                                            if (Math.max(above, below) < 8) {
+                                                return drawInlineMark(page, ink, rect);
+                                            }
+                                            var need = cardH - rect.h; // extra height beyond the field line
+                                            var growDown = below >= above;
+                                            var room = growDown ? below : above;
+                                            if (need > 0 && room < need) {
+                                                // neither gap fits fully — shrink ink to the larger gap,
+                                                // keeping the footer legible.
+                                                sigH = Math.max(9, sigH - (need - room));
+                                                cardH = pad + sigH + 4 + labelH + pad;
+                                            }
+                                            // Grow down → card top at the line top; grow up → card bottom
+                                            // at the line bottom. Either way the card brackets the field.
+                                            var botY = growDown ? rect.yBottom + rect.h - cardH : rect.yBottom;
+                                            var x0 = rect.x;
+                                            // opaque white backdrop + brand border (lifts the stamp off
+                                            // any underlying bleed so it reads cleanly)
+                                            page.drawRectangle({
+                                                x: x0,
+                                                y: botY,
+                                                width: cardW,
+                                                height: cardH,
+                                                color: rgb(1, 1, 1),
+                                                borderColor: blue,
+                                                borderWidth: 0.75
+                                            });
+                                            // left accent bar
+                                            page.drawRectangle({
+                                                x: x0,
+                                                y: botY,
+                                                width: accent,
+                                                height: cardH,
+                                                color: blue
+                                            });
+                                            var innerX = x0 + accent + pad;
+                                            // signature ink, upper zone — drawn image or typed text
+                                            var sy = botY + cardH - pad - sigH;
+                                            if (ink.png) {
+                                                page.drawImage(ink.png, {
+                                                    x: innerX,
+                                                    y: sy,
+                                                    width: Math.min(sigW, innerW),
+                                                    height: sigH
+                                                });
+                                            } else {
+                                                // baseline a touch above the divider so the script font
+                                                // sits in the ink zone like a written signature
+                                                page.drawText(ink.text || '', {
+                                                    x: innerX,
+                                                    y: sy + sigH * 0.18,
+                                                    size: sigH,
+                                                    font: oblique,
+                                                    color: rgb(0.07, 0.11, 0.25)
+                                                });
+                                            }
+                                            // hairline divider between ink and footer
+                                            page.drawRectangle({
+                                                x: innerX,
+                                                y: sy - 2.5,
+                                                width: innerW,
+                                                height: 0.4,
+                                                color: hair
+                                            });
+                                            // footer: attribution (left) + brand wordmark (right)
+                                            var ly = botY + pad;
+                                            page.drawText(labelLine, {
+                                                x: innerX,
+                                                y: ly,
+                                                size: labelSize,
+                                                font: helv,
+                                                color: grayTxt
+                                            });
+                                            page.drawText(brand, {
+                                                x: x0 + cardW - pad - brandW,
+                                                y: ly - 0.2,
+                                                size: brandSize,
+                                                font: helvBold,
+                                                color: blue
+                                            });
+                                            return cardW;
+                                        }
                                         var chain = Promise.resolve();
                                         guided.spots.forEach(function (spot) {
                                             chain = chain.then(function () {
@@ -1895,56 +2082,72 @@
                                                 var page = pages[rect.pageIndex];
                                                 var markW = 0;
                                                 var p;
+                                                var who =
+                                                    signerData && signerData.signerName
+                                                        ? signerData.signerName
+                                                        : typedName || '';
+                                                var fullLabel = 'Signed by ' + (who || '—') + '   ·   ' + capShort;
                                                 if (spot.imageData) {
                                                     var isInitials = spot.placement.type === 'Initials';
                                                     p = doc
                                                         .embedPng(dataUrlToBytes(spot.imageData))
                                                         .then(function (png) {
-                                                            var h = isInitials
-                                                                ? Math.min(Math.max(rect.h * 1.4, 12), 20)
-                                                                : 32;
-                                                            var maxW = isInitials ? 70 : 220;
-                                                            var w = Math.min(h * (png.width / png.height), maxW);
-                                                            markW = w;
-                                                            page.drawImage(png, {
-                                                                x: rect.x,
-                                                                y: rect.yBottom,
-                                                                width: w,
-                                                                height: h
-                                                            });
+                                                            if (isInitials) {
+                                                                // Drawn initials → compact stamp card.
+                                                                markW = drawStampCard(
+                                                                    page,
+                                                                    { png: png },
+                                                                    rect,
+                                                                    14,
+                                                                    'Initialed'
+                                                                );
+                                                            } else {
+                                                                // Drawn signature → full stamp card.
+                                                                markW = drawStampCard(
+                                                                    page,
+                                                                    { png: png },
+                                                                    rect,
+                                                                    20,
+                                                                    fullLabel
+                                                                );
+                                                            }
                                                         });
                                                 } else {
                                                     var text = spot.value || spot.placement.signedValue || '';
                                                     if (!text) return;
-                                                    var sz = Math.max(rect.h, 9);
-                                                    page.drawText(String(text), {
-                                                        x: rect.x,
-                                                        y: rect.yBottom + 1,
-                                                        size: sz,
-                                                        font: oblique
-                                                    });
-                                                    markW = oblique.widthOfTextAtSize(String(text), sz);
+                                                    var type = spot.placement.type;
+                                                    if (type === 'Full') {
+                                                        // Typed signature → same stamp card, name as ink.
+                                                        markW = drawStampCard(
+                                                            page,
+                                                            { text: text },
+                                                            rect,
+                                                            18,
+                                                            fullLabel
+                                                        );
+                                                    } else if (type === 'Initials') {
+                                                        // Typed initials → compact stamp card.
+                                                        markW = drawStampCard(
+                                                            page,
+                                                            { text: text },
+                                                            rect,
+                                                            14,
+                                                            'Initialed'
+                                                        );
+                                                    } else {
+                                                        // Date (and any other) → plain stamped text on the line.
+                                                        var sz = Math.max(rect.h, 9);
+                                                        page.drawText(String(text), {
+                                                            x: rect.x,
+                                                            y: rect.yBottom + 1,
+                                                            size: sz,
+                                                            font: oblique
+                                                        });
+                                                        markW = oblique.widthOfTextAtSize(String(text), sz);
+                                                    }
                                                     p = Promise.resolve();
                                                 }
-                                                return Promise.resolve(p).then(function () {
-                                                    // Attribution caption beside SIGNATURE marks (name +
-                                                    // time) so a drawn squiggle isn't anonymous. Initials
-                                                    // and dates don't get a caption.
-                                                    if (spot.placement.type === 'Full') {
-                                                        var who =
-                                                            signerData && signerData.signerName
-                                                                ? signerData.signerName
-                                                                : typedName || '';
-                                                        var cap = who + '  ·  ' + capShort;
-                                                        page.drawText(cap, {
-                                                            x: rect.x + markW + 10,
-                                                            y: rect.yBottom + 1,
-                                                            size: 6.5,
-                                                            font: helv,
-                                                            color: rgb(0.44, 0.43, 0.42)
-                                                        });
-                                                    }
-                                                });
+                                                return Promise.resolve(p);
                                             });
                                         });
                                         return chain.then(function () {

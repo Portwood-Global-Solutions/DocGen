@@ -1,0 +1,115 @@
+<!--
+  Portwood DocGen DEMO — Financial Account Statement (HTML -> PDF)
+  Base object: Demo_Statement__c   Child loop: Lines__r
+  Features: parent fields, currency/date formatting, child table loop,
+            grand-total aggregates (SUM/COUNT), donut chart, zebra rows,
+            page-number footer.  Flying Saucer CSS 2.1 safe (tables, solid
+            colors, fixed units — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1a2b3c; font-size: 10.5pt; }
+      .bar { background: #0b3d62; color: #ffffff; padding: 14px 18px; }
+      .bar h1 { margin: 0; font-size: 20pt; letter-spacing: 0.5px; }
+      .bar .tag { font-size: 9pt; color: #bcd6ea; }
+      table { border-collapse: collapse; width: 100%; }
+      .meta td { padding: 2px 0; font-size: 10pt; vertical-align: top; }
+      .meta .k { color: #5a6b7b; width: 90px; }
+      .panel { border: 1px solid #d6dee6; }
+      .panel th { background: #eef3f8; text-align: left; padding: 7px 10px; font-size: 9pt;
+                  color: #0b3d62; border-bottom: 1px solid #d6dee6; }
+      .panel td { padding: 6px 10px; }
+      .summary td { padding: 8px 10px; font-size: 11pt; }
+      .summary .lbl { color: #5a6b7b; font-size: 9pt; }
+      .summary .big { font-size: 15pt; font-weight: bold; }
+      .pos { color: #167a3c; }
+      .neg { color: #b3261e; }
+      .tx th { background: #0b3d62; color: #fff; text-align: left; padding: 7px 9px; font-size: 9pt; }
+      .tx td { padding: 6px 9px; border-bottom: 1px solid #e6ecf2; font-size: 9.5pt; }
+      .tx tr:nth-child(even) td { background: #f6f9fc; }
+      .r { text-align: right; }
+      .foot { margin-top: 16px; color: #8795a3; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #d6dee6; padding-top: 8px; }
+      h2.sec { color: #0b3d62; font-size: 12pt; border-bottom: 2px solid #0b3d62;
+               padding-bottom: 3px; margin: 22px 0 10px 0; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <table>
+        <tr>
+          <td><h1>Riverside Community Bank</h1><div class="tag">Member FDIC &nbsp;·&nbsp; riversidecb.example.com</div></td>
+          <td class="r" style="vertical-align:top;"><div style="font-size:13pt;font-weight:bold;">Account Statement</div>
+            <div class="tag">{Statement_Period__c}</div></td>
+        </tr>
+      </table>
+    </div>
+
+    <table style="margin-top:14px;">
+      <tr>
+        <td style="width:55%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Account Holder</td><td><strong>{Account_Holder__c}</strong></td></tr>
+            <tr><td class="k">Mailing</td><td>{Address__c}<br/>{City_State_Zip__c}</td></tr>
+            <tr><td class="k">Email</td><td>{Email__c}</td></tr>
+          </table>
+        </td>
+        <td style="width:45%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Statement No.</td><td><strong>{Name}</strong></td></tr>
+            <tr><td class="k">Account No.</td><td>{Account_Number__c}</td></tr>
+            <tr><td class="k">Type</td><td>{Account_Type__c}</td></tr>
+            <tr><td class="k">Date</td><td>{Statement_Date__c:MMMM d, yyyy}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Account Summary</h2>
+    <table class="panel summary">
+      <tr>
+        <td style="width:25%;"><div class="lbl">OPENING BALANCE</div><div class="big">{Opening_Balance__c:currency}</div></td>
+        <td style="width:25%;"><div class="lbl">DEPOSITS &amp; CREDITS</div><div class="big pos">{Total_Deposits__c:currency}</div></td>
+        <td style="width:25%;"><div class="lbl">WITHDRAWALS &amp; DEBITS</div><div class="big neg">{Total_Withdrawals__c:currency}</div></td>
+        <td style="width:25%; background:#eef3f8;"><div class="lbl">CLOSING BALANCE</div><div class="big">{Closing_Balance__c:currency}</div></td>
+      </tr>
+    </table>
+
+    <table style="margin-top:18px;">
+      <tr>
+        <td style="width:62%; vertical-align:top;">
+          <h2 class="sec">Transactions &nbsp;<span style="font-size:9pt;color:#5a6b7b;font-weight:normal;">({COUNT:Lines__r} this period)</span></h2>
+          <table class="tx">
+            <tr><th>Date</th><th>Description</th><th>Category</th><th class="r">Amount</th><th class="r">Balance</th></tr>
+            {#Lines__r}
+            <tr>
+              <td>{Transaction_Date__c:MM/dd}</td>
+              <td>{Description__c}</td>
+              <td>{Category__c}</td>
+              <td class="r">{Amount__c:currency}</td>
+              <td class="r">{Running_Balance__c:currency}</td>
+            </tr>
+            {/Lines__r}
+          </table>
+        </td>
+        <td style="width:38%; vertical-align:top; padding-left:18px;">
+          <h2 class="sec">Activity Mix</h2>
+          <div style="text-align:center;">
+            {Chart:Lines__r:Category__c:bar:title=Transactions by Category&width=300&height=230}
+          </div>
+          <table class="panel" style="margin-top:14px;">
+            <tr><th>Net change this period</th></tr>
+            <tr><td style="font-size:14pt;font-weight:bold;">{SUM:Lines__r.Amount:currency}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      This statement is provided for demonstration purposes by Portwood DocGen. &nbsp;·&nbsp;
+      Questions? Call (800) 555-0100.
+    </div>
+  </body>
+</html>

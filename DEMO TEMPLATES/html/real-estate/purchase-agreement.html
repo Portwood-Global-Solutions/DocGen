@@ -1,0 +1,118 @@
+<!--
+  Portwood DocGen DEMO — Residential Purchase Agreement (HTML -> PDF)
+  Base object: Demo_Property__c
+  Features: parent fields, currency/date formatting, numbered clauses,
+            mid-document initials line, two-column signature block (Full + Date).
+  Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.7in 0.75in; }
+      body { font-family: Times, "Times New Roman", serif; color: #1a1a1a; font-size: 11pt; line-height: 1.4; }
+      table { border-collapse: collapse; width: 100%; }
+      .title { text-align: center; border-bottom: 2px solid #6b1f1f; padding-bottom: 8px; margin-bottom: 4px; }
+      .title h1 { margin: 0; font-size: 18pt; color: #6b1f1f; letter-spacing: 0.5px; }
+      .title .sub { font-size: 9.5pt; color: #5a5a5a; font-family: Helvetica, Arial, sans-serif; }
+      .facts { margin-top: 14px; border: 1px solid #d8cdcd; }
+      .facts td { padding: 5px 10px; font-size: 10pt; vertical-align: top;
+                  font-family: Helvetica, Arial, sans-serif; }
+      .facts .k { color: #6b1f1f; width: 120px; font-weight: bold; }
+      .facts tr:nth-child(even) td { background: #faf5f5; }
+      h2.sec { color: #6b1f1f; font-size: 12pt; border-bottom: 1px solid #6b1f1f;
+               padding-bottom: 3px; margin: 18px 0 8px 0; font-family: Helvetica, Arial, sans-serif; }
+      .clause { margin: 8px 0; }
+      .clause .n { font-weight: bold; color: #6b1f1f; }
+      .initials { text-align: right; margin: 18px 0; font-size: 10pt; color: #333;
+                  font-family: Helvetica, Arial, sans-serif; border-top: 1px dashed #c4b3b3; padding-top: 8px; }
+      .sigtbl td { padding: 22px 22px 6px 0; vertical-align: bottom; }
+      .sigline { border-top: 1px solid #1a1a1a; padding-top: 4px; font-size: 9pt; color: #5a5a5a;
+                 font-family: Helvetica, Arial, sans-serif; }
+      .foot { margin-top: 20px; color: #8a7a7a; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #d8cdcd; padding-top: 8px; font-family: Helvetica, Arial, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div class="title">
+      <h1>Residential Purchase Agreement</h1>
+      <div class="sub">This Agreement is made and entered into as of {Today:MMMM d, yyyy}</div>
+    </div>
+
+    <table class="facts">
+      <tr><td class="k">Buyer</td><td>{Buyer_Name__c} &nbsp;·&nbsp; {Buyer_Email__c}</td></tr>
+      <tr><td class="k">Seller</td><td>{Seller_Name__c} &nbsp;·&nbsp; {Seller_Email__c}</td></tr>
+      <tr><td class="k">Listing Agent</td><td>{Agent_Name__c}</td></tr>
+      <tr><td class="k">Property</td><td>{Address__c}, {City__c}, {State__c} {Postal_Code__c} &nbsp;·&nbsp; MLS #{MLS_Number__c}</td></tr>
+      <tr><td class="k">Description</td><td>{Property_Type__c} · {Bedrooms__c} bed / {Bathrooms__c} bath · {Square_Feet__c:#,##0} sq ft</td></tr>
+    </table>
+
+    <h2 class="sec">Terms &amp; Conditions</h2>
+
+    <div class="clause"><span class="n">1. Purchase Price.</span> Buyer agrees to purchase and Seller agrees to sell
+      the above-described real property for a total purchase price of <strong>{Sale_Price__c:currency}</strong>,
+      payable at closing in accordance with the terms set forth herein.</div>
+
+    <div class="clause"><span class="n">2. Earnest Money.</span> Upon execution of this Agreement, Buyer shall deposit
+      earnest money in the amount of <strong>{Earnest_Money__c:currency}</strong> with the designated escrow holder,
+      to be applied toward the purchase price at closing or otherwise disbursed as provided herein.</div>
+
+    <div class="clause"><span class="n">3. Closing.</span> The closing of this transaction shall occur on or before
+      <strong>{Closing_Date__c:MMMM d, yyyy}</strong>, at a time and place mutually agreed upon by the parties.
+      Possession shall transfer to Buyer at closing unless otherwise agreed in writing.</div>
+
+    <div class="clause"><span class="n">4. Financing Contingency.</span> This Agreement is contingent upon Buyer
+      obtaining a loan commitment within twenty-one (21) days of the effective date. If Buyer is unable to obtain
+      financing after good-faith effort, Buyer may terminate this Agreement and the earnest money shall be refunded.</div>
+
+    <div class="clause"><span class="n">5. Inspection Contingency.</span> Buyer shall have ten (10) days following the
+      effective date to conduct inspections of the property at Buyer's expense. Buyer may, within that period, request
+      repairs, renegotiate, or terminate this Agreement based on inspection findings.</div>
+
+    <div class="clause"><span class="n">6. Title &amp; Appraisal.</span> Seller shall convey marketable title by general
+      warranty deed, free of liens except those expressly assumed. This Agreement is contingent upon the property
+      appraising at or above the purchase price.</div>
+
+    <div class="clause"><span class="n">7. Condition of Property.</span> Seller warrants that all systems and fixtures
+      shall be in working order at closing. The property is otherwise sold in its present condition, subject to the
+      inspection rights granted above.</div>
+
+    <div class="clause"><span class="n">8. Default.</span> If either party defaults, the non-defaulting party shall be
+      entitled to the remedies available at law or in equity, including retention or return of the earnest money as
+      liquidated damages where applicable.</div>
+
+    <div class="initials">
+      Buyer initials: {@Signature_Buyer:1:Initials} &nbsp;&nbsp;&nbsp; Seller initials: {@Signature_Seller:1:Initials}
+    </div>
+
+    <h2 class="sec">Signatures</h2>
+    <p style="font-size:10pt;">By signing below, the parties acknowledge that they have read, understood, and agree to be
+      bound by the terms of this Residential Purchase Agreement.</p>
+
+    <table class="sigtbl">
+      <tr>
+        <td style="width:50%;">
+          {@Signature_Buyer:2:Full}
+          <div class="sigline">{Buyer_Name__c} — Buyer</div>
+        </td>
+        <td style="width:50%;">
+          {@Signature_Seller:2:Full}
+          <div class="sigline">{Seller_Name__c} — Seller</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="width:50%;">
+          {@Signature_Buyer:2:Date}
+          <div class="sigline">Date</div>
+        </td>
+        <td style="width:50%;">
+          {@Signature_Seller:2:Date}
+          <div class="sigline">Date</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      Demonstration document generated by Portwood DocGen. &nbsp;·&nbsp; Not a substitute for advice of licensed counsel.
+    </div>
+  </body>
+</html>

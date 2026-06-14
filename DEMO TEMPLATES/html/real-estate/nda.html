@@ -1,0 +1,105 @@
+<!--
+  Portwood DocGen DEMO — Mutual Non-Disclosure Agreement (HTML -> PDF)
+  Base object: Contact  (parent: Account.Name)
+  Features: parent + relationship fields, RunningUser, Today, numbered clauses,
+            two-party signature block (Full + Date).
+  Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.7in 0.75in; }
+      body { font-family: Times, "Times New Roman", serif; color: #1a1a1a; font-size: 11pt; line-height: 1.45; }
+      table { border-collapse: collapse; width: 100%; }
+      .title { text-align: center; border-bottom: 2px solid #1f3a5f; padding-bottom: 8px; margin-bottom: 6px; }
+      .title h1 { margin: 0; font-size: 18pt; color: #1f3a5f; letter-spacing: 0.5px; }
+      .title .sub { font-size: 9.5pt; color: #5a5a5a; font-family: Helvetica, Arial, sans-serif; }
+      .parties { margin-top: 14px; font-size: 10.5pt; }
+      .clause { margin: 9px 0; }
+      .clause .n { font-weight: bold; color: #1f3a5f; }
+      h2.sec { color: #1f3a5f; font-size: 12pt; border-bottom: 1px solid #1f3a5f;
+               padding-bottom: 3px; margin: 18px 0 8px 0; font-family: Helvetica, Arial, sans-serif; }
+      .sigtbl td { padding: 22px 22px 6px 0; vertical-align: bottom; }
+      .sigline { border-top: 1px solid #1a1a1a; padding-top: 4px; font-size: 9pt; color: #5a5a5a;
+                 font-family: Helvetica, Arial, sans-serif; }
+      .foot { margin-top: 20px; color: #8795a3; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #d6dee6; padding-top: 8px; font-family: Helvetica, Arial, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div class="title">
+      <h1>Mutual Non-Disclosure Agreement</h1>
+      <div class="sub">Effective Date: {Today:MMMM d, yyyy}</div>
+    </div>
+
+    <p class="parties">This Mutual Non-Disclosure Agreement (the &ldquo;Agreement&rdquo;) is entered into as of the
+      Effective Date by and between <strong>Portwood Global Solutions</strong> (&ldquo;Portwood&rdquo;) and
+      <strong>{Account.Name}</strong>, represented by {FirstName} {LastName}, {Title} (&ldquo;Recipient&rdquo;).
+      Portwood and Recipient are each a &ldquo;Party&rdquo; and together the &ldquo;Parties.&rdquo; Each Party may
+      disclose and may receive Confidential Information under this Agreement.</p>
+
+    <h2 class="sec">Terms</h2>
+
+    <div class="clause"><span class="n">1. Definition of Confidential Information.</span> &ldquo;Confidential
+      Information&rdquo; means any non-public information disclosed by one Party to the other, whether oral, written,
+      or electronic, including but not limited to business plans, technical data, product designs, customer lists,
+      pricing, and trade secrets, that is marked confidential or that a reasonable person would understand to be
+      confidential given its nature.</div>
+
+    <div class="clause"><span class="n">2. Obligations.</span> The receiving Party shall (a) use the Confidential
+      Information solely to evaluate or pursue the business relationship between the Parties, (b) protect it using at
+      least the same degree of care it uses for its own confidential information (and no less than reasonable care),
+      and (c) not disclose it to any third party without the disclosing Party's prior written consent.</div>
+
+    <div class="clause"><span class="n">3. Exclusions.</span> Confidential Information does not include information
+      that is or becomes publicly available through no fault of the receiving Party, was rightfully known prior to
+      disclosure, is independently developed without use of the Confidential Information, or is rightfully obtained
+      from a third party without restriction.</div>
+
+    <div class="clause"><span class="n">4. Term.</span> This Agreement shall remain in effect for two (2) years from
+      the Effective Date. The confidentiality obligations herein shall survive termination and continue for three (3)
+      years following the date of disclosure of the applicable Confidential Information.</div>
+
+    <div class="clause"><span class="n">5. Return of Materials.</span> Upon written request or termination of this
+      Agreement, the receiving Party shall promptly return or destroy all Confidential Information in its possession,
+      including all copies, and certify such destruction in writing if requested.</div>
+
+    <div class="clause"><span class="n">6. No License.</span> Nothing in this Agreement grants either Party any right,
+      title, license, or interest in the other Party's Confidential Information or intellectual property except the
+      limited right to use it for the purpose stated above.</div>
+
+    <div class="clause"><span class="n">7. Governing Law.</span> This Agreement shall be governed by and construed in
+      accordance with the laws of the State of Texas, without regard to its conflict-of-laws principles. The Parties
+      consent to the exclusive jurisdiction of the courts located in Travis County, Texas.</div>
+
+    <h2 class="sec">Signatures</h2>
+    <p style="font-size:10pt;">The Parties have executed this Agreement as of the Effective Date.</p>
+
+    <table class="sigtbl">
+      <tr>
+        <td style="width:50%;">
+          {@Signature_Discloser:1:Full}
+          <div class="sigline">Portwood Global Solutions — by {RunningUser.Name}</div>
+        </td>
+        <td style="width:50%;">
+          {@Signature_Recipient:1:Full}
+          <div class="sigline">{Account.Name} — by {FirstName} {LastName}, {Title}</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="width:50%;">
+          {@Signature_Discloser:1:Date}
+          <div class="sigline">Date</div>
+        </td>
+        <td style="width:50%;">
+          {@Signature_Recipient:1:Date}
+          <div class="sigline">Date</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      Demonstration document generated by Portwood DocGen. &nbsp;·&nbsp; Not a substitute for advice of licensed counsel.
+    </div>
+  </body>
+</html>

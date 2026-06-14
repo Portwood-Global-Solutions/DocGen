@@ -1,0 +1,97 @@
+<!--
+  Portwood DocGen DEMO — Student Report Card (HTML -> PDF)
+  Base object: Demo_Student__c   Child loop: Enrollments__r
+  Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1c2733; font-size: 10.5pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .bar { background: #5a1130; color: #ffffff; padding: 14px 18px; }
+      .bar h1 { margin: 0; font-size: 20pt; letter-spacing: 0.5px; }
+      .bar .tag { font-size: 9pt; color: #e6c4d2; }
+      h2.sec { color: #5a1130; font-size: 12pt; border-bottom: 2px solid #5a1130;
+               padding-bottom: 3px; margin: 22px 0 10px 0; }
+      .panel { border: 1px solid #d8d0d4; }
+      .meta td { padding: 4px 10px; font-size: 10pt; vertical-align: top; }
+      .meta .k { color: #7a6a72; width: 110px; }
+      .grades th { background: #5a1130; color: #fff; text-align: left; padding: 7px 9px; font-size: 9pt; }
+      .grades td { padding: 6px 9px; border-bottom: 1px solid #ece4e8; font-size: 9.5pt; }
+      .grades tr:nth-child(even) td { background: #faf5f7; }
+      .c { text-align: center; }
+      .summary td { padding: 10px 12px; }
+      .summary .lbl { color: #7a6a72; font-size: 8.5pt; letter-spacing: 1px; }
+      .summary .big { font-size: 18pt; font-weight: bold; color: #5a1130; }
+      .foot { margin-top: 18px; color: #9a8e94; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #d8d0d4; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <table>
+        <tr>
+          <td><h1>Riverside University</h1><div class="tag">Office of the Registrar &middot; Academic Report Card</div></td>
+          <td class="r" style="text-align:right; vertical-align:top;">
+            <div style="font-size:13pt; font-weight:bold;">Report Card</div>
+            <div class="tag">Issued {Today:MMMM d, yyyy}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <h2 class="sec">Student Information</h2>
+    <table class="panel">
+      <tr>
+        <td style="width:50%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Student</td><td><strong>{Name}</strong></td></tr>
+            <tr><td class="k">Student ID</td><td>{Student_ID__c}</td></tr>
+            <tr><td class="k">Program</td><td>{Program__c}</td></tr>
+            <tr><td class="k">Major</td><td>{Major__c}</td></tr>
+          </table>
+        </td>
+        <td style="width:50%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Class Standing</td><td>{Class_Standing__c}</td></tr>
+            <tr><td class="k">Advisor</td><td>{Advisor__c}</td></tr>
+            <tr><td class="k">Expected Grad.</td><td>{Expected_Graduation__c:MMMM d, yyyy}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Coursework &amp; Grades</h2>
+    <table class="grades">
+      <tr>
+        <th>Course Code</th><th>Course</th><th>Term</th>
+        <th class="c">Credits</th><th>Instructor</th><th class="c">Grade</th>
+      </tr>
+      {#Enrollments__r}
+      <tr>
+        <td>{Course_Code__c}</td>
+        <td>{Course_Name__c}</td>
+        <td>{Term__c}</td>
+        <td class="c">{Credits__c}</td>
+        <td>{Instructor__c}</td>
+        <td class="c"><strong>{Grade__c}</strong></td>
+      </tr>
+      {/Enrollments__r}
+    </table>
+
+    <h2 class="sec">Academic Summary</h2>
+    <table class="panel summary">
+      <tr>
+        <td style="width:34%;"><div class="lbl">CUMULATIVE GPA</div><div class="big">{GPA__c}</div></td>
+        <td style="width:33%;"><div class="lbl">TOTAL CREDITS</div><div class="big">{Total_Credits__c:#,##0}</div></td>
+        <td style="width:33%; background:#faf5f7;"><div class="lbl">COURSES ON RECORD</div><div class="big">{COUNT:Enrollments__r}</div></td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      Riverside University &middot; Office of the Registrar &middot; This report card reflects
+      coursework across multiple terms, listed newest first.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,126 @@
+<!--
+  Portwood DocGen DEMO — Homeowner Insurance Declarations / Policy Schedule (HTML -> PDF)
+  Base object: Demo_Property__c
+  Features: parent fields, currency/date formatting, coverage table, derived static figures.
+  Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1a2b3c; font-size: 10.5pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .bar { background: #14532d; color: #ffffff; padding: 14px 18px; }
+      .bar h1 { margin: 0; font-size: 20pt; letter-spacing: 0.5px; }
+      .bar .tag { font-size: 9pt; color: #c7e3d0; }
+      .meta td { padding: 2px 0; font-size: 10pt; vertical-align: top; }
+      .meta .k { color: #5a6b7b; width: 120px; }
+      .panel { border: 1px solid #cdd9d0; }
+      .panel th { background: #eaf3ee; text-align: left; padding: 7px 10px; font-size: 9pt;
+                  color: #14532d; border-bottom: 1px solid #cdd9d0; }
+      .panel td { padding: 6px 10px; }
+      .cov th { background: #14532d; color: #fff; text-align: left; padding: 7px 9px; font-size: 9pt; }
+      .cov td { padding: 6px 9px; border-bottom: 1px solid #e1ebe4; font-size: 9.5pt; }
+      .cov tr:nth-child(even) td { background: #f4f9f5; }
+      .r { text-align: right; }
+      h2.sec { color: #14532d; font-size: 12pt; border-bottom: 2px solid #14532d;
+               padding-bottom: 3px; margin: 20px 0 10px 0; }
+      .premium { background: #eaf3ee; border: 1px solid #cdd9d0; }
+      .premium .lbl { color: #5a6b7b; font-size: 9pt; }
+      .premium .big { font-size: 17pt; font-weight: bold; color: #14532d; }
+      .foot { margin-top: 16px; color: #8795a3; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #cdd9d0; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <table>
+        <tr>
+          <td><h1>Riverside Mutual Insurance</h1><div class="tag">Homeowners Protection &nbsp;·&nbsp; riversidemutual.example.com</div></td>
+          <td class="r" style="vertical-align:top;"><div style="font-size:13pt;font-weight:bold;">Declarations Page</div>
+            <div class="tag">Policy Schedule</div></td>
+        </tr>
+      </table>
+    </div>
+
+    <table style="margin-top:14px;">
+      <tr>
+        <td style="width:52%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Policyholder</td><td><strong>{Buyer_Name__c}</strong></td></tr>
+            <tr><td class="k">Email</td><td>{Buyer_Email__c}</td></tr>
+            <tr><td class="k">Insured Property</td><td>{Address__c}<br/>{City__c}, {State__c} {Postal_Code__c}</td></tr>
+          </table>
+        </td>
+        <td style="width:48%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Policy Number</td><td><strong>HO3-{MLS_Number__c}</strong></td></tr>
+            <tr><td class="k">Policy Form</td><td>HO-3 Special Form</td></tr>
+            <tr><td class="k">Policy Period</td><td>{Today:MMMM d, yyyy} to {Today:MMMM d, yyyy} (12 months)</td></tr>
+            <tr><td class="k">Issued</td><td>{Today:MMMM d, yyyy}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Insured Dwelling Details</h2>
+    <table class="panel">
+      <tr>
+        <th style="width:20%;">Property Type</th>
+        <th style="width:16%;">Bedrooms</th>
+        <th style="width:16%;">Bathrooms</th>
+        <th style="width:24%;">Living Area</th>
+        <th style="width:24%;">Year Built</th>
+      </tr>
+      <tr>
+        <td>{Property_Type__c}</td>
+        <td>{Bedrooms__c}</td>
+        <td>{Bathrooms__c}</td>
+        <td>{Square_Feet__c:#,##0} sq ft</td>
+        <td>{Year_Built__c}</td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Coverages &amp; Limits</h2>
+    <table class="cov">
+      <tr><th style="width:14%;">Section</th><th>Coverage</th><th class="r" style="width:22%;">Limit</th><th class="r" style="width:18%;">Deductible</th></tr>
+      <tr><td>A</td><td>Dwelling (replacement cost)</td><td class="r">{List_Price__c:currency}</td><td class="r">$1,000</td></tr>
+      <tr><td>B</td><td>Other Structures</td><td class="r">$45,000</td><td class="r">$1,000</td></tr>
+      <tr><td>C</td><td>Personal Property</td><td class="r">$225,000</td><td class="r">$1,000</td></tr>
+      <tr><td>D</td><td>Loss of Use / Additional Living Expense</td><td class="r">$90,000</td><td class="r">—</td></tr>
+      <tr><td>E</td><td>Personal Liability (each occurrence)</td><td class="r">$300,000</td><td class="r">—</td></tr>
+      <tr><td>F</td><td>Medical Payments to Others</td><td class="r">$5,000</td><td class="r">—</td></tr>
+    </table>
+
+    <h2 class="sec">Endorsements &amp; Discounts</h2>
+    <table class="panel">
+      <tr><th>Item</th><th class="r" style="width:30%;">Status</th></tr>
+      <tr><td>Replacement Cost — Contents</td><td class="r">Included</td></tr>
+      <tr><td>Water Backup &amp; Sump Overflow ($10,000)</td><td class="r">Included</td></tr>
+      <tr><td>Protective Device Discount (monitored alarm)</td><td class="r">Applied</td></tr>
+      <tr><td>Claims-Free Discount</td><td class="r">Applied</td></tr>
+    </table>
+
+    <table style="margin-top:18px;">
+      <tr>
+        <td style="width:60%; vertical-align:top; padding-right:18px;">
+          <table class="panel">
+            <tr><th>Mortgagee Clause</th></tr>
+            <tr><td>Riverside Community Bank, ISAOA/ATIMA<br/>P.O. Box 4400, Austin, TX 78701</td></tr>
+          </table>
+        </td>
+        <td style="width:40%; vertical-align:top;">
+          <table class="premium">
+            <tr><td><div class="lbl">TOTAL ANNUAL PREMIUM</div><div class="big">$1,842.00</div>
+              <div class="lbl" style="margin-top:4px;">Paid in full · No installment fee</div></td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      This declarations page summarizes your coverage and is part of your policy contract. &nbsp;·&nbsp;
+      Demonstration document generated by Portwood DocGen. &nbsp;·&nbsp; Riverside Mutual Insurance · (800) 555-0177
+    </div>
+  </body>
+</html>

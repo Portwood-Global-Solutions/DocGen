@@ -7517,7 +7517,21 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             Pattern p = Pattern.compile('\\{([^}]+)\\}');
             Matcher m = p.matcher(format);
             while (m.find()) {
-                fieldPaths.add(m.group(1));
+                String tok = m.group(1).trim();
+                // Skip built-in special tokens — {Today}, {Now}, {Today: MM/DD/YYYY},
+                // {Now: HH:mm} — which generateDocTitle resolves itself. They are NOT
+                // SObject fields; querying them broke the dynamic SOQL (the ':' in a date
+                // format threw "unexpected token: ':'", failing the whole load so {Name}
+                // never resolved — Sarah's "Waiver - Signed" fallback).
+                String head = (tok.contains(':') ? tok.substringBefore(':') : tok).trim();
+                if (head.equalsIgnoreCase('Today') || head.equalsIgnoreCase('Now')) {
+                    continue;
+                }
+                // Only real field paths (Name, Account.Name) are queryable.
+                if (!Pattern.matches('(?i)[a-z_][a-z0-9_]*(\\.[a-z_][a-z0-9_]*)*', tok)) {
+                    continue;
+                }
+                fieldPaths.add(tok);
             }
         }
         if (fieldPaths.isEmpty()) {
@@ -7727,7 +7741,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                             : UserInfo.getLocale();
                         strVal = dt.format(getLocaleDatePattern(dateLocale));
                     } else {
-                        strVal = dt.format(dateFormat);
+                        // Forgive the common US-date convention: in Java SimpleDateFormat
+                        // uppercase D = day-of-YEAR and uppercase Y = week-YEAR, so an
+                        // author writing "MM/DD/YYYY" would otherwise get "06/164/2026".
+                        // They almost always mean day-of-month + calendar year, so
+                        // normalize D->d and Y->y (M stays uppercase — lowercase m = minutes).
+                        String fmt = dateFormat.replace('YYYY', 'yyyy')
+                            .replace('YY', 'yy')
+                            .replace('DD', 'dd')
+                            .replace('D', 'd');
+                        strVal = dt.format(fmt);
                     }
                 } else if (dateFormat != null && isNumericFormat(dateFormat)) {
                     strVal = formatNumber(val, dateFormat);
@@ -8337,6 +8360,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             ? null
             : processXml(decodeBraceEntities(footerHtml), recordDataMap);
 
+        // Convert {*Field:qr} / {*Field:code128} barcode markers (emitted by
+        // processXml as ##BARCODE:...##) into inline CSS so they render in
+        // HTML-template PDFs. The Word path does this per text-run; HTML bodies
+        // are already HTML, so swap only the marker (no surrounding escaping).
+        mergedBody = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(mergedBody);
+        mergedHeader = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(mergedHeader);
+        mergedFooter = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(mergedFooter);
+
         // 1.68 — set the renderer overrides BEFORE wrapping so wrapHtmlForPdf can
         // call computePageCss() and pick up the size/orientation/margins from
         // the merge result. Statics are cleared in renderPdf's finally block.
@@ -8516,7 +8547,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     css +=
                         ' @top-center { ' +
                         buildPageMarginContentCss(header) +
-                        ' vertical-align: bottom; font-size: 9pt; color: #444; }';
+                        ' vertical-align: bottom; font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 9pt; color: #444; }';
                 } else {
                     css += ' @top-center { content: element(dgheader); vertical-align: bottom; }';
                 }
@@ -8526,7 +8557,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     css +=
                         ' @bottom-center { ' +
                         buildPageMarginContentCss(footer) +
-                        ' vertical-align: top; font-size: 9pt; color: #444; }';
+                        ' vertical-align: top; font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 9pt; color: #444; }';
                 } else {
                     css += ' @bottom-center { content: element(dgfooter); vertical-align: top; }';
                 }

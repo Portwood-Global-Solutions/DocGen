@@ -1,0 +1,119 @@
+<!--
+  Portwood DocGen DEMO — Mortgage Loan Estimate (CFPB-style, simplified) (HTML -> PDF)
+  Base object: Demo_Property__c
+  Features: parent fields, currency/date formatting, costs table, signature + date tags.
+  Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1a2b3c; font-size: 10.5pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .bar { background: #0b3d62; color: #ffffff; padding: 14px 18px; }
+      .bar h1 { margin: 0; font-size: 20pt; letter-spacing: 0.5px; }
+      .bar .tag { font-size: 9pt; color: #bcd6ea; }
+      .meta td { padding: 2px 0; font-size: 10pt; vertical-align: top; }
+      .meta .k { color: #5a6b7b; width: 110px; }
+      .hl { border: 1px solid #d6dee6; }
+      .hl td { padding: 10px 12px; vertical-align: top; }
+      .hl .lbl { color: #5a6b7b; font-size: 8.5pt; letter-spacing: 0.3px; }
+      .hl .big { font-size: 16pt; font-weight: bold; color: #0b3d62; }
+      .panel { border: 1px solid #d6dee6; }
+      .panel th { background: #eef3f8; text-align: left; padding: 7px 10px; font-size: 9pt;
+                  color: #0b3d62; border-bottom: 1px solid #d6dee6; }
+      .panel td { padding: 6px 10px; border-bottom: 1px solid #eef3f8; }
+      .r { text-align: right; }
+      .total td { background: #eef3f8; font-weight: bold; font-size: 11pt; }
+      h2.sec { color: #0b3d62; font-size: 12pt; border-bottom: 2px solid #0b3d62;
+               padding-bottom: 3px; margin: 20px 0 10px 0; }
+      .sigline { border-top: 1px solid #1a2b3c; padding-top: 4px; font-size: 9pt; color: #5a6b7b; }
+      .sigcell { padding: 18px 20px 6px 0; vertical-align: bottom; }
+      .ack { font-size: 9pt; color: #5a6b7b; }
+      .foot { margin-top: 16px; color: #8795a3; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #d6dee6; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <table>
+        <tr>
+          <td><h1>Riverside Community Bank</h1><div class="tag">Home Lending &nbsp;·&nbsp; Member FDIC &nbsp;·&nbsp; Equal Housing Lender</div></td>
+          <td class="r" style="vertical-align:top;"><div style="font-size:13pt;font-weight:bold;">Loan Estimate</div>
+            <div class="tag">Issued {Today:MMMM d, yyyy}</div></td>
+        </tr>
+      </table>
+    </div>
+
+    <table style="margin-top:14px;">
+      <tr>
+        <td style="width:55%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Borrower</td><td><strong>{Buyer_Name__c}</strong></td></tr>
+            <tr><td class="k">Property</td><td>{Address__c}<br/>{City__c}, {State__c}</td></tr>
+          </table>
+        </td>
+        <td style="width:45%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Loan Term</td><td>30 years, Fixed</td></tr>
+            <tr><td class="k">Purpose</td><td>Purchase</td></tr>
+            <tr><td class="k">Est. Closing</td><td>{Closing_Date__c:MMMM d, yyyy}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table class="hl" style="margin-top:14px;">
+      <tr>
+        <td style="width:34%;"><div class="lbl">SALE PRICE</div><div class="big">{Sale_Price__c:currency}</div></td>
+        <td style="width:33%; border-left:1px solid #d6dee6;"><div class="lbl">LOAN AMOUNT (80% LTV)</div><div class="big">80% of sale price</div></td>
+        <td style="width:33%; border-left:1px solid #d6dee6;"><div class="lbl">EST. MONTHLY PAYMENT</div><div class="big">$2,180 / mo</div></td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Loan Terms</h2>
+    <table class="panel">
+      <tr><th>Item</th><th class="r" style="width:35%;">Estimate</th></tr>
+      <tr><td>Interest Rate</td><td class="r">6.250% (Fixed)</td></tr>
+      <tr><td>Down Payment (20%)</td><td class="r">20% of sale price</td></tr>
+      <tr><td>Principal &amp; Interest</td><td class="r">$1,694 / mo</td></tr>
+      <tr><td>Estimated Escrow (taxes &amp; insurance)</td><td class="r">$486 / mo</td></tr>
+      <tr class="total"><td>Estimated Total Monthly Payment</td><td class="r">$2,180 / mo</td></tr>
+    </table>
+
+    <h2 class="sec">Costs at Closing</h2>
+    <table class="panel">
+      <tr><th>Item</th><th class="r" style="width:35%;">Amount</th></tr>
+      <tr><td>Earnest Money Deposit (credit)</td><td class="r">{Earnest_Money__c:currency}</td></tr>
+      <tr><td>Origination Charges</td><td class="r">$2,950</td></tr>
+      <tr><td>Appraisal &amp; Credit Report</td><td class="r">$675</td></tr>
+      <tr><td>Title Services &amp; Lender's Title Insurance</td><td class="r">$1,820</td></tr>
+      <tr><td>Recording Fees &amp; Transfer Taxes</td><td class="r">$540</td></tr>
+      <tr><td>Prepaid Interest &amp; Initial Escrow</td><td class="r">$2,310</td></tr>
+      <tr class="total"><td>Estimated Cash to Close</td><td class="r">$8,295</td></tr>
+    </table>
+
+    <h2 class="sec">Borrower Acknowledgement</h2>
+    <p class="ack">This Loan Estimate is provided for demonstration purposes and is not a commitment to lend. By signing below,
+      the borrower acknowledges receipt of this estimate and understands that figures are preliminary and subject to
+      verification, underwriting, and final disclosure.</p>
+
+    <table style="margin-top:22px;">
+      <tr>
+        <td class="sigcell" style="width:55%;">
+          {@Signature_Borrower:1:Full}
+          <div class="sigline">{Buyer_Name__c} — Borrower</div>
+        </td>
+        <td class="sigcell" style="width:45%;">
+          {@Signature_Borrower:1:Date}
+          <div class="sigline">Date</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      Riverside Community Bank · Home Lending Division · (800) 555-0100 &nbsp;·&nbsp;
+      Demonstration document generated by Portwood DocGen.
+    </div>
+  </body>
+</html>

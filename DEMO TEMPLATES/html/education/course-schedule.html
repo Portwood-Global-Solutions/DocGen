@@ -1,0 +1,97 @@
+<!--
+  Portwood DocGen DEMO — Course Schedule (HTML -> PDF)
+  Base object: Demo_Student__c   Child loop: Enrollments__r
+  Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1c2733; font-size: 10.5pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .bar { background: #134e3a; color: #ffffff; padding: 14px 18px; }
+      .bar h1 { margin: 0; font-size: 20pt; letter-spacing: 0.5px; }
+      .bar .tag { font-size: 9pt; color: #bfe0d2; }
+      h2.sec { color: #134e3a; font-size: 12pt; border-bottom: 2px solid #134e3a;
+               padding-bottom: 3px; margin: 22px 0 10px 0; }
+      .meta td { padding: 3px 10px; font-size: 10pt; vertical-align: top; }
+      .meta .k { color: #5f726a; width: 110px; }
+      .sched th { background: #134e3a; color: #fff; text-align: left; padding: 7px 9px; font-size: 9pt; }
+      .sched td { padding: 6px 9px; border-bottom: 1px solid #e2ece7; font-size: 9.5pt; }
+      .sched tr:nth-child(even) td { background: #f4f9f6; }
+      .c { text-align: center; }
+      .pill { font-size: 8.5pt; color: #134e3a; }
+      .summary td { padding: 10px 12px; }
+      .summary .lbl { color: #5f726a; font-size: 8.5pt; letter-spacing: 1px; }
+      .summary .big { font-size: 18pt; font-weight: bold; color: #134e3a; }
+      .foot { margin-top: 18px; color: #8d9a94; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #d4ded8; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <table>
+        <tr>
+          <td><h1>Riverside University</h1><div class="tag">Office of the Registrar &middot; Course Schedule</div></td>
+          <td style="text-align:right; vertical-align:top;">
+            <div style="font-size:13pt; font-weight:bold;">Course Schedule</div>
+            <div class="tag">Generated {Today:MMMM d, yyyy}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <h2 class="sec">Student</h2>
+    <table>
+      <tr>
+        <td style="width:50%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Name</td><td><strong>{Name}</strong></td></tr>
+            <tr><td class="k">Student ID</td><td>{Student_ID__c}</td></tr>
+            <tr><td class="k">Class Standing</td><td>{Class_Standing__c}</td></tr>
+          </table>
+        </td>
+        <td style="width:50%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Program</td><td>{Program__c}</td></tr>
+            <tr><td class="k">Major</td><td>{Major__c}</td></tr>
+            <tr><td class="k">Advisor</td><td>{Advisor__c}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Enrolled Courses</h2>
+    <table class="sched">
+      <tr>
+        <th>Course Code</th><th>Course Title</th><th>Term</th>
+        <th class="c">Credits</th><th>Instructor</th><th>Status</th>
+      </tr>
+      {#Enrollments__r}
+      <tr>
+        <td>{Course_Code__c}</td>
+        <td>{Course_Name__c}</td>
+        <td>{Term__c}</td>
+        <td class="c">{Credits__c}</td>
+        <td>{Instructor__c}</td>
+        <td><span class="pill">{Status__c}</span></td>
+      </tr>
+      {/Enrollments__r}
+    </table>
+
+    <table class="summary" style="margin-top:18px;">
+      <tr>
+        <td style="width:50%; border:1px solid #d4ded8;">
+          <div class="lbl">TOTAL ENROLLED COURSES</div><div class="big">{COUNT:Enrollments__r}</div>
+        </td>
+        <td style="width:50%; border:1px solid #d4ded8; background:#f4f9f6;">
+          <div class="lbl">TOTAL CREDITS</div><div class="big">{SUM:Enrollments__r.Credits:number}</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      Riverside University &middot; Office of the Registrar &middot; Schedule subject to change.
+    </div>
+  </body>
+</html>

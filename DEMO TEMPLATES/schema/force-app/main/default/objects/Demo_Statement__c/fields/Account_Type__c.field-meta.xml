@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Account_Type__c</fullName>
+    <label>Account Type</label>
+    <type>Picklist</type>
+    <valueSet>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+                <value>
+                    <fullName>Checking</fullName>
+                    <default>false</default>
+                    <label>Checking</label>
+                </value>
+                <value>
+                    <fullName>Savings</fullName>
+                    <default>false</default>
+                    <label>Savings</label>
+                </value>
+                <value>
+                    <fullName>Credit Card</fullName>
+                    <default>false</default>
+                    <label>Credit Card</label>
+                </value>
+                <value>
+                    <fullName>Investment</fullName>
+                    <default>false</default>
+                    <label>Investment</label>
+                </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

@@ -131,7 +131,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         @InvocableVariable(
             label='Signing Order'
-            description='Enter "Parallel" (default) to email all signers at once, or "Sequential" to send one at a time — each signer is emailed only after the previous one completes.'
+            description='Enter "Parallel" (default) to email all signers at once, "Sequential" to send one at a time (each signer emailed only after the previous completes), or "Single" for a one-signer document.'
         )
         global String signingOrder;
     }
@@ -227,19 +227,27 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         // Runtime errors (template not found, DML failures) are caught and returned in Result
         try {
-            // Resolve signing order
+            // Resolve signing order. "Single" = an explicit one-signer request (behaves
+            // like Parallel for delivery, but lets authors say so clearly — Sarah's #4).
             String signingOrder = String.isNotBlank(req.signingOrder) ? req.signingOrder : 'Parallel';
-            if (signingOrder != 'Parallel' && signingOrder != 'Sequential') {
+            if (signingOrder != 'Parallel' && signingOrder != 'Sequential' && signingOrder != 'Single') {
                 signingOrder = 'Parallel';
             }
 
-            // Use the v3 path — creates request, placements, preview, and optionally sends emails
+            // Consolidated signing (#170): ALL templates route to the GUIDED PDF path
+            // (DocGenSignaturePdf.page), which stamps the real signature/date into the
+            // final PDF via the reliable client-side composite — the same path the Sender
+            // LWC uses. Templates with {@Signature_...} tags position chips at those tags;
+            // tag-less legacy templates get an auto-appended "Signatures" block (option b)
+            // so they sign through the same path with zero author change. The classic page
+            // is deprecated — one signing path for Flow and LWC alike.
             String signersJson = JSON.serialize(signerInputs);
-            List<DocGenSignatureSenderController.SignerResult> signerResults = DocGenSignatureSenderController.createTemplateSignerRequestWithOrder(
+            List<DocGenSignatureSenderController.SignerResult> signerResults = DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
                 req.templateId,
                 req.relatedRecordId,
                 signersJson,
-                signingOrder
+                signingOrder,
+                null // documentTitleFormat — inherited from the template
             );
 
             // Find the request ID

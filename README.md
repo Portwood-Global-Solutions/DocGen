@@ -4,11 +4,11 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.11.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.16.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
-[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1490_passing-brightgreen)](#code-quality)
+[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1548_passing-brightgreen)](#code-quality)
 [![Coverage](https://img.shields.io/badge/Coverage-76%25-brightgreen)](#code-quality)
 [![Security](https://img.shields.io/badge/Code_Analyzer-0%2F0%2F0-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
@@ -18,10 +18,10 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 ## Install
 
 ```bash
-sf package install --package 04tVx000000nPGbIAM --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000nZ4fIAE --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nPGbIAM) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nPGbIAM)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nZ4fIAE) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nZ4fIAE)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -189,7 +189,7 @@ Records with **2,000 to 50,000+ child records** are detected automatically. Same
 
 ### E-Signatures
 
-Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided field-to-field signing **on the actual PDF** — **draw or type** signatures and initials — date stamps, document packets, sequential and multi-signer flows, decline flow, sender notifications, and a **Certificate of Completion** (signed timestamps, IP, consent, document hash) — all 100% native.
+Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided field-to-field signing **on the actual PDF** — **draw or type** signatures and initials — date stamps, document packets, parallel / sequential / single multi-signer flows, decline flow, sender **and signer** completion notifications, and a **Certificate of Completion** (signed timestamps, IP, consent, document hash) — all 100% native. Send from the **Signature Sender** UI or trigger from a **Flow / platform event** — both take the same guided experience. Signed documents follow your template's **Document Title Format** naming, and each signature lands as a clean, professional signature stamp card.
 
 **Signature tag syntax:** `{@Signature_Role:Order:Type}`
 
@@ -371,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.11.0 — Shared Template Image Rendering**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.16.0 — Consolidated guided signing**.
 
 See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +444,12 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.11.0 | **Latest (Released)**                   | `04tVx000000nPGbIAM` |
+| v3.16.0 | **Latest (Released)**                   | `04tVx000000nZ4fIAE` |
+| v3.15.0 | Previous                                | `04tVx000000nZ33IAE` |
+| v3.14.0 | Previous                                | `04tVx000000nYgTIAU` |
+| v3.13.0 | Previous                                | `04tVx000000nYdFIAU` |
+| v3.12.0 | Previous                                | `04tVx000000nYTZIA2` |
+| v3.11.0 | Previous                                | `04tVx000000nPGbIAM` |
 | v3.10.0 | Previous                                | `04tVx000000nOh7IAE` |
 | v3.09.0 | Previous                                | `04tVx000000nOdtIAE` |
 | v3.08.0 | Previous                                | `04tVx000000nOFhIAM` |

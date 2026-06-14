@@ -1228,7 +1228,22 @@ public without sharing class DocGenSignatureService {
                         new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'FirstPublishLocationId' }
                     );
                     /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-                    Database.insert(new List<ContentVersion>{ pdfCv }, false, AccessLevel.SYSTEM_MODE);
+                    Database.SaveResult cvRes = Database.insert(
+                        new List<ContentVersion>{ pdfCv },
+                        false,
+                        AccessLevel.SYSTEM_MODE
+                    )[0];
+                    // Surface a silent finalize failure — previously a failed save left the
+                    // request "Signed" with NO attached PDF and no trace (the bug Sarah hit:
+                    // signing completes but the signed document never appears).
+                    if (!cvRes.isSuccess()) {
+                        throw new DocGenException(
+                            'Signed PDF could not be saved to ' +
+                                req.Related_Record_Id__c +
+                                ': ' +
+                                cvRes.getErrors()[0].getMessage()
+                        );
+                    }
                 }
 
                 // Update document hash on existing audit records
@@ -1461,7 +1476,22 @@ public without sharing class DocGenSignatureService {
                         new Set<String>{ 'Title', 'PathOnClient', 'VersionData', 'FirstPublishLocationId' }
                     );
                     /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-                    Database.insert(new List<ContentVersion>{ pdfCv }, false, AccessLevel.SYSTEM_MODE);
+                    Database.SaveResult cvRes = Database.insert(
+                        new List<ContentVersion>{ pdfCv },
+                        false,
+                        AccessLevel.SYSTEM_MODE
+                    )[0];
+                    // Surface a silent finalize failure — previously a failed save left the
+                    // request "Signed" with NO attached PDF and no trace (the bug Sarah hit:
+                    // signing completes but the signed document never appears).
+                    if (!cvRes.isSuccess()) {
+                        throw new DocGenException(
+                            'Signed PDF could not be saved to ' +
+                                req.Related_Record_Id__c +
+                                ': ' +
+                                cvRes.getErrors()[0].getMessage()
+                        );
+                    }
 
                     // Signer form-field writeback: publish the decoupled event ONLY
                     // after the signed PDF ContentVersion is saved, so writeback fires

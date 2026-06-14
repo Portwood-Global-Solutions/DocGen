@@ -417,6 +417,34 @@ try {
     System.debug('FORMFIELD {?key} PRESERVE/RESOLVE: FAIL — ' + e.getMessage());
 }
 
+// ===== Barcode / QR tags in HTML templates (v3.15) =====
+// processXml emits ##BARCODE:...## markers; the HTML path converts them to CSS
+// via DocGenHtmlRenderer.replaceBarcodeMarkersInHtml (Word path uses renderBarcodeHtml).
+try {
+    String bt = '<td>SKU {*Code__c:code128:200x44} <span>scan {*Url__c:qr:160}</span></td>';
+    String marked = DocGenService.processXmlForTest(
+        bt,
+        new Map<String, Object>{ 'Code__c' => 'PWG-1001', 'Url__c' => 'https://verify.portwood.dev/x' }
+    );
+    Boolean emitted = marked.contains('##BARCODE:code128') && marked.contains('##BARCODE:qr');
+    String rendered = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(marked);
+    Boolean ok =
+        emitted &&
+        !rendered.contains('##BARCODE:') &&
+        rendered.contains('display:inline-block') &&
+        rendered.contains('<td>'); // surrounding HTML preserved unescaped
+    if (ok) {
+        pass++;
+        System.debug('HTML BARCODE+QR: PASS');
+    } else {
+        fail++;
+        System.debug('HTML BARCODE+QR: FAIL — emitted=' + emitted + ' rendered=' + rendered.left(120));
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('HTML BARCODE+QR: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX4 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

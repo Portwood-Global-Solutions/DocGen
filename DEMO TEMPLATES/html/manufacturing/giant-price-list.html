@@ -1,0 +1,54 @@
+<!--
+  Portwood DocGen DEMO — Master / Giant Price List (HTML -> PDF, SCALE demo)
+  Base object: Pricebook2 (~2,200 PricebookEntries)   Child loop: PricebookEntries
+  Features: compact many-page table, repeating header across PDF pages via
+            -fs-table-paginate + thead{display:table-header-group}.
+            Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.5in 0.6in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #222; font-size: 8.5pt; }
+      table { border-collapse: collapse; width: 100%; -fs-table-paginate: paginate; }
+      thead { display: table-header-group; }
+      .title { margin: 0 0 8px 0; }
+      .title h1 { margin: 0; font-size: 15pt; color: #243b53; letter-spacing: 0.5px; }
+      .title .tag { font-size: 8.5pt; color: #5a6b7b; }
+      th { background: #243b53; color: #fff; text-align: left; padding: 5px 7px; font-size: 8pt;
+           letter-spacing: 0.3px; }
+      td { padding: 3px 7px; border-bottom: 1px solid #e6ebf0; font-size: 8.5pt; }
+      tbody tr:nth-child(even) td { background: #f5f8fb; }
+      .sku { font-family: Courier, monospace; color: #486581; }
+      .r { text-align: right; }
+      .pricecell { font-weight: bold; color: #102a43; }
+    </style>
+  </head>
+  <body>
+    <div class="title">
+      <h1>{Name}</h1>
+      <div class="tag">Master Price List &nbsp;·&nbsp; {COUNT:PricebookEntries} line items &nbsp;·&nbsp; Generated {Today:MMMM d, yyyy}</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:18%;">SKU</th>
+          <th style="width:48%;">Product</th>
+          <th style="width:22%;">Family</th>
+          <th style="width:12%;" class="r">Price</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#PricebookEntries}
+        <tr>
+          <td class="sku">{Product2.ProductCode}</td>
+          <td>{Product2.Name}</td>
+          <td>{Product2.Family}</td>
+          <td class="r pricecell">{UnitPrice:currency}</td>
+        </tr>
+        {/PricebookEntries}
+      </tbody>
+    </table>
+  </body>
+</html>

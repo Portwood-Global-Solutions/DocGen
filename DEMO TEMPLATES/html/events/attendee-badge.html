@@ -1,0 +1,66 @@
+<!--
+  Portwood DocGen DEMO — Conference Attendee Badge (HTML -> PDF)
+  Base object: Demo_Attendee__c   Parent: Event__r
+  A printed name badge centered on the page. Flying Saucer CSS 2.1 safe
+  (tables, solid colors, fixed units — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.75in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1a2b3c; }
+      table { border-collapse: collapse; }
+      .center { width: 100%; }
+      .center td { text-align: center; vertical-align: top; }
+      .badge { width: 4in; border: 2px solid #0b3d62; }
+      .badge td { padding: 0; }
+      .topbar { background: #0b3d62; color: #ffffff; padding: 10px 14px;
+                text-align: center; }
+      .topbar .ev { font-size: 11pt; font-weight: bold; letter-spacing: 0.5px; }
+      .topbar .loc { font-size: 8.5pt; color: #bcd6ea; }
+      .body { padding: 26px 18px 22px 18px; text-align: center; }
+      .name { font-size: 30pt; font-weight: bold; color: #0b3d62;
+              line-height: 1.05; }
+      .title { font-size: 12pt; color: #5a6b7b; padding-top: 8px; }
+      .company { font-size: 13pt; font-weight: bold; color: #1a2b3c;
+                 padding-top: 4px; }
+      .rule { border-top: 1px solid #d6dee6; }
+      .footbar { background: #c0392b; color: #ffffff; padding: 12px 14px;
+                 text-align: center; }
+      .footbar .tt { font-size: 16pt; font-weight: bold; letter-spacing: 2px; }
+      .hello { font-size: 9pt; color: #5a6b7b; letter-spacing: 3px; }
+    </style>
+  </head>
+  <body>
+    <table class="center">
+      <tr>
+        <td>
+          <table class="badge">
+            <tr>
+              <td class="topbar">
+                <div class="ev">{Event__r.Name}</div>
+                <div class="loc">{Event__r.City__c}, {Event__r.State__c}</div>
+              </td>
+            </tr>
+            <tr>
+              <td class="body">
+                <div class="hello">HELLO, MY NAME IS</div>
+                <table style="width:100%;"><tr><td style="text-align:center;padding-top:14px;">
+                  <div class="name">{Name}</div>
+                  <div class="title">{Title__c}</div>
+                  <div class="company">{Company__c}</div>
+                </td></tr></table>
+              </td>
+            </tr>
+            <tr><td class="rule"></td></tr>
+            <tr>
+              <td class="footbar">
+                <div class="tt">{Ticket_Type__c}</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
