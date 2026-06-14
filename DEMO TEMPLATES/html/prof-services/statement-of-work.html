@@ -1,0 +1,152 @@
+<!--
+  Portwood DocGen DEMO — Statement of Work (HTML -> PDF)
+  Base object: Opportunity   Child loop: OpportunityLineItems
+  Features: parent fields, currency/date formatting, child table loop,
+            grand-total aggregate (SUM), two-column signature block.
+            Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units
+            — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #20272e; font-size: 10.5pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .bar { background: #1f4d3f; color: #ffffff; padding: 14px 18px; }
+      .bar h1 { margin: 0; font-size: 20pt; letter-spacing: 0.5px; }
+      .bar .tag { font-size: 9pt; color: #b9d6cb; }
+      .doctitle { font-size: 13pt; font-weight: bold; }
+      .parties td { padding: 2px 0; font-size: 10pt; vertical-align: top; }
+      .parties .k { color: #5f7068; width: 92px; }
+      .card { border: 1px solid #cdd9d4; }
+      .card th { background: #eaf1ee; text-align: left; padding: 7px 10px; font-size: 9pt;
+                 color: #1f4d3f; border-bottom: 1px solid #cdd9d4; }
+      .card td { padding: 6px 10px; }
+      h2.sec { color: #1f4d3f; font-size: 12pt; border-bottom: 2px solid #1f4d3f;
+               padding-bottom: 3px; margin: 22px 0 10px 0; }
+      p.body { line-height: 1.5; margin: 0 0 10px 0; }
+      .items th { background: #1f4d3f; color: #fff; text-align: left; padding: 7px 9px; font-size: 9pt; }
+      .items td { padding: 6px 9px; border-bottom: 1px solid #e3ebe7; font-size: 9.5pt; vertical-align: top; }
+      .items tr:nth-child(even) td { background: #f4f8f6; }
+      .r { text-align: right; }
+      .desc { color: #5f7068; font-size: 8.5pt; }
+      .fees td { padding: 7px 10px; font-size: 11pt; }
+      .fees .grand { background: #eaf1ee; font-size: 14pt; font-weight: bold; color: #1f4d3f; }
+      .sigline { border-top: 1px solid #20272e; padding-top: 4px; font-size: 9pt; color: #5f7068; }
+      .sigcell { height: 54px; vertical-align: bottom; font-size: 13pt; }
+      .foot { margin-top: 18px; color: #8a978f; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #cdd9d4; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <table>
+        <tr>
+          <td><h1>Portwood Global Solutions</h1><div class="tag">Professional Services &nbsp;·&nbsp; portwoodglobal.example.com</div></td>
+          <td class="r" style="vertical-align:top;">
+            <div class="doctitle">Statement of Work</div>
+            <div class="tag">Prepared {Today:MMMM d, yyyy}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <table style="margin-top:14px;">
+      <tr>
+        <td style="width:50%; vertical-align:top;">
+          <table class="parties">
+            <tr><td class="k">Provider</td><td><strong>Portwood Global Solutions</strong></td></tr>
+            <tr><td class="k">Contact</td><td>{RunningUser.Name}</td></tr>
+            <tr><td class="k">Email</td><td>{RunningUser.Email}</td></tr>
+          </table>
+        </td>
+        <td style="width:50%; vertical-align:top;">
+          <table class="parties">
+            <tr><td class="k">Client</td><td><strong>{Account.Name}</strong></td></tr>
+            <tr><td class="k">Address</td><td>{Account.BillingStreet}<br/>{Account.BillingCity}, {Account.BillingState} {Account.BillingPostalCode}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Project: {Name}</h2>
+    <p class="body">
+      This Statement of Work ("SOW") is entered into between Portwood Global Solutions
+      ("Provider") and {Account.Name} ("Client") and describes the professional services
+      to be performed in connection with the <strong>{Name}</strong> engagement. The
+      engagement is currently at the <strong>{StageName}</strong> stage with a target
+      completion date of <strong>{CloseDate:MMMM d, yyyy}</strong>. By signing below, both
+      parties acknowledge and agree to the scope, deliverables, fees, and terms set forth
+      in this document.
+    </p>
+
+    <h2 class="sec">Scope of Services &amp; Deliverables</h2>
+    <table class="items">
+      <tr>
+        <th style="width:34%;">Deliverable</th>
+        <th>Description</th>
+        <th class="r" style="width:9%;">Qty</th>
+        <th class="r" style="width:15%;">Rate</th>
+        <th class="r" style="width:15%;">Amount</th>
+      </tr>
+      {#OpportunityLineItems}
+      <tr>
+        <td><strong>{Product2.Name}</strong></td>
+        <td class="desc">{Description}</td>
+        <td class="r">{Quantity}</td>
+        <td class="r">{UnitPrice:currency}</td>
+        <td class="r">{TotalPrice:currency}</td>
+      </tr>
+      {/OpportunityLineItems}
+    </table>
+
+    <h2 class="sec">Fees Summary</h2>
+    <table class="card fees">
+      <tr>
+        <td>Total Professional Fees</td>
+        <td class="r grand">{SUM:OpportunityLineItems.TotalPrice:currency}</td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Terms</h2>
+    <p class="body">
+      Provider will perform the services described above in a professional and workmanlike
+      manner consistent with industry standards. Fees are due net thirty (30) days from the
+      date of each invoice. Any changes to the scope of services must be agreed upon in
+      writing by both parties through a signed change order. Either party may terminate this
+      engagement with thirty (30) days' written notice; Client shall pay for all services
+      rendered through the effective date of termination. This SOW, together with any
+      governing master services agreement, constitutes the entire agreement between the parties.
+    </p>
+
+    <h2 class="sec">Authorization</h2>
+    <table style="margin-top:6px;">
+      <tr>
+        <td style="width:48%; vertical-align:top;">
+          <div class="sigcell">{@Signature_Provider:1:Full}</div>
+          <div class="sigline">Provider &mdash; Portwood Global Solutions</div>
+        </td>
+        <td style="width:4%;"></td>
+        <td style="width:48%; vertical-align:top;">
+          <div class="sigcell">{@Signature_Client:1:Full}</div>
+          <div class="sigline">Client &mdash; {Account.Name}</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="vertical-align:top; padding-top:18px;">
+          <div class="sigline" style="border-top:none; padding-top:0;">{RunningUser.Name}</div>
+        </td>
+        <td></td>
+        <td style="vertical-align:top; padding-top:18px;">
+          <div style="font-size:11pt;">{@Signature_Client:1:Date}</div>
+          <div class="sigline">Date</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      Statement of Work generated by Portwood DocGen for demonstration purposes. &nbsp;·&nbsp;
+      Portwood Global Solutions &nbsp;·&nbsp; (800) 555-0100
+    </div>
+  </body>
+</html>

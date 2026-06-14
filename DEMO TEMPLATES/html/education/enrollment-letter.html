@@ -1,0 +1,92 @@
+<!--
+  Portwood DocGen DEMO — Enrollment Verification Letter (HTML -> PDF)
+  Base object: Demo_Student__c
+  Signature tags on own lines. Embossed-seal placeholder via bordered table cell.
+  Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.75in 0.85in; }
+      body { font-family: "Times New Roman", Times, serif; color: #1c2733; font-size: 11.5pt; line-height: 1.5; }
+      table { border-collapse: collapse; width: 100%; }
+      .head { border-bottom: 3px solid #1f3a5f; padding-bottom: 8px; }
+      .head .name { font-family: Helvetica, Arial, sans-serif; font-size: 19pt;
+                    font-weight: bold; color: #1f3a5f; }
+      .head .sub { font-family: Helvetica, Arial, sans-serif; font-size: 9.5pt;
+                   letter-spacing: 2px; color: #6a7682; }
+      .seal { width: 78pt; height: 78pt; border: 3pt solid #c9a227; }
+      .seal .inner { border: 1pt solid #c9a227; width: 100%; height: 100%; }
+      .seal .txt { font-family: Helvetica, Arial, sans-serif; font-size: 7.5pt;
+                   letter-spacing: 1px; color: #8a7320; text-align: center; }
+      .date { margin: 26px 0 18px 0; font-size: 11pt; }
+      p { margin: 0 0 12px 0; }
+      .salut { margin-top: 6px; font-weight: bold; }
+      .factbox { border: 1px solid #d6dee6; margin: 16px 0; }
+      .factbox td { padding: 6px 12px; font-size: 10.5pt;
+                    font-family: Helvetica, Arial, sans-serif; }
+      .factbox .k { color: #5a6b7b; width: 180px; border-right: 1px solid #eef3f8; }
+      .sigblock { margin-top: 34px; }
+      .sigline { border-top: 1px solid #1c2733; padding-top: 4px; width: 250pt;
+                 font-family: Helvetica, Arial, sans-serif; font-size: 9.5pt; color: #5a6b7b; }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <table>
+        <tr>
+          <td style="vertical-align:middle;">
+            <div class="name">Riverside University</div>
+            <div class="sub">OFFICE OF THE REGISTRAR</div>
+          </td>
+          <td style="text-align:right; vertical-align:middle; width:90pt;">
+            <table class="seal"><tr><td class="inner">
+              <table style="height:100%;"><tr><td class="txt" valign="middle">OFFICIAL<br/>SEAL<br/>RIVERSIDE U</td></tr></table>
+            </td></tr></table>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="date">{Today:MMMM d, yyyy}</div>
+
+    <p class="salut">To Whom It May Concern:</p>
+
+    <p>
+      This letter serves as official verification that <strong>{Name}</strong>
+      (Student ID <strong>{Student_ID__c}</strong>) is currently and actively
+      enrolled at Riverside University. The student is in good standing and is
+      classified as a <strong>{Class_Standing__c}</strong> pursuing the
+      {Program__c} program with a declared major in {Major__c}.
+    </p>
+
+    <table class="factbox">
+      <tr><td class="k">Student Name</td><td>{Name}</td></tr>
+      <tr><td class="k">Student ID</td><td>{Student_ID__c}</td></tr>
+      <tr><td class="k">Program</td><td>{Program__c}</td></tr>
+      <tr><td class="k">Major</td><td>{Major__c}</td></tr>
+      <tr><td class="k">Class Standing</td><td>{Class_Standing__c}</td></tr>
+      <tr><td class="k">Enrolled Since</td><td>{Enrollment_Date__c:MMMM d, yyyy}</td></tr>
+      <tr><td class="k">Expected Graduation</td><td>{Expected_Graduation__c:MMMM d, yyyy}</td></tr>
+      <tr><td class="k">Credits Completed</td><td>{Total_Credits__c:#,##0}</td></tr>
+      <tr><td class="k">Faculty Advisor</td><td>{Advisor__c}</td></tr>
+    </table>
+
+    <p>
+      Should you require any additional confirmation of this student's enrollment
+      status, please contact the Office of the Registrar at your convenience. This
+      verification is issued in response to a request for proof of enrollment and
+      is valid as of the date shown above.
+    </p>
+
+    <p>Sincerely,</p>
+
+    <div class="sigblock">
+      {@Signature_Registrar:1:Full}
+      <div class="sigline">University Registrar &middot; Office of the Registrar</div>
+      <div style="margin-top:10px; font-family:Helvetica,Arial,sans-serif; font-size:9.5pt; color:#5a6b7b;">
+        Date: {@Signature_Registrar:1:Date}
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,149 @@
+<!--
+  Portwood DocGen DEMO — Client Engagement Letter (HTML -> PDF)
+  Base object: Contact   Parent: Account
+  Features: parent fields, business-letter format, today's date,
+            running-user signoff, signature + date block.
+            Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units
+            — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.75in 0.85in; }
+      body { font-family: Times, "Times New Roman", serif; color: #1c1c1c; font-size: 11pt; line-height: 1.55; }
+      table { border-collapse: collapse; width: 100%; }
+      .letterhead { border-bottom: 3px solid #6b1f2e; padding-bottom: 10px; }
+      .letterhead .firm { font-family: Helvetica, Arial, sans-serif; font-size: 18pt;
+                          font-weight: bold; color: #6b1f2e; letter-spacing: 0.5px; }
+      .letterhead .tag { font-family: Helvetica, Arial, sans-serif; font-size: 8.5pt;
+                         color: #6b6b6b; letter-spacing: 1.5px; }
+      .letterhead .contact { font-family: Helvetica, Arial, sans-serif; font-size: 8.5pt;
+                             color: #6b6b6b; text-align: right; }
+      .date { margin: 26px 0 18px 0; }
+      .addr { margin-bottom: 18px; }
+      .re { font-weight: bold; margin: 4px 0 16px 0; }
+      p.body { margin: 0 0 12px 0; }
+      h3.sub { font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #6b1f2e;
+               margin: 16px 0 6px 0; }
+      .closing { margin-top: 22px; }
+      .signoff .name { font-weight: bold; }
+      .accept { margin-top: 30px; border-top: 1px solid #cfcfcf; padding-top: 16px; }
+      .accept .hdr { font-family: Helvetica, Arial, sans-serif; font-size: 10pt;
+                     font-weight: bold; color: #6b1f2e; letter-spacing: 1px; margin-bottom: 14px; }
+      .sigcell { height: 50px; vertical-align: bottom; font-size: 13pt; }
+      .sigline { border-top: 1px solid #1c1c1c; padding-top: 4px;
+                 font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #6b6b6b; }
+      .foot { margin-top: 22px; color: #9a9a9a; font-family: Helvetica, Arial, sans-serif;
+              font-size: 8pt; text-align: center; border-top: 1px solid #cfcfcf; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <table class="letterhead">
+      <tr>
+        <td style="vertical-align:top;">
+          <div class="firm">Portwood Global Solutions</div>
+          <div class="tag">PROFESSIONAL ADVISORY SERVICES</div>
+        </td>
+        <td class="contact" style="vertical-align:top;">
+          100 Market Street, Suite 400<br/>
+          (800) 555-0100<br/>
+          portwoodglobal.example.com
+        </td>
+      </tr>
+    </table>
+
+    <div class="date">{Today:MMMM d, yyyy}</div>
+
+    <div class="addr">
+      {FirstName} {LastName}<br/>
+      {Title}<br/>
+      {Account.Name}<br/>
+      {Account.BillingCity}, {Account.BillingState}
+    </div>
+
+    <div class="re">Re: Engagement of Professional Services</div>
+
+    <p class="body">Dear {FirstName} {LastName},</p>
+
+    <p class="body">
+      Thank you for selecting Portwood Global Solutions to serve {Account.Name}. We are
+      pleased to confirm the terms of our engagement in this letter. The purpose of this
+      letter is to set out the scope of the services we will provide, the basis on which our
+      fees will be charged, our mutual obligations regarding confidentiality, and the term
+      of our relationship.
+    </p>
+
+    <h3 class="sub">Scope of Engagement</h3>
+    <p class="body">
+      We will provide professional advisory and implementation services as agreed between us
+      from time to time. Each specific project will be described in a separate statement of
+      work that references this engagement letter. We will perform our services with
+      professional diligence and in accordance with applicable standards, and we will keep
+      you informed of progress throughout the engagement.
+    </p>
+
+    <h3 class="sub">Fees</h3>
+    <p class="body">
+      Our fees will be based on the services described in each statement of work. Invoices
+      are payable within thirty (30) days of the invoice date. We will discuss any
+      significant change in the anticipated fees with you before additional work is
+      undertaken, and no change to scope or fees will take effect without your written
+      approval.
+    </p>
+
+    <h3 class="sub">Confidentiality</h3>
+    <p class="body">
+      We will treat all information you provide as strictly confidential and will use it
+      solely for the purpose of performing the engagement. We will not disclose your
+      confidential information to any third party except as required by law or with your
+      prior written consent. We expect the same standard of confidentiality to apply to any
+      proprietary materials and methodologies we share with you.
+    </p>
+
+    <h3 class="sub">Term</h3>
+    <p class="body">
+      This engagement begins on the date of your acceptance below and continues until the
+      completion of the agreed services or until terminated by either party upon thirty (30)
+      days' written notice. Upon termination, you will remain responsible for fees and
+      expenses incurred through the effective date of termination.
+    </p>
+
+    <p class="body">
+      We are grateful for your confidence in our firm and look forward to a successful and
+      productive relationship. If the terms set out above are acceptable, please sign and
+      date the acknowledgement below. Should you have any questions, please do not hesitate
+      to contact me directly at {Email} or by phone.
+    </p>
+
+    <div class="closing">
+      <p class="body">Sincerely,</p>
+      <div class="signoff" style="margin-top:10px;">
+        <div class="name">{RunningUser.Name}</div>
+        <div>{RunningUser.Title}</div>
+        <div>Portwood Global Solutions</div>
+      </div>
+    </div>
+
+    <div class="accept">
+      <div class="hdr">ACCEPTED AND AGREED</div>
+      <table>
+        <tr>
+          <td style="width:55%; vertical-align:top;">
+            <div class="sigcell">{@Signature_Client:1:Full}</div>
+            <div class="sigline">{FirstName} {LastName}</div>
+          </td>
+          <td style="width:5%;"></td>
+          <td style="width:40%; vertical-align:top;">
+            <div class="sigcell" style="font-size:11pt;">{@Signature_Client:1:Date}</div>
+            <div class="sigline">Date</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="foot">
+      Engagement letter generated by Portwood DocGen for demonstration purposes. &nbsp;·&nbsp;
+      Portwood Global Solutions &nbsp;·&nbsp; (800) 555-0100
+    </div>
+  </body>
+</html>

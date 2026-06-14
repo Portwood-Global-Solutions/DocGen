@@ -1,0 +1,122 @@
+<!--
+  Portwood DocGen DEMO — Sales / Partnership Proposal (HTML -> PDF)
+  Base object: Account   Child loop: Opportunities
+  Features: parent fields, currency/date formatting, column chart,
+            child table loop, grand-total aggregates (SUM/COUNT).
+            Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units
+            — no flex/grid/gap/calc/var/gradient).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #20262e; font-size: 10.5pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .cover { background: #2a2f5a; color: #ffffff; padding: 30px 24px; }
+      .cover .eyebrow { font-size: 10pt; color: #b9bce0; letter-spacing: 2px; }
+      .cover h1 { margin: 6px 0 4px 0; font-size: 24pt; letter-spacing: 0.5px; }
+      .cover .sub { font-size: 11pt; color: #cdcfe8; }
+      h2.sec { color: #2a2f5a; font-size: 12pt; border-bottom: 2px solid #2a2f5a;
+               padding-bottom: 3px; margin: 22px 0 10px 0; }
+      p.body { line-height: 1.5; margin: 0 0 10px 0; }
+      .card { border: 1px solid #d4d6e6; }
+      .card th { background: #eceef7; text-align: left; padding: 7px 10px; font-size: 9pt;
+                 color: #2a2f5a; border-bottom: 1px solid #d4d6e6; width: 32%; }
+      .card td { padding: 7px 10px; font-size: 10.5pt; }
+      .card tr:nth-child(even) th, .card tr:nth-child(even) td { background: #f6f7fc; }
+      .pipe th { background: #2a2f5a; color: #fff; text-align: left; padding: 7px 9px; font-size: 9pt; }
+      .pipe td { padding: 6px 9px; border-bottom: 1px solid #e6e7f1; font-size: 9.5pt; }
+      .pipe tr:nth-child(even) td { background: #f6f7fc; }
+      .r { text-align: right; }
+      .invest td { padding: 8px 12px; }
+      .invest .lbl { color: #5d6275; font-size: 9pt; }
+      .invest .big { font-size: 18pt; font-weight: bold; color: #2a2f5a; }
+      .signoff { margin-top: 8px; }
+      .signoff .name { font-size: 11pt; font-weight: bold; color: #2a2f5a; }
+      .signoff .ttl { font-size: 9.5pt; color: #5d6275; }
+      .foot { margin-top: 18px; color: #8a8fa3; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #d4d6e6; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="cover">
+      <div class="eyebrow">PORTWOOD GLOBAL SOLUTIONS</div>
+      <h1>Partnership Proposal for {Name}</h1>
+      <div class="sub">Prepared {Today:MMMM d, yyyy} &nbsp;·&nbsp; Presented by {RunningUser.Name}</div>
+    </div>
+
+    <h2 class="sec">Executive Summary</h2>
+    <p class="body">
+      Thank you for the opportunity to partner with <strong>{Name}</strong>. As a leader in
+      the {Industry} sector, your organization is positioned for continued growth, and
+      Portwood Global Solutions is committed to supporting that journey. This proposal
+      summarizes our understanding of your current engagements, outlines the active pipeline
+      we are pursuing together, and sets out the recommended investment to advance our
+      partnership. Our goal is a long-term relationship that delivers measurable value across
+      every stage of your operations.
+    </p>
+
+    <h2 class="sec">Account Snapshot</h2>
+    <table class="card">
+      <tr><th>Industry</th><td>{Industry}</td></tr>
+      <tr><th>Annual Revenue</th><td>{AnnualRevenue:currency}</td></tr>
+      <tr><th>Location</th><td>{BillingCity}, {BillingState}</td></tr>
+      <tr><th>Phone</th><td>{Phone}</td></tr>
+      <tr><th>Website</th><td>{Website}</td></tr>
+    </table>
+
+    <h2 class="sec">Current Engagements &amp; Pipeline</h2>
+    <div style="text-align:center; margin-bottom:12px;">
+      {Chart:Opportunities:StageName:bar:title=Pipeline by Stage&width=460&height=240}
+    </div>
+    <table class="pipe">
+      <tr>
+        <th>Opportunity</th>
+        <th class="r" style="width:18%;">Amount</th>
+        <th style="width:24%;">Stage</th>
+        <th class="r" style="width:20%;">Close Date</th>
+      </tr>
+      {#Opportunities}
+      <tr>
+        <td>{Name}</td>
+        <td class="r">{Amount:currency}</td>
+        <td>{StageName}</td>
+        <td class="r">{CloseDate:MMMM d, yyyy}</td>
+      </tr>
+      {/Opportunities}
+    </table>
+
+    <h2 class="sec">Investment Summary</h2>
+    <table class="card invest">
+      <tr>
+        <td style="width:50%; border-right:1px solid #d4d6e6;">
+          <div class="lbl">TOTAL PIPELINE VALUE</div>
+          <div class="big">{SUM:Opportunities.Amount:currency}</div>
+        </td>
+        <td style="width:50%;">
+          <div class="lbl">ACTIVE OPPORTUNITIES</div>
+          <div class="big">{COUNT:Opportunities}</div>
+        </td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Next Steps</h2>
+    <p class="body">
+      We propose a brief kickoff session to align on priorities, confirm timelines, and
+      finalize the engagement plan for each opportunity outlined above. Following that
+      conversation, our team will prepare detailed statements of work for your review and
+      approval. We are confident this partnership will deliver lasting value to {Name}, and
+      we look forward to getting started.
+    </p>
+    <div class="signoff">
+      <p class="body" style="margin-bottom:14px;">Warm regards,</p>
+      <div class="name">{RunningUser.Name}</div>
+      <div class="ttl">{RunningUser.Title} &nbsp;·&nbsp; Portwood Global Solutions</div>
+    </div>
+
+    <div class="foot">
+      Partnership proposal generated by Portwood DocGen for demonstration purposes. &nbsp;·&nbsp;
+      Portwood Global Solutions &nbsp;·&nbsp; (800) 555-0100
+    </div>
+  </body>
+</html>
