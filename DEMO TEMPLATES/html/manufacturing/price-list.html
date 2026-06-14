@@ -1,0 +1,77 @@
+<!--
+  Portwood DocGen DEMO — Wholesale Price List (HTML -> PDF)
+  Base object: Pricebook2   Child loop: PricebookEntries
+  Features: parent fields, COUNT aggregate, child table loop, currency
+            formatting, zebra rows. Data pre-sorted by family then name.
+            Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1f2933; font-size: 10.5pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .bar { background: #243b53; color: #ffffff; padding: 16px 18px; }
+      .bar h1 { margin: 0; font-size: 21pt; letter-spacing: 0.5px; }
+      .bar .tag { font-size: 9pt; color: #b7c7d8; }
+      .intro td { padding: 3px 0; font-size: 10pt; vertical-align: top; }
+      .intro .k { color: #5a6b7b; width: 90px; }
+      .desc { margin: 14px 0 4px 0; color: #3a4a59; font-size: 10pt; }
+      .price th { background: #243b53; color: #fff; text-align: left; padding: 8px 10px; font-size: 9pt;
+                  letter-spacing: 0.5px; }
+      .price td { padding: 7px 10px; border-bottom: 1px solid #e3e9ef; font-size: 9.5pt; }
+      .price tr:nth-child(even) td { background: #f5f8fb; }
+      .sku { font-family: Courier, monospace; color: #486581; }
+      .r { text-align: right; }
+      .c { text-align: center; }
+      .pricecell { font-weight: bold; color: #102a43; }
+      .pillcount { background: #ffffff; color: #243b53; padding: 3px 9px; font-size: 10pt;
+                   font-weight: bold; border: 1px solid #b7c7d8; }
+      .foot { margin-top: 18px; color: #8795a3; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #d6dee6; padding-top: 8px; }
+      h2.sec { color: #243b53; font-size: 12pt; border-bottom: 2px solid #243b53;
+               padding-bottom: 3px; margin: 20px 0 8px 0; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <table>
+        <tr>
+          <td><h1>{Name}</h1><div class="tag">Wholesale Price List &nbsp;·&nbsp; Portwood Global Solutions</div></td>
+          <td class="r" style="vertical-align:top;">
+            <div style="font-size:11pt;font-weight:bold;">Effective {Today:MMMM d, yyyy}</div>
+            <div class="tag" style="margin-top:6px;"><span class="pillcount">{COUNT:PricebookEntries} products</span></div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="desc">{Description}</div>
+
+    <h2 class="sec">Catalog Pricing</h2>
+    <table class="price">
+      <tr>
+        <th style="width:16%;">SKU</th>
+        <th style="width:40%;">Product</th>
+        <th style="width:22%;">Family</th>
+        <th style="width:10%;" class="c">Unit</th>
+        <th style="width:12%;" class="r">Unit Price</th>
+      </tr>
+      {#PricebookEntries}
+      <tr>
+        <td class="sku">{Product2.ProductCode}</td>
+        <td>{Product2.Name}</td>
+        <td>{Product2.Family}</td>
+        <td class="c">{Product2.QuantityUnitOfMeasure}</td>
+        <td class="r pricecell">{UnitPrice:currency}</td>
+      </tr>
+      {/PricebookEntries}
+    </table>
+
+    <div class="foot">
+      Prices subject to change without notice. &nbsp;·&nbsp;
+      Minimum order quantities may apply. &nbsp;·&nbsp;
+      Portwood DocGen demonstration document.
+    </div>
+  </body>
+</html>

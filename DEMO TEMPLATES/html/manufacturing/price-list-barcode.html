@@ -1,0 +1,48 @@
+<!--
+  Portwood DocGen DEMO — Wholesale Price List with Barcodes (HTML -> PDF)  [requires v3.15+]
+  Base object: Pricebook2   Child loop: PricebookEntries
+  Showcases Code 128 barcodes in HTML templates (new in v3.15):
+  {*Product2.ProductCode:code128} renders a scannable barcode per row.
+  Flying Saucer CSS 2.1 safe.
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1a2b3c; font-size: 10pt; }
+      .bar { background: #7c2d12; color: #fff; padding: 12px 16px; }
+      .bar h1 { margin: 0; font-size: 20pt; }
+      .bar .sub { color: #f3d6c6; font-size: 9pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .pl { margin-top: 14px; }
+      .pl th { background: #7c2d12; color: #fff; text-align: left; padding: 7px 9px; font-size: 9pt; }
+      .pl td { padding: 6px 9px; border-bottom: 1px solid #ead9d1; font-size: 9.5pt; vertical-align: middle; }
+      .pl tr:nth-child(even) td { background: #faf4f1; }
+      .r { text-align: right; }
+      .sku { font-family: Courier, monospace; color: #7c2d12; }
+      .foot { margin-top: 16px; color: #9aa5b1; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #ead9d1; padding-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <h1>{Name}</h1>
+      <div class="sub">Wholesale Price List with Scannable Barcodes &middot; Effective {Today:MMMM d, yyyy} &middot; {COUNT:PricebookEntries} products</div>
+    </div>
+
+    <table class="pl">
+      <tr><th>SKU</th><th>Barcode</th><th>Product</th><th>Family</th><th class="r">Unit Price</th></tr>
+      {#PricebookEntries}
+      <tr>
+        <td class="sku">{Product2.ProductCode}</td>
+        <td>{*Product2.ProductCode:code128:220x46}</td>
+        <td>{Product2.Name}</td>
+        <td>{Product2.Family}</td>
+        <td class="r">{UnitPrice:currency}</td>
+      </tr>
+      {/PricebookEntries}
+    </table>
+
+    <div class="foot">Prices subject to change without notice. Scan any barcode to look up the SKU in your inventory system. &middot; {Name}</div>
+  </body>
+</html>

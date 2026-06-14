@@ -1,0 +1,99 @@
+<!--
+  Portwood DocGen DEMO — Certificate of Completion (HTML -> PDF)  *** LANDSCAPE ***
+  Base object: Demo_Certificate__c
+  Flying Saucer CSS 2.1 safe (nested tables, solid colors, fixed units — no
+  flex/grid/gap/calc/var/gradient/shadow). Ornate border simulated with nested
+  thick+thin solid-border tables in a gold/navy scheme.
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter landscape; margin: 0.5in; }
+      body { font-family: "Times New Roman", Times, serif; color: #11243a; }
+      table { border-collapse: collapse; width: 100%; }
+      .frameOuter { border: 6pt solid #1f3a5f; }
+      .frameMid { border: 2pt solid #c9a227; }
+      .frameInner { border: 1pt solid #1f3a5f; }
+      .pad { padding: 26pt 40pt; }
+      .eyebrow { font-family: Helvetica, Arial, sans-serif; font-size: 10pt;
+                 letter-spacing: 4px; color: #c9a227; text-align: center; }
+      .title { font-size: 38pt; color: #1f3a5f; text-align: center;
+               letter-spacing: 2px; padding: 4pt 0 2pt 0; }
+      .rule { width: 180pt; height: 3pt; background: #c9a227; }
+      .lead { font-size: 13pt; color: #4a5a6b; text-align: center; font-style: italic; }
+      .name { font-size: 40pt; color: #11243a; text-align: center;
+              padding: 6pt 0 4pt 0; }
+      .course { font-size: 20pt; color: #1f3a5f; text-align: center; font-weight: bold; }
+      .body { font-size: 13pt; color: #2a3b4c; text-align: center; line-height: 1.5; }
+      .stat .lbl { font-family: Helvetica, Arial, sans-serif; font-size: 8.5pt;
+                   letter-spacing: 2px; color: #8a7320; }
+      .stat .val { font-size: 18pt; color: #1f3a5f; font-weight: bold; }
+      .sigline { border-top: 1pt solid #1f3a5f; padding-top: 4pt; font-size: 10pt;
+                 font-family: Helvetica, Arial, sans-serif; color: #4a5a6b; }
+      .signame { font-size: 13pt; color: #11243a; }
+      .certno { font-family: Courier, monospace; font-size: 9.5pt; color: #4a5a6b; }
+    </style>
+  </head>
+  <body>
+    <table class="frameOuter">
+      <tr><td>
+        <table class="frameMid">
+          <tr><td>
+            <table class="frameInner">
+              <tr><td class="pad">
+
+                <div class="eyebrow">RIVERSIDE UNIVERSITY &nbsp;&middot;&nbsp; OFFICE OF PROFESSIONAL CREDENTIALS</div>
+                <div class="title">Certificate of Completion</div>
+                <table><tr><td align="center"><div class="rule"></div></td></tr></table>
+
+                <div class="lead" style="margin-top:14pt;">This certifies that</div>
+                <div class="name">{Recipient_Name__c}</div>
+
+                <div class="body">has successfully completed the program of study</div>
+                <div class="course" style="margin-top:6pt;">{Course_Name__c}</div>
+
+                <div class="body" style="margin-top:10pt;">
+                  at the <strong>{Credential_Level__c}</strong> credential level, comprising
+                  {Hours__c} contact hours, with a final assessment score of
+                  <strong>{Score__c}%</strong>.
+                </div>
+
+                <table style="margin-top:22pt;">
+                  <tr>
+                    <td align="center" class="stat" style="width:33%;">
+                      <div class="lbl">DATE ISSUED</div>
+                      <div class="val">{Issue_Date__c:MMMM d, yyyy}</div>
+                    </td>
+                    <td align="center" class="stat" style="width:34%;">
+                      <div class="lbl">CONTACT HOURS</div>
+                      <div class="val">{Hours__c}</div>
+                    </td>
+                    <td align="center" class="stat" style="width:33%;">
+                      <div class="lbl">VALID THROUGH</div>
+                      <div class="val">{Expiration_Date__c:MMMM d, yyyy}</div>
+                    </td>
+                  </tr>
+                </table>
+
+                <table style="margin-top:30pt;">
+                  <tr>
+                    <td style="width:42%; vertical-align:bottom;">
+                      <div class="signame">{Issuer__c}</div>
+                      <div class="sigline">{Issuer_Title__c}</div>
+                    </td>
+                    <td style="width:16%;"></td>
+                    <td style="width:42%; vertical-align:bottom;" align="right">
+                      <div class="certno">Certificate No. {Certificate_Number__c}</div>
+                      <div class="sigline" style="display:inline-block; min-width:160pt; text-align:left;">Official Seal of the University</div>
+                    </td>
+                  </tr>
+                </table>
+
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>

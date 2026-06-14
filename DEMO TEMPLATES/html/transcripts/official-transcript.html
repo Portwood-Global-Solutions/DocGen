@@ -1,0 +1,124 @@
+<!--
+  Portwood DocGen DEMO — Official Academic Transcript (HTML -> PDF)
+  Base object: Demo_Student__c   Child loop: Enrollments__r (pre-sorted Term_Order then code)
+  Registrar-grade, dense, formal. Seal placeholder via bordered table cell.
+  Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.55in 0.65in; }
+      body { font-family: "Times New Roman", Times, serif; color: #1a1a1a; font-size: 10pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .head { border-bottom: 3px double #1a1a1a; padding-bottom: 8px; }
+      .head .name { font-family: Helvetica, Arial, sans-serif; font-size: 18pt; font-weight: bold; color: #1a1a1a; }
+      .head .sub { font-family: Helvetica, Arial, sans-serif; font-size: 9.5pt; letter-spacing: 3px; color: #444; }
+      .seal { width: 70pt; height: 70pt; border: 2.5pt solid #1a1a1a; }
+      .seal .inner { border: 1pt solid #1a1a1a; width: 100%; height: 100%; }
+      .seal .txt { font-family: Helvetica, Arial, sans-serif; font-size: 7pt; letter-spacing: 1px; color: #1a1a1a; text-align: center; }
+      h2.sec { font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 10pt;
+               letter-spacing: 2px; background: #1a1a1a; color: #fff; padding: 4px 8px;
+               margin: 18px 0 8px 0; }
+      .info td { padding: 3px 8px; font-size: 9.5pt; vertical-align: top;
+                 font-family: Helvetica, Arial, sans-serif; }
+      .info .k { color: #555; width: 95px; }
+      .info .box { border: 1px solid #999; }
+      .cw th { background: #2a2a2a; color: #fff; text-align: left; padding: 5px 7px;
+               font-size: 8pt; font-family: Helvetica, Arial, sans-serif; letter-spacing: 0.5px; }
+      .cw td { padding: 4px 7px; border-bottom: 1px solid #d8d8d8; font-size: 9pt; }
+      .cw tr:nth-child(even) td { background: #f4f4f4; }
+      .c { text-align: center; }
+      .r { text-align: right; }
+      .sumbox { border: 2px solid #1a1a1a; margin-top: 16px; }
+      .sumbox td { padding: 8px 12px; font-family: Helvetica, Arial, sans-serif; }
+      .sumbox .lbl { font-size: 8pt; letter-spacing: 1px; color: #555; }
+      .sumbox .big { font-size: 16pt; font-weight: bold; color: #1a1a1a; }
+      .foot { margin-top: 16px; color: #555; font-size: 8pt; text-align: center;
+              border-top: 1px solid #1a1a1a; padding-top: 6px;
+              font-family: Helvetica, Arial, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <table>
+        <tr>
+          <td style="vertical-align:middle;">
+            <div class="name">Riverside University</div>
+            <div class="sub">OFFICIAL ACADEMIC TRANSCRIPT</div>
+          </td>
+          <td style="text-align:right; vertical-align:middle; width:82pt;">
+            <table class="seal"><tr><td class="inner">
+              <table style="height:100%;"><tr><td class="txt" valign="middle">OFFICIAL<br/>RIVERSIDE U<br/>REGISTRAR</td></tr></table>
+            </td></tr></table>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <h2 class="sec">STUDENT RECORD</h2>
+    <table class="info box">
+      <tr>
+        <td style="width:50%; vertical-align:top; border-right:1px solid #ccc;">
+          <table class="info">
+            <tr><td class="k">Name</td><td><strong>{Name}</strong></td></tr>
+            <tr><td class="k">Student ID</td><td>{Student_ID__c}</td></tr>
+            <tr><td class="k">Program</td><td>{Program__c}</td></tr>
+            <tr><td class="k">Major</td><td>{Major__c}</td></tr>
+            <tr><td class="k">Minor</td><td>{Minor__c}</td></tr>
+          </table>
+        </td>
+        <td style="width:50%; vertical-align:top;">
+          <table class="info">
+            <tr><td class="k">Class Standing</td><td>{Class_Standing__c}</td></tr>
+            <tr><td class="k">Advisor</td><td>{Advisor__c}</td></tr>
+            <tr><td class="k">Enrolled</td><td>{Enrollment_Date__c:MMMM d, yyyy}</td></tr>
+            <tr><td class="k">Exp. Grad.</td><td>{Expected_Graduation__c:MMMM d, yyyy}</td></tr>
+            <tr><td class="k">Honors</td><td>{Honors__c}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 class="sec">COURSEWORK</h2>
+    <table class="cw">
+      <tr>
+        <th>Term</th><th>Code</th><th>Course Title</th>
+        <th class="c">Credits</th><th class="c">Grade</th>
+        <th class="r">Grade Pts</th><th class="r">Quality Pts</th>
+      </tr>
+      {#Enrollments__r}
+      <tr>
+        <td>{Term__c}</td>
+        <td>{Course_Code__c}</td>
+        <td>{Course_Name__c}</td>
+        <td class="c">{Credits__c}</td>
+        <td class="c"><strong>{Grade__c}</strong></td>
+        <td class="r">{Grade_Points__c}</td>
+        <td class="r">{Quality_Points__c}</td>
+      </tr>
+      {/Enrollments__r}
+    </table>
+
+    <table class="sumbox">
+      <tr>
+        <td style="width:25%; border-right:1px solid #1a1a1a;">
+          <div class="lbl">CUMULATIVE GPA</div><div class="big">{GPA__c}</div>
+        </td>
+        <td style="width:25%; border-right:1px solid #1a1a1a;">
+          <div class="lbl">TOTAL CREDITS</div><div class="big">{Total_Credits__c:#,##0}</div>
+        </td>
+        <td style="width:25%; border-right:1px solid #1a1a1a;">
+          <div class="lbl">TOTAL QUALITY POINTS</div><div class="big">{SUM:Enrollments__r.Quality_Points:number}</div>
+        </td>
+        <td style="width:25%;">
+          <div class="lbl">HONORS</div><div class="big" style="font-size:12pt;">{Honors__c}</div>
+        </td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      This is an official transcript generated electronically by Riverside University,
+      Office of the Registrar. Any alteration voids this document.
+    </div>
+  </body>
+</html>

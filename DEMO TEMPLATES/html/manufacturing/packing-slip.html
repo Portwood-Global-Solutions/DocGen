@@ -1,0 +1,119 @@
+<!--
+  Portwood DocGen DEMO — Warehouse Packing Slip (HTML -> PDF)
+  Base object: Opportunity   Parent: Account.*   Child loop: OpportunityLineItems
+  Features: parent fields, date formatting, child table loop with pick checkbox,
+            blank "Qty Packed" cells, grand-total aggregates (SUM/COUNT).
+            Flying Saucer CSS 2.1 safe (tables, solid colors, fixed units).
+-->
+<html>
+  <head>
+    <style>
+      @page { size: letter; margin: 0.6in 0.7in; }
+      body { font-family: Helvetica, Arial, sans-serif; color: #1f2933; font-size: 10.5pt; }
+      table { border-collapse: collapse; width: 100%; }
+      .bar { background: #1a4731; color: #ffffff; padding: 14px 18px; }
+      .bar h1 { margin: 0; font-size: 22pt; letter-spacing: 1px; }
+      .bar .tag { font-size: 9pt; color: #c3e0d0; }
+      .meta td { padding: 2px 0; font-size: 10pt; vertical-align: top; }
+      .meta .k { color: #5a6b66; width: 95px; }
+      .box { border: 1px solid #c9d4ce; }
+      .box th { background: #eef4f0; text-align: left; padding: 7px 10px; font-size: 9pt;
+                color: #1a4731; border-bottom: 1px solid #c9d4ce; letter-spacing: 0.5px; }
+      .box td { padding: 7px 10px; vertical-align: top; }
+      .items th { background: #1a4731; color: #fff; text-align: left; padding: 8px 9px; font-size: 9pt;
+                  letter-spacing: 0.5px; }
+      .items td { padding: 7px 9px; border-bottom: 1px solid #e3eae6; font-size: 9.5pt; }
+      .items tr:nth-child(even) td { background: #f5f9f7; }
+      .chk { text-align: center; font-size: 14pt; width: 34px; }
+      .r { text-align: right; }
+      .c { text-align: center; }
+      .packcol { width: 90px; }
+      .totals td { padding: 8px 10px; font-size: 11pt; }
+      .totals .big { font-size: 15pt; font-weight: bold; color: #1a4731; }
+      .totals .lbl { color: #5a6b66; font-size: 9pt; letter-spacing: 0.5px; }
+      .sign { margin-top: 26px; border-top: 1px solid #c9d4ce; padding-top: 14px; }
+      .sign td { font-size: 9.5pt; color: #3a4a44; padding: 6px 12px 6px 0; }
+      .sign .line { border-bottom: 1px solid #7a8780; display: inline-block; width: 150px; }
+      .foot { margin-top: 18px; color: #8a958f; font-size: 8.5pt; text-align: center;
+              border-top: 1px solid #c9d4ce; padding-top: 8px; }
+      h2.sec { color: #1a4731; font-size: 12pt; border-bottom: 2px solid #1a4731;
+               padding-bottom: 3px; margin: 22px 0 10px 0; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <table>
+        <tr>
+          <td><h1>PACKING SLIP</h1><div class="tag">Portwood Fulfillment Center &nbsp;·&nbsp; Dock 7</div></td>
+          <td class="r" style="vertical-align:top;">
+            <div style="font-size:13pt;font-weight:bold;">Order {Name}</div>
+            <div class="tag">Ship Date: {CloseDate:MMMM d, yyyy}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <table style="margin-top:16px;">
+      <tr>
+        <td style="width:52%; vertical-align:top; padding-right:18px;">
+          <table class="box">
+            <tr><th>SHIP TO</th></tr>
+            <tr><td>
+              <strong>{Account.Name}</strong><br/>
+              {Account.BillingStreet}<br/>
+              {Account.BillingCity}, {Account.BillingState} {Account.BillingPostalCode}
+            </td></tr>
+          </table>
+        </td>
+        <td style="width:48%; vertical-align:top;">
+          <table class="meta">
+            <tr><td class="k">Order Ref</td><td><strong>{Name}</strong></td></tr>
+            <tr><td class="k">Ship Date</td><td>{CloseDate:MMMM d, yyyy}</td></tr>
+            <tr><td class="k">Printed</td><td>{Today:MMMM d, yyyy}</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <h2 class="sec">Items to Pick &amp; Pack</h2>
+    <table class="items">
+      <tr>
+        <th class="c">Pick</th>
+        <th>Product Code</th>
+        <th>Description</th>
+        <th class="r">Qty Ordered</th>
+        <th class="c">Qty Packed</th>
+      </tr>
+      {#OpportunityLineItems}
+      <tr>
+        <td class="chk">&#9744;</td>
+        <td>{Product2.ProductCode}</td>
+        <td>{Product2.Name}</td>
+        <td class="r">{Quantity:#,##0}</td>
+        <td class="packcol">&nbsp;</td>
+      </tr>
+      {/OpportunityLineItems}
+    </table>
+
+    <table class="box totals" style="margin-top:16px;">
+      <tr>
+        <td style="width:50%;"><div class="lbl">TOTAL LINE ITEMS</div><div class="big">{COUNT:OpportunityLineItems}</div></td>
+        <td style="width:50%; background:#eef4f0;"><div class="lbl">TOTAL UNITS PACKED</div><div class="big">{SUM:OpportunityLineItems.Quantity:#,##0}</div></td>
+      </tr>
+    </table>
+
+    <table class="sign">
+      <tr>
+        <td>Packed by: <span class="line">&nbsp;</span></td>
+        <td>Checked by: <span class="line">&nbsp;</span></td>
+        <td>Date: <span class="line">&nbsp;</span></td>
+      </tr>
+    </table>
+
+    <div class="foot">
+      Inspect contents against this slip before signing. &nbsp;·&nbsp;
+      Report discrepancies to the shipping office within 48 hours. &nbsp;·&nbsp;
+      Portwood DocGen demonstration document.
+    </div>
+  </body>
+</html>
