@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.11.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.14.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -189,7 +189,7 @@ Records with **2,000 to 50,000+ child records** are detected automatically. Same
 
 ### E-Signatures
 
-Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided field-to-field signing **on the actual PDF** — **draw or type** signatures and initials — date stamps, document packets, sequential and multi-signer flows, decline flow, sender notifications, and a **Certificate of Completion** (signed timestamps, IP, consent, document hash) — all 100% native.
+Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided field-to-field signing **on the actual PDF** — **draw or type** signatures and initials — date stamps, document packets, parallel / sequential / single multi-signer flows, decline flow, sender **and signer** completion notifications, and a **Certificate of Completion** (signed timestamps, IP, consent, document hash) — all 100% native. Send from the **Signature Sender** UI or trigger from a **Flow / platform event** — both take the same guided experience. Signed documents follow your template's **Document Title Format** naming, and each signature lands as a clean DocuSign-style stamp card.
 
 **Signature tag syntax:** `{@Signature_Role:Order:Type}`
 

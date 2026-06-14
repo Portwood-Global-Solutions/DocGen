@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.14.0 — Flow Signing Consolidation + Signed-Document Naming (`04tVx000000nYgTIAU`, build `3.14.0-2`, promoted 2026-06-14)
+
+Addresses four customer-reported issues from the Flow-triggered, single-signer signing flow — and the root-cause document-naming bug behind one of them. The theme is consolidation: Flow-triggered signing and the Signature Sender now behave identically.
+
+### 1. Flow-triggered signing uses the guided PDF path
+
+A signature request created from a Flow (the `DocGen: Create Signature Request` invocable) previously routed to the classic signing page and a server-side stamp/finalize step, while the Signature Sender LWC used the guided field-to-field experience with the reliable client-side composite. So Flow signers could see raw `{@Signature_…}` merge tags instead of the stamped signature/date. `DocGenSignatureFlowAction` now detects placement tags and routes those templates to the **guided path** (same as the Sender); tag-less legacy templates fall back to the classic page so existing Flows keep working.
+
+### 2. Signed documents follow the template's naming pattern
+
+Signed PDFs came out named `<Template> - Signed`, ignoring the template's `Document Title Format` (e.g. `Waiver - {Name} {Today: MM/DD/YYYY}`) even though normal generation respected it. **Root cause:** the title helper collected every `{…}` token as an SObject field, so `{Today: MM/DD/YYYY}` landed in the SOQL `SELECT` and threw `unexpected token ':'` — failing the whole record load, so `{Name}` never resolved and the name fell back. The helper now skips built-in `{Today}`/`{Now}` tokens and only queries real field paths. The template's format is also inherited onto the signature request (guided + classic) and applied in the guided composite save. Uppercase US-date mistakes are forgiven (`MM/DD/YYYY` → `06/13/2026`, not the SimpleDateFormat day-of-year `06/164/2026`).
+
+### 3. Signer completion email
+
+When all signers finish, the signers themselves now receive a branded completion confirmation (previously only the sender was notified).
+
+### 4. "Single" signing order
+
+A `Single` option on `Signing Order` for explicit one-signer requests (behaves like Parallel for delivery), surfaced in both Flow actions.
+
+### Also
+
+- **Whitespace-aware signature stamp cards** for drawn **and** typed signatures/initials — a DocuSign-style card (opaque backdrop, brand border, "Signed by … · date · Portwood DocGen" footer) that grows into the side of the field with clearance so it never covers neighboring text; degrades to a clean inline mark when a tag is dropped mid-prose. Authoring rule: place signature/initial tags in their own table cell or line, never inline in body text.
+- **Silent finalize hardened** — the template-PDF finalize swallowed a failed `ContentVersion` insert, leaving a request marked `Signed` with no attached document and no error; that failure is now surfaced.
+
+### Admin note (signature emails)
+
+Invitation and completion emails require an Org-Wide Email Address with **Allow All Profiles** enabled (guest signers trigger the send) and the sending **domain DKIM-authenticated** (Salesforce blocks unauthenticated custom-domain sends). This is per-org admin/DNS setup, the same as any Salesforce OWA.
+
+### Release validation
+
+e2e-01..08 PASS/FAIL0, RunLocalTests 1536 methods / 100% / 76% org-wide, `sf code-analyzer` 0 violations, new `DocGenSarahFixesTest` 8/8. Verified in scratch: Flow→guided routing, signed-doc naming (`Waiver - Jordan Rivera 06/13/2026`), `Single` order, and the completion-email send path through a verified OWA.
+
+## v3.13.0 — Guided PDF Signing: Draw or Type on the Real Document (`04tVx000000nYdFIAU`, build `3.13.0-3`, promoted 2026-06-13)
+
+The full DocuSign-style signing overhaul. Signers walk field-to-field through the actual PDF, **drawing (mouse/finger) or typing** their signature, initials, and date, with the marks composited into the finished document client-side (PDF.js + pdf-lib, vendored — no callouts, no data egress) and a **Certificate of Completion** appended (per-signer signed time, email-verified, IP, consent, device, plus a SHA-256 document hash). Point-in-time snapshot signing keeps the signed PDF faithful to what the signer reviewed. Issue [#167](https://github.com/Portwood-Global-Solutions/DocGen/issues/167); also closed [#163](https://github.com/Portwood-Global-Solutions/DocGen/issues/163) (drawn signatures). PDF.js upgraded to 4.7.76 to clear CVE-2024-4367; SBOM in `THIRD-PARTY-NOTICES.md`.
+
 ## v3.12.0 — Date Field Fix + Verification Security (build pending)
 
 Two fixes, both reported from Slack:

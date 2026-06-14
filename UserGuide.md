@@ -731,7 +731,7 @@ HTML templates work with every generation path: single-record, bulk (individual 
 
 - **Barcodes / QR codes** — `{*Field:qr}` etc. are Word-only today; in HTML templates the tag falls back to plain text. On the roadmap.
 - **DOCX output** — not applicable. HTML templates are PDF-only.
-- **Signatures** — `{@Signature_Role}` flows haven't been validated against HTML templates yet. Use Word templates if you need signatures today.
+- **Signatures** — fully supported on HTML templates (as well as Word). `{@Signature_Role:Order:Type}` tags, guided field-to-field signing, draw-or-type, multi-signer, and the Certificate of Completion all work on HTML; HTML is in fact the recommended format for signature templates because the stamp-card layout has the most room to breathe.
 - **Page counters + rich header/footer content** — see §5.7.5. Flying Saucer flattens the margin to text when counters are present.
 
 #### 5.7.10 Troubleshooting
@@ -2042,8 +2042,14 @@ Typed-name electronic signatures with PIN verification, audit trail, packets, an
 5. For each signer, choose:
     - **Role** (Buyer, Seller, Witness — matches `{@Signature_Role}` in the template)
     - **Order** (1, 2, 3 — for sequential flows, controls send order)
-6. Pick signing order: **Parallel** (all get emails simultaneously) or **Sequential** (each signer emailed only after the previous completes).
+6. Pick signing order: **Parallel** (all get emails simultaneously), **Sequential** (each signer emailed only after the previous completes), or **Single** (an explicit one-signer document — behaves like Parallel for delivery).
 7. Click **Send**. Each signer receives a branded invitation email.
+
+> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a DocuSign-style stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern.
+
+> **Triggering from Flow.** The **DocGen: Create Signature Request** invocable action gives you the exact same guided signing experience as the Send-for-Signature UI — pass a Template Id, Related Record Id, and a collection of signers. As long as the template has `{@Signature_…}` tags, signers walk the guided field-to-field flow and the signed PDF is stamped and named from your template's **Document Title Format**.
+
+> **Email setup (admin).** Invitation and completion emails send through the Org-Wide Email Address you configure in **DocGen → Signatures settings**. That OWA must have **Allow All Profiles** enabled (guest signers trigger the completion email) and its sending **domain must be DKIM-authenticated** (Setup → Email → DKIM Keys, then publish the CNAME records in your DNS) — Salesforce blocks unauthenticated custom-domain sends. Without these, signing still works but emails won't deliver (the reason is logged on the request's **Email Status** field).
 
 ### 10.2 Signature tag syntax
 
