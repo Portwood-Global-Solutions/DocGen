@@ -5,7 +5,9 @@
  *     getTemplateSignaturePlacements and, when non-empty, routes through
  *     createGuidedPdfSignatureRequest (guided DocGenSignaturePdf page) rather than
  *     the classic createTemplateSignerRequestWithOrder path.
- *  #2 Tag-less templates keep using the classic signing page (DocGenSignature).
+ *  #2 Tag-less templates now ALSO route to the guided PDF page (#170 consolidation,
+ *     option b): an auto-appended "Signatures" block is generated server-side. Updated
+ *     from the original v3.14 behavior where tag-less fell back to the classic page.
  *  #3 signingOrder = 'Single' is accepted and persisted (not coerced to Parallel).
  *  #4 Guided requests inherit the template's Document_Title_Format__c when the
  *     documentTitleFormat arg is blank.
@@ -116,10 +118,12 @@ private class DocGenSarahFixesTest {
     }
 
     // =========================================================================
-    // #2 — Tag-less template uses the CLASSIC signing page (NOT DocGenSignaturePdf)
+    // #2 — Tag-less template now ALSO routes to the guided PDF page (#170 option b)
+    //      Consolidation: all signing goes through DocGenSignaturePdf; tag-less
+    //      templates get an auto-appended "Signatures" block server-side.
     // =========================================================================
     @IsTest
-    static void testFlowActionTaglessTemplateUsesClassic() {
+    static void testFlowActionTaglessTemplateUsesGuided() {
         Contact c = makeContact();
         Id tplId = makeTemplate(false, null);
 
@@ -133,14 +137,10 @@ private class DocGenSarahFixesTest {
         DocGenSignatureFlowAction.Result r = results[0];
         // Runtime errors are caught into the Result (success=false) rather than thrown.
         if (r.success) {
-            System.assert(!r.signerUrls.isEmpty(), 'Classic path should still return a signer URL');
+            System.assert(!r.signerUrls.isEmpty(), 'Guided path should return a signer URL');
             System.assert(
-                !r.signerUrls[0].contains('DocGenSignaturePdf'),
-                'Tag-less template must use the classic page, got: ' + r.signerUrls[0]
-            );
-            System.assert(
-                r.signerUrls[0].contains('DocGenSignature'),
-                'Classic signer URL should reference the DocGenSignature page, got: ' + r.signerUrls[0]
+                r.signerUrls[0].contains('DocGenSignaturePdf'),
+                'Tag-less template must now route to the guided PDF page, got: ' + r.signerUrls[0]
             );
         } else {
             // Match actual behavior: a graceful structured failure is acceptable.
