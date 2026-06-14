@@ -8482,7 +8482,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     css +=
                         ' @top-center { ' +
                         buildPageMarginContentCss(header) +
-                        ' vertical-align: bottom; font-size: 9pt; color: #444; }';
+                        ' vertical-align: bottom; font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 9pt; color: #444; }';
                 } else {
                     css += ' @top-center { content: element(dgheader); vertical-align: bottom; }';
                 }
@@ -8492,7 +8492,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     css +=
                         ' @bottom-center { ' +
                         buildPageMarginContentCss(footer) +
-                        ' vertical-align: top; font-size: 9pt; color: #444; }';
+                        ' vertical-align: top; font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 9pt; color: #444; }';
                 } else {
                     css += ' @bottom-center { content: element(dgfooter); vertical-align: top; }';
                 }

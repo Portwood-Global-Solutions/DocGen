@@ -1167,6 +1167,90 @@ public with sharing class DocGenSignatureSenderController {
      * Scope: HTML templates (the recommended signature format). DOCX tags can
      * split across runs and need a different substitution strategy — deferred (#167).
      */
+    /**
+     * Option (b) for tag-less legacy templates (#170): synthesize one Full + one
+     * Date placement per signer so the template signs through the guided PDF path
+     * with zero author change. Roles are de-duplicated so each maps to one signer.
+     */
+    private static List<PlacementInfo> buildSyntheticSignaturePlacements(List<Map<String, Object>> signerInputs) {
+        List<PlacementInfo> out = new List<PlacementInfo>();
+        Set<String> usedRoles = new Set<String>();
+        for (Integer i = 0; i < signerInputs.size(); i++) {
+            String role = (String) signerInputs[i].get('roleName');
+            if (String.isBlank(role) || usedRoles.contains(role)) {
+                role = 'Signer ' + (i + 1);
+            }
+            usedRoles.add(role);
+            String slug = role.replaceAll('[^A-Za-z0-9]+', '_');
+            out.add(new PlacementInfo(role, 1, 'Full', '{@Signature_' + slug + ':1:Full}'));
+            out.add(new PlacementInfo(role, 1, 'Date', '{@Signature_' + slug + ':1:Date}'));
+        }
+        return out;
+    }
+
+    /**
+     * Appends a clean "Signatures" block carrying each synthetic placement's tag
+     * text to the merged body so the guided pipeline (frozen sentinels + white-text
+     * positioning) finds and positions them. Handles HTML and merged-DOCX bodies.
+     * Placements arrive as (Full, Date) pairs per signer.
+     */
+    private static String appendSyntheticSignatureBlock(
+        String body,
+        String templateType,
+        List<PlacementInfo> placements
+    ) {
+        if (templateType == 'HTML') {
+            String block =
+                '<div style="margin-top:40px;border-top:1px solid #999;padding-top:14px;">' +
+                '<div style="font-weight:bold;font-size:12pt;margin-bottom:10px;">Signatures</div>';
+            for (Integer i = 0; i < placements.size(); i += 2) {
+                PlacementInfo full = placements[i];
+                PlacementInfo dt = (i + 1 < placements.size()) ? placements[i + 1] : null;
+                block +=
+                    '<div style="margin-bottom:26px;">' +
+                    '<div>' +
+                    String.valueOf(full.role).escapeHtml4() +
+                    ' signature: ' +
+                    full.tagText +
+                    '</div>' +
+                    (dt != null ? '<div style="margin-top:6px;">Date: ' + dt.tagText + '</div>' : '') +
+                    '</div>';
+            }
+            block += '</div>';
+            Integer bodyClose = body.toLowerCase().lastIndexOf('</body>');
+            return (bodyClose != -1)
+                ? (body.substring(0, bodyClose) + block + body.substring(bodyClose))
+                : (body + block);
+        }
+        // Merged DOCX document.xml: build <w:p> paragraphs; insert before the body-level
+        // <w:sectPr> (which must remain the last child of <w:body>), else before </w:body>.
+        String para = '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Signatures</w:t></w:r></w:p>';
+        for (Integer i = 0; i < placements.size(); i += 2) {
+            PlacementInfo full = placements[i];
+            PlacementInfo dt = (i + 1 < placements.size()) ? placements[i + 1] : null;
+            para +=
+                '<w:p><w:r><w:t xml:space="preserve">' +
+                String.valueOf(full.role).escapeHtml4() +
+                ' signature: </w:t></w:r>' +
+                '<w:r><w:t xml:space="preserve">' +
+                full.tagText +
+                '</w:t></w:r></w:p>';
+            if (dt != null) {
+                para +=
+                    '<w:p><w:r><w:t xml:space="preserve">Date: </w:t></w:r>' +
+                    '<w:r><w:t xml:space="preserve">' +
+                    dt.tagText +
+                    '</w:t></w:r></w:p>';
+            }
+        }
+        Integer sectPr = body.lastIndexOf('<w:sectPr');
+        if (sectPr != -1) {
+            return body.substring(0, sectPr) + para + body.substring(sectPr);
+        }
+        Integer bodyClose = body.indexOf('</w:body>');
+        return (bodyClose != -1) ? (body.substring(0, bodyClose) + para + body.substring(bodyClose)) : (body + para);
+    }
+
     @AuraEnabled
     public static List<SignerResult> createGuidedPdfSignatureRequest(
         Id templateId,
@@ -1215,7 +1299,12 @@ public with sharing class DocGenSignatureSenderController {
 
         List<PlacementInfo> placements = getTemplateSignaturePlacements(templateId);
         if (placements.isEmpty()) {
-            throw new AuraHandledException('This template has no {@Signature_...} placement tags.');
+            // Option (b) for tag-less legacy templates (#170): synthesize a "Signatures"
+            // block (one Full + Date per signer) and append it to the merged body so the
+            // template signs through the guided path — one signing path for all templates,
+            // zero author change. Tag-ful templates skip this entirely.
+            placements = buildSyntheticSignaturePlacements(signerInputs);
+            body = appendSyntheticSignatureBlock(body, templateType, placements);
         }
 
         // FROZEN body: replace each placement's tag (in document order) with a unique

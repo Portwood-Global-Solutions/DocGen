@@ -85,8 +85,10 @@ private class DocGenGuidedSigningTest {
     }
 
     @IsTest
-    static void rejectsTemplateWithNoPlacementTags() {
-        // Template with no {@Signature_...} tags should be rejected.
+    static void synthesizesPlacementsForTaglessTemplate() {
+        // #170 option (b): a tag-less legacy template is no longer rejected — the guided
+        // path auto-appends a "Signatures" block (Full + Date per signer) so it signs
+        // through the one consolidated path with zero author change.
         DocGen_Template__c tmpl = new DocGen_Template__c(
             Name = 'NoTags ' + Datetime.now().getTime(),
             Type__c = 'HTML',
@@ -110,21 +112,35 @@ private class DocGenGuidedSigningTest {
         );
         Account a = [SELECT Id FROM Account LIMIT 1];
 
-        Boolean threw = false;
         Test.startTest();
-        try {
-            DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
-                tmpl.Id,
-                a.Id,
-                signersJson(),
-                'Parallel',
-                null
-            );
-        } catch (Exception e) {
-            threw = true;
-        }
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(tmpl.Id, a.Id, signersJson(), 'Parallel', null);
         Test.stopTest();
-        System.assert(threw, 'Should reject a template with no placement tags');
+
+        DocGen_Signature_Request__c req = [
+            SELECT Id, Source_Document_Id__c, Frozen_Document__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :tmpl.Id
+            LIMIT 1
+        ];
+        System.assertNotEquals(null, req.Source_Document_Id__c, 'Tag-less template should still produce a viewing PDF');
+        System.assertNotEquals(null, req.Frozen_Document__c, 'Frozen body should be captured');
+
+        List<DocGen_Signature_Placement__c> plcs = [
+            SELECT Tag_Text__c, Placement_Type__c
+            FROM DocGen_Signature_Placement__c
+            WHERE Signature_Request__c = :req.Id
+        ];
+        // One signer → synthesized Full + Date.
+        System.assertEquals(2, plcs.size(), 'Synthesized Full + Date placements for the one signer');
+        Set<String> types = new Set<String>();
+        for (DocGen_Signature_Placement__c p : plcs) {
+            types.add(p.Placement_Type__c);
+            System.assert(
+                p.Tag_Text__c != null && p.Tag_Text__c.startsWith('@@SIG-'),
+                'Synthesized placement keys on a sentinel: ' + p.Tag_Text__c
+            );
+        }
+        System.assert(types.contains('Full') && types.contains('Date'), 'Both Full and Date synthesized: ' + types);
     }
 
     @IsTest

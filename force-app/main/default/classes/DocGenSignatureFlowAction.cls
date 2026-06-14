@@ -234,35 +234,21 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
                 signingOrder = 'Parallel';
             }
 
-            // Route to the GUIDED PDF signing path when the template carries
-            // {@Signature_...} placement tags. The guided path (DocGenSignaturePdf.page)
-            // stamps the real signature/date into the final PDF via the reliable
-            // client-side composite — the same path the Sender LWC uses. Tag-less legacy
-            // templates (old {#Signatures} loop style) fall back to the classic page so
-            // existing Flows keep working. This makes Flow- and LWC-triggered signing
-            // behave identically (fixes the divergent-path bug where Flow signers saw raw
-            // merge tags / no stamped document).
+            // Consolidated signing (#170): ALL templates route to the GUIDED PDF path
+            // (DocGenSignaturePdf.page), which stamps the real signature/date into the
+            // final PDF via the reliable client-side composite — the same path the Sender
+            // LWC uses. Templates with {@Signature_...} tags position chips at those tags;
+            // tag-less legacy templates get an auto-appended "Signatures" block (option b)
+            // so they sign through the same path with zero author change. The classic page
+            // is deprecated — one signing path for Flow and LWC alike.
             String signersJson = JSON.serialize(signerInputs);
-            List<DocGenSignatureSenderController.PlacementInfo> placements = DocGenSignatureSenderController.getTemplateSignaturePlacements(
-                req.templateId
+            List<DocGenSignatureSenderController.SignerResult> signerResults = DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
+                req.templateId,
+                req.relatedRecordId,
+                signersJson,
+                signingOrder,
+                null // documentTitleFormat — inherited from the template
             );
-            List<DocGenSignatureSenderController.SignerResult> signerResults;
-            if (placements != null && !placements.isEmpty()) {
-                signerResults = DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
-                    req.templateId,
-                    req.relatedRecordId,
-                    signersJson,
-                    signingOrder,
-                    null // documentTitleFormat — inherited from the template below
-                );
-            } else {
-                signerResults = DocGenSignatureSenderController.createTemplateSignerRequestWithOrder(
-                    req.templateId,
-                    req.relatedRecordId,
-                    signersJson,
-                    signingOrder
-                );
-            }
 
             // Find the request ID
             if (!signerResults.isEmpty()) {
