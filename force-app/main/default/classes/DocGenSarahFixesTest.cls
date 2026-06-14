@@ -321,7 +321,8 @@ private class DocGenSarahFixesTest {
             base64,
             true,
             '1.2.3.4',
-            'JUnit/1.0'
+            'JUnit/1.0',
+            '{}' // formFieldJson (#161) — no signer form fields in this scenario
         );
         Test.stopTest();
 
