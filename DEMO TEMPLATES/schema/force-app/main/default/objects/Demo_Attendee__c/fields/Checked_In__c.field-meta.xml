@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
-    <fullName>Checked_In__c</fullName>
-    <label>Checked In</label>
-    <type>Checkbox</type>
-    <defaultValue>false</defaultValue>
-</CustomField>
