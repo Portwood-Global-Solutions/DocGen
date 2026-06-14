@@ -22,7 +22,7 @@ A `Single` option on `Signing Order` for explicit one-signer requests (behaves l
 
 ### Also
 
-- **Whitespace-aware signature stamp cards** for drawn **and** typed signatures/initials — a DocuSign-style card (opaque backdrop, brand border, "Signed by … · date · Portwood DocGen" footer) that grows into the side of the field with clearance so it never covers neighboring text; degrades to a clean inline mark when a tag is dropped mid-prose. Authoring rule: place signature/initial tags in their own table cell or line, never inline in body text.
+- **Whitespace-aware signature stamp cards** for drawn **and** typed signatures/initials — a polished stamp card (opaque backdrop, brand border, "Signed by … · date · Portwood DocGen" footer) that grows into the side of the field with clearance so it never covers neighboring text; degrades to a clean inline mark when a tag is dropped mid-prose. Authoring rule: place signature/initial tags in their own table cell or line, never inline in body text.
 - **Silent finalize hardened** — the template-PDF finalize swallowed a failed `ContentVersion` insert, leaving a request marked `Signed` with no attached document and no error; that failure is now surfaced.
 
 ### Admin note (signature emails)
@@ -35,7 +35,7 @@ e2e-01..08 PASS/FAIL0, RunLocalTests 1536 methods / 100% / 76% org-wide, `sf cod
 
 ## v3.13.0 — Guided PDF Signing: Draw or Type on the Real Document (`04tVx000000nYdFIAU`, build `3.13.0-3`, promoted 2026-06-13)
 
-The full DocuSign-style signing overhaul. Signers walk field-to-field through the actual PDF, **drawing (mouse/finger) or typing** their signature, initials, and date, with the marks composited into the finished document client-side (PDF.js + pdf-lib, vendored — no callouts, no data egress) and a **Certificate of Completion** appended (per-signer signed time, email-verified, IP, consent, device, plus a SHA-256 document hash). Point-in-time snapshot signing keeps the signed PDF faithful to what the signer reviewed. Issue [#167](https://github.com/Portwood-Global-Solutions/DocGen/issues/167); also closed [#163](https://github.com/Portwood-Global-Solutions/DocGen/issues/163) (drawn signatures). PDF.js upgraded to 4.7.76 to clear CVE-2024-4367; SBOM in `THIRD-PARTY-NOTICES.md`.
+The full guided-signing overhaul. Signers walk field-to-field through the actual PDF, **drawing (mouse/finger) or typing** their signature, initials, and date, with the marks composited into the finished document client-side (PDF.js + pdf-lib, vendored — no callouts, no data egress) and a **Certificate of Completion** appended (per-signer signed time, email-verified, IP, consent, device, plus a SHA-256 document hash). Point-in-time snapshot signing keeps the signed PDF faithful to what the signer reviewed. Issue [#167](https://github.com/Portwood-Global-Solutions/DocGen/issues/167); also closed [#163](https://github.com/Portwood-Global-Solutions/DocGen/issues/163) (drawn signatures). PDF.js upgraded to 4.7.76 to clear CVE-2024-4367; SBOM in `THIRD-PARTY-NOTICES.md`.
 
 ## v3.12.0 — Date Field Fix + Verification Security (build pending)
 
@@ -3331,7 +3331,7 @@ Huge thanks to **@josephedwards-png** for PR #46 — his analysis of the relId c
 
 - **Command Hub** — Single-tab UX replacing 7 tabs. Wizard-first onboarding, embedded bulk generator, contextual help.
 - **Deep Grandchild Relationships** — Multi-level query stitching: Account → Opportunities → Line Items → Schedules. One SOQL per level, stitched in Apex. Query builder UI supports "Add Related List" inside child cards.
-- **Signature Feature Removed** — E-signatures carry legal requirements a doc gen tool should not implement. Use dedicated providers (DocuSign, Adobe Sign).
+- **Signature Feature Removed** — E-signatures carry legal requirements a doc gen tool should not implement. Use a dedicated e-signature provider.
 - **Custom Font Upload Removed** — `Blob.toPdf()` does not support CSS `@font-face` (confirmed via data URIs, static resources, and ContentVersion URLs). PDF supports Helvetica, Times, Courier, Arial Unicode MS. DOCX preserves template fonts.
 - **Font Documentation** — PDF font limitations documented. DOCX recommended for custom fonts.
 - **DOCX Download Only** — Save to Record removed for DOCX output (Aura 4MB payload limit). Download works for any size.

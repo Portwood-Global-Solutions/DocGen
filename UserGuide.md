@@ -2045,7 +2045,7 @@ Typed-name electronic signatures with PIN verification, audit trail, packets, an
 6. Pick signing order: **Parallel** (all get emails simultaneously), **Sequential** (each signer emailed only after the previous completes), or **Single** (an explicit one-signer document — behaves like Parallel for delivery).
 7. Click **Send**. Each signer receives a branded invitation email.
 
-> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a DocuSign-style stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern.
+> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern.
 
 > **Triggering from Flow.** The **DocGen: Create Signature Request** invocable action gives you the exact same guided signing experience as the Send-for-Signature UI — pass a Template Id, Related Record Id, and a collection of signers. As long as the template has `{@Signature_…}` tags, signers walk the guided field-to-field flow and the signed PDF is stamped and named from your template's **Document Title Format**.
 
@@ -2103,7 +2103,7 @@ Guided, mobile-friendly. States: PIN verify → signing → review → submit.
 
 ### 10.7.1 Guided sign-spot signing on the PDF viewer (drawn or typed)
 
-For templates that use `{@Signature_Role:Order:Type}` placement tags, the PDF-viewer page can walk signers field-to-field **on the real rendered PDF** (DocuSign-style), with hand-drawn or typed signatures:
+For templates that use `{@Signature_Role:Order:Type}` placement tags, the PDF-viewer page can walk signers field-to-field **on the real rendered PDF**, with hand-drawn or typed signatures:
 
 - The actual generated PDF renders in the browser. Each of the signer's sign-spots gets a positioned chip — **SIGN HERE**, **INITIAL HERE**, or **DATE** — with a "field _N_ of _M_" counter, the current field highlighted, and auto-scroll to the next one.
 - At each spot the signer can **draw** a signature/initials (mouse or finger) **or type** them; date fields auto-stamp. Submission is gated until every required field is done.

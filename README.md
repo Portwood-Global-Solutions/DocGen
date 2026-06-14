@@ -189,7 +189,7 @@ Records with **2,000 to 50,000+ child records** are detected automatically. Same
 
 ### E-Signatures
 
-Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided field-to-field signing **on the actual PDF** — **draw or type** signatures and initials — date stamps, document packets, parallel / sequential / single multi-signer flows, decline flow, sender **and signer** completion notifications, and a **Certificate of Completion** (signed timestamps, IP, consent, document hash) — all 100% native. Send from the **Signature Sender** UI or trigger from a **Flow / platform event** — both take the same guided experience. Signed documents follow your template's **Document Title Format** naming, and each signature lands as a clean DocuSign-style stamp card.
+Collect legally valid electronic signatures directly from DocGen — no third-party tools required. Built-in Simple Electronic Signature (SES) support that's valid under the US ESIGN Act and UETA. Guided field-to-field signing **on the actual PDF** — **draw or type** signatures and initials — date stamps, document packets, parallel / sequential / single multi-signer flows, decline flow, sender **and signer** completion notifications, and a **Certificate of Completion** (signed timestamps, IP, consent, document hash) — all 100% native. Send from the **Signature Sender** UI or trigger from a **Flow / platform event** — both take the same guided experience. Signed documents follow your template's **Document Title Format** naming, and each signature lands as a clean, professional signature stamp card.
 
 **Signature tag syntax:** `{@Signature_Role:Order:Type}`
 
