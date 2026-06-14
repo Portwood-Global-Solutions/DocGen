@@ -100,6 +100,13 @@ const F = {
     OutputFormat: OUTPUT_FORMAT_FIELD.fieldApiName,
     BaseObject: BASE_OBJECT_FIELD.fieldApiName,
     QueryConfig: QUERY_CONFIG_FIELD.fieldApiName,
+    // #161 follow-up — dedicated storage for Signer Inputs form-field config.
+    // The field has no @salesforce/schema import yet (backend ships it in
+    // parallel), so resolve its namespace from an already-resolved field's
+    // prefix (e.g. `portwoodglobal__` in subscriber orgs, '' in staging).
+    FormFieldsConfig:
+        QUERY_CONFIG_FIELD.fieldApiName.slice(0, QUERY_CONFIG_FIELD.fieldApiName.length - 'Query_Config__c'.length) +
+        'Form_Fields_Config__c',
     Desc: DESC_FIELD.fieldApiName,
     TestRecordId: TEST_RECORD_FIELD.fieldApiName,
     DocTitleFormat: DOC_TITLE_FIELD.fieldApiName,
@@ -267,6 +274,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isUploadingWatermark = false;
     editTemplateDesc;
     @track editTemplateQuery;
+    // #161 follow-up — raw JSON string for the dedicated Form_Fields_Config__c
+    // field (shape `{formFields:[...]}`). Signer Inputs no longer live on
+    // Query_Config__c, so this is independent of editTemplateQuery.
+    @track editFormFieldsConfig = '';
     editTemplateTestRecordId;
     editTemplateTitleFormat;
     editTemplateIsActive = true;
@@ -2095,14 +2106,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return candidate;
     }
 
-    // Read parsed.formFields off the editTemplateQuery JSON (manual/SOQL configs
-    // simply have no formFields → empty list).
-    _hydrateSignerFieldsFromQuery() {
+    // Parse the dedicated Form_Fields_Config__c JSON (shape `{formFields:[...]}`)
+    // into signerFields. Independent of Query_Config__c, so it works for EVERY
+    // template type (V1 flat-string, V3/V4 JSON, Apex provider) — no gate.
+    _hydrateSignerFields() {
         let rows = [];
-        const qc = this.editTemplateQuery;
-        if (qc && qc.trim().startsWith('{')) {
+        const cfg = (this.editFormFieldsConfig || '').trim();
+        if (cfg.startsWith('{')) {
             try {
-                const parsed = JSON.parse(qc);
+                const parsed = JSON.parse(cfg);
                 if (Array.isArray(parsed.formFields)) {
                     rows = parsed.formFields.map((f) => ({
                         key: f.key,
@@ -2117,38 +2129,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     }));
                 }
             } catch (e) {
-                /* not JSON / manual config — no form fields */
+                /* malformed / empty config — no form fields */
             }
         }
         this.signerFields = rows;
     }
 
-    // Signer form fields can only live on a JSON-backed (visual builder) config,
-    // because that is the only Query_Config__c shape the server reads `formFields`
-    // off of. A manual / raw-SOQL (V1) config has no JSON object to graft onto, and
-    // wrapping it as JSON would make getConfigVersion() read it as V2 and break the
-    // template's data query. The Signer Inputs tab is gated on this getter.
-    get signerInputsSupported() {
-        const qc = (this.editTemplateQuery || '').trim();
-        if (!qc.startsWith('{')) {
-            return false;
-        }
-        try {
-            const parsed = JSON.parse(qc);
-            return parsed && typeof parsed === 'object' && !Array.isArray(parsed);
-        } catch (e) {
-            return false;
-        }
-    }
-
-    get signerInputsUnsupported() {
-        return !this.signerInputsSupported;
-    }
-
-    // Write the current signerFields back onto parsed.formFields, preserving the
-    // rest of the JSON config. Only ever graft onto a parseable JSON object — never
-    // transform a manual/raw-SOQL config (that would corrupt the query parser).
-    _persistSignerFieldsToQuery() {
+    // Serialize the current signerFields into the dedicated Form_Fields_Config__c
+    // JSON string. NEVER touches editTemplateQuery — form fields no longer live on
+    // Query_Config__c, so this works regardless of the template's query shape.
+    _persistSignerFields() {
         const serialized = (this.signerFields || []).map((f) => ({
             key: f.key,
             label: f.label || '',
@@ -2160,34 +2150,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             choices: Array.isArray(f.choices) ? f.choices : [],
             listOnCertificate: !!f.listOnCertificate
         }));
-        const qc = (this.editTemplateQuery || '').trim();
-        let parsed;
-        if (qc.startsWith('{')) {
-            try {
-                parsed = JSON.parse(qc);
-            } catch (e) {
-                parsed = null;
-            }
-        }
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            // Existing JSON (v3/v4) config — graft formFields on, preserve the rest.
-            parsed.formFields = serialized;
-            this.editTemplateQuery = JSON.stringify(parsed);
-        }
-        // Non-JSON (manual / raw-SOQL / V1) config: unsupported — leave the query
-        // untouched. The UI gate (signerInputsSupported) prevents reaching here with
-        // fields to persist, so this is a defensive no-op rather than data loss.
+        this.editFormFieldsConfig = JSON.stringify({ formFields: serialized });
     }
 
     handleAddSignerField() {
-        if (!this.signerInputsSupported) {
-            this.showToast(
-                'Signer inputs unavailable',
-                'Signer form fields require a template built with the visual query builder. Configure this template’s query there first.',
-                'warning'
-            );
-            return;
-        }
         const label = 'New Field';
         const key = this._generateSignerFieldKey(label);
         this.signerFields = [
@@ -2204,14 +2170,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 listOnCertificate: false
             }
         ];
-        this._persistSignerFieldsToQuery();
+        this._persistSignerFields();
     }
 
     handleRemoveSignerField(event) {
         const index = Number(event.currentTarget.dataset.index);
         if (Number.isNaN(index)) return;
         this.signerFields = (this.signerFields || []).filter((_, i) => i !== index);
-        this._persistSignerFieldsToQuery();
+        this._persistSignerFields();
     }
 
     handleMoveSignerFieldUp(event) {
@@ -2220,7 +2186,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const rows = [...this.signerFields];
         [rows[index - 1], rows[index]] = [rows[index], rows[index - 1]];
         this.signerFields = rows;
-        this._persistSignerFieldsToQuery();
+        this._persistSignerFields();
     }
 
     handleMoveSignerFieldDown(event) {
@@ -2229,14 +2195,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const rows = [...this.signerFields];
         [rows[index + 1], rows[index]] = [rows[index], rows[index + 1]];
         this.signerFields = rows;
-        this._persistSignerFieldsToQuery();
+        this._persistSignerFields();
     }
 
     // Generic per-row update — never touches key/mergeTag (label edits are safe).
     _updateSignerFieldRow(index, patch) {
         if (Number.isNaN(index)) return;
         this.signerFields = (this.signerFields || []).map((row, i) => (i === index ? { ...row, ...patch } : row));
-        this._persistSignerFieldsToQuery();
+        this._persistSignerFields();
     }
 
     handleSignerFieldLabelChange(event) {
@@ -2806,8 +2772,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // flattening would silently drop alias slots. The readable textarea
             // formats V3→V1 at display time via the readableEditQueryConfig getter.
             this.editTemplateQuery = row[F.QueryConfig];
-            // #161 — load configured signer form fields from the query config JSON.
-            this._hydrateSignerFieldsFromQuery();
+            // #161 — load configured signer form fields from the dedicated
+            // Form_Fields_Config__c field (independent of Query_Config__c).
+            this.editFormFieldsConfig = row[F.FormFieldsConfig] || '';
+            this._hydrateSignerFields();
             // Auto-detect v4 (Apex Data Provider) bindings so admins re-opening
             // a provider-backed template land in the right mode immediately.
             this.editUseApexProvider = false;
@@ -3190,6 +3158,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Base_Object_API__c: this.editTemplateObject,
             Description__c: this.editTemplateDesc,
             Query_Config__c: this._sanitizeQueryConfig(this.editTemplateQuery),
+            // #161 — Signer Inputs form-field config (dedicated field, not Query_Config__c).
+            Form_Fields_Config__c: this.editFormFieldsConfig,
             Test_Record_Id__c: this.editTemplateTestRecordId,
             Document_Title_Format__c: this.editTemplateTitleFormat,
             Is_Active__c: this.editTemplateIsActive,
@@ -3233,6 +3203,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Base_Object_API__c: this.editTemplateObject,
             Description__c: this.editTemplateDesc,
             Query_Config__c: this._sanitizeQueryConfig(this.editTemplateQuery),
+            // #161 — Signer Inputs form-field config (dedicated field, not Query_Config__c).
+            Form_Fields_Config__c: this.editFormFieldsConfig,
             Test_Record_Id__c: this.editTemplateTestRecordId,
             Document_Title_Format__c: this.editTemplateTitleFormat,
             Is_Active__c: this.editTemplateIsActive,

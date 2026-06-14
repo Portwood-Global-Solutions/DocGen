@@ -6,7 +6,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  *
  * DocGen e-signing lets an admin configure extra "form fields" on a template
- * (DocGen_Template__c.Query_Config__c → formFields[]), each optionally mapped
+ * (DocGen_Template__c.Form_Fields_Config__c → formFields[]), each optionally mapped
  * to a base-object field. The guest signer fills them in during signing; the
  * values are (a) merged into the re-rendered signed PDF at {?key} positions,
  * (b) optionally listed on the signing certificate, and (c) written back to
@@ -43,7 +43,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
 
     /**
      * One configured signer form field, parsed from the template's
-     * Query_Config__c formFields[] array.
+     * Form_Fields_Config__c formFields[] array.
      */
     public class FormFieldDef {
         public String key;
@@ -76,7 +76,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
     }
 
     /**
-     * Parses the formFields[] array out of a template Query_Config__c JSON.
+     * Parses the formFields[] array out of a template Form_Fields_Config__c JSON.
      * Tolerant of missing/blank config (returns an empty list) and of malformed
      * JSON (logs + returns empty) — writeback/merge degrade gracefully rather
      * than break the signing transaction. Unknown / malformed entries are
@@ -267,7 +267,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signature_Request__c> reqs = [
-                SELECT Related_Record_Id__c, Template__r.Query_Config__c
+                SELECT Related_Record_Id__c, Template__r.Form_Fields_Config__c
                 FROM DocGen_Signature_Request__c
                 WHERE Id = :requestId
                 WITH SYSTEM_MODE
@@ -281,7 +281,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
                 return; // capture-only template or no base record — nothing to write.
             }
 
-            List<FormFieldDef> defs = parseConfig(req.Template__r.Query_Config__c);
+            List<FormFieldDef> defs = parseConfig(req.Template__r.Form_Fields_Config__c);
             // 2. Allowlist = config fields where writeback==true AND a base field
             //    is mapped. NEVER derived from the guest JSON keys.
             Map<String, FormFieldDef> writebackDefs = new Map<String, FormFieldDef>();
@@ -291,6 +291,28 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
                 }
             }
             if (writebackDefs.isEmpty()) {
+                return;
+            }
+
+            // Writeback is single-signer only. On a multi-signer request every signer
+            // fills the same template-scoped fields, so there is no unambiguous single
+            // value to write (collectValues would merge them last-writer-wins). Skip the
+            // record write — capture + per-signer certificate attribution still happen.
+            DocGenFlsGuard.assertAccessible(DocGen_Signer__c.sObjectType, new Set<String>{ 'Signature_Request__c' });
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            Integer signerCount = [
+                SELECT COUNT()
+                FROM DocGen_Signer__c
+                WHERE Signature_Request__c = :requestId
+                WITH SYSTEM_MODE
+            ];
+            if (signerCount > 1) {
+                logWritebackError(
+                    requestId,
+                    'Form-field writeback skipped — multi-signer request (' +
+                        signerCount +
+                        ' signers); writeback applies to single-signer requests only.'
+                );
                 return;
             }
 

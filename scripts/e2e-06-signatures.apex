@@ -548,13 +548,13 @@ try {
 
 // ===== Form-field capture -> record writeback round-trip =====
 try {
-    DocGen_Template__c wbTmpl = [SELECT Id, Query_Config__c FROM DocGen_Template__c WHERE Id = :tmplId LIMIT 1];
-    String origCfg = wbTmpl.Query_Config__c;
+    DocGen_Template__c wbTmpl = [SELECT Id, Form_Fields_Config__c FROM DocGen_Template__c WHERE Id = :tmplId LIMIT 1];
+    String origCfg = wbTmpl.Form_Fields_Config__c;
     String wbCfg =
         '{"formFields":[' +
         '{"key":"wbdesc","fieldApiName":"Description","type":"text","writeback":true},' +
         '{"key":"caponly","type":"text","writeback":false}]}';
-    update new DocGen_Template__c(Id = tmplId, Query_Config__c = wbCfg);
+    update new DocGen_Template__c(Id = tmplId, Form_Fields_Config__c = wbCfg);
     update new Account(Id = acctId, Description = null);
 
     String wbMarker = 'WB ' + Datetime.now().getTime();
@@ -573,7 +573,7 @@ try {
         fail++;
         System.debug('WRITEBACK ROUND-TRIP: FAIL — dropOk=' + dropOk + ' Description=' + wbAcct.Description);
     }
-    update new DocGen_Template__c(Id = tmplId, Query_Config__c = origCfg);
+    update new DocGen_Template__c(Id = tmplId, Form_Fields_Config__c = origCfg);
     update new DocGen_Signer__c(Id = signerId, Field_Data_Json__c = null);
 } catch (Exception e) {
     fail++;

@@ -2051,6 +2051,9 @@
                                                     Inputs the signer fills in while e-signing. Paste each field's
                                                     <code>&lbrace;?key&rbrace;</code> tag into your template to place
                                                     its value, and optionally write the value back to a record field.
+                                                    Writeback applies to single-signer requests only; on multi-signer
+                                                    documents the values are captured to the signing certificate (per
+                                                    signer) but not written back to the record.
                                                 </p>
                                             </div>
                                         </div>
@@ -2059,20 +2062,10 @@
                                                 label="Add Field"
                                                 icon-name="utility:add"
                                                 variant="brand"
-                                                disabled={signerInputsUnsupported}
                                                 onclick={handleAddSignerField}
                                             ></lightning-button>
                                         </div>
                                     </div>
-                                    <template if:true={signerInputsUnsupported}>
-                                        <div
-                                            class="slds-box slds-theme_warning slds-text-body_small slds-var-m-top_x-small"
-                                        >
-                                            Signer form fields are available only on templates built with the visual
-                                            query builder. Switch this template’s query to the visual builder to add
-                                            signer inputs.
-                                        </div>
-                                    </template>
                                     <template if:true={hasSignerFields}>
                                         <div class="pdf-acroform-mapping__scroll">
                                             <table class="pdf-acroform-mapping__table signer-fields__table">

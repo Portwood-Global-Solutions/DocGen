@@ -281,37 +281,83 @@ public without sharing class DocGenSignatureService {
             html += '</td></tr>';
         }
 
-        // Form Field Responses — list configured fields flagged listOnCertificate.
-        // Reuses the same inline-style table; one <tr> per field.
-        if (certFields != null && !certFields.isEmpty()) {
-            Map<String, Object> values = formValues != null ? formValues : new Map<String, Object>();
-            Boolean anyCertField = false;
-            String fieldRows = '';
+        // Form Field Responses — list configured fields flagged listOnCertificate,
+        // attributed PER SIGNER. Each signer fills the same template-scoped fields
+        // independently (their values live on DocGen_Signer__c.Field_Data_Json__c), so
+        // the certificate shows each signer's own answers. Single signer → a flat
+        // label:value list with no signer header (unchanged appearance). Multiple
+        // signers → a per-signer sub-heading before each set. The merged formValues
+        // param is intentionally not used here (it would be ambiguous across signers).
+        if (certFields != null && !certFields.isEmpty() && signers != null && !signers.isEmpty()) {
+            List<DocGenFieldWritebackService.FormFieldDef> shown = new List<DocGenFieldWritebackService.FormFieldDef>();
             for (DocGenFieldWritebackService.FormFieldDef def : certFields) {
-                if (def.listOnCertificate != true) {
-                    continue;
+                if (def.listOnCertificate == true) {
+                    shown.add(def);
                 }
-                anyCertField = true;
-                Object raw = values.get(def.key);
-                String display;
-                if (def.type == 'checkbox') {
-                    Boolean checked = raw instanceof Boolean
-                        ? (Boolean) raw
-                        : (raw != null && String.valueOf(raw).equalsIgnoreCase('true'));
-                    display = checked ? 'Yes' : 'No';
-                } else {
-                    display = raw == null ? '' : String.valueOf(raw);
-                }
-                String fieldLabel = String.isNotBlank(def.label) ? def.label : def.key;
-                fieldRows +=
-                    '<tr><td style="width:140px;padding:3px 0;font-weight:bold;color:#555;vertical-align:top;">' +
-                    fieldLabel.escapeHtml4() +
-                    ':</td>';
-                fieldRows += '<td style="padding:3px 0;">' + display.escapeHtml4() + '</td></tr>';
             }
-            if (anyCertField) {
-                html += '<tr><td colspan="2" style="padding-top:16px;padding-bottom:6px;font-size:10pt;font-weight:bold;border-bottom:1px solid #ddd;">Form Field Responses</td></tr>';
-                html += fieldRows;
+            if (!shown.isEmpty()) {
+                Boolean multi = signers.size() > 1;
+                Boolean anyRendered = false;
+                String fieldRows = '';
+                for (DocGen_Signer__c sgn : signers) {
+                    Map<String, Object> sVals = new Map<String, Object>();
+                    if (String.isNotBlank(sgn.Field_Data_Json__c)) {
+                        try {
+                            Object parsed = JSON.deserializeUntyped(sgn.Field_Data_Json__c);
+                            if (parsed instanceof Map<String, Object>) {
+                                sVals = (Map<String, Object>) parsed;
+                            }
+                        } catch (Exception e) {
+                            // Unparseable signer payload — skip this signer's answers.
+                        }
+                    }
+                    if (multi) {
+                        // Skip signers who answered none of the listed fields.
+                        Boolean hasAny = false;
+                        for (DocGenFieldWritebackService.FormFieldDef def : shown) {
+                            if (sVals.get(def.key) != null) {
+                                hasAny = true;
+                                break;
+                            }
+                        }
+                        if (!hasAny) {
+                            continue;
+                        }
+                        String who = String.isNotBlank(sgn.Signer_Name__c)
+                            ? sgn.Signer_Name__c
+                            : (String.isNotBlank(sgn.Signer_Email__c) ? sgn.Signer_Email__c : 'Signer');
+                        if (String.isNotBlank(sgn.Role_Name__c)) {
+                            who += ' (' + sgn.Role_Name__c + ')';
+                        }
+                        fieldRows +=
+                            '<tr><td colspan="2" style="padding-top:8px;padding-bottom:2px;font-size:9pt;font-weight:bold;color:#333;">' +
+                            who.escapeHtml4() +
+                            '</td></tr>';
+                    }
+                    for (DocGenFieldWritebackService.FormFieldDef def : shown) {
+                        Object raw = sVals.get(def.key);
+                        String display;
+                        if (def.type == 'checkbox') {
+                            Boolean checked = raw instanceof Boolean
+                                ? (Boolean) raw
+                                : (raw != null && String.valueOf(raw).equalsIgnoreCase('true'));
+                            display = checked ? 'Yes' : 'No';
+                        } else {
+                            display = raw == null ? '' : String.valueOf(raw);
+                        }
+                        String fieldLabel = String.isNotBlank(def.label) ? def.label : def.key;
+                        fieldRows +=
+                            '<tr><td style="width:140px;padding:3px 0;font-weight:bold;color:#555;vertical-align:top;">' +
+                            fieldLabel.escapeHtml4() +
+                            ':</td>';
+                        fieldRows += '<td style="padding:3px 0;">' + display.escapeHtml4() + '</td></tr>';
+                    }
+                    anyRendered = true;
+                }
+                if (anyRendered) {
+                    html += '<tr><td colspan="2" style="padding-top:16px;padding-bottom:6px;font-size:10pt;font-weight:bold;border-bottom:1px solid #ddd;">Form Field Responses</td></tr>';
+                    html += fieldRows;
+                }
             }
         }
 
@@ -353,17 +399,17 @@ public without sharing class DocGenSignatureService {
             return new List<DocGenFieldWritebackService.FormFieldDef>();
         }
         try {
-            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Query_Config__c' });
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Form_Fields_Config__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Template__c> tmpls = [
-                SELECT Query_Config__c
+                SELECT Form_Fields_Config__c
                 FROM DocGen_Template__c
                 WHERE Id = :templateId
                 WITH SYSTEM_MODE
                 LIMIT 1
             ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
             if (!tmpls.isEmpty()) {
-                return DocGenFieldWritebackService.parseConfig(tmpls[0].Query_Config__c);
+                return DocGenFieldWritebackService.parseConfig(tmpls[0].Form_Fields_Config__c);
             }
         } catch (Exception e) {
             System.debug(LoggingLevel.WARN, 'DocGen: cert field defs load failed: ' + e.getMessage());
@@ -1346,7 +1392,11 @@ public without sharing class DocGenSignatureService {
                     // their template positions in this re-render. Injected alongside
                     // {#Signatures}; templates without {?key} tags ignore the key.
                     snap.put('__formFields', formValues);
-                    pdfBlob = renderTemplateSignaturePdf(requestId, req.Template__c, null, snap);
+                    // Pass formValues through (5-arg overload) so the signing
+                    // certificate's "Form Field Responses" section is populated —
+                    // the snap carries __formFields for the {?key} re-render, but the
+                    // cert builder reads the formValues param, not the merge data.
+                    pdfBlob = renderTemplateSignaturePdf(requestId, req.Template__c, null, snap, formValues);
                 } else if (String.isNotBlank(req.Template_Ids__c)) {
                     // Multi-template packet
                     pdfBlob = renderPacketSignaturePdf(
@@ -1719,12 +1769,19 @@ public without sharing class DocGenSignatureService {
                     'PIN_Verified_At__c',
                     'Signature_Request__c',
                     'Status__c',
-                    'Sort_Order__c'
+                    'Sort_Order__c',
+                    'Field_Data_Json__c'
                 }
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signer__c> fullSigners = [
-                SELECT Signer_Name__c, Signature_Data__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
+                SELECT
+                    Signer_Name__c,
+                    Signature_Data__c,
+                    Signer_Email__c,
+                    Role_Name__c,
+                    PIN_Verified_At__c,
+                    Field_Data_Json__c
                 FROM DocGen_Signer__c
                 WHERE Signature_Request__c = :reqId AND Status__c = 'Signed'
                 WITH SYSTEM_MODE
@@ -1927,12 +1984,19 @@ public without sharing class DocGenSignatureService {
                     'PIN_Verified_At__c',
                     'Signature_Request__c',
                     'Status__c',
-                    'Sort_Order__c'
+                    'Sort_Order__c',
+                    'Field_Data_Json__c'
                 }
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Signer__c> fullSigners = [
-                SELECT Signer_Name__c, Signature_Data__c, Signer_Email__c, Role_Name__c, PIN_Verified_At__c
+                SELECT
+                    Signer_Name__c,
+                    Signature_Data__c,
+                    Signer_Email__c,
+                    Role_Name__c,
+                    PIN_Verified_At__c,
+                    Field_Data_Json__c
                 FROM DocGen_Signer__c
                 WHERE Signature_Request__c = :reqId AND Status__c = 'Signed'
                 WITH SYSTEM_MODE

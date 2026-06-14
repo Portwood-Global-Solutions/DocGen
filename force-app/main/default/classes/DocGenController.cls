@@ -2312,6 +2312,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 'Base_Object_API__c',
                 'Category__c',
                 'Query_Config__c',
+                'Form_Fields_Config__c',
                 'Test_Record_Id__c',
                 'Output_Format__c',
                 'Document_Title_Format__c',
@@ -2340,6 +2341,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Base_Object_API__c,
                 Category__c,
                 Query_Config__c,
+                Form_Fields_Config__c,
                 Test_Record_Id__c,
                 Output_Format__c,
                 Document_Title_Format__c,
@@ -2382,6 +2384,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Base_Object_API__c = (String) fields.get('Base_Object_API__c');
             template.Description__c = (String) fields.get('Description__c');
             template.Query_Config__c = (String) fields.get('Query_Config__c');
+            // Signer form-field config (dedicated carrier, separate from Query_Config__c
+            // so it survives single-object templates whose Query_Config__c is a flat
+            // field-list string). Only set when present so partial saves don't clear it.
+            if (fields.containsKey('Form_Fields_Config__c')) {
+                template.Form_Fields_Config__c = (String) fields.get('Form_Fields_Config__c');
+            }
             template.Test_Record_Id__c = (String) fields.get('Test_Record_Id__c');
             template.Document_Title_Format__c = (String) fields.get('Document_Title_Format__c');
 
@@ -2484,6 +2492,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     'Base_Object_API__c',
                     'Description__c',
                     'Query_Config__c',
+                    'Form_Fields_Config__c',
                     'Test_Record_Id__c',
                     'Document_Title_Format__c',
                     'Output_Format__c',

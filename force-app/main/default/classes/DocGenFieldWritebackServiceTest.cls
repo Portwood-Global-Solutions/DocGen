@@ -5,15 +5,15 @@ private class DocGenFieldWritebackServiceTest {
     private static final String SIGNER_TOKEN = 'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5';
 
     /**
-     * Builds a signature request bound to a template whose Query_Config__c carries
-     * the supplied formFields config, plus one PIN-verified signer carrying the
-     * supplied collected-values JSON. Returns the request Id.
+     * Builds a signature request bound to a template whose Form_Fields_Config__c
+     * carries the supplied formFields config, plus one PIN-verified signer carrying
+     * the supplied collected-values JSON. Returns the request Id.
      */
     private static Id buildRequest(String formFieldsConfig, Id relatedRecordId, String fieldDataJson) {
         DocGen_Template__c tmpl = new DocGen_Template__c(
             Name = 'Writeback Template ' + Datetime.now().getTime(),
             Base_Object_API__c = 'Account',
-            Query_Config__c = formFieldsConfig,
+            Form_Fields_Config__c = formFieldsConfig,
             Type__c = 'HTML',
             Output_Format__c = 'PDF'
         );
@@ -353,6 +353,30 @@ private class DocGenFieldWritebackServiceTest {
         DocGenFieldWritebackService.performWriteback(reqId);
         Test.stopTest();
         System.assertEquals(0, auditCount(reqId), 'no base record → no writeback, no error log');
+    }
+
+    @IsTest
+    static void performWriteback_multiSigner_skippedAndLogged() {
+        Account acc = new Account(Name = 'WB Multi');
+        insert acc;
+        String cfg = '{"formFields":[{"key":"desc","fieldApiName":"Description","type":"text","writeback":true}]}';
+        Id reqId = buildRequest(cfg, acc.Id, '{"desc":"SIGNER1"}');
+        // Add a second signer → multi-signer request; writeback must be SKIPPED
+        // (no unambiguous single source) and the skip logged to the audit trail.
+        insert new DocGen_Signer__c(
+            Signature_Request__c = reqId,
+            Signer_Name__c = 'WB Signer 2',
+            Secure_Token__c = '2222222222222222222222222222222222222222222222222222222222222222',
+            Status__c = 'Signed',
+            Sort_Order__c = 2,
+            Field_Data_Json__c = '{"desc":"SIGNER2"}'
+        );
+        Test.startTest();
+        DocGenFieldWritebackService.performWriteback(reqId);
+        Test.stopTest();
+        Account after = [SELECT Description FROM Account WHERE Id = :acc.Id];
+        System.assertEquals(null, after.Description, 'multi-signer request must NOT write back to the record');
+        System.assert(auditCount(reqId) >= 1, 'multi-signer skip is logged to the audit trail');
     }
 
     // =========================================================================

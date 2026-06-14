@@ -21,6 +21,18 @@
                 * {
                     box-sizing: border-box;
                 }
+                /* Guarantee the page can scroll. The legacy document preview is injected
+                   via innerHTML and carries the template's own style block, including a
+                   bare "body { overflow: hidden }" that leaks onto THIS page's body and
+                   traps scroll. That injected rule has equal specificity but comes later
+                   in the DOM, so it wins — override it with !important. (The PDF viewer
+                   page is immune: it renders a real PDF, not injected template HTML.) */
+                html,
+                body {
+                    height: auto !important;
+                    min-height: 100% !important;
+                    overflow-y: auto !important;
+                }
                 body {
                     background-color: #f3f2f2;
                     font-family:
@@ -845,6 +857,9 @@
                                 >Your signature will appear here</span
                             >
                         </div>
+                        <!-- Signer form fields (#161) on the legacy (no-placement) screen,
+                             populated from validateToken.formFields by renderFormFields. -->
+                        <div id="legacy-form-fields"></div>
                         <div class="consent-row">
                             <input id="consent-checkbox" type="checkbox" />
                             <label for="consent-checkbox">
@@ -910,9 +925,12 @@
                             document.getElementById('state-' + stateIds[i]).style.display =
                                 stateIds[i] === name ? '' : 'none';
                         }
-                        // For guided state, switch page-wrapper to flex-start alignment
+                        // Top-align tall states so their full height stays scrollable —
+                        // a center-aligned flex child taller than the viewport has its top
+                        // clipped above the scroll origin (the legacy signature card grew
+                        // tall once signer form fields (#161) were added).
                         var pw = document.getElementById('page-wrapper');
-                        if (name === 'guided') {
+                        if (name === 'guided' || name === 'signature') {
                             pw.style.justifyContent = 'flex-start';
                             pw.style.padding = '1rem';
                         } else {
@@ -965,6 +983,10 @@
                     // Signer form fields (#161): collected values, keyed by field key.
                     var collectedFormFields = {};
                     var formFieldsRendered = false;
+                    // Which container holds the active form-field inputs — guided flow
+                    // uses 'guided-form-fields', the legacy (no-placement) screen uses
+                    // 'legacy-form-fields'. validateFormFields() reads from this.
+                    var formFieldsContainerId = 'guided-form-fields';
 
                     // ===== CLIENT-SIDE IP CAPTURE =====
                     // The signing page is hosted on a Salesforce Site, so signers are Guest users.
@@ -1259,7 +1281,7 @@
                         });
                     }
 
-                    function renderFormFields(container, fields) {
+                    function renderFormFields(container, fields, onChange) {
                         if (!container) return;
                         if (!fields || !fields.length) {
                             container.innerHTML = '';
@@ -1362,10 +1384,11 @@
                         }
                         container.innerHTML = html;
                         formFieldsRendered = true;
+                        var changeCb = onChange || updateCompleteSigningState;
                         var inputs = container.querySelectorAll('[data-key]');
                         for (var k = 0; k < inputs.length; k++) {
-                            inputs[k].addEventListener('input', updateCompleteSigningState);
-                            inputs[k].addEventListener('change', updateCompleteSigningState);
+                            inputs[k].addEventListener('input', changeCb);
+                            inputs[k].addEventListener('change', changeCb);
                         }
                     }
 
@@ -1373,7 +1396,7 @@
                     // { valid, values }. Paints inline errors and stashes into
                     // collectedFormFields.
                     function validateFormFields() {
-                        var container = document.getElementById('guided-form-fields');
+                        var container = document.getElementById(formFieldsContainerId);
                         var values = {};
                         var valid = true;
                         if (!container) return { valid: true, values: values };
@@ -1762,12 +1785,26 @@
                         });
                         document.getElementById('consent-checkbox').addEventListener('change', updateLegacySubmitState);
                         document.getElementById('btn-submit').addEventListener('click', handleLegacySubmit);
+
+                        // Signer form fields (#161): the legacy screen has no guided
+                        // placement walk, so render the configured inputs here too. The
+                        // PDF page shows them in its modal regardless of placements; this
+                        // keeps the HTML page at parity for zero-placement templates.
+                        formFieldsContainerId = 'legacy-form-fields';
+                        formFieldsRendered = false;
+                        var legacyFields = signerData && signerData.formFields ? signerData.formFields : null;
+                        renderFormFields(
+                            document.getElementById('legacy-form-fields'),
+                            legacyFields,
+                            updateLegacySubmitState
+                        );
                     }
 
                     function updateLegacySubmitState() {
                         var nameVal = document.getElementById('typed-name').value.trim();
                         var consentVal = document.getElementById('consent-checkbox').checked;
-                        document.getElementById('btn-submit').disabled = !(nameVal && consentVal);
+                        var ffValid = validateFormFields().valid;
+                        document.getElementById('btn-submit').disabled = !(nameVal && consentVal && ffValid);
                     }
 
                     function loadLegacyPreview() {
@@ -1793,6 +1830,11 @@
                         var typedName = document.getElementById('typed-name').value.trim();
                         var consentGiven = document.getElementById('consent-checkbox').checked;
                         if (!typedName || !consentGiven) return;
+                        // Signer form fields (#161): block submit until required inputs are
+                        // valid, and carry the collected values to the save call.
+                        var ffResult = validateFormFields();
+                        if (!ffResult.valid) return;
+                        var legacyFormFieldJson = JSON.stringify(ffResult.values);
                         showState('processing');
                         var userAgent = navigator.userAgent || 'Unknown';
 
@@ -1805,8 +1847,7 @@
                                 consentGiven,
                                 capturedIp,
                                 userAgent,
-                                // Legacy (non-guided) screen has no signer form fields (#161).
-                                '{}',
+                                legacyFormFieldJson,
                                 function (result, event) {
                                     if (!event.status) {
                                         showError('Save failed: ' + (event.message || 'Unknown error'));

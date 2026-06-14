@@ -5890,7 +5890,7 @@ private class DocGenSignatureTests {
         DocGen_Template__c tmpl = new DocGen_Template__c(
             Name = 'FF Template ' + Datetime.now().getTime(),
             Base_Object_API__c = 'Account',
-            Query_Config__c = formFieldsConfig,
+            Form_Fields_Config__c = formFieldsConfig,
             Type__c = 'HTML',
             Output_Format__c = 'PDF'
         );
