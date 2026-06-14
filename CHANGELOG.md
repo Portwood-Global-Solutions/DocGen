@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.15.0 — Barcodes & QR codes in HTML templates (`04tVx000000nZ33IAE`, build `3.15.0-1`, promoted 2026-06-14)
+
+`{*Field:code128}` and `{*Field:qr}` tags now render in **HTML templates**, not just Word — so HTML invoices can carry a QR pay-link, and HTML catalogs/price lists can carry a scannable barcode per row.
+
+**Root cause of the prior "Word-only" behavior:** the barcode tag is replaced during merge with a `##BARCODE:type:size:value##` sentinel, but the sentinel→CSS converter (`DocGenHtmlRenderer.renderBarcodeHtml`) was only invoked from the Word→HTML run-text path. A pure HTML template never passes through that path, so the marker survived as literal text. The rendering capability already existed (pure CSS bars / QR modules that `Blob.toPdf` renders perfectly) — it just wasn't wired into the HTML branch.
+
+**Fix:** new `DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(html)` swaps every `##BARCODE:…##` marker for inline CSS **without escaping the surrounding HTML** (the Word path's per-run helper escapes its plain-text surroundings, which is wrong for already-HTML content). `DocGenService.mergeHtmlTemplate` now runs it over the merged body, header, and footer before handing off to `Blob.toPdf`. Supported symbologies remain Code 128 and QR (Level Q error correction, ≤600 chars). No new dependencies; renders entirely in-platform.
+
+**Validation:** e2e-01..08 + 07-syntax1..4 PASS/FAIL0 (new `HTML BARCODE+QR` assertion in 07-syntax4), RunLocalTests 1547/100%/76%, `sf code-analyzer` 0 violations, real HTML→PDF render confirmed (QR invoice + per-row barcode price list).
+
 ## v3.14.0 — Flow Signing Consolidation + Signed-Document Naming (`04tVx000000nYgTIAU`, build `3.14.0-2`, promoted 2026-06-14)
 
 Addresses four customer-reported issues from the Flow-triggered, single-signer signing flow — and the root-cause document-naming bug behind one of them. The theme is consolidation: Flow-triggered signing and the Signature Sender now behave identically.

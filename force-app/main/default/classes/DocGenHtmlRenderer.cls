@@ -4518,6 +4518,53 @@ public with sharing class DocGenHtmlRenderer {
             (String.isNotBlank(after) ? after.escapeHtml4() : '');
     }
 
+    /**
+     * Replaces EVERY ##BARCODE:type:size:value## marker in already-HTML content
+     * with inline CSS barcode / QR markup, leaving the surrounding HTML intact.
+     *
+     * Used by the HTML-template path (see DocGenService.mergeHtmlTemplate). The
+     * Word path renders markers per text-run via renderBarcodeHtml (which escapes
+     * its surrounding plain text); HTML-template bodies are already HTML, so the
+     * surrounding content must NOT be escaped — only the marker is swapped out.
+     * Blob.toPdf() renders the CSS perfectly — no images needed.
+     */
+    public static String replaceBarcodeMarkersInHtml(String html) {
+        if (String.isBlank(html) || !html.contains('##BARCODE:')) {
+            return html;
+        }
+        String result = '';
+        Integer cursor = 0;
+        while (true) {
+            Integer startIdx = html.indexOf('##BARCODE:', cursor);
+            if (startIdx == -1) {
+                result += html.substring(cursor);
+                break;
+            }
+            Integer endIdx = html.indexOf('##', startIdx + 10);
+            if (endIdx == -1) {
+                result += html.substring(cursor);
+                break;
+            }
+            result += html.substring(cursor, startIdx);
+            String marker = html.substring(startIdx + 10, endIdx);
+            List<String> parts = marker.split(':', 3);
+            String barcodeType = parts.size() > 0 ? parts[0] : '';
+            String sizeSpec = parts.size() > 1 ? parts[1] : '';
+            String value = parts.size() > 2 ? parts[2] : '';
+            value = value.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>');
+            String pattern = BarcodeGenerator.getPattern(value, barcodeType);
+            if (pattern == null) {
+                result += value.escapeHtml4();
+            } else if (barcodeType == 'qr') {
+                result += renderQrHtml(pattern, sizeSpec);
+            } else {
+                result += renderCode128Html(pattern, sizeSpec);
+            }
+            cursor = endIdx + 2;
+        }
+        return result;
+    }
+
     /** Renders Code 128 as inline CSS bars. */
     private static String renderCode128Html(String pattern, String sizeSpec) {
         // Parse size: "300x80" or default

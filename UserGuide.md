@@ -729,7 +729,7 @@ HTML templates work with every generation path: single-record, bulk (individual 
 
 #### 5.7.9 Known limitations
 
-- **Barcodes / QR codes** — `{*Field:qr}` etc. are Word-only today; in HTML templates the tag falls back to plain text. On the roadmap.
+- **Barcodes / QR codes** — `{*Field:qr}` / `{*Field:code128}` render in both Word **and** HTML templates (HTML support added in v3.15). They render as crisp CSS in the PDF — no external services.
 - **DOCX output** — not applicable. HTML templates are PDF-only.
 - **Signatures** — fully supported on HTML templates (as well as Word). `{@Signature_Role:Order:Type}` tags, guided field-to-field signing, draw-or-type, multi-signer, and the Certificate of Completion all work on HTML; HTML is in fact the recommended format for signature templates because the stamp-card layout has the most room to breathe.
 - **Page counters + rich header/footer content** — see §5.7.5. Flying Saucer flattens the margin to text when counters are present.
@@ -1666,7 +1666,7 @@ Handles multiple sources automatically:
 {*URL:qr:200}                   200px QR code
 ```
 
-Barcodes are rendered as images in PDF and DOCX output. Types supported: `code128`, `qr`.
+Barcodes render in Word **and** HTML templates (HTML support added in v3.15) across PDF and DOCX output. Types supported: `code128`, `qr`.
 
 QR codes are generated natively in Salesforce with Level Q error correction and support values up to 600 characters. For printed or mailed documents, short URLs or tokens under 120 characters are recommended for 1 inch square QR codes.
 

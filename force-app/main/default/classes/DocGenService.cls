@@ -8295,6 +8295,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             ? null
             : processXml(decodeBraceEntities(footerHtml), recordDataMap);
 
+        // Convert {*Field:qr} / {*Field:code128} barcode markers (emitted by
+        // processXml as ##BARCODE:...##) into inline CSS so they render in
+        // HTML-template PDFs. The Word path does this per text-run; HTML bodies
+        // are already HTML, so swap only the marker (no surrounding escaping).
+        mergedBody = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(mergedBody);
+        mergedHeader = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(mergedHeader);
+        mergedFooter = DocGenHtmlRenderer.replaceBarcodeMarkersInHtml(mergedFooter);
+
         // 1.68 — set the renderer overrides BEFORE wrapping so wrapHtmlForPdf can
         // call computePageCss() and pick up the size/orientation/margins from
         // the merge result. Statics are cleared in renderPdf's finally block.
