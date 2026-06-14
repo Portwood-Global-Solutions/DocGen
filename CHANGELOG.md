@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.16.0 — Consolidated guided signing + HTML page-counter font (build `3.16.0-1`, promoted 2026-06-14)
+
+Unifies electronic signing on the **one guided PDF path** and fixes the HTML page-counter font (#160).
+
+### Signing consolidation (#170)
+
+Previously, signing forked across paths: tag-templates used the guided field-by-field PDF experience, tag-less templates fell back to a classic typed-name page, and multi-template packets used yet another classic preview path. Each needed its own signer-input/writeback logic. Now **every** signing scenario flows through the guided path:
+
+- **Tag-less templates** no longer fall back to the classic page — a "Signatures" block (one Full + Date per signer) is auto-appended to the rendered document so they sign field-by-field with zero author change.
+- **Flow-triggered** signing and the **Signature Sender** both route all single-template signing to guided.
+- **Multi-template packets** render into one combined viewing PDF with cross-document sign-spots (`createGuidedPacketSignatureRequest`) and sign through the guided path; the classic packet preview is removed.
+
+This collapses the signing surface to one path (a single completion point for signer-input writeback) and removes a live-render integrity drift. The multi-template classic path is gone; the classic single-template page and `stampSignaturesIn*` remain only for legacy in-flight requests and the guided finalizer's sentinel stamping.
+
+### #160 — HTML page-counter font
+
+`@page` margin boxes for `{PageNumber}`/`{TotalPages}` headers/footers now declare `font-family` (Arial), so counter text renders in the document font instead of Flying Saucer's default Times serif.
+
+**Validation:** e2e-01..08 + 07-syntax1..4 PASS/FAIL0 · RunLocalTests 100% · `sf code-analyzer` 0 · guided single/tag-less/packet signing verified.
+
 ## v3.15.0 — Barcodes & QR codes in HTML templates (`04tVx000000nZ33IAE`, build `3.15.0-1`, promoted 2026-06-14)
 
 `{*Field:code128}` and `{*Field:qr}` tags now render in **HTML templates**, not just Word — so HTML invoices can carry a QR pay-link, and HTML catalogs/price lists can carry a scannable barcode per row.

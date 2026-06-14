@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.15.0 — Barcodes & QR codes in HTML templates",
-      "versionNumber": "3.15.0.NEXT",
-      "ancestorId": "04tVx000000nYgTIAU",
+      "versionName": "v3.16.0 — Consolidated guided signing (single, multi-signer & packets) + HTML page-counter font",
+      "versionNumber": "3.16.0.NEXT",
+      "ancestorId": "04tVx000000nZ33IAE",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.15 brings scannable barcodes and QR codes to HTML templates — not just Word. Drop a Code 128 barcode or QR code into any HTML template with a simple tag and it renders crisply in the PDF: invoices with QR pay-links, product catalogs and price lists with scannable SKUs, event tickets, and verifiable certificates all work from HTML now. 100% native — no external services or callouts. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.16 unifies electronic signing on the modern guided experience — signers walk field-by-field through the real PDF — for every template: single documents, multi-signer documents, and multi-document packets alike, including older templates without signature tags (a signature block is added for them automatically). Page numbers in HTML headers and footers now render in the document's font instead of a mismatched serif. 100% native — no external services or callouts. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
