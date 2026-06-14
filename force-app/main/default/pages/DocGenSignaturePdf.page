@@ -1224,9 +1224,17 @@
                     var guided = null;
                     // Which behaviour btn-sign-submit drives: 'pdf' (single typed name,
                     // legacy flat flow), 'spot' (capture one placement), 'final'
-                    // (consent + finalize after all spots are signed).
+                    // (consent + finalize after all spots are signed), 'fields'
+                    // (collect signer form fields up front, BEFORE any signing).
                     var modalMode = 'pdf';
                     var activeSpot = null;
+                    // Signer form fields (#161) are collected ONCE, up front — before the
+                    // signer captures any signature — because the signature is the
+                    // completion/commit of the document. Collected JSON is reused at the
+                    // final save; the final/consent step no longer re-asks for them.
+                    var formFieldsCollected = false;
+                    var collectedFormFieldJson = '{}';
+                    var afterFieldsAction = null;
                     // The source PDF bytes (base64), kept so we can composite signatures
                     // onto them client-side with pdf-lib at finish (#163).
                     var sourcePdfBase64 = null;
@@ -1547,7 +1555,9 @@
                         spots.forEach(function (spot) {
                             spot.chip.addEventListener('click', function () {
                                 if (spot.signed) return;
-                                openPlacementCapture(spot);
+                                ensureFormFieldsThen(function () {
+                                    openPlacementCapture(spot);
+                                });
                             });
                         });
 
@@ -1626,6 +1636,11 @@
                     // Scroll to and (for non-Date types) open capture for the next pending spot.
                     function advanceGuided() {
                         if (!guided) return;
+                        // Form fields first — collect them before the signer signs anything.
+                        if (hasPendingFormFields()) {
+                            openFormFieldsStep(advanceGuided);
+                            return;
+                        }
                         var pending = firstPendingIndex();
                         if (pending < 0) {
                             openFinalSubmit();
@@ -2269,7 +2284,9 @@
                         nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
                         document.getElementById('modal-consent-checkbox').parentNode.style.display = '';
                         document.getElementById('modal-consent-checkbox').checked = false;
-                        showFormFields();
+                        document.getElementById('btn-sign-submit').textContent = 'Sign';
+                        // Form fields were collected up front (before signing) — not here.
+                        hideFormFields();
                         showModalMsg('', 'info');
                         updateSignSubmitState();
                         document.getElementById('sign-modal').style.display = '';
@@ -2462,6 +2479,60 @@
                         if (c) c.style.display = 'none';
                     }
 
+                    // Gate: signer form fields are completed BEFORE any signing. The first
+                    // signing action (Start Signing, a sign-spot chip, or the legacy single
+                    // modal) routes through ensureFormFieldsThen; once collected, signing
+                    // proceeds and the fields are never re-asked at the final/consent step.
+                    function hasPendingFormFields() {
+                        return (
+                            !formFieldsCollected &&
+                            signerData &&
+                            signerData.formFields &&
+                            signerData.formFields.length > 0
+                        );
+                    }
+
+                    function ensureFormFieldsThen(fn) {
+                        if (hasPendingFormFields()) {
+                            openFormFieldsStep(fn);
+                        } else {
+                            fn();
+                        }
+                    }
+
+                    function openFormFieldsStep(onContinue) {
+                        modalMode = 'fields';
+                        afterFieldsAction = onContinue || null;
+                        document.getElementById('modal-draw-group').style.display = 'none';
+                        document.getElementById('modal-typed-name').parentNode.style.display = 'none';
+                        document.getElementById('modal-consent-checkbox').parentNode.style.display = 'none';
+                        document.querySelector('#sign-modal .modal-header h2').textContent = 'Your Information';
+                        document.querySelector('#sign-modal .modal-subtitle').textContent =
+                            'Complete these fields, then sign to finish.';
+                        showFormFields();
+                        var c = document.getElementById('modal-form-fields');
+                        if (c) c.style.display = '';
+                        document.getElementById('btn-sign-submit').textContent = 'Continue';
+                        showModalMsg('', 'info');
+                        updateSignSubmitState();
+                        document.getElementById('sign-modal').style.display = '';
+                    }
+
+                    function handleFieldsContinue() {
+                        var ff = validateFormFields();
+                        if (!ff.valid) {
+                            updateSignSubmitState();
+                            return;
+                        }
+                        collectedFormFieldJson = JSON.stringify(ff.values);
+                        formFieldsCollected = true;
+                        document.getElementById('btn-sign-submit').textContent = 'Sign';
+                        closeSignModal();
+                        var fn = afterFieldsAction;
+                        afterFieldsAction = null;
+                        if (fn) fn();
+                    }
+
                     // ===== SIGNING MODAL =====
                     function wireSignModal() {
                         document.getElementById('modal-close').addEventListener('click', closeSignModal);
@@ -2475,12 +2546,26 @@
                     }
 
                     function openSignModal() {
+                        // Form fields first, then the single typed-name + consent modal.
+                        if (hasPendingFormFields()) {
+                            openFormFieldsStep(openSignModal);
+                            return;
+                        }
+                        modalMode = 'pdf';
                         document.getElementById('modal-draw-group').style.display = 'none';
+                        // Re-show name + consent (the form-fields step hides them).
+                        document.getElementById('modal-typed-name').parentNode.style.display = '';
+                        document.getElementById('modal-consent-checkbox').parentNode.style.display = '';
+                        document.querySelector('#sign-modal .modal-header h2').textContent = 'Sign Document';
+                        document.querySelector('#sign-modal .modal-subtitle').textContent =
+                            'Confirm your name and consent to sign electronically.';
+                        document.getElementById('btn-sign-submit').textContent = 'Sign';
                         // Prefill the confirmed name from validateToken.signerName.
                         var nameInput = document.getElementById('modal-typed-name');
                         nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
                         document.getElementById('modal-consent-checkbox').checked = false;
-                        showFormFields();
+                        // Form fields were collected up front — don't ask again here.
+                        hideFormFields();
                         showModalMsg('', 'info');
                         updateSignSubmitState();
                         document.getElementById('sign-modal').style.display = '';
@@ -2497,15 +2582,18 @@
                         var nameVal = document.getElementById('modal-typed-name').value.trim();
                         var consentVal = document.getElementById('modal-consent-checkbox').checked;
                         var btn = document.getElementById('btn-sign-submit');
-                        if (modalMode === 'spot') {
+                        if (modalMode === 'fields') {
+                            // Up-front form-field step: enable Continue once required fields
+                            // are valid (#161). No name/consent here.
+                            btn.disabled = !validateFormFields().valid;
+                        } else if (modalMode === 'spot') {
                             // Per-spot capture: a typed value OR a drawn signature is enough
                             // (Date types pre-enable in openPlacementCapture).
                             btn.disabled = !(nameVal || DrawPad.hasInk());
                         } else {
-                            // 'pdf' (legacy single) and 'final': require name + consent +
-                            // all required signer form fields (#161).
-                            var fieldsValid = validateFormFields().valid;
-                            btn.disabled = !(nameVal && consentVal && fieldsValid);
+                            // 'pdf' (legacy single) and 'final': name + consent. Signer form
+                            // fields (#161) were already collected up front.
+                            btn.disabled = !(nameVal && consentVal);
                         }
                     }
 
@@ -2543,15 +2631,14 @@
                             handleFinalSubmit();
                             return;
                         }
+                        if (modalMode === 'fields') {
+                            handleFieldsContinue();
+                            return;
+                        }
 
                         var typedName = document.getElementById('modal-typed-name').value.trim();
                         var consentGiven = document.getElementById('modal-consent-checkbox').checked;
                         if (!typedName || !consentGiven) return;
-                        var ff = validateFormFields();
-                        if (!ff.valid) {
-                            updateSignSubmitState();
-                            return;
-                        }
 
                         var btn = document.getElementById('btn-sign-submit');
                         btn.disabled = true;
@@ -2567,7 +2654,7 @@
                             consentGiven,
                             capturedIp,
                             userAgent,
-                            JSON.stringify(ff.values),
+                            collectedFormFieldJson,
                             function (result, event) {
                                 btn.disabled = false;
                                 btn.textContent = 'Sign';
@@ -2659,12 +2746,8 @@
                         var typedName = document.getElementById('modal-typed-name').value.trim();
                         var consentGiven = document.getElementById('modal-consent-checkbox').checked;
                         if (!typedName || !consentGiven) return;
-                        var ff = validateFormFields();
-                        if (!ff.valid) {
-                            updateSignSubmitState();
-                            return;
-                        }
-                        var formFieldJson = JSON.stringify(ff.values);
+                        // Signer form fields (#161) were collected up front, before signing.
+                        var formFieldJson = collectedFormFieldJson;
 
                         var btn = document.getElementById('btn-sign-submit');
                         btn.disabled = true;
