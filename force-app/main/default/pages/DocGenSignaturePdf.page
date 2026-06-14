@@ -1886,6 +1886,44 @@
                             }
                             y -= 22;
                         });
+                        // Form Field Responses — list configured fields flagged
+                        // listOnCertificate with the value this signer entered (mirrors the
+                        // server certificate's section so the drawn path matches the typed path).
+                        var ffCertDefs = signerData && signerData.formFields ? signerData.formFields : [];
+                        var ffCertShown = [];
+                        for (var ci = 0; ci < ffCertDefs.length; ci++) {
+                            if (ffCertDefs[ci].listOnCertificate) ffCertShown.push(ffCertDefs[ci]);
+                        }
+                        if (ffCertShown.length) {
+                            var ffCertVals = {};
+                            try {
+                                ffCertVals = JSON.parse(collectedFormFieldJson || '{}') || {};
+                            } catch (e) {
+                                ffCertVals = {};
+                            }
+                            y -= 6;
+                            page.drawText('Form Field Responses', { x: 54, y: y, size: 12, font: helvBold });
+                            y -= 18;
+                            for (var cj = 0; cj < ffCertShown.length; cj++) {
+                                var fdef = ffCertShown[cj];
+                                var frawv = ffCertVals[fdef.key];
+                                var fdisp;
+                                if (fdef.type === 'checkbox') {
+                                    fdisp = frawv === true || frawv === 'true' ? 'Yes' : 'No';
+                                } else {
+                                    fdisp = frawv == null || frawv === '' ? '—' : String(frawv);
+                                }
+                                page.drawText((fdef.label || fdef.key) + ': ' + fdisp, {
+                                    x: 60,
+                                    y: y,
+                                    size: 9,
+                                    font: helv,
+                                    color: gray
+                                });
+                                y -= 13;
+                            }
+                            y -= 9;
+                        }
                         y -= 6;
                         if (hashHex) {
                             page.drawText('Document hash (SHA-256):', { x: 54, y: y, size: 9, font: helvBold });

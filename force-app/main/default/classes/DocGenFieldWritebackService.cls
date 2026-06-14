@@ -135,10 +135,11 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
 
     /**
      * PUBLIC-SAFE projection for the guest signing page (validateToken response).
-     * Exposes ONLY {key,label,type,required,choices} — never the writeback flags
-     * or base-object field API names. The writeback allowlist is re-derived
-     * server-side at completion, so withholding these from the guest costs
-     * nothing and shrinks the attack surface.
+     * Exposes ONLY {key,label,type,required,choices,listOnCertificate} — never the
+     * writeback flag or the base-object field API name (the writeback allowlist is
+     * re-derived server-side at completion). listOnCertificate is a presentation
+     * flag, not a capability, so the drawn-path client can render it on its
+     * Certificate of Completion just like the server cert does.
      */
     public static List<Object> publicFormFields(String queryConfigJson) {
         List<Object> publicDefs = new List<Object>();
@@ -149,7 +150,8 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
                     'label' => def.label,
                     'type' => def.type,
                     'required' => def.required,
-                    'choices' => def.choices
+                    'choices' => def.choices,
+                    'listOnCertificate' => def.listOnCertificate
                 }
             );
         }
