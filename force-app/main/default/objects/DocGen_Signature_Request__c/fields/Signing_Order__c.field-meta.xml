@@ -12,6 +12,7 @@
             <value><fullName>Parallel</fullName><default>true</default><label>Parallel (all at once)</label></value>
             <value><fullName>Sequential</fullName><default>false</default><label
                 >Sequential (one at a time)</label></value>
+            <value><fullName>Single</fullName><default>false</default><label>Single signer</label></value>
         </valueSetDefinition>
     </valueSet>
 </CustomField>

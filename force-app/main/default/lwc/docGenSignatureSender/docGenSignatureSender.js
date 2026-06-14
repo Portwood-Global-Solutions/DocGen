@@ -2,6 +2,7 @@ import { LightningElement, api, wire, track } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getSignerRolePicklistValues from '@salesforce/apex/DocGenSignatureSenderController.getSignerRolePicklistValues';
 import createTemplateSignerRequest from '@salesforce/apex/DocGenSignatureSenderController.createTemplateSignerRequestWithTitle';
+import createGuidedPdfSignatureRequest from '@salesforce/apex/DocGenSignatureSenderController.createGuidedPdfSignatureRequest';
 import markSignerVerifiedInPerson from '@salesforce/apex/DocGenSignatureSenderController.markSignerVerifiedInPerson';
 import createPacketSignerRequest from '@salesforce/apex/DocGenSignatureSenderController.createPacketSignerRequestWithTitle';
 import getContactInfo from '@salesforce/apex/DocGenSignatureSenderController.getContactInfo';
@@ -545,14 +546,30 @@ export default class DocGenSignatureSender extends LightningElement {
 
             const titleFormat = (this.documentTitleFormat || '').trim() || null;
             if (this.selectedTemplates.length === 1) {
+                const single = this.selectedTemplates[0];
+                const hasPlacements = single.placements && single.placements.length > 0;
                 // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-                this.signerResults = await createTemplateSignerRequest({
-                    templateId: this.selectedTemplates[0].templateId,
-                    relatedRecordId: this.recordId,
-                    signersJson,
-                    signingOrder: this.signingOrder,
-                    documentTitleFormat: titleFormat
-                });
+                if (hasPlacements) {
+                    // Guided signing: draw/type on the real PDF, walk field-to-field, with a
+                    // Certificate of Completion. Works for HTML and Word templates that carry
+                    // {@Signature_Role:Order:Type} placement tags.
+                    this.signerResults = await createGuidedPdfSignatureRequest({
+                        templateId: single.templateId,
+                        relatedRecordId: this.recordId,
+                        signersJson,
+                        signingOrder: this.signingOrder,
+                        documentTitleFormat: titleFormat
+                    });
+                } else {
+                    // No placement tags → classic typed-name signing page.
+                    this.signerResults = await createTemplateSignerRequest({
+                        templateId: single.templateId,
+                        relatedRecordId: this.recordId,
+                        signersJson,
+                        signingOrder: this.signingOrder,
+                        documentTitleFormat: titleFormat
+                    });
+                }
             } else {
                 const templateIds = this.selectedTemplates.map((t) => t.templateId);
                 // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework

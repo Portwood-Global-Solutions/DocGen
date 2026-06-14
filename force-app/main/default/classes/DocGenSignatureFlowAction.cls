@@ -131,7 +131,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         @InvocableVariable(
             label='Signing Order'
-            description='Enter "Parallel" (default) to email all signers at once, or "Sequential" to send one at a time — each signer is emailed only after the previous one completes.'
+            description='Enter "Parallel" (default) to email all signers at once, "Sequential" to send one at a time (each signer emailed only after the previous completes), or "Single" for a one-signer document.'
         )
         global String signingOrder;
     }
@@ -227,20 +227,42 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         // Runtime errors (template not found, DML failures) are caught and returned in Result
         try {
-            // Resolve signing order
+            // Resolve signing order. "Single" = an explicit one-signer request (behaves
+            // like Parallel for delivery, but lets authors say so clearly — Sarah's #4).
             String signingOrder = String.isNotBlank(req.signingOrder) ? req.signingOrder : 'Parallel';
-            if (signingOrder != 'Parallel' && signingOrder != 'Sequential') {
+            if (signingOrder != 'Parallel' && signingOrder != 'Sequential' && signingOrder != 'Single') {
                 signingOrder = 'Parallel';
             }
 
-            // Use the v3 path — creates request, placements, preview, and optionally sends emails
+            // Route to the GUIDED PDF signing path when the template carries
+            // {@Signature_...} placement tags. The guided path (DocGenSignaturePdf.page)
+            // stamps the real signature/date into the final PDF via the reliable
+            // client-side composite — the same path the Sender LWC uses. Tag-less legacy
+            // templates (old {#Signatures} loop style) fall back to the classic page so
+            // existing Flows keep working. This makes Flow- and LWC-triggered signing
+            // behave identically (fixes the divergent-path bug where Flow signers saw raw
+            // merge tags / no stamped document).
             String signersJson = JSON.serialize(signerInputs);
-            List<DocGenSignatureSenderController.SignerResult> signerResults = DocGenSignatureSenderController.createTemplateSignerRequestWithOrder(
-                req.templateId,
-                req.relatedRecordId,
-                signersJson,
-                signingOrder
+            List<DocGenSignatureSenderController.PlacementInfo> placements = DocGenSignatureSenderController.getTemplateSignaturePlacements(
+                req.templateId
             );
+            List<DocGenSignatureSenderController.SignerResult> signerResults;
+            if (placements != null && !placements.isEmpty()) {
+                signerResults = DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
+                    req.templateId,
+                    req.relatedRecordId,
+                    signersJson,
+                    signingOrder,
+                    null // documentTitleFormat — inherited from the template below
+                );
+            } else {
+                signerResults = DocGenSignatureSenderController.createTemplateSignerRequestWithOrder(
+                    req.templateId,
+                    req.relatedRecordId,
+                    signersJson,
+                    signingOrder
+                );
+            }
 
             // Find the request ID
             if (!signerResults.isEmpty()) {

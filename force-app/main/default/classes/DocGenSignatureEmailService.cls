@@ -292,6 +292,115 @@ public with sharing class DocGenSignatureEmailService {
     }
 
     /**
+     * Sends a completion confirmation to the SIGNERS themselves once everyone has signed.
+     * Previously only the sender (CreatedById) was notified, so signers never received a
+     * "you're done" message (Sarah's #3). Branded like the request email. Best-effort:
+     * a missing OWA or a send error is surfaced to Email_Status__c / debug, never thrown,
+     * so it can't block the finalize that calls it.
+     */
+    public static void sendSignerCompletionEmails(Id requestId) {
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            DocGen_Signature_Request__c req = [
+                SELECT
+                    Template__c,
+                    (
+                        SELECT Signer_Name__c, Signer_Email__c
+                        FROM Signers__r
+                        WHERE Status__c = 'Signed'
+                    )
+                FROM DocGen_Signature_Request__c
+                WHERE Id = :requestId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD
+            if (req.Signers__r == null || req.Signers__r.isEmpty()) {
+                return;
+            }
+
+            DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+            String owaId = settings.Signature_OWA_Id__c;
+            if (String.isBlank(owaId)) {
+                // Guest/async sends require an OWA; surface the reason instead of failing silently.
+                updateEmailStatus(
+                    requestId,
+                    'Signer completion emails not sent — no Org-Wide Email Address configured. Set one in DocGen > Signatures settings.'
+                );
+                return;
+            }
+            String brandColor = safeBrandColor(settings.Signature_Email_Brand_Color__c);
+            String companyName = settings.Company_Name__c;
+
+            // Resolve a friendly document name (best-effort, guarded).
+            String docTitle = 'your document';
+            if (req.Template__c != null) {
+                DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                List<DocGen_Template__c> tpls = [
+                    SELECT Name
+                    FROM DocGen_Template__c
+                    WHERE Id = :req.Template__c
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (!tpls.isEmpty() && String.isNotBlank(tpls[0].Name)) {
+                    docTitle = tpls[0].Name;
+                }
+            }
+
+            List<Messaging.SingleEmailMessage> emails = new List<Messaging.SingleEmailMessage>();
+            for (DocGen_Signer__c s : req.Signers__r) {
+                if (String.isBlank(s.Signer_Email__c)) {
+                    continue;
+                }
+                Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+                email.setToAddresses(new List<String>{ s.Signer_Email__c });
+                email.setSubject('Signature complete: ' + docTitle);
+                email.setHtmlBody(buildSignerCompletionHtml(s.Signer_Name__c, docTitle, brandColor, companyName));
+                email.setSaveAsActivity(false);
+                email.setOrgWideEmailAddressId(owaId);
+                emails.add(email);
+            }
+            if (!emails.isEmpty()) {
+                Messaging.sendEmail(emails, false);
+            }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: Signer completion emails failed: ' + e.getMessage());
+        }
+    }
+
+    private static String buildSignerCompletionHtml(
+        String signerName,
+        String docTitle,
+        String brandColor,
+        String companyName
+    ) {
+        String safeName = escapeHtml(String.isNotBlank(signerName) ? signerName : 'there');
+        String safeDoc = escapeHtml(docTitle);
+        String safeBrand = escapeHtml(brandColor);
+        String html = '<!DOCTYPE html><html><head><meta charset="utf-8"/></head>';
+        html += '<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">';
+        html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;">';
+        html += '<tr><td align="center" style="padding:24px 16px;">';
+        html += '<table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;width:100%;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">';
+        html += '<tr><td style="background:' + safeBrand + ';padding:16px 32px;text-align:center;">';
+        if (String.isNotBlank(companyName)) {
+            html += '<span style="color:#fff;font-size:18px;font-weight:bold;">' + escapeHtml(companyName) + '</span>';
+        }
+        html += '</td></tr>';
+        html += '<tr><td style="padding:24px 32px;color:#333;font-size:15px;line-height:1.5;">';
+        html += '<p>Hi ' + safeName + ',</p>';
+        html +=
+            '<p>Thanks for signing. All parties have now completed <strong>' +
+            safeDoc +
+            '</strong>, and the signed document is finalized. No further action is needed.</p>';
+        html += '<p style="font-size:13px;color:#706e6b;">This is your confirmation that the signature was recorded.</p>';
+        html += '</td></tr></table></td></tr></table></body></html>';
+        return html;
+    }
+
+    /**
      * Notifies the sender that a signer has declined.
      */
     public static void sendDeclineNotification(Id requestId, DocGen_Signer__c signer, String reason) {

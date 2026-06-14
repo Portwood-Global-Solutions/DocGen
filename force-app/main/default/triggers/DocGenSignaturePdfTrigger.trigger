@@ -123,6 +123,17 @@ trigger DocGenSignaturePdfTrigger on DocGen_Signature_PDF__e(after insert) {
                 } catch (Exception notifEx) {
                     System.debug(LoggingLevel.WARN, 'DocGen: All-signed notification failed: ' + notifEx.getMessage());
                 }
+
+                // Send a completion confirmation to the SIGNERS themselves (Sarah's #3 —
+                // previously only the sender was notified, so signers never got a "done").
+                try {
+                    DocGenSignatureEmailService.sendSignerCompletionEmails(requestId);
+                } catch (Exception signerNotifEx) {
+                    System.debug(
+                        LoggingLevel.WARN,
+                        'DocGen: Signer completion email failed: ' + signerNotifEx.getMessage()
+                    );
+                }
             } else if (remaining > 0) {
                 // Not all done — send "signer completed" notification
                 if (lastSignedSigner != null) {

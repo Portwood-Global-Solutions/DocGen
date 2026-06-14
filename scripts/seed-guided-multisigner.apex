@@ -17,8 +17,13 @@ String html =
     '<h1>Purchase Agreement</h1>' +
     '<div class="sub">{Account.Name} &middot; Multi-signer guided PDF test</div>' +
     '<div class="terms">This Purchase Agreement is between the Buyer and the Seller for the property described herein. ' +
-    'Buyer initials to acknowledge the inspection clause: {@Signature_Buyer:1:Initials} &nbsp;&nbsp; ' +
-    'Seller initials to acknowledge the disclosure clause: {@Signature_Seller:1:Initials}</div>' +
+    'Each party initials below to acknowledge the inspection and disclosure clauses.</div>' +
+    // Initials live in their own table cells (NOT inline in the prose) so each stamp
+    // card has whitespace and never overlaps body text — the recommended authoring pattern.
+    '<table class="sig"><tr>' +
+    '<td><div>{@Signature_Buyer:1:Initials}</div><div class="line">Buyer Initials &mdash; Inspection clause</div></td>' +
+    '<td><div>{@Signature_Seller:1:Initials}</div><div class="line">Seller Initials &mdash; Disclosure clause</div></td>' +
+    '</tr></table>' +
     '<div class="gap"></div>' +
     '<div class="terms">Each party agrees to the full terms as of the date of signature below.</div>' +
     '<table class="sig"><tr>' +
