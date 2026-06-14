@@ -258,6 +258,52 @@ private class DocGenGuidedSigningTest {
     }
 
     @IsTest
+    static void compositedDrawnPath_firesWriteback() {
+        // Regression #173: the guided DRAWN path (saveCompositedSignedPdf) stores the
+        // client-composited PDF directly and never enqueues the typed-path finalizer, so
+        // it must publish DocGen_Field_Writeback__e itself. Before the fix it didn't, so
+        // signer form-field writeback silently no-op'd for every drawn signature. Driving
+        // the real save method inside start/stopTest flushes the event through the trigger.
+        Id tplId = createTaggedTemplate();
+        update new DocGen_Template__c(
+            Id = tplId,
+            Form_Fields_Config__c = '{"formFields":[{"key":"wbdesc","fieldApiName":"Description","type":"text","writeback":true}]}'
+        );
+        Account a = [SELECT Id FROM Account LIMIT 1];
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(tplId, a.Id, signersJson(), 'Parallel', null);
+
+        DocGen_Signer__c signer = [
+            SELECT Id, Secure_Token__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__r.Template__c = :tplId
+            LIMIT 1
+        ];
+        signer.PIN_Verified_At__c = System.now();
+        update signer;
+
+        Test.startTest();
+        DocGenSignatureController.SavePdfSignatureResult r = DocGenSignatureController.saveCompositedSignedPdf(
+            signer.Secure_Token__c,
+            EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.4 drawn composite')),
+            true,
+            '1.2.3.4',
+            'JUnit/1.0',
+            '{"wbdesc":"WRITTEN VIA DRAWN PATH","hackerKey":"INJECTED"}'
+        );
+        // stopTest delivers the published DocGen_Field_Writeback__e → DocGenFieldWritebackTrigger
+        // runs performWriteback (the subscriber) which writes the captured value to the record.
+        Test.stopTest();
+
+        System.assertEquals(true, r.isComplete, 'Single signer completes the request');
+        Account after = [SELECT Description FROM Account WHERE Id = :a.Id];
+        System.assertEquals(
+            'WRITTEN VIA DRAWN PATH',
+            after.Description,
+            'Drawn path must publish the writeback event so the captured form field reaches the record'
+        );
+    }
+
+    @IsTest
     static void rejectsInvalidTokens() {
         Test.startTest();
         Boolean a = false, b = false;

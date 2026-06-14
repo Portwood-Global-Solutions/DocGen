@@ -130,20 +130,12 @@ try {
 // ===== Verify PIN fields set =====
 try {
     DocGen_Signer__c sg2 = [SELECT PIN_Hash__c, PIN_Expires_At__c FROM DocGen_Signer__c WHERE Id = :signerId];
-    if (sg2.PIN_Hash__c != null) {
+    if (sg2.PIN_Hash__c != null && sg2.PIN_Expires_At__c != null) {
         pass++;
-        System.debug('PIN HASH SET: PASS');
+        System.debug('PIN HASH + EXPIRY SET: PASS');
     } else {
         fail++;
-        System.debug('PIN HASH SET: FAIL — null');
-    }
-
-    if (sg2.PIN_Expires_At__c != null) {
-        pass++;
-        System.debug('PIN EXPIRES AT SET: PASS — ' + sg2.PIN_Expires_At__c);
-    } else {
-        fail++;
-        System.debug('PIN EXPIRES AT SET: FAIL — null');
+        System.debug('PIN HASH + EXPIRY SET: FAIL — hash=' + sg2.PIN_Hash__c + ' exp=' + sg2.PIN_Expires_At__c);
     }
 } catch (Exception e) {
     fail++;
@@ -240,19 +232,12 @@ try {
         ''
     );
     DocGen_Settings__c s2 = DocGenSetupController.getSettings();
-    Boolean brandOk = s2.Signature_Email_Brand_Color__c == '#0066CC';
-    Boolean companyOk = s2.Company_Name__c == 'E2E Test Corp';
-    if (brandOk && companyOk) {
+    if (s2.Signature_Email_Brand_Color__c == '#0066CC' && s2.Company_Name__c == 'E2E Test Corp') {
         pass++;
         System.debug('SAVE SIGNATURE SETTINGS: PASS');
     } else {
         fail++;
-        System.debug(
-            'SAVE SIGNATURE SETTINGS: FAIL — brand: ' +
-                s2.Signature_Email_Brand_Color__c +
-                ', company: ' +
-                s2.Company_Name__c
-        );
+        System.debug('SAVE SIGNATURE SETTINGS: FAIL — brand=' + s2.Signature_Email_Brand_Color__c);
     }
 } catch (Exception e) {
     fail++;
@@ -546,10 +531,13 @@ try {
     System.debug('SEND EXISTING CV: FAIL — ' + e.getMessage());
 }
 
-// ===== Form-field capture -> record writeback round-trip =====
+// ===== Form-field capture -> record writeback round-trip (regression #173) =====
+// Service-level round-trip (unknown keys dropped, only allowlisted mapped field written).
+// The drawn-path event publish is @AuraEnabled (uncatchable AuraHandledException in anon
+// Apex), so that end-to-end guard lives in DocGenGuidedSigningTest.compositedDrawnPath_firesWriteback.
 try {
-    DocGen_Template__c wbTmpl = [SELECT Id, Form_Fields_Config__c FROM DocGen_Template__c WHERE Id = :tmplId LIMIT 1];
-    String origCfg = wbTmpl.Form_Fields_Config__c;
+    String origCfg = [SELECT Form_Fields_Config__c FROM DocGen_Template__c WHERE Id = :tmplId LIMIT 1]
+    .Form_Fields_Config__c;
     String wbCfg =
         '{"formFields":[' +
         '{"key":"wbdesc","fieldApiName":"Description","type":"text","writeback":true},' +

@@ -2723,6 +2723,28 @@ public without sharing class DocGenSignatureController {
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
 
+        // Signer form-field writeback: this guided drawn-signature path stores the
+        // client-composited PDF directly and never enqueues TemplateSignaturePdfQueueable
+        // (the typed-name path's finalizer), so the writeback event must be published
+        // HERE — once, after the final signed CV is saved — or writeback never fires for
+        // drawn signatures. Decoupled + post-completion, mirroring the queueable: the
+        // subscriber (DocGenFieldWritebackTrigger) re-derives the writable allowlist from
+        // config and re-checks FLS per field; performWriteback no-ops when the template
+        // has no writeback fields and never throws into signing.
+        if (result.isComplete) {
+            try {
+                DocGen_Field_Writeback__e wbEvent = new DocGen_Field_Writeback__e();
+                wbEvent.Request_Id__c = signer.Signature_Request__c;
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                EventBus.publish(wbEvent);
+            } catch (Exception wbEx) {
+                System.debug(
+                    LoggingLevel.WARN,
+                    'DocGen: composited writeback event publish failed: ' + wbEx.getMessage()
+                );
+            }
+        }
+
         result.success = true;
         return result;
     }
