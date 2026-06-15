@@ -196,7 +196,8 @@ private class DocGenSignaturePdfTests {
             'Pat Signer',
             true,
             '203.0.113.7',
-            'Mozilla/5.0'
+            'Mozilla/5.0',
+            '{}'
         );
         Test.stopTest();
 
@@ -241,7 +242,7 @@ private class DocGenSignaturePdfTests {
         Database.update(signer, AccessLevel.SYSTEM_MODE);
 
         Test.startTest();
-        DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', true, '203.0.113.7', 'UA');
+        DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', true, '203.0.113.7', 'UA', '{}');
         Integer enqueued = Limits.getAsyncCalls();
         Test.stopTest();
 
@@ -255,7 +256,7 @@ private class DocGenSignaturePdfTests {
         Database.update(signer, AccessLevel.SYSTEM_MODE);
         Test.startTest();
         try {
-            DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', false, '1.1.1.1', 'UA');
+            DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', false, '1.1.1.1', 'UA', '{}');
             System.assert(false, 'Should have thrown without consent');
         } catch (Exception e) {
             // AuraHandledException
@@ -267,7 +268,7 @@ private class DocGenSignaturePdfTests {
     static void testSavePdfSignature_noPinVerification() {
         Test.startTest();
         try {
-            DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', true, '1.1.1.1', 'UA');
+            DocGenSignatureController.savePdfSignature(SIGNER_TOKEN, 'Pat Signer', true, '1.1.1.1', 'UA', '{}');
             System.assert(false, 'Should have thrown — PIN not verified');
         } catch (Exception e) {
             // AuraHandledException
@@ -279,7 +280,7 @@ private class DocGenSignaturePdfTests {
     static void testSavePdfSignature_invalidToken() {
         Test.startTest();
         try {
-            DocGenSignatureController.savePdfSignature('bad', 'Name', true, '1.1.1.1', 'UA');
+            DocGenSignatureController.savePdfSignature('bad', 'Name', true, '1.1.1.1', 'UA', '{}');
             System.assert(false, 'Should have thrown');
         } catch (Exception e) {
             // AuraHandledException
@@ -292,7 +293,10 @@ private class DocGenSignaturePdfTests {
     // =========================================================================
 
     @isTest
-    static void testCreateRequestFromContentVersion() {
+    static void testCreateRequestFromContentVersion_removed() {
+        // v3.18: sending a pre-generated PDF (ContentVersion) for signature is removed —
+        // a flat PDF has no parseable signature tags, so it can't drive guided signing or
+        // stamp-back. The entry now fails fast with guidance; no request is created.
         Account acc = [SELECT Id FROM Account LIMIT 1];
         ContentVersion cv = new ContentVersion(
             Title = 'Fresh Generated Doc',
@@ -301,39 +305,28 @@ private class DocGenSignaturePdfTests {
         );
         insert cv;
         cv = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
-
         String signersJson = '[{"signerName":"Sam Signer","signerEmail":"sam@test.com","roleName":"Signer","contactId":""}]';
 
+        Boolean threw = false;
         Test.startTest();
-        List<DocGenSignatureSenderController.SignerResult> results = DocGenSignatureSenderController.createRequestFromContentVersion(
-            cv.Id,
-            acc.Id,
-            signersJson,
-            'Parallel',
-            null
-        );
+        try {
+            DocGenSignatureSenderController.createRequestFromContentVersion(
+                cv.Id,
+                acc.Id,
+                signersJson,
+                'Parallel',
+                null
+            );
+        } catch (Exception e) {
+            threw = true;
+        }
         Test.stopTest();
-
-        System.assertEquals(1, results.size());
-        System.assertEquals('Sam Signer', results[0].signerName);
-        System.assert(String.isNotBlank(results[0].signerUrl), 'Signer URL expected');
-        System.assert(results[0].signerUrl.contains('DocGenSignaturePdf'), 'URL must target the flat-PDF page');
-
-        // Verify a Template__c-null request was created with the source CV + a signer token.
-        DocGen_Signer__c created = [
-            SELECT
-                Secure_Token__c,
-                Signature_Request__r.Source_Document_Id__c,
-                Signature_Request__r.Template__c,
-                Signature_Request__r.Status__c
-            FROM DocGen_Signer__c
-            WHERE Signer_Email__c = 'sam@test.com'
-            LIMIT 1
-        ];
-        System.assertEquals(cv.Id, created.Signature_Request__r.Source_Document_Id__c);
-        System.assertEquals(null, created.Signature_Request__r.Template__c, 'Template must be null for the PDF path');
-        System.assertEquals('Sent', created.Signature_Request__r.Status__c);
-        System.assertEquals(64, created.Secure_Token__c.length(), 'A 64-char token must be issued');
+        System.assert(threw, 'Pre-generated PDF signing must be rejected (removed in v3.18)');
+        System.assertEquals(
+            0,
+            [SELECT COUNT() FROM DocGen_Signer__c WHERE Signer_Email__c = 'sam@test.com'],
+            'No signature request is created on the removed path'
+        );
     }
 
     @isTest
@@ -354,20 +347,34 @@ private class DocGenSignaturePdfTests {
         Test.stopTest();
     }
 
+    @isTest
+    static void testSignatureTagStrippedInNormalGeneration() {
+        // Leak fix: {@Signature_*} must be stripped from a normally-generated document
+        // (preserveSignatureTags=false) and kept only during a signature merge.
+        String body = 'A {@Signature_Signer:1:Full} B';
+        Test.startTest();
+        DocGenService.preserveSignatureTags = false;
+        String gen = DocGenService.processXmlForTest(body, new Map<String, Object>());
+        DocGenService.preserveSignatureTags = true;
+        String sig = DocGenService.processXmlForTest(body, new Map<String, Object>());
+        DocGenService.preserveSignatureTags = false;
+        Test.stopTest();
+        System.assert(!gen.contains('{@Signature'), 'Normal generation strips signing tags (no leak): ' + gen);
+        System.assert(sig.contains('{@Signature_Signer:1:Full}'), 'Signing preserves the tag for stamping');
+    }
+
     // =========================================================================
     // A4 — DocGenSignaturePdfFlowAction invocable
     // =========================================================================
 
     @isTest
     static void testPdfFlowAction_success() {
+        // v3.18: the action is template-only. Provide a Template Id; DocGen snapshots +
+        // re-renders on completion.
         Account acc = [SELECT Id FROM Account LIMIT 1];
-        ContentVersion cv = new ContentVersion(
-            Title = 'Flow Generated Doc',
-            PathOnClient = 'flow.pdf',
-            VersionData = Blob.valueOf('%PDF-1.7 flow')
+        Id tmplId = createHtmlSignatureTemplate(
+            '<html><body><p>{Name}</p><p>Sign: {@Signature_Signer:1:Full}</p></body></html>'
         );
-        insert cv;
-        cv = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
 
         DocGenSigner s = new DocGenSigner();
         s.name = 'Flow Signer';
@@ -375,7 +382,7 @@ private class DocGenSignaturePdfTests {
         s.role = 'Signer';
 
         DocGenSignaturePdfFlowAction.Request req = new DocGenSignaturePdfFlowAction.Request();
-        req.contentVersionId = cv.Id;
+        req.templateId = tmplId;
         req.relatedRecordId = acc.Id;
         req.signerRecords = new List<DocGenSigner>{ s };
         req.signingOrder = 'Parallel';
@@ -392,7 +399,40 @@ private class DocGenSignaturePdfTests {
         System.assertNotEquals(null, r.signatureRequestId);
         System.assertEquals(1, r.signerUrls.size());
         System.assertEquals('Flow Signer', r.signerNames[0]);
-        System.assert(r.signerUrls[0].contains('DocGenSignaturePdf'), 'URL must target the flat-PDF page');
+        System.assert(r.signerUrls[0].contains('DocGenSignaturePdf'), 'URL must target the signing page');
+    }
+
+    @isTest
+    static void testPdfFlowAction_contentVersionRejected() {
+        // The pre-generated-PDF path is removed: passing only a Content Version Id (no
+        // Template Id) must be rejected.
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        ContentVersion cv = new ContentVersion(
+            Title = 'Flow Generated Doc',
+            PathOnClient = 'flow.pdf',
+            VersionData = Blob.valueOf('%PDF-1.7 flow')
+        );
+        insert cv;
+        cv = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
+
+        DocGenSigner s = new DocGenSigner();
+        s.name = 'Flow Signer';
+        s.email = 'flow@test.com';
+
+        DocGenSignaturePdfFlowAction.Request req = new DocGenSignaturePdfFlowAction.Request();
+        req.contentVersionId = cv.Id;
+        req.relatedRecordId = acc.Id;
+        req.signerRecords = new List<DocGenSigner>{ s };
+
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenSignaturePdfFlowAction.send(new List<DocGenSignaturePdfFlowAction.Request>{ req });
+        } catch (Exception e) {
+            threw = true;
+        }
+        Test.stopTest();
+        System.assert(threw, 'Content-Version-only signing must be rejected (Template Id required)');
     }
 
     @isTest
@@ -410,7 +450,10 @@ private class DocGenSignaturePdfTests {
         s.name = 'No Email Signer';
 
         DocGenSignaturePdfFlowAction.Request req = new DocGenSignaturePdfFlowAction.Request();
-        req.contentVersionId = cv.Id;
+        // Template-based now (v3.18); the missing-email validation still applies.
+        req.templateId = createHtmlSignatureTemplate(
+            '<html><body><p>{Name} {@Signature_Signer:1:Full}</p></body></html>'
+        );
         req.relatedRecordId = acc.Id;
         req.signerRecords = new List<DocGenSigner>{ s };
 
@@ -570,7 +613,8 @@ private class DocGenSignaturePdfTests {
             'Pat',
             true,
             '1.2.3.4',
-            'UA'
+            'UA',
+            '{}'
         );
 
         System.assertEquals(true, result.success);

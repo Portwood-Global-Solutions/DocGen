@@ -92,6 +92,13 @@ public with sharing class DocGenSignatureGuestSecurity {
      *   • Decline_Reason__c
      *   • Signature_Data__c (typed-name capture)
      *   • Secure_Token__c (one-shot rotate on resend)
+     *   • Field_Data_Json__c — signer form-field values collected at signing,
+     *     validated server-side against the template config (required enforced,
+     *     types coerced, unknown keys dropped) before write. The guest writes
+     *     ONLY this JSON blob; base-record writeback runs later in system context
+     *     (DocGen_Field_Writeback__e → DocGenFieldWritebackService.performWriteback)
+     *     off a server-derived, FLS-re-checked allowlist — the guest never does
+     *     base-object DML and the JSON keys never decide what gets written.
      */
     public static void assertSignerWritableFields(String token) {
         if (Schema.sObjectType.DocGen_Signer__c.isUpdateable()) {

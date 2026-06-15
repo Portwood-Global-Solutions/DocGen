@@ -26,6 +26,9 @@ import createSampleTemplates from '@salesforce/apex/DocGenController.createSampl
 import exportTemplate from '@salesforce/apex/DocGenController.exportTemplate';
 import importTemplate from '@salesforce/apex/DocGenController.importTemplate';
 import getObjectFields from '@salesforce/apex/DocGenController.getObjectFields';
+// #161 — updateable-only field list for writeback-target dropdowns (Signer Inputs tab).
+// New Apex method (backend agent); if not yet deployed, QA deploys — import/usage is wired here.
+import getUpdateableObjectFields from '@salesforce/apex/DocGenController.getUpdateableObjectFields';
 import getObjectOptions from '@salesforce/apex/DocGenController.getObjectOptions';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
 import getParentRelationships from '@salesforce/apex/DocGenController.getParentRelationships';
@@ -97,6 +100,13 @@ const F = {
     OutputFormat: OUTPUT_FORMAT_FIELD.fieldApiName,
     BaseObject: BASE_OBJECT_FIELD.fieldApiName,
     QueryConfig: QUERY_CONFIG_FIELD.fieldApiName,
+    // #161 follow-up — dedicated storage for Signer Inputs form-field config.
+    // The field has no @salesforce/schema import yet (backend ships it in
+    // parallel), so resolve its namespace from an already-resolved field's
+    // prefix (e.g. `portwoodglobal__` in subscriber orgs, '' in staging).
+    FormFieldsConfig:
+        QUERY_CONFIG_FIELD.fieldApiName.slice(0, QUERY_CONFIG_FIELD.fieldApiName.length - 'Query_Config__c'.length) +
+        'Form_Fields_Config__c',
     Desc: DESC_FIELD.fieldApiName,
     TestRecordId: TEST_RECORD_FIELD.fieldApiName,
     DocTitleFormat: DOC_TITLE_FIELD.fieldApiName,
@@ -264,6 +274,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isUploadingWatermark = false;
     editTemplateDesc;
     @track editTemplateQuery;
+    // #161 follow-up — raw JSON string for the dedicated Form_Fields_Config__c
+    // field (shape `{formFields:[...]}`). Signer Inputs no longer live on
+    // Query_Config__c, so this is independent of editTemplateQuery.
+    @track editFormFieldsConfig = '';
     editTemplateTestRecordId;
     editTemplateTitleFormat;
     editTemplateIsActive = true;
@@ -365,6 +379,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track _allFields = [];
     @track _allChildren = [];
     @track _allParents = [];
+    // #161 — Signer Inputs (form fields). Updateable-only field list for writeback
+    // targets; rows of { key, label, fieldApiName, type, required, writeback,
+    // mergeTag, choices, listOnCertificate }.
+    @track _allUpdateableFields = [];
+    @track signerFields = [];
 
     get builderFieldsTabClass() {
         return this.builderTab === 'fields' ? 'builder-tab-active' : '';
@@ -1701,6 +1720,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             .catch(() => {
                 this._allFields = [];
             });
+        // #161 — updateable-only list for Signer Inputs writeback targets.
+        getUpdateableObjectFields({ objectName })
+            .then((data) => {
+                this._allUpdateableFields = data || [];
+            })
+            .catch(() => {
+                this._allUpdateableFields = [];
+            });
         getChildRelationships({ objectName })
             .then((data) => {
                 this._allChildren = data || [];
@@ -1994,6 +2021,236 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const cleaned = queryConfig.trim();
         if (cleaned.startsWith('{')) return cleaned;
         return stripOuterSelectFrom(cleaned);
+    }
+
+    // ============================================================
+    // #161 — Signer Inputs (form fields with optional record writeback)
+    // ------------------------------------------------------------
+    // Rows live as parsed.formFields on the editTemplateQuery JSON:
+    //   { key, label, fieldApiName, type, required, writeback, mergeTag,
+    //     choices, listOnCertificate }
+    // `key` is a stable [A-Za-z0-9_]+ id generated once and NEVER reused after
+    // delete; `mergeTag` is `{?<key>}` and never changes when the label is edited.
+    // ============================================================
+
+    get signerFieldTypeOptions() {
+        return [
+            { label: 'Text', value: 'text' },
+            { label: 'Number', value: 'number' },
+            { label: 'Date', value: 'date' },
+            { label: 'Checkbox', value: 'checkbox' },
+            { label: 'Picklist', value: 'picklist' }
+        ];
+    }
+
+    // Capture-or-writeback field pickers, keyed off the edit template object.
+    get signerFieldMappedOptions() {
+        return [
+            { label: '— Not mapped (capture only) —', value: '' },
+            ...(this._allFields || []).map((f) => ({ label: f.label, value: f.value }))
+        ];
+    }
+    get signerFieldWritebackOptions() {
+        return [
+            { label: '— Select a field to write back —', value: '' },
+            ...(this._allUpdateableFields || []).map((f) => ({ label: f.label, value: f.value }))
+        ];
+    }
+
+    // View-model rows for the table template. Picks the right field-picker
+    // option set per row (writeback rows must only offer updateable fields).
+    get signerFieldRows() {
+        return (this.signerFields || []).map((row, index) => ({
+            key: row.key,
+            index,
+            label: row.label || '',
+            fieldApiName: row.fieldApiName || '',
+            type: row.type || 'text',
+            required: !!row.required,
+            writeback: !!row.writeback,
+            listOnCertificate: !!row.listOnCertificate,
+            mergeTag: row.mergeTag || this._buildSignerMergeTag(row.key),
+            choicesText: Array.isArray(row.choices) ? row.choices.join(', ') : row.choices || '',
+            isPicklist: (row.type || 'text') === 'picklist',
+            fieldOptions: row.writeback ? this.signerFieldWritebackOptions : this.signerFieldMappedOptions,
+            isFirst: index === 0,
+            isLast: index === (this.signerFields || []).length - 1
+        }));
+    }
+
+    get hasSignerFields() {
+        return (this.signerFields || []).length > 0;
+    }
+
+    _buildSignerMergeTag(key) {
+        return '{?' + key + '}';
+    }
+
+    // Stable, collision-free [A-Za-z0-9_]+ key. Slugifies the label as a seed but
+    // ALWAYS appends a short unique suffix so renaming the label can never produce
+    // a key already in use (and so the merge tag stays unique).
+    _generateSignerFieldKey(seedLabel) {
+        const existing = new Set((this.signerFields || []).map((f) => f.key));
+        const base =
+            String(seedLabel || 'field')
+                .replace(/[^A-Za-z0-9_]+/g, '_')
+                .replace(/^_+|_+$/g, '')
+                .slice(0, 30) || 'field';
+        let candidate;
+        let i = 0;
+        do {
+            const suffix = Math.random().toString(36).slice(2, 6);
+            candidate = (base + '_' + suffix).replace(/__+/g, '_');
+            i++;
+        } while (existing.has(candidate) && i < 50);
+        return candidate;
+    }
+
+    // Parse the dedicated Form_Fields_Config__c JSON (shape `{formFields:[...]}`)
+    // into signerFields. Independent of Query_Config__c, so it works for EVERY
+    // template type (V1 flat-string, V3/V4 JSON, Apex provider) — no gate.
+    _hydrateSignerFields() {
+        let rows = [];
+        const cfg = (this.editFormFieldsConfig || '').trim();
+        if (cfg.startsWith('{')) {
+            try {
+                const parsed = JSON.parse(cfg);
+                if (Array.isArray(parsed.formFields)) {
+                    rows = parsed.formFields.map((f) => ({
+                        key: f.key,
+                        label: f.label || '',
+                        fieldApiName: f.fieldApiName || '',
+                        type: f.type || 'text',
+                        required: !!f.required,
+                        writeback: !!f.writeback,
+                        mergeTag: f.mergeTag || this._buildSignerMergeTag(f.key),
+                        choices: Array.isArray(f.choices) ? f.choices : [],
+                        listOnCertificate: !!f.listOnCertificate
+                    }));
+                }
+            } catch (e) {
+                /* malformed / empty config — no form fields */
+            }
+        }
+        this.signerFields = rows;
+    }
+
+    // Serialize the current signerFields into the dedicated Form_Fields_Config__c
+    // JSON string. NEVER touches editTemplateQuery — form fields no longer live on
+    // Query_Config__c, so this works regardless of the template's query shape.
+    _persistSignerFields() {
+        const serialized = (this.signerFields || []).map((f) => ({
+            key: f.key,
+            label: f.label || '',
+            fieldApiName: f.fieldApiName || '',
+            type: f.type || 'text',
+            required: !!f.required,
+            writeback: !!f.writeback,
+            mergeTag: f.mergeTag || this._buildSignerMergeTag(f.key),
+            choices: Array.isArray(f.choices) ? f.choices : [],
+            listOnCertificate: !!f.listOnCertificate
+        }));
+        this.editFormFieldsConfig = JSON.stringify({ formFields: serialized });
+    }
+
+    handleAddSignerField() {
+        const label = 'New Field';
+        const key = this._generateSignerFieldKey(label);
+        this.signerFields = [
+            ...(this.signerFields || []),
+            {
+                key,
+                label,
+                fieldApiName: '',
+                type: 'text',
+                required: false,
+                writeback: false,
+                mergeTag: this._buildSignerMergeTag(key),
+                choices: [],
+                listOnCertificate: false
+            }
+        ];
+        this._persistSignerFields();
+    }
+
+    handleRemoveSignerField(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (Number.isNaN(index)) return;
+        this.signerFields = (this.signerFields || []).filter((_, i) => i !== index);
+        this._persistSignerFields();
+    }
+
+    handleMoveSignerFieldUp(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (Number.isNaN(index) || index <= 0) return;
+        const rows = [...this.signerFields];
+        [rows[index - 1], rows[index]] = [rows[index], rows[index - 1]];
+        this.signerFields = rows;
+        this._persistSignerFields();
+    }
+
+    handleMoveSignerFieldDown(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        if (Number.isNaN(index) || index >= this.signerFields.length - 1) return;
+        const rows = [...this.signerFields];
+        [rows[index + 1], rows[index]] = [rows[index], rows[index + 1]];
+        this.signerFields = rows;
+        this._persistSignerFields();
+    }
+
+    // Generic per-row update — never touches key/mergeTag (label edits are safe).
+    _updateSignerFieldRow(index, patch) {
+        if (Number.isNaN(index)) return;
+        this.signerFields = (this.signerFields || []).map((row, i) => (i === index ? { ...row, ...patch } : row));
+        this._persistSignerFields();
+    }
+
+    handleSignerFieldLabelChange(event) {
+        // Label edits must NOT change key/mergeTag.
+        this._updateSignerFieldRow(Number(event.currentTarget.dataset.index), {
+            label: event.detail ? event.detail.value : event.target.value
+        });
+    }
+
+    handleSignerFieldMappedChange(event) {
+        this._updateSignerFieldRow(Number(event.currentTarget.dataset.index), {
+            fieldApiName: (event.detail ? event.detail.value : event.target.value) || ''
+        });
+    }
+
+    handleSignerFieldTypeChange(event) {
+        this._updateSignerFieldRow(Number(event.currentTarget.dataset.index), {
+            type: event.detail ? event.detail.value : event.target.value
+        });
+    }
+
+    handleSignerFieldRequiredChange(event) {
+        this._updateSignerFieldRow(Number(event.currentTarget.dataset.index), {
+            required: event.detail ? event.detail.checked : event.target.checked
+        });
+    }
+
+    handleSignerFieldWritebackChange(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        const writeback = event.detail ? event.detail.checked : event.target.checked;
+        // Toggling writeback swaps the field-picker option set; clear the mapped
+        // field so a stale (possibly non-updateable) selection can't leak through.
+        this._updateSignerFieldRow(index, { writeback, fieldApiName: '' });
+    }
+
+    handleSignerFieldChoicesChange(event) {
+        const raw = event.detail ? event.detail.value : event.target.value;
+        const choices = String(raw || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+        this._updateSignerFieldRow(Number(event.currentTarget.dataset.index), { choices });
+    }
+
+    handleSignerFieldCertificateChange(event) {
+        this._updateSignerFieldRow(Number(event.currentTarget.dataset.index), {
+            listOnCertificate: event.detail ? event.detail.checked : event.target.checked
+        });
     }
 
     handleEditTestRecordChange(event) {
@@ -2515,6 +2772,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // flattening would silently drop alias slots. The readable textarea
             // formats V3→V1 at display time via the readableEditQueryConfig getter.
             this.editTemplateQuery = row[F.QueryConfig];
+            // #161 — load configured signer form fields from the dedicated
+            // Form_Fields_Config__c field (independent of Query_Config__c).
+            this.editFormFieldsConfig = row[F.FormFieldsConfig] || '';
+            this._hydrateSignerFields();
             // Auto-detect v4 (Apex Data Provider) bindings so admins re-opening
             // a provider-backed template land in the right mode immediately.
             this.editUseApexProvider = false;
@@ -2897,6 +3158,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Base_Object_API__c: this.editTemplateObject,
             Description__c: this.editTemplateDesc,
             Query_Config__c: this._sanitizeQueryConfig(this.editTemplateQuery),
+            // #161 — Signer Inputs form-field config (dedicated field, not Query_Config__c).
+            Form_Fields_Config__c: this.editFormFieldsConfig,
             Test_Record_Id__c: this.editTemplateTestRecordId,
             Document_Title_Format__c: this.editTemplateTitleFormat,
             Is_Active__c: this.editTemplateIsActive,
@@ -2940,6 +3203,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Base_Object_API__c: this.editTemplateObject,
             Description__c: this.editTemplateDesc,
             Query_Config__c: this._sanitizeQueryConfig(this.editTemplateQuery),
+            // #161 — Signer Inputs form-field config (dedicated field, not Query_Config__c).
+            Form_Fields_Config__c: this.editFormFieldsConfig,
             Test_Record_Id__c: this.editTemplateTestRecordId,
             Document_Title_Format__c: this.editTemplateTitleFormat,
             Is_Active__c: this.editTemplateIsActive,

@@ -389,6 +389,34 @@ try {
     System.debug('PICKLIST LABEL SUFFIX: FAIL — ' + e.getMessage());
 }
 
+// ============================================================
+// Signer form-field {?key} — preserved when resolveFormFields off,
+// resolved from __formFields when on, {?key|fallback} default applies
+// ============================================================
+try {
+    Map<String, Object> ffd = new Map<String, Object>{
+        '__formFields' => new Map<String, Object>{ 'city' => 'Boston' }
+    };
+    DocGenService.resolveFormFields = false;
+    String pv = DocGenService.processXmlForTest('<w:t>{?city}</w:t>', ffd);
+    DocGenService.resolveFormFields = true;
+    String rv = DocGenService.processXmlForTest('<w:t>{?city} {?missing|N/A}</w:t>', ffd);
+    DocGenService.resolveFormFields = false;
+    Boolean okPreserve = pv.contains('{?city}') && !pv.contains('Boston');
+    Boolean okResolve = rv.contains('Boston') && rv.contains('N/A') && !rv.contains('{?city}');
+    if (okPreserve && okResolve) {
+        pass++;
+        System.debug('FORMFIELD {?key} PRESERVE/RESOLVE: PASS');
+    } else {
+        fail++;
+        System.debug('FORMFIELD {?key} PRESERVE/RESOLVE: FAIL preserve=' + pv + ' resolve=' + rv);
+    }
+} catch (Exception e) {
+    fail++;
+    DocGenService.resolveFormFields = false;
+    System.debug('FORMFIELD {?key} PRESERVE/RESOLVE: FAIL — ' + e.getMessage());
+}
+
 // ===== Barcode / QR tags in HTML templates (v3.15) =====
 // processXml emits ##BARCODE:...## markers; the HTML path converts them to CSS
 // via DocGenHtmlRenderer.replaceBarcodeMarkersInHtml (Word path uses renderBarcodeHtml).
@@ -415,6 +443,27 @@ try {
 } catch (Exception e) {
     fail++;
     System.debug('HTML BARCODE+QR: FAIL — ' + e.getMessage());
+}
+
+// ===== {@Signature_*} leak: stripped in normal generation, kept for signing =====
+try {
+    String sigBody = 'Sign here: {@Signature_Signer:1:Full} end';
+    DocGenService.preserveSignatureTags = false; // normal document generation
+    String genOut = DocGenService.processXmlForTest(sigBody, new Map<String, Object>());
+    DocGenService.preserveSignatureTags = true; // signature send/finalize
+    String sigOut = DocGenService.processXmlForTest(sigBody, new Map<String, Object>());
+    DocGenService.preserveSignatureTags = false; // reset
+    if (!genOut.contains('{@Signature') && sigOut.contains('{@Signature_Signer:1:Full}')) {
+        pass++;
+        System.debug('SIGNATURE TAG LEAK GUARD: PASS');
+    } else {
+        fail++;
+        System.debug('SIGNATURE TAG LEAK GUARD: FAIL — gen=' + genOut + ' sig=' + sigOut);
+    }
+} catch (Exception e) {
+    DocGenService.preserveSignatureTags = false;
+    fail++;
+    System.debug('SIGNATURE TAG LEAK GUARD: FAIL — ' + e.getMessage());
 }
 
 System.debug('========================================');
