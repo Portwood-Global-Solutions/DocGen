@@ -3820,7 +3820,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                 : String.valueOf(val).equalsIgnoreCase('true');
                             strVal = checked ? '[X]' : '[ ]';
                         } else if (dateFormat != null && isNumericFormat(dateFormat)) {
-                            strVal = formatNumber(val, dateFormat);
+                            strVal = formatNumber(val, dateFormat, data);
                         } else if (dateOnlyGmt) {
                             // No format suffix on a DATE field — show a clean locale date (GMT,
                             // no time component) rather than a Datetime's "00:00:00" tail.
@@ -4868,6 +4868,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     private static String formatNumber(Object val, String fmt) {
+        return formatNumber(val, fmt, null);
+    }
+
+    // 3-arg overload: `data` is the record's field map, used only by the
+    // {Field:currency:auto[=SourceField]} token to read the currency ISO code
+    // from the record at merge time. Null `data` reproduces the legacy behavior.
+    private static String formatNumber(Object val, String fmt, Map<String, Object> data) {
         Decimal num;
         try {
             num = Decimal.valueOf(String.valueOf(val));
@@ -4880,7 +4887,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String baseFormat = segments[0].toLowerCase().trim();
 
         if (baseFormat == 'currency') {
-            return formatCurrency(num, segments);
+            return formatCurrency(num, segments, data);
         } else if (baseFormat == 'percent') {
             return formatPercent(num, segments);
         } else if (baseFormat == 'number') {
@@ -4898,15 +4905,53 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
     /** {Amount:currency} | {Amount:currency:EUR} | {Amount:currency:EUR:de_DE} */
     private static String formatCurrency(Decimal num, List<String> segments) {
+        return formatCurrency(num, segments, null);
+    }
+
+    /**
+     * {Amount:currency}                          → backward-compat hardcoded $
+     * {Amount:currency:EUR[:de_DE]}              → explicit ISO (+ optional locale)
+     * {Amount:currency:auto[:locale]}            → ISO read from the record's CurrencyIsoCode
+     * {Amount:currency:auto=Field__c[:locale]}   → ISO read from a named record field
+     *
+     * The auto forms need the record's field map (`data`); when it's null/missing the
+     * source field, or the value isn't a known ISO code, we fall back to the safe `$`
+     * output so the token never throws or renders raw text.
+     */
+    private static String formatCurrency(Decimal num, List<String> segments, Map<String, Object> data) {
         // Bare :currency → backward compat: hardcoded $ with US separators
         if (segments.size() == 1) {
-            return '$' + formatNumberLocale(num.setScale(2, RoundingMode.HALF_UP), ',', '.');
+            return formatCurrencyDollarFallback(num);
+        }
+
+        String spec = segments[1].trim();
+        String lowerSpec = spec.toLowerCase();
+
+        // :currency:auto[=SourceField] → resolve the ISO from the record at merge time
+        if (lowerSpec == 'auto' || lowerSpec.startsWith('auto=')) {
+            String sourceField = lowerSpec == 'auto' ? null : spec.substring(spec.indexOf('=') + 1).trim();
+            String autoIso = resolveCurrencyIso(data, sourceField);
+            // Missing / unknown ISO → safe $ fallback (never emit raw ISO text)
+            if (autoIso == null || !CURRENCY_SYMBOLS.containsKey(autoIso)) {
+                return formatCurrencyDollarFallback(num);
+            }
+            String autoLocale = segments.size() >= 3 ? segments[2].trim() : UserInfo.getLocale();
+            return formatCurrencyWithIso(num, autoIso, autoLocale);
         }
 
         // :currency:ISO or :currency:ISO:locale
-        String iso = segments[1].trim().toUpperCase();
+        String iso = spec.toUpperCase();
         String locale = segments.size() >= 3 ? segments[2].trim() : null;
+        return formatCurrencyWithIso(num, iso, locale);
+    }
 
+    /** Backward-compat bare-:currency output: hardcoded $ with US separators. */
+    private static String formatCurrencyDollarFallback(Decimal num) {
+        return '$' + formatNumberLocale(num.setScale(2, RoundingMode.HALF_UP), ',', '.');
+    }
+
+    /** Formats `num` with the symbol for `iso` and the separators/placement for `locale`. */
+    private static String formatCurrencyWithIso(Decimal num, String iso, String locale) {
         // Resolve symbol
         String symbol = CURRENCY_SYMBOLS.containsKey(iso) ? CURRENCY_SYMBOLS.get(iso) : iso + ' ';
 
@@ -4925,6 +4970,27 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return formatted + ' ' + symbol.trim();
         }
         return symbol + formatted;
+    }
+
+    /**
+     * Reads an ISO 4217 currency code from the record `data` map. `sourceField`
+     * defaults to the standard `CurrencyIsoCode` when null/blank. Lookup is
+     * case-insensitive (SOQL select-list casing isn't guaranteed). Returns the
+     * trimmed, upper-cased value, or null when absent/blank.
+     */
+    private static String resolveCurrencyIso(Map<String, Object> data, String sourceField) {
+        if (data == null) {
+            return null;
+        }
+        String target = String.isBlank(sourceField) ? 'CurrencyIsoCode' : sourceField.trim();
+        for (String k : data.keySet()) {
+            if (k.equalsIgnoreCase(target)) {
+                Object v = data.get(k);
+                String iso = v == null ? null : String.valueOf(v).trim();
+                return String.isBlank(iso) ? null : iso.toUpperCase();
+            }
+        }
+        return null;
     }
 
     /** {Rate:percent} | {Rate:percent:de_DE} */
@@ -5008,13 +5074,42 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * Used by DocGenGiantQueryAssembler to resolve grand-total tags.
      */
     public static String formatAggregateValue(Decimal value, String fmt) {
+        return formatAggregateValue(value, fmt, null);
+    }
+
+    /**
+     * Overload accepting an explicit currency ISO code for {…:currency:auto[=Field]}
+     * grand-total tags on the giant-query path, where the parent record's field map
+     * isn't otherwise in scope. `autoIso` is exposed to the formatter as a synthetic
+     * one-key data map ({CurrencyIsoCode: autoIso}); null falls back to legacy behavior.
+     */
+    public static String formatAggregateValue(Decimal value, String fmt, String autoIso) {
         if (value == null) {
             return '0';
         }
         if (String.isNotBlank(fmt) && isNumericFormat(fmt)) {
-            return formatNumber(value, fmt);
+            if (autoIso == null) {
+                return formatNumber(value, fmt, null);
+            }
+            // The assembler already resolved the ISO from the parent's source field, so
+            // collapse `currency:auto=Field` → `currency:auto` and feed the ISO through a
+            // synthetic one-key map keyed by the default CurrencyIsoCode source.
+            return formatNumber(
+                value,
+                collapseAutoSourceField(fmt),
+                new Map<String, Object>{ 'CurrencyIsoCode' => autoIso }
+            );
         }
         return String.valueOf(value);
+    }
+
+    /** currency:auto=Field[:locale] → currency:auto[:locale] (other formats unchanged). */
+    private static String collapseAutoSourceField(String fmt) {
+        List<String> segs = fmt.split(':');
+        if (segs.size() >= 2 && segs[1].trim().toLowerCase().startsWith('auto=')) {
+            segs[1] = 'auto';
+        }
+        return String.join(segs, ':');
     }
 
     /**
@@ -5073,7 +5168,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             }
             String countResult = String.valueOf(countNum);
             if (numberFormat != null && isNumericFormat(numberFormat)) {
-                return formatNumber(Decimal.valueOf(countResult), numberFormat);
+                return formatNumber(Decimal.valueOf(countResult), numberFormat, data);
             }
             return countResult;
         }
@@ -5136,7 +5231,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         } else if (fn == 'COUNT') {
             String countResult = String.valueOf(values.size());
             if (numberFormat != null && isNumericFormat(numberFormat)) {
-                return formatNumber(Decimal.valueOf(countResult), numberFormat);
+                return formatNumber(Decimal.valueOf(countResult), numberFormat, data);
             }
             return countResult;
         } else {
@@ -5145,7 +5240,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
         // Apply format specifier if provided, otherwise strip trailing zeros
         if (numberFormat != null && isNumericFormat(numberFormat)) {
-            return formatNumber(result, numberFormat);
+            return formatNumber(result, numberFormat, data);
         }
         return result.stripTrailingZeros().toPlainString();
     }
@@ -7688,7 +7783,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         strVal = dt.format(fmt);
                     }
                 } else if (dateFormat != null && isNumericFormat(dateFormat)) {
-                    strVal = formatNumber(val, dateFormat);
+                    strVal = formatNumber(val, dateFormat, data);
                 } else {
                     strVal = String.valueOf(val);
                 }

@@ -732,6 +732,13 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 if (!builtins.contains(upper) && !upper.startsWith('RUNNINGUSER.')) {
                     fieldPaths.add(path);
                 }
+                // {Field:currency:auto[=SourceField]} needs the currency source field
+                // queried too so it lands in the per-tag miniMap below. Schema validation
+                // drops it if absent (e.g. CurrencyIsoCode in a single-currency org).
+                String csf = currencyAutoSourceField(m.group(2));
+                if (csf != null) {
+                    fieldPaths.add(csf);
+                }
             }
 
             // Validate field paths against schema
@@ -850,6 +857,12 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                         cur.put(parts[parts.size() - 1], val);
                     } else {
                         miniMap.put(path, val);
+                    }
+                    // Seed the currency source field so {…:currency:auto[=Field]} resolves
+                    // the ISO from the record (mirrors the row-level data map).
+                    String csf = currencyAutoSourceField(fmt);
+                    if (csf != null && validFieldSet.contains(csf)) {
+                        miniMap.put(csf, rec.get(csf));
                     }
                     try {
                         replacement = DocGenService.processXmlForTest('{' + path + ':' + fmt + '}', miniMap);
@@ -1171,6 +1184,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         }
 
         // Replace each tag occurrence
+        Map<String, String> isoCache = new Map<String, String>();
         for (Integer i = 0; i < fullMatches.size(); i++) {
             String pair = fns[i] + '|' + fields[i];
             String alias = pairToAlias.get(pair);
@@ -1183,7 +1197,14 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 replacement = '0';
             } else if (fmts[i] != null) {
                 try {
-                    replacement = DocGenService.formatAggregateValue(Decimal.valueOf(String.valueOf(raw)), fmts[i]);
+                    // {…:currency:auto[=Field]} — resolve the ISO from the parent record once,
+                    // since the parent's field map isn't loaded on the giant-aggregate path.
+                    String autoIso = resolveAutoIsoForFormat(fmts[i], isoCache);
+                    replacement = DocGenService.formatAggregateValue(
+                        Decimal.valueOf(String.valueOf(raw)),
+                        fmts[i],
+                        autoIso
+                    );
                 } catch (Exception fmtErr) {
                     replacement = String.valueOf(raw);
                 }
@@ -1193,6 +1214,74 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             html = html.replace(fullMatches[i], replacement);
         }
         return html;
+    }
+
+    /**
+     * If `fmt` is a {…:currency:auto[=Field]} specifier, returns the ISO 4217 code read
+     * from the parent record's source field (default `CurrencyIsoCode`), else null.
+     * Results are cached per source field to avoid repeated single-row queries. Null on
+     * any miss (single-currency org, missing/blank field) so the formatter falls back to $.
+     */
+    private String resolveAutoIsoForFormat(String fmt, Map<String, String> isoCache) {
+        String sourceField = currencyAutoSourceField(fmt);
+        if (sourceField == null) {
+            return null;
+        }
+        String cacheKey = sourceField.toLowerCase();
+        if (isoCache.containsKey(cacheKey)) {
+            return isoCache.get(cacheKey);
+        }
+
+        String iso = null;
+        // CurrencyIsoCode only exists in multi-currency orgs; a custom currency field can
+        // exist in either, so don't gate custom fields on isMultiCurrencyOrganization().
+        Boolean isStandardIso = sourceField.equalsIgnoreCase('CurrencyIsoCode');
+        if (!isStandardIso || UserInfo.isMultiCurrencyOrganization()) {
+            try {
+                Schema.SObjectType parentType = recordId.getSObjectType();
+                Map<String, Schema.SObjectField> pf = parentType.getDescribe().fields.getMap();
+                if (pf.containsKey(cacheKey)) {
+                    String q =
+                        'SELECT ' +
+                        sourceField +
+                        ' FROM ' +
+                        String.escapeSingleQuotes(String.valueOf(parentType)) +
+                        ' WHERE Id = :recordId LIMIT 1';
+                    List<SObject> rows = Database.query(q, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — source field validated against parent Schema field map; object name from describe; parameterized Id
+                    if (!rows.isEmpty()) {
+                        Object v = rows[0].get(sourceField);
+                        String s = v == null ? null : String.valueOf(v).trim();
+                        iso = String.isBlank(s) ? null : s.toUpperCase();
+                    }
+                }
+            } catch (Exception e) {
+                String noop = e.getMessage(); // NOPMD — non-fatal, fall back to $ formatting
+            }
+        }
+        isoCache.put(cacheKey, iso);
+        return iso;
+    }
+
+    /**
+     * Returns the currency source field for a {…:currency:auto[=Field]} format string
+     * (defaulting to the standard `CurrencyIsoCode`), or null when `fmt` isn't a
+     * currency:auto specifier.
+     */
+    private static String currencyAutoSourceField(String fmt) {
+        if (String.isBlank(fmt)) {
+            return null;
+        }
+        List<String> segs = fmt.split(':');
+        if (segs.size() < 2 || !segs[0].trim().equalsIgnoreCase('currency')) {
+            return null;
+        }
+        String spec = segs[1].trim();
+        String lower = spec.toLowerCase();
+        if (lower != 'auto' && !lower.startsWith('auto=')) {
+            return null;
+        }
+        String src = lower == 'auto' ? 'CurrencyIsoCode' : spec.substring(spec.indexOf('=') + 1).trim();
+        return String.isBlank(src) ? 'CurrencyIsoCode' : src;
     }
 
     /**

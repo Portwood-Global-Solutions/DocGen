@@ -417,6 +417,27 @@ try {
     System.debug('HTML BARCODE+QR: FAIL — ' + e.getMessage());
 }
 
+// ============================================================
+// {Field:currency:auto[=SourceField]} — ISO from a record field; $ fallback when absent
+// ============================================================
+try {
+    String gbp = DocGenService.processXmlForTest(
+        '{A:currency:auto=Cur}',
+        new Map<String, Object>{ 'A' => 1234.56, 'Cur' => 'GBP' }
+    );
+    String back = DocGenService.processXmlForTest('{A:currency:auto}', new Map<String, Object>{ 'A' => 1234.56 });
+    if (gbp.contains('£') && back.contains('$')) {
+        pass++;
+        System.debug('CURRENCY AUTO: PASS — ' + gbp + ' / ' + back);
+    } else {
+        fail++;
+        System.debug('CURRENCY AUTO: FAIL — gbp=' + gbp + ' fallback=' + back);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('CURRENCY AUTO: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX4 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

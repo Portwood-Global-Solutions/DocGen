@@ -121,6 +121,10 @@ public with sharing class DocGenDataRetriever {
         List<SubquerySpec> deepSpecs = new List<SubquerySpec>();
         parseConfigParts(fieldsConfig, baseObject, fieldMap, flatParts, deepSpecs);
 
+        // In multi-currency orgs, make {Field:currency:auto} work out of the box by
+        // adding the standard CurrencyIsoCode field to the base SELECT.
+        addCurrencyIsoCodeField(flatParts, fieldMap);
+
         // Build Level 0 query: flat fields + direct child subqueries (no nesting)
         String level0Select = buildLevel0Select(flatParts, deepSpecs);
         if (String.isBlank(level0Select)) {
@@ -168,6 +172,31 @@ public with sharing class DocGenDataRetriever {
         }
 
         return data;
+    }
+
+    /**
+     * In multi-currency orgs, ensures the standard `CurrencyIsoCode` field is in the
+     * base-object select list so the {Field:currency:auto} token can read the record's
+     * currency without the author listing it explicitly. No-op in single-currency orgs
+     * (the field doesn't exist there — selecting it would throw "No such column"),
+     * when the base object lacks the field, or when it's already selected.
+     * Authors using a non-standard currency field (e.g. an ERP's CustomerCurrency__c)
+     * must still list that field in their Query Config and reference it via
+     * {Field:currency:auto=CustomerCurrency__c}.
+     */
+    private static void addCurrencyIsoCodeField(List<String> selectParts, Map<String, SObjectField> baseFieldMap) {
+        if (!UserInfo.isMultiCurrencyOrganization()) {
+            return;
+        }
+        if (baseFieldMap == null || !baseFieldMap.containsKey('currencyisocode')) {
+            return;
+        }
+        for (String part : selectParts) {
+            if (part != null && part.trim().equalsIgnoreCase('CurrencyIsoCode')) {
+                return;
+            }
+        }
+        selectParts.add('CurrencyIsoCode');
     }
 
     /**
@@ -355,6 +384,9 @@ public with sharing class DocGenDataRetriever {
         if (selectParts.isEmpty()) {
             selectParts.add('Id');
         }
+
+        // Multi-currency: surface CurrencyIsoCode for {Field:currency:auto}
+        addCurrencyIsoCodeField(selectParts, baseFieldMap);
 
         // Execute Level 0 query
         String query =
@@ -643,6 +675,9 @@ public with sharing class DocGenDataRetriever {
             rootSelect.add('Id');
         }
 
+        // Multi-currency: surface CurrencyIsoCode for {Field:currency:auto}
+        addCurrencyIsoCodeField(rootSelect, gd.get(root.objectApiName).getDescribe().fields.getMap());
+
         String rootQuery =
             'SELECT ' +
             String.join(rootSelect, ', ') +
@@ -762,6 +797,9 @@ public with sharing class DocGenDataRetriever {
         if (!rootSelect.contains('Id')) {
             rootSelect.add(0, 'Id');
         }
+
+        // Multi-currency: surface CurrencyIsoCode for {Field:currency:auto}
+        addCurrencyIsoCodeField(rootSelect, gd.get(root.objectApiName).getDescribe().fields.getMap());
 
         String rootQuery =
             'SELECT ' +

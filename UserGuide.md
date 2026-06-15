@@ -1086,6 +1086,25 @@ Supported currencies: USD, EUR, GBP, JPY, CNY, CHF, CAD, AUD, INR, KRW, BRL, MXN
 
 Zero-decimal currencies (JPY, KRW, CLP, VND, HUF, ISK, TWD) format without decimals automatically.
 
+##### Auto-detecting the currency from the record
+
+Use `:currency:auto` when the symbol should follow the **record's own currency** rather than a fixed ISO code — ideal for multi-currency orgs.
+
+```
+{Amount:currency:auto}                       Reads the standard CurrencyIsoCode field
+{Amount:currency:auto=CustomerCurrency__c}   Reads a named currency field (e.g. an ERP field)
+{Amount:currency:auto:en_GB}                 auto + an explicit locale for separators/placement
+{Amount:currency:auto=CustomerCurrency__c:de_DE}
+```
+
+How it works and what to know:
+
+- **The source field must hold an ISO 4217 code** (`GBP`, `USD`, `EUR`, …) — its value is matched against the supported-currency list above.
+- **List the source field in your template's Query Config.** DocGen builds its query from the Query Config (it does not scan the template body), so a field referenced only inside `:currency:auto=...` must be added to the Query Config like any other merge field. The standard `CurrencyIsoCode` is added automatically in multi-currency orgs, so bare `:currency:auto` works without listing it.
+- **Safe fallback:** if the source field is missing, blank, or not a recognized ISO code, the tag falls back to the default `$` format — it never errors or prints a raw code.
+- **Bare `:currency` is unchanged** — it always emits `$`. Auto-detection is strictly opt-in via `:auto`.
+- **Aggregates** support it too: `{SUM:Lines.Amount:currency:auto=CustomerCurrency__c}` uses the **parent** record's currency for the symbol (values are summed as stored — no exchange-rate conversion).
+
 #### Number formatting
 
 ```
@@ -1298,9 +1317,10 @@ Grand totals across a child relationship. Works in sync and giant-query paths.
 {AVG:OrderItems.UnitPrice:currency}                   $127.50
 {MIN:Quotes.Amount:currency}                          $100.00
 {MAX:Deals.Amount:currency:GBP}                       £999,999.00
+{SUM:Lines.Amount:currency:auto=CustomerCurrency__c}  uses the parent record's currency
 ```
 
-All five functions support any format suffix (`currency`, `number`, `percent`, custom patterns).
+All five functions support any format suffix (`currency`, `number`, `percent`, custom patterns), including `currency:auto` (see [Auto-detecting the currency from the record](#auto-detecting-the-currency-from-the-record)).
 
 **Aggregate fields don't need to be rendered columns** — you can aggregate `UnitPrice` even if your loop table only shows `Product2.Name` and `Quantity`. The resolver validates field names against the child object's schema.
 

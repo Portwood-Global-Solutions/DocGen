@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.17.0 — Record-driven currency symbol (`:currency:auto`) (in development)
+
+New opt-in format token so a currency merge tag follows the **record's own currency** instead of the hardcoded `$`, for multi-currency orgs.
+
+- `{Amount:currency:auto}` reads the standard `CurrencyIsoCode`; `{Amount:currency:auto=CustomerCurrency__c}` reads a named field (e.g. a Rootstock/ERP currency field). An optional locale still applies: `{Amount:currency:auto=CustomerCurrency__c:en_GB}`.
+- The source field's value is matched against the existing ISO→symbol map (`GBP`→`£`, etc.). Missing/blank/unknown values fall back to the safe `$` format — the token never throws or prints a raw code.
+- **Bare `:currency` is unchanged** (still `$`). Auto-detection is strictly opt-in via `:auto`, avoiding any silent output change to existing templates.
+
+**Implementation:** `DocGenService.formatCurrency` gains an `auto[=Field]` branch fed by the record's field map (new `formatNumber`/`formatCurrency`/`formatAggregateValue` overloads taking the data map + a resolved ISO). The data map is threaded through the `processXml` field path, the document-title helper, and in-memory aggregates. `DocGenDataRetriever` auto-adds `CurrencyIsoCode` to the base SELECT in multi-currency orgs (V1/V2/V3/V3-bulk) so bare `:currency:auto` works without listing it; custom source fields must be in the Query Config (the engine builds its query from Query Config, not by scanning the template). The giant-query paths (`resolveParentMergeTags`, `resolveGiantAggregateTags`) parse the source field from the tag and supply the parent record's ISO. Child aggregates use the parent currency (no FX conversion). New unit tests in `DocGenMiscTests`/`DocGenGiantQueryTest` (multi-currency-org-independent — inject the source field into the data map) and an `e2e-07-syntax4` regression.
+
 ## v3.16.0 — Consolidated guided signing + HTML page-counter font (build `3.16.0-1`, promoted 2026-06-14)
 
 Unifies electronic signing on the **one guided PDF path** and fixes the HTML page-counter font (#160).
