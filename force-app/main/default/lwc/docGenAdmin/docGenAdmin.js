@@ -3247,7 +3247,28 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             ) {
                 await this._queuePdfAcroFormPreparedBody(versionId, templateBodyContentVersionId);
             }
-            this.showToast('Success', 'New version saved. You can now Generate to test it.', 'success');
+            if (templateBodyContentVersionId) {
+                this.showToast('Success', 'New version saved. You can now Generate to test it.', 'success');
+            } else {
+                // Carry-forward warning (builds on #176's Version History diagnostics):
+                // a new version saved WITHOUT re-uploading a body file reuses the prior
+                // version's body ContentVersion. That's fine for metadata-only changes,
+                // but it surprises authors who edited the document itself — e.g. added
+                // {@Signature_…} tags — and expected it to take effect (the "No Signature
+                // Placements Found" / stale-body reports). Sticky so it isn't missed.
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Saved — but the body file was reused',
+                        message:
+                            'This new version kept the PREVIOUS document body because no new file was uploaded. ' +
+                            'If you changed the document itself — text, layout, or signature tags — re-upload the ' +
+                            "file and save again, or your change won't appear when you generate. Metadata-only " +
+                            'changes (name, mapping, title format, page setup) are saved correctly as-is.',
+                        variant: 'warning',
+                        mode: 'sticky'
+                    })
+                );
+            }
             // Don't close the modal — authors want to immediately test/preview
             // the new version. Clear the just-uploaded CV reference so a follow-up
             // save doesn't double-attach the same file, refresh the version list,

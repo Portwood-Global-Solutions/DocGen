@@ -629,6 +629,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>DocGen_Signature_Placement__c.Render_Inline__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Signature_Placement__c.Section_Context__c</field>
         <readable>true</readable>
     </fieldPermissions>

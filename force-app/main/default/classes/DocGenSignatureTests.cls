@@ -3754,6 +3754,42 @@ private class DocGenSignatureTests {
     }
 
     @isTest
+    static void testParseSignaturePlacements_inlineModifier() {
+        // The :inline style suffix forces compact in-place rendering (no stamp card).
+        // It composes with the placement type and must not disturb type parsing.
+        String text =
+            'Sig: {@Signature_Buyer:1:Full:inline} ' +
+            'Date: {@Signature_Buyer:1:Date:inline} ' +
+            'Card: {@Signature_Seller:1:Full}';
+        Test.startTest();
+        List<DocGenSignatureSenderController.PlacementInfo> placements = DocGenSignatureSenderController.parseSignaturePlacements(
+            text
+        );
+        Test.stopTest();
+
+        System.assertEquals(3, placements.size(), 'Should find 3 placements');
+        Map<String, DocGenSignatureSenderController.PlacementInfo> byKey = new Map<String, DocGenSignatureSenderController.PlacementInfo>();
+        for (DocGenSignatureSenderController.PlacementInfo p : placements) {
+            byKey.put(p.role + '|' + p.placementType, p);
+        }
+        System.assertEquals(
+            true,
+            byKey.get('Buyer|Full').renderInline,
+            'Full:inline should set renderInline and keep type=Full'
+        );
+        System.assertEquals(
+            true,
+            byKey.get('Buyer|Date').renderInline,
+            'Date:inline should set renderInline and keep type=Date'
+        );
+        System.assertEquals(
+            false,
+            byKey.get('Seller|Full').renderInline,
+            'A tag without :inline must default renderInline=false (unchanged behavior)'
+        );
+    }
+
+    @isTest
     static void testValidateSignatureSetup() {
         Test.startTest();
         List<Map<String, Object>> checks = DocGenSetupController.validateSignatureSetup();

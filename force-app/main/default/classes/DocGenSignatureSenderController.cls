@@ -97,6 +97,11 @@ public with sharing class DocGenSignatureSenderController {
         public String placementType; // Full, Initials, Date, DatePick
         @AuraEnabled
         public String tagText; // Original tag for reference
+        // true → render a compact in-place mark (no DocuSign stamp card) regardless of
+        // surrounding whitespace, for tight templates where the card would overlap a
+        // label. Set from an `:inline` style suffix on the tag (e.g. {@Signature_Buyer:1:Full:inline}).
+        @AuraEnabled
+        public Boolean renderInline = false;
 
         public PlacementInfo(String role, Integer sequence, String placementType, String tagText) {
             this.role = role;
@@ -226,14 +231,32 @@ public with sharing class DocGenSignatureSenderController {
         while (sigMatch.find()) {
             String roleName = sigMatch.group(1).replaceAll('_', ' ');
             Integer seq = sigMatch.group(2) != null ? Integer.valueOf(sigMatch.group(2)) : 1;
-            String pType = sigMatch.group(3) != null ? sigMatch.group(3) : 'Full';
+
+            // The type segment (group 3) may carry a colon-joined render-style suffix,
+            // e.g. "Full:inline" or "Date:inline" (the regex's [^}]+ keeps the inner
+            // colons). First token = the placement type; an "inline" token anywhere
+            // after it forces the compact in-place mark.
+            String typeRaw = sigMatch.group(3) != null ? sigMatch.group(3) : 'Full';
+            Boolean renderInline = false;
+            String pType = 'Full';
+            List<String> typeParts = typeRaw.split(':');
+            if (!typeParts.isEmpty() && String.isNotBlank(typeParts[0])) {
+                pType = typeParts[0].trim();
+            }
+            for (Integer ti = 1; ti < typeParts.size(); ti++) {
+                if (typeParts[ti].trim().equalsIgnoreCase('inline')) {
+                    renderInline = true;
+                }
+            }
 
             // Normalize type
             if (pType != 'Full' && pType != 'Initials' && pType != 'Date' && pType != 'DatePick') {
                 pType = 'Full';
             }
 
-            placements.add(new PlacementInfo(roleName, seq, pType, sigMatch.group(0)));
+            PlacementInfo pi = new PlacementInfo(roleName, seq, pType, sigMatch.group(0));
+            pi.renderInline = renderInline;
+            placements.add(pi);
         }
 
         // Fallback: generic {@Signature} tag (no role)
@@ -390,7 +413,10 @@ public with sharing class DocGenSignatureSenderController {
             matchPositions.add(new List<Integer>{ sigMatch.start(), sigMatch.end() });
             String role = sigMatch.group(1).replaceAll('_', ' ');
             String order = sigMatch.group(2) != null ? sigMatch.group(2) : '1';
-            String pType = sigMatch.group(3) != null ? sigMatch.group(3) : 'Full';
+            // group 3 may carry a render-style suffix (e.g. "Full:inline"); the preview
+            // chip only cares about the base placement type.
+            String pTypeRaw = sigMatch.group(3) != null ? sigMatch.group(3) : 'Full';
+            String pType = pTypeRaw.contains(':') ? pTypeRaw.substringBefore(':').trim() : pTypeRaw.trim();
             matchData.add(new List<String>{ role, order, pType, sigMatch.group(0) });
         }
 
@@ -1240,6 +1266,7 @@ public with sharing class DocGenSignatureSenderController {
                     Document_Index__c = 0,
                     Sequence_Order__c = p.sequence,
                     Placement_Type__c = p.placementType,
+                    Render_Inline__c = p.renderInline,
                     Status__c = 'Pending',
                     Tag_Text__c = sentinels[i]
                 )
@@ -1254,6 +1281,7 @@ public with sharing class DocGenSignatureSenderController {
                     'Document_Index__c',
                     'Sequence_Order__c',
                     'Placement_Type__c',
+                    'Render_Inline__c',
                     'Status__c',
                     'Tag_Text__c'
                 }
@@ -1492,6 +1520,7 @@ public with sharing class DocGenSignatureSenderController {
                     Document_Index__c = placementDocIdx[i],
                     Sequence_Order__c = p.sequence,
                     Placement_Type__c = p.placementType,
+                    Render_Inline__c = p.renderInline,
                     Status__c = 'Pending',
                     Tag_Text__c = allSentinels[i]
                 )
@@ -1506,6 +1535,7 @@ public with sharing class DocGenSignatureSenderController {
                     'Document_Index__c',
                     'Sequence_Order__c',
                     'Placement_Type__c',
+                    'Render_Inline__c',
                     'Status__c',
                     'Tag_Text__c'
                 }
@@ -1696,7 +1726,9 @@ public with sharing class DocGenSignatureSenderController {
             System.debug(LoggingLevel.WARN, 'DocGen: In-person audit write failed: ' + e.getMessage());
         }
 
-        return getSiteBaseUrl() + getSigningPagePath() + '?token=' + signer.Secure_Token__c;
+        // #170 consolidation: this LWC only creates guided requests, so route the
+        // in-person signer to the flat-PDF guided page (not the legacy DOCX/HTML page).
+        return getSiteBaseUrl() + getSigningPdfPagePath() + '?token=' + signer.Secure_Token__c;
     }
 
     /**
@@ -1784,7 +1816,10 @@ public with sharing class DocGenSignatureSenderController {
                 signerMap.put('signerEmail', signer.Signer_Email__c);
                 signerMap.put('roleName', signer.Role_Name__c);
                 signerMap.put('status', signer.Status__c);
-                signerMap.put('signerUrl', siteUrl + getSigningPagePath() + '?token=' + signer.Secure_Token__c);
+                // #170 consolidation: requests from this LWC are guided — surface the
+                // flat-PDF guided page in the "previous requests" copy-links, matching
+                // the freshly-created results above (getSigningPdfPagePath at creation).
+                signerMap.put('signerUrl', siteUrl + getSigningPdfPagePath() + '?token=' + signer.Secure_Token__c);
                 signerList.add(signerMap);
             }
             reqMap.put('signers', signerList);
@@ -1899,6 +1934,7 @@ public with sharing class DocGenSignatureSenderController {
             plc.Document_Index__c = 0;
             plc.Sequence_Order__c = p.sequence;
             plc.Placement_Type__c = p.placementType;
+            plc.Render_Inline__c = p.renderInline;
             plc.Status__c = 'Pending';
             plc.Tag_Text__c = p.tagText;
             placementRecords.add(plc);
@@ -1914,6 +1950,7 @@ public with sharing class DocGenSignatureSenderController {
                     'Document_Index__c',
                     'Sequence_Order__c',
                     'Placement_Type__c',
+                    'Render_Inline__c',
                     'Status__c',
                     'Tag_Text__c'
                 }
