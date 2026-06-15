@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Record-driven currency symbol (`:currency:auto`)
+
+New opt-in format token so a currency merge tag follows the **record's own currency** instead of the hardcoded `$`, for multi-currency orgs.
+
+- `{Amount:currency:auto}` reads the standard `CurrencyIsoCode`; `{Amount:currency:auto=CustomerCurrency__c}` reads a named field (e.g. a Rootstock/ERP currency field). An optional locale still applies: `{Amount:currency:auto=CustomerCurrency__c:en_GB}`.
+- The source field's value is matched against the existing ISO→symbol map (`GBP`→`£`, etc.). Missing/blank/unknown values fall back to the safe `$` format — the token never throws or prints a raw code.
+- **Bare `:currency` is unchanged** (still `$`). Auto-detection is strictly opt-in via `:auto`, avoiding any silent output change to existing templates.
+
+**Implementation:** `DocGenService.formatCurrency` gains an `auto[=Field]` branch fed by the record's field map (new `formatNumber`/`formatCurrency`/`formatAggregateValue` overloads taking the data map + a resolved ISO). The data map is threaded through the `processXml` field path, the document-title helper, and in-memory aggregates. `DocGenDataRetriever` auto-adds `CurrencyIsoCode` to the base SELECT in multi-currency orgs (V1/V2/V3/V3-bulk) so bare `:currency:auto` works without listing it; custom source fields must be in the Query Config (the engine builds its query from Query Config, not by scanning the template). The giant-query paths (`resolveParentMergeTags`, `resolveGiantAggregateTags`) parse the source field from the tag and supply the parent record's ISO. Child aggregates use the parent currency (no FX conversion). New unit tests in `DocGenMiscTests`/`DocGenGiantQueryTest` (multi-currency-org-independent — inject the source field into the data map) and an `e2e-07-syntax4` regression.
+
 ## Unreleased — Signer Form Fields with Record Writeback (build pending)
 
 DocuSign-style signer **form fields** with optional base-record writeback. An admin configures extra input fields on a template — stored on the dedicated `DocGen_Template__c.Form_Fields_Config__c` field (LongTextArea) as `{formFields:[{key,label,fieldApiName,type,required,writeback,mergeTag,choices,listOnCertificate}]}`, so it works for every template type (flat-field, V3 tree, Apex, Flow) and never collides with the query config; the signer fills them in during e-signing; on completion the values are (a) merged into the **re-rendered** signed PDF at the admin's `{?key}` positions, (b) optionally listed on the signing certificate, and (c) optionally **written back** to the related record.

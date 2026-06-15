@@ -4266,6 +4266,86 @@ private class DocGenMiscTests {
         System.assert(result.contains('1.234,56'), 'EUR de_DE should use German separators, got: ' + result);
     }
 
+    // =========================================================================
+    // {Field:currency:auto[=SourceField]} \u2014 ISO read from the record at merge time.
+    // These inject the currency-source field directly into the data map so they
+    // don't depend on the org being multi-currency.
+    // =========================================================================
+
+    @IsTest
+    static void testCurrencyAutoDefaultIsoCode() {
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 1234.56, 'CurrencyIsoCode' => 'GBP' };
+        String result = DocGenService.processXmlForTest('{Amount:currency:auto}', data);
+        System.assert(
+            result.contains('\u00A3'),
+            'auto should read CurrencyIsoCode=GBP and emit \u00A3, got: ' + result
+        );
+    }
+
+    @IsTest
+    static void testCurrencyAutoCustomSourceField() {
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 1234.56, 'CustomerCurrency__c' => 'GBP' };
+        String result = DocGenService.processXmlForTest('{Amount:currency:auto=CustomerCurrency__c}', data);
+        System.assert(result.contains('\u00A3'), 'auto=CustomerCurrency__c should emit \u00A3, got: ' + result);
+    }
+
+    @IsTest
+    static void testCurrencyAutoJPYNoDecimals() {
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 1234.56, 'CurrencyIsoCode' => 'JPY' };
+        String result = DocGenService.processXmlForTest('{Amount:currency:auto}', data);
+        System.assert(result.contains('\u00A5'), 'auto JPY should emit \u00A5, got: ' + result);
+        System.assert(!result.contains('.'), 'auto JPY should have no decimals, got: ' + result);
+    }
+
+    @IsTest
+    static void testCurrencyAutoFallbackNoSourceField() {
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 1000 };
+        String result = DocGenService.processXmlForTest('{Amount:currency:auto}', data);
+        System.assert(result.contains('$'), 'auto with no source field should fall back to $, got: ' + result);
+    }
+
+    @IsTest
+    static void testCurrencyAutoFallbackUnknownIso() {
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 1000, 'CurrencyIsoCode' => 'XYZ' };
+        String result = DocGenService.processXmlForTest('{Amount:currency:auto}', data);
+        System.assert(result.contains('$'), 'auto with unknown ISO should fall back to $, got: ' + result);
+        System.assert(!result.contains('XYZ'), 'auto must not emit raw ISO text for unknown codes, got: ' + result);
+    }
+
+    @IsTest
+    static void testCurrencyAutoLocaleOverride() {
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 1234.56, 'CustomerCurrency__c' => 'EUR' };
+        String result = DocGenService.processXmlForTest('{Amount:currency:auto=CustomerCurrency__c:de_DE}', data);
+        System.assert(result.contains('\u20AC'), 'auto with locale override should emit \u20AC, got: ' + result);
+        System.assert(result.contains('1.234,56'), 'auto:de_DE should use German separators, got: ' + result);
+    }
+
+    @IsTest
+    static void testCurrencyBareStillDollarWithIsoInMap() {
+        // Regression-lock: bare :currency must keep emitting $ even when the record
+        // carries a CurrencyIsoCode \u2014 the auto behavior is strictly opt-in.
+        Map<String, Object> data = new Map<String, Object>{ 'Amount' => 5000, 'CurrencyIsoCode' => 'GBP' };
+        String result = DocGenService.processXmlForTest('{Amount:currency}', data);
+        System.assert(result.contains('$'), 'Bare :currency must still emit $, got: ' + result);
+        System.assert(!result.contains('\u00A3'), 'Bare :currency must not auto-detect GBP, got: ' + result);
+    }
+
+    @IsTest
+    static void testAggregateCurrencyAuto() {
+        Map<String, Object> data = new Map<String, Object>{
+            'CurrencyIsoCode' => 'GBP',
+            'Items' => new List<Object>{
+                new Map<String, Object>{ 'Price' => 1234.5 },
+                new Map<String, Object>{ 'Price' => 5678.9 }
+            }
+        };
+        String result = DocGenService.processXmlForTest('{SUM:Items.Price:currency:auto}', data);
+        System.assert(
+            result.contains('\u00A3'),
+            'Aggregate auto should read parent CurrencyIsoCode=GBP \u2192 \u00A3, got: ' + result
+        );
+    }
+
     @IsTest
     static void testNumberLocale_deDE() {
         Map<String, Object> data = new Map<String, Object>{ 'Qty' => 1234567 };

@@ -1700,4 +1700,21 @@ private class DocGenGiantQueryTest {
 
         System.assertEquals(null, title, 'computeDocTitle returns null when no format is configured');
     }
+
+    // formatAggregateValue is the giant-query grand-total formatter. The 3-arg overload
+    // takes an ISO resolved from the parent record for {…:currency:auto[=Field]} tags.
+    @IsTest
+    static void testFormatAggregateValueCurrencyAuto() {
+        // Explicit ISO supplied (as the giant aggregate path does after querying the parent).
+        String gbp = DocGenService.formatAggregateValue(1234.56, 'currency:auto', 'GBP');
+        System.assert(gbp.contains('£'), 'currency:auto with GBP should emit £, got: ' + gbp);
+
+        // auto=Field collapses to the supplied ISO too.
+        String gbp2 = DocGenService.formatAggregateValue(1234.56, 'currency:auto=CustomerCurrency__c', 'GBP');
+        System.assert(gbp2.contains('£'), 'currency:auto=Field with GBP should emit £, got: ' + gbp2);
+
+        // No ISO (2-arg overload / single-currency org) → safe $ fallback.
+        String usd = DocGenService.formatAggregateValue(1234.56, 'currency:auto');
+        System.assert(usd.contains('$'), 'currency:auto with no ISO should fall back to $, got: ' + usd);
+    }
 }
