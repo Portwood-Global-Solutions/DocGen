@@ -11,6 +11,7 @@ import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
 import saveTemplate from '@salesforce/apex/DocGenController.saveTemplate';
 import generateDocumentData from '@salesforce/apex/DocGenController.generateDocumentData';
 import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
+import getVersionBodyFileInfo from '@salesforce/apex/DocGenController.getVersionBodyFileInfo';
 import deleteTemplateVersion from '@salesforce/apex/DocGenController.deleteTemplateVersion';
 import generateDocumentParts from '@salesforce/apex/DocGenController.generateDocumentParts';
 import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
@@ -191,6 +192,10 @@ const VERSION_COLUMNS = [
         }
     },
     { label: 'Created By', fieldName: 'CreatedByName' },
+    // Body file the version points at — surfaces which underlying ContentVersion
+    // generation actually reads (diagnostic for stale/mismatched template bodies).
+    { label: 'File Ver', fieldName: 'bodyCvVersion', initialWidth: 80 },
+    { label: 'File Name', fieldName: 'bodyCvFileName' },
     {
         type: 'button',
         initialWidth: 130,
@@ -2894,12 +2899,35 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         CreatedByName: v.CreatedBy ? v.CreatedBy.Name : '',
                         isActiveLabel: isActive ? '✓' : '',
                         activeClass: isActive ? 'slds-text-color_success slds-text-title_bold' : '',
-                        activateVariant: isActive ? 'neutral' : 'brand'
+                        activateVariant: isActive ? 'neutral' : 'brand',
+                        bodyCvVersion: '',
+                        bodyCvFileName: ''
                     };
                 });
                 // Sync watermark CV from the active version so the tab shows current state
                 const active = data.find((v) => v[F.VerIsActive]);
                 this.editTemplateWatermarkCvId = active ? active[F.VerWatermarkCv] || null : null;
+
+                // Enrich with the body ContentVersion's number + filename so the table
+                // shows which underlying file each version points at (diagnostic).
+                const cvIds = data.map((v) => v[F.VerCvId]).filter(Boolean);
+                if (cvIds.length) {
+                    getVersionBodyFileInfo({ contentVersionIds: cvIds })
+                        .then((info) => {
+                            if (!info) {
+                                return;
+                            }
+                            this.versions = this.versions.map((row) => {
+                                const meta = info[row[F.VerCvId]];
+                                return meta
+                                    ? { ...row, bodyCvVersion: meta.versionNumber, bodyCvFileName: meta.fileName }
+                                    : row;
+                            });
+                        })
+                        .catch(() => {
+                            // Non-fatal — leave the file columns blank if the lookup fails.
+                        });
+                }
             })
             .catch(() => {
                 this.versions = [];

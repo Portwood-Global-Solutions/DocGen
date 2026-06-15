@@ -3291,6 +3291,58 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * Returns the body ContentVersion's version number + filename for each given
+     * Content_Version_Id__c, so the Version History view can show which underlying
+     * file a version actually points at (diagnostic for "generation read a body I
+     * didn't expect"). Keyed by ContentVersion Id → { versionNumber, fileName }.
+     *
+     * SYSTEM_MODE for the read (with an explicit per-field FLS guard) mirrors
+     * getTemplateFileContent: the template-body CV's ContentDocumentLink can default
+     * to Visibility=InternalUsers, which a USER_MODE read would strip.
+     */
+    @AuraEnabled
+    public static Map<String, Object> getVersionBodyFileInfo(List<String> contentVersionIds) {
+        Map<String, Object> result = new Map<String, Object>();
+        if (contentVersionIds == null || contentVersionIds.isEmpty()) {
+            return result;
+        }
+        Set<Id> ids = new Set<Id>();
+        for (String s : contentVersionIds) {
+            if (String.isBlank(s)) {
+                continue;
+            }
+            try {
+                ids.add((Id) s);
+            } catch (Exception e) {
+                String noop = e.getMessage(); // NOPMD — skip non-Id values defensively
+            }
+        }
+        if (ids.isEmpty() || !Schema.sObjectType.ContentVersion.isAccessible()) {
+            return result;
+        }
+        DocGenFlsGuard.assertAccessible(
+            ContentVersion.sObjectType,
+            new Set<String>{ 'VersionNumber', 'Title', 'PathOnClient' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        for (ContentVersion cv : [
+            SELECT Id, VersionNumber, Title, PathOnClient
+            FROM ContentVersion
+            WHERE Id IN :ids
+            WITH SYSTEM_MODE
+        ]) {
+            result.put(
+                String.valueOf(cv.Id),
+                new Map<String, Object>{
+                    'versionNumber' => cv.VersionNumber,
+                    'fileName' => String.isNotBlank(cv.PathOnClient) ? cv.PathOnClient : cv.Title
+                }
+            );
+        }
+        return result;
+    }
+
+    /**
      * Issue #83 — Deletes a non-active template version and its associated files.
      * Removes the version record, its body ContentVersion, and all pre-decomposed
      * XML ContentVersions (titles starting with `docgen_tmpl_xml_<versionId>_`).
