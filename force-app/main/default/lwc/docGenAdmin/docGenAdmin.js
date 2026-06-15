@@ -196,9 +196,11 @@ const VERSION_COLUMNS = [
     // The same CV Id across rows = a metadata-only save reused the prior body.
     { label: 'File CV Id', fieldName: 'bodyCvId' },
     { label: 'File Name', fieldName: 'bodyCvFileName' },
+    // Action buttons: uniform fixed width + centered so they line up at the right.
     {
         type: 'button',
         initialWidth: 130,
+        cellAttributes: { alignment: 'center' },
         typeAttributes: {
             label: 'Preview',
             name: 'preview',
@@ -208,6 +210,8 @@ const VERSION_COLUMNS = [
     },
     {
         type: 'button',
+        initialWidth: 130,
+        cellAttributes: { alignment: 'center' },
         typeAttributes: {
             label: 'Activate',
             name: 'restore',
@@ -221,7 +225,8 @@ const VERSION_COLUMNS = [
         // Disabled on the active version; the row.disableDelete flag is set in
         // loadVersions() to mirror Is_Active__c.
         type: 'button',
-        initialWidth: 110,
+        initialWidth: 130,
+        cellAttributes: { alignment: 'center' },
         typeAttributes: {
             label: 'Delete',
             name: 'deleteVersion',
