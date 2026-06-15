@@ -170,7 +170,7 @@ const COLUMNS = [
 ];
 
 const VERSION_COLUMNS = [
-    { label: 'Ver', fieldName: 'VersionNumber', initialWidth: 70 },
+    { label: 'Version', fieldName: 'VersionNumber', initialWidth: 90 },
     {
         label: 'Active',
         fieldName: 'isActiveLabel',
@@ -194,7 +194,8 @@ const VERSION_COLUMNS = [
     { label: 'Created By', fieldName: 'CreatedByName' },
     // Body file the version points at — surfaces which underlying ContentVersion
     // generation actually reads (diagnostic for stale/mismatched template bodies).
-    { label: 'File Ver', fieldName: 'bodyCvVersion', initialWidth: 80 },
+    // The same CV Id across rows = a metadata-only save reused the prior body.
+    { label: 'File CV Id', fieldName: 'bodyCvId', initialWidth: 170 },
     { label: 'File Name', fieldName: 'bodyCvFileName' },
     {
         type: 'button',
@@ -2890,17 +2891,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     this.editTemplateWatermarkCvId = null;
                     return;
                 }
-                const total = data.length;
-                this.versions = data.map((v, index) => {
+                this.versions = data.map((v) => {
                     const isActive = v[F.VerIsActive];
                     return {
                         ...v,
-                        VersionNumber: 'v' + (total - index),
+                        // Show the real version record name (e.g. V-0024), not a synthetic index.
+                        VersionNumber: v.Name,
                         CreatedByName: v.CreatedBy ? v.CreatedBy.Name : '',
                         isActiveLabel: isActive ? '✓' : '',
                         activeClass: isActive ? 'slds-text-color_success slds-text-title_bold' : '',
                         activateVariant: isActive ? 'neutral' : 'brand',
-                        bodyCvVersion: '',
+                        bodyCvId: v[F.VerCvId] || '',
                         bodyCvFileName: ''
                     };
                 });
@@ -2919,9 +2920,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             }
                             this.versions = this.versions.map((row) => {
                                 const meta = info[row[F.VerCvId]];
-                                return meta
-                                    ? { ...row, bodyCvVersion: meta.versionNumber, bodyCvFileName: meta.fileName }
-                                    : row;
+                                return meta ? { ...row, bodyCvFileName: meta.fileName } : row;
                             });
                         })
                         .catch(() => {
