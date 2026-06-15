@@ -777,6 +777,16 @@ public with sharing class DocGenSignatureSenderController {
      *
      * signersJson: [{signerName, signerEmail, roleName, contactId}, ...]
      */
+    /**
+     * @deprecated REMOVED (v3.18) — sending a pre-generated PDF (ContentVersion) for
+     * signature is no longer supported. A flat PDF carries no parseable {@Signature_*}
+     * placement tags, so it can never drive guided/field-by-field signing or stamp
+     * signatures back into the document (it could only ever flat-sign + append a
+     * certificate). E-signature now always starts from a TEMPLATE, which DocGen
+     * re-renders and tags at send time. Kept (managed-package immutability) only to
+     * fail fast with guidance; callers should use createGuidedPdfSignatureRequest /
+     * createTemplateSnapshotRequest with a Template Id instead.
+     */
     @AuraEnabled
     public static List<SignerResult> createRequestFromContentVersion(
         Id contentVersionId,
@@ -785,46 +795,11 @@ public with sharing class DocGenSignatureSenderController {
         String signingOrder,
         String documentTitleFormat
     ) {
-        if (contentVersionId == null) {
-            throw new AuraHandledException('A source document (ContentVersion Id) is required.');
-        }
-
-        // Parse signers JSON
-        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
-        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
-        for (Object item : rawInputs) {
-            signerInputs.add((Map<String, Object>) item);
-        }
-
-        // Create parent request bound to the pre-generated CV (no Template__c)
-        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
-        req.Source_Document_Id__c = contentVersionId;
-        req.Template__c = null;
-        req.Related_Record_Id__c = relatedRecordId;
-        req.Status__c = 'Sent';
-        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
-        if (String.isNotBlank(documentTitleFormat)) {
-            req.Document_Title_Format__c = documentTitleFormat;
-        }
-        // Package-internal object — CRUD controlled by DocGen permission sets
-        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
-        DocGenFlsGuard.assertCreateable(
-            req,
-            new Set<String>{
-                'Source_Document_Id__c',
-                'Related_Record_Id__c',
-                'Status__c',
-                'Signing_Order__c',
-                'Document_Title_Format__c'
-            }
+        throw new AuraHandledException(
+            'Sending a pre-generated PDF for signature is no longer supported. Send the template for ' +
+                'signature instead — DocGen renders and tags the document automatically so signatures can ' +
+                'be placed in the document and stamped on completion.'
         );
-        /* code-analyzer-suppress ApexFlsViolation */
-        Database.insert(req, AccessLevel.SYSTEM_MODE);
-
-        // Create signer records + send emails, pointing URLs at the flat-PDF page.
-        // templateId=null → createPlacementsForSigners is skipped (no tags to place).
-        String documentTitle = getDocumentTitle(contentVersionId);
-        return createSignersAndNotify(req.Id, null, documentTitle, signerInputs, true, getSigningPdfPagePath());
     }
 
     /**
@@ -1055,6 +1030,26 @@ public with sharing class DocGenSignatureSenderController {
         return (bodyClose != -1) ? (body.substring(0, bodyClose) + para + body.substring(bodyClose)) : (body + para);
     }
 
+    /**
+     * Signer form-field tags {?key} (optional {?key|fallback}) on the guided PDF path.
+     * Rewrites them in the VIEWING html to white (invisible) @@FF-<key>@@ sentinels: the
+     * literal tag never shows to the signer, yet the PDF.js text layer can still locate the
+     * position so the drawn-signature client stamps the collected value there (mirrors the
+     * @@SIG-n@@ signature sentinels). The FROZEN body deliberately keeps the bare {?key}
+     * tag, so the typed-name finalize re-render resolves it server-side
+     * (DocGenService.resolveFormFields). Key grammar matches DocGenFieldWritebackService.
+     */
+    @TestVisible
+    private static String applyFormFieldViewingSentinels(String viewingHtml) {
+        if (String.isBlank(viewingHtml) || !viewingHtml.contains('{?')) {
+            return viewingHtml;
+        }
+        return viewingHtml.replaceAll(
+            '\\{\\?([A-Za-z0-9_]+)(?:\\|[^}]*)?\\}',
+            '<span style="color:#ffffff">@@FF-$1@@</span>'
+        );
+    }
+
     @AuraEnabled
     public static List<SignerResult> createGuidedPdfSignatureRequest(
         Id templateId,
@@ -1155,6 +1150,9 @@ public with sharing class DocGenSignatureSenderController {
         for (String sentinel : sentinels) {
             viewingHtml = viewingHtml.replace(sentinel, '<span style="color:#ffffff">' + sentinel + '</span>');
         }
+        // Signer form-field tags {?key}: hide the literal tag and leave a locatable
+        // @@FF-<key>@@ sentinel for the drawn-path client to stamp the value onto.
+        viewingHtml = applyFormFieldViewingSentinels(viewingHtml);
 
         // Render the viewing PDF (invisible sentinels) → standalone ContentVersion.
         Blob viewingBlob = Blob.toPdf(viewingHtml);
@@ -1391,6 +1389,8 @@ public with sharing class DocGenSignatureSenderController {
             for (String sentinel : docSentinels) {
                 docViewing = docViewing.replace(sentinel, '<span style="color:#ffffff">' + sentinel + '</span>');
             }
+            // Signer form-field tags {?key} → locatable white @@FF-<key>@@ sentinel (per doc).
+            docViewing = applyFormFieldViewingSentinels(docViewing);
             String titleHeader =
                 '<div style="background:#f8fafc;border:1px solid #e5e5e5;border-radius:6px;padding:12px 16px;margin-bottom:16px;text-align:center;">' +
                 '<strong style="font-size:14px;color:#3e3e3c;">Document ' +

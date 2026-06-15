@@ -2312,6 +2312,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 'Base_Object_API__c',
                 'Category__c',
                 'Query_Config__c',
+                'Form_Fields_Config__c',
                 'Test_Record_Id__c',
                 'Output_Format__c',
                 'Document_Title_Format__c',
@@ -2340,6 +2341,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Base_Object_API__c,
                 Category__c,
                 Query_Config__c,
+                Form_Fields_Config__c,
                 Test_Record_Id__c,
                 Output_Format__c,
                 Document_Title_Format__c,
@@ -2382,6 +2384,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Base_Object_API__c = (String) fields.get('Base_Object_API__c');
             template.Description__c = (String) fields.get('Description__c');
             template.Query_Config__c = (String) fields.get('Query_Config__c');
+            // Signer form-field config (dedicated carrier, separate from Query_Config__c
+            // so it survives single-object templates whose Query_Config__c is a flat
+            // field-list string). Only set when present so partial saves don't clear it.
+            if (fields.containsKey('Form_Fields_Config__c')) {
+                template.Form_Fields_Config__c = (String) fields.get('Form_Fields_Config__c');
+            }
             template.Test_Record_Id__c = (String) fields.get('Test_Record_Id__c');
             template.Document_Title_Format__c = (String) fields.get('Document_Title_Format__c');
 
@@ -2484,6 +2492,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     'Base_Object_API__c',
                     'Description__c',
                     'Query_Config__c',
+                    'Form_Fields_Config__c',
                     'Test_Record_Id__c',
                     'Document_Title_Format__c',
                     'Output_Format__c',
@@ -3820,6 +3829,44 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         for (Schema.SObjectField field : objType.getDescribe().fields.getMap().values()) {
             Schema.DescribeFieldResult describe = field.getDescribe();
             if (describe.isAccessible()) {
+                sortedFields.add(new Option(describe.getLabel() + ' (' + describe.getName() + ')', describe.getName()));
+                fieldTypes.put(describe.getName(), describe.getType().name());
+            }
+        }
+        sortedFields.sort();
+
+        List<Map<String, String>> fields = new List<Map<String, String>>();
+        for (Option opt : sortedFields) {
+            fields.add(
+                new Map<String, String>{
+                    'label' => opt.label,
+                    'value' => opt.value,
+                    'type' => fieldTypes.get(opt.value)
+                }
+            );
+        }
+        return fields;
+    }
+
+    /**
+     * Returns updateable fields for a given SObject type with label, API name, and type.
+     * The isUpdateable() variant of getObjectFields — used by the signer form-field
+     * admin UI so writeback-target dropdowns only offer fields the admin can write.
+     * @param objectName The SObject API name
+     * @return List of maps with 'label', 'value', and 'type' keys
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<Map<String, String>> getUpdateableObjectFields(String objectName) {
+        List<Option> sortedFields = new List<Option>();
+        Map<String, String> fieldTypes = new Map<String, String>();
+        SObjectType objType = Schema.getGlobalDescribe().get(objectName);
+        if (objType == null) {
+            return new List<Map<String, String>>();
+        }
+
+        for (Schema.SObjectField field : objType.getDescribe().fields.getMap().values()) {
+            Schema.DescribeFieldResult describe = field.getDescribe();
+            if (describe.isUpdateable()) {
                 sortedFields.add(new Option(describe.getLabel() + ' (' + describe.getName() + ')', describe.getName()));
                 fieldTypes.put(describe.getName(), describe.getType().name());
             }

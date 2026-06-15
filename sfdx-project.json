@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.16.0 — Consolidated guided signing (single, multi-signer & packets) + HTML page-counter font",
-      "versionNumber": "3.16.0.NEXT",
-      "ancestorId": "04tVx000000nZ33IAE",
+      "versionName": "v3.18.0 — Template-only e-signature + signature-tag leak fix",
+      "versionNumber": "3.18.0.NEXT",
+      "ancestorId": "04tVx000000nZJBIA2",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.16 unifies electronic signing on the modern guided experience — signers walk field-by-field through the real PDF — for every template: single documents, multi-signer documents, and multi-document packets alike, including older templates without signature tags (a signature block is added for them automatically). Page numbers in HTML headers and footers now render in the document's font instead of a mismatched serif. 100% native — no external services or callouts. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.18 streamlines electronic signing: every signature request now renders from a template, so signature fields and signer form fields are always placed and filled correctly in the finished document. It also fixes signature placeholders occasionally appearing as text in normally-generated documents. 100% native — no external services or callouts. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
@@ -179,6 +179,9 @@
     "Portwood DocGen Managed@3.13.0-3": "04tVx000000nYdFIAU",
     "Portwood DocGen Managed@3.14.0-1": "04tVx000000nYerIAE",
     "Portwood DocGen Managed@3.14.0-2": "04tVx000000nYgTIAU",
-    "Portwood DocGen Managed@3.15.0-1": "04tVx000000nZ33IAE"
+    "Portwood DocGen Managed@3.15.0-1": "04tVx000000nZ33IAE",
+    "Portwood DocGen Managed@3.17.0-1": "04tVx000000nZJBIA2",
+    "Portwood DocGen Managed@3.18.0-1": "04tVx000000nb85IAA",
+    "Portwood DocGen Managed@3.18.0-2": "04tVx000000nbBJIAY"
   }
 }

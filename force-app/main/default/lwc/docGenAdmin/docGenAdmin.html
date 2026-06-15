@@ -2035,6 +2035,186 @@
                             </div>
                         </lightning-tab>
 
+                        <!-- Tab: Signer Inputs (#161) — form fields with optional record writeback -->
+                        <lightning-tab label="Signer Inputs" value="signerInputs">
+                            <div class="slds-var-p-around_small">
+                                <div class="pdf-acroform-mapping">
+                                    <div class="pdf-acroform-mapping__header">
+                                        <div class="slds-media slds-media_center">
+                                            <div class="slds-media__figure">
+                                                <lightning-icon icon-name="utility:edit_form" size="small">
+                                                </lightning-icon>
+                                            </div>
+                                            <div class="slds-media__body">
+                                                <h3 class="slds-text-heading_small">Signer Form Fields</h3>
+                                                <p class="slds-text-body_small slds-text-color_weak">
+                                                    Inputs the signer fills in while e-signing. Paste each field's
+                                                    <code>&lbrace;?key&rbrace;</code> tag into your template to place
+                                                    its value, and optionally write the value back to a record field.
+                                                    Writeback applies to single-signer requests only; on multi-signer
+                                                    documents the values are captured to the signing certificate (per
+                                                    signer) but not written back to the record.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="pdf-acroform-mapping__actions">
+                                            <lightning-button
+                                                label="Add Field"
+                                                icon-name="utility:add"
+                                                variant="brand"
+                                                onclick={handleAddSignerField}
+                                            ></lightning-button>
+                                        </div>
+                                    </div>
+                                    <template if:true={hasSignerFields}>
+                                        <div class="pdf-acroform-mapping__scroll">
+                                            <table class="pdf-acroform-mapping__table signer-fields__table">
+                                                <thead>
+                                                    <tr>
+                                                        <th scope="col">Label</th>
+                                                        <th scope="col">Type</th>
+                                                        <th scope="col">Mapped Field</th>
+                                                        <th scope="col">Required</th>
+                                                        <th scope="col">Write Back</th>
+                                                        <th scope="col">On Certificate</th>
+                                                        <th scope="col">Merge Tag</th>
+                                                        <th scope="col">Order</th>
+                                                        <th scope="col"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template for:each={signerFieldRows} for:item="row">
+                                                        <tr key={row.key} class="pdf-acroform-row">
+                                                            <td>
+                                                                <lightning-input
+                                                                    type="text"
+                                                                    variant="label-hidden"
+                                                                    value={row.label}
+                                                                    data-index={row.index}
+                                                                    placeholder="Field label"
+                                                                    onchange={handleSignerFieldLabelChange}
+                                                                ></lightning-input>
+                                                                <template if:true={row.isPicklist}>
+                                                                    <lightning-input
+                                                                        class="slds-var-m-top_xx-small"
+                                                                        type="text"
+                                                                        variant="label-hidden"
+                                                                        value={row.choicesText}
+                                                                        data-index={row.index}
+                                                                        placeholder="Choices, comma-separated"
+                                                                        onchange={handleSignerFieldChoicesChange}
+                                                                    ></lightning-input>
+                                                                </template>
+                                                            </td>
+                                                            <td>
+                                                                <lightning-combobox
+                                                                    variant="label-hidden"
+                                                                    value={row.type}
+                                                                    data-index={row.index}
+                                                                    options={signerFieldTypeOptions}
+                                                                    onchange={handleSignerFieldTypeChange}
+                                                                ></lightning-combobox>
+                                                            </td>
+                                                            <td>
+                                                                <lightning-combobox
+                                                                    variant="label-hidden"
+                                                                    value={row.fieldApiName}
+                                                                    data-index={row.index}
+                                                                    placeholder="Select field"
+                                                                    options={row.fieldOptions}
+                                                                    onchange={handleSignerFieldMappedChange}
+                                                                ></lightning-combobox>
+                                                            </td>
+                                                            <td>
+                                                                <lightning-input
+                                                                    type="toggle"
+                                                                    variant="label-hidden"
+                                                                    checked={row.required}
+                                                                    data-index={row.index}
+                                                                    message-toggle-active=""
+                                                                    message-toggle-inactive=""
+                                                                    onchange={handleSignerFieldRequiredChange}
+                                                                ></lightning-input>
+                                                            </td>
+                                                            <td>
+                                                                <lightning-input
+                                                                    type="toggle"
+                                                                    variant="label-hidden"
+                                                                    checked={row.writeback}
+                                                                    data-index={row.index}
+                                                                    message-toggle-active=""
+                                                                    message-toggle-inactive=""
+                                                                    onchange={handleSignerFieldWritebackChange}
+                                                                ></lightning-input>
+                                                            </td>
+                                                            <td>
+                                                                <lightning-input
+                                                                    type="toggle"
+                                                                    variant="label-hidden"
+                                                                    checked={row.listOnCertificate}
+                                                                    data-index={row.index}
+                                                                    message-toggle-active=""
+                                                                    message-toggle-inactive=""
+                                                                    onchange={handleSignerFieldCertificateChange}
+                                                                ></lightning-input>
+                                                            </td>
+                                                            <td>
+                                                                <code
+                                                                    class="tag-click"
+                                                                    data-tag={row.mergeTag}
+                                                                    onclick={handleCopyEditTag}
+                                                                    >{row.mergeTag}</code
+                                                                >
+                                                            </td>
+                                                            <td>
+                                                                <lightning-button-icon
+                                                                    icon-name="utility:up"
+                                                                    alternative-text="Move up"
+                                                                    title="Move up"
+                                                                    variant="border-filled"
+                                                                    data-index={row.index}
+                                                                    disabled={row.isFirst}
+                                                                    onclick={handleMoveSignerFieldUp}
+                                                                ></lightning-button-icon>
+                                                                <lightning-button-icon
+                                                                    icon-name="utility:down"
+                                                                    alternative-text="Move down"
+                                                                    title="Move down"
+                                                                    variant="border-filled"
+                                                                    data-index={row.index}
+                                                                    disabled={row.isLast}
+                                                                    onclick={handleMoveSignerFieldDown}
+                                                                ></lightning-button-icon>
+                                                            </td>
+                                                            <td>
+                                                                <lightning-button-icon
+                                                                    icon-name="utility:delete"
+                                                                    alternative-text="Remove field"
+                                                                    title="Remove field"
+                                                                    variant="border-filled"
+                                                                    data-index={row.index}
+                                                                    onclick={handleRemoveSignerField}
+                                                                ></lightning-button-icon>
+                                                            </td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </template>
+                                    <template if:false={hasSignerFields}>
+                                        <div class="slds-box slds-theme_shade slds-text-align_center">
+                                            <lightning-icon icon-name="utility:edit_form" size="small"></lightning-icon>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                                No signer form fields yet. Add a field to collect input during signing
+                                                and place its <code>&lbrace;?key&rbrace;</code> tag in the template.
+                                            </p>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </lightning-tab>
+
                         <!-- Tab 3: Template Tags -->
                         <lightning-tab label="Copy-Paste Tags" value="tags">
                             <div class="slds-var-p-around_small">

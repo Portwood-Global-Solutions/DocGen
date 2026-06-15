@@ -292,4 +292,17 @@ private class DocGenFlsGuardTest {
         Test.stopTest();
         System.assert(true, 'guest list overloads with null/empty input are no-ops');
     }
+
+    @IsTest
+    static void guestAssertUpdateable_signerFieldDataJson_isAllowlisted() {
+        // The signer form-field writeback feature added Field_Data_Json__c to the
+        // guest-update allowlist (DocGenSignatureController.captureFormFieldData).
+        // Guard the field exists + passes the per-field updateable verdict.
+        DocGen_Signer__c signer = new DocGen_Signer__c();
+        TestDataFactory.assignAdminPermissionSet();
+        Test.startTest();
+        DocGenFlsGuard.guestAssertUpdateable(signer, new Set<String>{ 'Field_Data_Json__c' });
+        Test.stopTest();
+        System.assert(true, 'Field_Data_Json__c is a recognized, updateable signer field for guest writeback capture');
+    }
 }

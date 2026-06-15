@@ -1,5 +1,4 @@
 // DocGen E2E Test 06 — Signature Pipeline
-// Run: sf apex run --target-org <org> -f scripts/e2e-06-signatures.apex
 // Depends on: e2e-02 (Account 'E2E Test Corp', Template 'E2E Test Template')
 // Expected: PASS: N  FAIL: 0
 
@@ -49,8 +48,7 @@ if (acctId == null || tmplId == null) {
 // ===== Create Signature Request =====
 try {
     signerToken = EncodingUtil.convertToHex(Crypto.generateAesKey(256));
-    // Request-level verification token — the capability for verifyByRequestId
-    // (the certificate verify link now carries ?token= this value, not the Id).
+    // Request-level verification token — capability for verifyByRequestId.
     requestToken = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', Crypto.generateAesKey(256)));
     DocGen_Signature_Request__c sr = new DocGen_Signature_Request__c(
         Status__c = 'Sent',
@@ -132,20 +130,12 @@ try {
 // ===== Verify PIN fields set =====
 try {
     DocGen_Signer__c sg2 = [SELECT PIN_Hash__c, PIN_Expires_At__c FROM DocGen_Signer__c WHERE Id = :signerId];
-    if (sg2.PIN_Hash__c != null) {
+    if (sg2.PIN_Hash__c != null && sg2.PIN_Expires_At__c != null) {
         pass++;
-        System.debug('PIN HASH SET: PASS');
+        System.debug('PIN HASH + EXPIRY SET: PASS');
     } else {
         fail++;
-        System.debug('PIN HASH SET: FAIL — null');
-    }
-
-    if (sg2.PIN_Expires_At__c != null) {
-        pass++;
-        System.debug('PIN EXPIRES AT SET: PASS — ' + sg2.PIN_Expires_At__c);
-    } else {
-        fail++;
-        System.debug('PIN EXPIRES AT SET: FAIL — null');
+        System.debug('PIN HASH + EXPIRY SET: FAIL — hash=' + sg2.PIN_Hash__c + ' exp=' + sg2.PIN_Expires_At__c);
     }
 } catch (Exception e) {
     fail++;
@@ -199,8 +189,7 @@ try {
         System.debug('VERIFY BY REQUEST TOKEN: FAIL — empty or null');
     }
 
-    // SECURITY REGRESSION GUARD: a raw record Id must NOT disclose signer data
-    // (the closed IDOR). Passing the request Id returns empty.
+    // SECURITY REGRESSION GUARD: a raw record Id must NOT disclose signer data (closed IDOR).
     List<DocGenAuthenticatorController.VerificationResult> byId = DocGenAuthenticatorController.verifyByRequestId(
         String.valueOf(sigReqId)
     );
@@ -243,19 +232,12 @@ try {
         ''
     );
     DocGen_Settings__c s2 = DocGenSetupController.getSettings();
-    Boolean brandOk = s2.Signature_Email_Brand_Color__c == '#0066CC';
-    Boolean companyOk = s2.Company_Name__c == 'E2E Test Corp';
-    if (brandOk && companyOk) {
+    if (s2.Signature_Email_Brand_Color__c == '#0066CC' && s2.Company_Name__c == 'E2E Test Corp') {
         pass++;
         System.debug('SAVE SIGNATURE SETTINGS: PASS');
     } else {
         fail++;
-        System.debug(
-            'SAVE SIGNATURE SETTINGS: FAIL — brand: ' +
-                s2.Signature_Email_Brand_Color__c +
-                ', company: ' +
-                s2.Company_Name__c
-        );
+        System.debug('SAVE SIGNATURE SETTINGS: FAIL — brand=' + s2.Signature_Email_Brand_Color__c);
     }
 } catch (Exception e) {
     fail++;
@@ -297,7 +279,6 @@ try {
 
 // ===== Cancel Signature Request =====
 try {
-    // Create a second request to cancel (keep the first for cleanup test)
     String cancelToken = EncodingUtil.convertToHex(Crypto.generateAesKey(256));
     DocGen_Signature_Request__c sr2 = new DocGen_Signature_Request__c(
         Status__c = 'Sent',
@@ -443,7 +424,6 @@ try {
     List<DocGenSignatureSenderController.PlacementInfo> placements = DocGenSignatureSenderController.getTemplateSignaturePlacements(
         tmplId
     );
-    // Template may not have @Signature tags — just verify method works
     if (placements != null) {
         pass++;
         System.debug('V3 TAG PARSER: PASS — ' + placements.size() + ' placements');
@@ -464,95 +444,55 @@ try {
         System.debug('SETUP VALIDATION: PASS — ' + checks.size() + ' checks');
     } else {
         fail++;
-        System.debug('SETUP VALIDATION: FAIL — expected >= 3 checks, got: ' + (checks != null ? checks.size() : 0));
+        System.debug('SETUP VALIDATION: FAIL — got: ' + (checks != null ? checks.size() : 0));
     }
 } catch (Exception e) {
     fail++;
     System.debug('SETUP VALIDATION: FAIL — ' + e.getMessage());
 }
 
-// ===== Send Existing ContentVersion (flat-PDF signing path, Milestone 1) =====
+// ===== Send Existing ContentVersion (flat-PDF signing path) — REMOVED in v3.18 =====
+// Sending a pre-generated PDF for signature is no longer supported (a flat PDF has no
+// parseable {@Signature_*} tags). createRequestFromContentVersion now throws an
+// AuraHandledException, which is UNCATCHABLE from anonymous Apex — so the deprecation
+// is asserted in DocGenSignaturePdfTests.testCreateRequestFromContentVersion_removed and
+// .testPdfFlowAction_contentVersionRejected (Apex test context) rather than here.
+
+// ===== Form-field capture -> record writeback round-trip (regression #173) =====
+// Service-level round-trip (unknown keys dropped, only allowlisted mapped field written).
+// The drawn-path event publish is @AuraEnabled (uncatchable AuraHandledException in anon
+// Apex), so that end-to-end guard lives in DocGenGuidedSigningTest.compositedDrawnPath_firesWriteback.
 try {
-    // A pre-generated document stored as a ContentVersion (what the signer will see).
-    ContentVersion srcCv = new ContentVersion(
-        Title = 'E2E Generated Agreement',
-        PathOnClient = 'e2e-agreement.pdf',
-        VersionData = Blob.valueOf('%PDF-1.7 e2e source document bytes')
+    String origCfg = [SELECT Form_Fields_Config__c FROM DocGen_Template__c WHERE Id = :tmplId LIMIT 1]
+    .Form_Fields_Config__c;
+    String wbCfg =
+        '{"formFields":[' +
+        '{"key":"wbdesc","fieldApiName":"Description","type":"text","writeback":true},' +
+        '{"key":"caponly","type":"text","writeback":false}]}';
+    update new DocGen_Template__c(Id = tmplId, Form_Fields_Config__c = wbCfg);
+    update new Account(Id = acctId, Description = null);
+
+    String wbMarker = 'WB ' + Datetime.now().getTime();
+    Map<String, Object> clean = DocGenFieldWritebackService.validateAndClean(
+        DocGenFieldWritebackService.parseConfig(wbCfg),
+        '{"wbdesc":"' + wbMarker + '","caponly":"ignore-me","hackerKey":"INJECTED"}'
     );
-    insert srcCv;
-    srcCv = [SELECT Id FROM ContentVersion WHERE Id = :srcCv.Id LIMIT 1];
-
-    String pdfSignersJson = '[{"signerName":"Carol Existing","signerEmail":"carol@e2etest.example.com","roleName":"Signer","contactId":""}]';
-
-    List<DocGenSignatureSenderController.SignerResult> pdfResults = DocGenSignatureSenderController.createRequestFromContentVersion(
-        srcCv.Id,
-        acctId,
-        pdfSignersJson,
-        'Parallel',
-        null
-    );
-
-    // One signer whose URL targets the NEW flat-PDF page (not /DocGenSignature).
-    Boolean urlOk =
-        pdfResults != null &&
-        pdfResults.size() == 1 &&
-        pdfResults[0].signerUrl != null &&
-        pdfResults[0].signerUrl.contains('DocGenSignaturePdf');
-    if (urlOk) {
+    Boolean dropOk = clean != null && !clean.containsKey('hackerKey') && clean.containsKey('caponly');
+    update new DocGen_Signer__c(Id = signerId, Field_Data_Json__c = JSON.serialize(clean));
+    DocGenFieldWritebackService.performWriteback(sigReqId);
+    Account wbAcct = [SELECT Description FROM Account WHERE Id = :acctId LIMIT 1];
+    if (dropOk && wbAcct.Description == wbMarker) {
         pass++;
-        System.debug('SEND EXISTING CV — SIGNER URL: PASS');
+        System.debug('WRITEBACK ROUND-TRIP (unknown key dropped + mapped field written): PASS');
     } else {
         fail++;
-        System.debug('SEND EXISTING CV — SIGNER URL: FAIL');
+        System.debug('WRITEBACK ROUND-TRIP: FAIL — dropOk=' + dropOk + ' Description=' + wbAcct.Description);
     }
-
-    // The created request is Template__c-null and bound to the source CV.
-    DocGen_Signer__c pdfSigner = [
-        SELECT
-            Secure_Token__c,
-            Signature_Request__c,
-            Signature_Request__r.Source_Document_Id__c,
-            Signature_Request__r.Template__c,
-            Signature_Request__r.Status__c
-        FROM DocGen_Signer__c
-        WHERE Signer_Email__c = 'carol@e2etest.example.com'
-        ORDER BY CreatedDate DESC
-        LIMIT 1
-    ];
-    Boolean reqOk =
-        pdfSigner.Signature_Request__r.Source_Document_Id__c == srcCv.Id &&
-        pdfSigner.Signature_Request__r.Template__c == null &&
-        pdfSigner.Signature_Request__r.Status__c == 'Sent';
-    if (reqOk) {
-        pass++;
-        System.debug('SEND EXISTING CV — TEMPLATE-NULL REQUEST: PASS');
-    } else {
-        fail++;
-        System.debug('SEND EXISTING CV — TEMPLATE-NULL REQUEST: FAIL');
-    }
-
-    // The signer's token round-trips through getSourcePdfBase64 → serves the bound PDF.
-    Map<String, String> pdfBytes = DocGenSignatureController.getSourcePdfBase64(pdfSigner.Secure_Token__c);
-    if (
-        pdfBytes.get('error') == null &&
-        pdfBytes.get('mimeType') == 'application/pdf' &&
-        pdfBytes.get('base64') == EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 e2e source document bytes'))
-    ) {
-        pass++;
-        System.debug('SEND EXISTING CV — getSourcePdfBase64 ROUND-TRIP: PASS');
-    } else {
-        fail++;
-        System.debug('SEND EXISTING CV — getSourcePdfBase64 ROUND-TRIP: FAIL — ' + pdfBytes.get('error'));
-    }
-
-    // Cleanup the request, signer, and source document created here.
-    Id pdfReqId = pdfSigner.Signature_Request__c;
-    delete [SELECT Id FROM DocGen_Signer__c WHERE Signature_Request__c = :pdfReqId];
-    delete [SELECT Id FROM DocGen_Signature_Request__c WHERE Id = :pdfReqId];
-    delete [SELECT Id FROM ContentDocument WHERE LatestPublishedVersionId = :srcCv.Id];
+    update new DocGen_Template__c(Id = tmplId, Form_Fields_Config__c = origCfg);
+    update new DocGen_Signer__c(Id = signerId, Field_Data_Json__c = null);
 } catch (Exception e) {
     fail++;
-    System.debug('SEND EXISTING CV: FAIL — ' + e.getMessage());
+    System.debug('WRITEBACK ROUND-TRIP: FAIL — ' + e.getMessage());
 }
 
 System.debug('========================================');

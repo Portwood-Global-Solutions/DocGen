@@ -32,6 +32,13 @@ public without sharing class DocGenSignatureController {
         public Boolean isSignerToken;
         @AuraEnabled
         public Boolean requiresPin;
+        // Signer form fields to render during e-signing. PUBLIC-SAFE projection
+        // only — {key,label,type,required,choices}. The writeback flags and the
+        // base-object field API names from the template config are deliberately
+        // NOT exposed to the guest (the writeback allowlist is re-derived
+        // server-side at completion). See DocGenFieldWritebackService.publicFormFields.
+        @AuraEnabled
+        public List<Object> formFields;
     }
 
     public class SaveSignatureResult {
@@ -90,6 +97,63 @@ public without sharing class DocGenSignatureController {
             }
         }
         return 'Unknown';
+    }
+
+    /**
+     * Captures the signer's form-field values onto DocGen_Signer__c.Field_Data_Json__c
+     * during a guest save (folded into saveSignature / savePdfSignature /
+     * saveCompositedSignedPdf — NO new guest endpoint). Flow:
+     *   token gate (caller already validated 64-hex + assertSignerWritableFields)
+     *   → load the request's Template__c.Form_Fields_Config__c (SYSTEM_MODE, FLS-guarded)
+     *   → validate the incoming JSON against config (DocGenFieldWritebackService:
+     *     enforce required, coerce by type, DROP unknown keys, config-ordered map)
+     *   → guestAssertUpdateable(signer, {'Field_Data_Json__c'})
+     *   → write the CLEAN JSON to Field_Data_Json__c in SYSTEM_MODE.
+     *
+     * No-ops when the template has no formFields or no incoming JSON. Required-field
+     * failures throw (AuraHandledException) BEFORE the signer is finalized so the
+     * guest sees a clean validation message and nothing is persisted on this save.
+     */
+    @TestVisible
+    private static void captureFormFieldData(Id signerId, Id requestId, String token, String formFieldJson) {
+        if (signerId == null || requestId == null) {
+            return;
+        }
+        // Load the template config for this request (SYSTEM_MODE — guest has no
+        // DocGen CRUD; token-bound capability already established by the caller).
+        DocGenFlsGuard.guestAssertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Form_Fields_Config__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signature_Request__c> reqs = [
+            SELECT Template__c, Template__r.Form_Fields_Config__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (reqs.isEmpty() || reqs[0].Template__c == null || reqs[0].Template__r == null) {
+            return; // No template / capture-only flat-PDF flow — nothing to capture.
+        }
+
+        List<DocGenFieldWritebackService.FormFieldDef> defs = DocGenFieldWritebackService.parseConfig(
+            reqs[0].Template__r.Form_Fields_Config__c
+        );
+        // validateAndClean enforces required + coerces + drops unknown keys, and
+        // returns null when there are no configured form fields.
+        Map<String, Object> clean = DocGenFieldWritebackService.validateAndClean(defs, formFieldJson);
+        if (clean == null) {
+            return;
+        }
+
+        DocGen_Signer__c signerUpd = new DocGen_Signer__c(Id = signerId);
+        signerUpd.Field_Data_Json__c = JSON.serialize(clean);
+        // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
+        DocGenFlsGuard.guestAssertUpdateable(signerUpd, new Set<String>{ 'Field_Data_Json__c' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.update(signerUpd, false, AccessLevel.SYSTEM_MODE);
     }
 
     /**
@@ -181,6 +245,12 @@ public without sharing class DocGenSignatureController {
                 'Secure_Token__c'
             }
         );
+        // Form_Fields_Config__c carries the signer form-field config rendered on the page.
+        // SYSTEM_MODE on the SOQL below; documented FLS describe signal here.
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Name', 'Form_Fields_Config__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
             SELECT
@@ -197,7 +267,8 @@ public without sharing class DocGenSignatureController {
                 Signature_Request__r.Source_Document_Id__c,
                 Signature_Request__r.Related_Record_Id__c,
                 Signature_Request__r.Template__c,
-                Signature_Request__r.Template__r.Name
+                Signature_Request__r.Template__r.Name,
+                Signature_Request__r.Template__r.Form_Fields_Config__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -622,6 +693,13 @@ public without sharing class DocGenSignatureController {
             }
         }
 
+        // Signer form fields (public-safe projection — key/label/type/required/choices
+        // only). The writeback flags + base-field API names from the config never
+        // leave the server; the writeback allowlist is re-derived at completion.
+        if (parentReq.Template__c != null && parentReq.Template__r != null) {
+            res.formFields = DocGenFieldWritebackService.publicFormFields(parentReq.Template__r.Form_Fields_Config__c);
+        }
+
         return res;
     }
 
@@ -991,7 +1069,8 @@ public without sharing class DocGenSignatureController {
         String typedName,
         Boolean consentGiven,
         String ipAddress,
-        String userAgent
+        String userAgent,
+        String formFieldJson
     ) {
         SaveSignatureResult result = new SaveSignatureResult();
 
@@ -1063,6 +1142,11 @@ public without sharing class DocGenSignatureController {
         if (signer.PIN_Verified_At__c == null) {
             throw new AuraHandledException('Email verification is required before signing.');
         }
+
+        // Signer form fields: validate + persist the collected values BEFORE the
+        // signer is finalized, so a required-field failure aborts the whole save
+        // (no status change, nothing persisted) and the guest sees a clean error.
+        captureFormFieldData(signer.Id, signer.Signature_Request__c, token, formFieldJson);
 
         // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         // Store typed name and mark as signed
@@ -2235,7 +2319,8 @@ public without sharing class DocGenSignatureController {
         String typedName,
         Boolean consentGiven,
         String ipAddress,
-        String userAgent
+        String userAgent,
+        String formFieldJson
     ) {
         SavePdfSignatureResult result = new SavePdfSignatureResult();
         result.success = false;
@@ -2308,6 +2393,11 @@ public without sharing class DocGenSignatureController {
         if (signer.PIN_Verified_At__c == null) {
             throw new AuraHandledException('Email verification is required before signing.');
         }
+
+        // Signer form fields: validate + persist the collected values BEFORE the
+        // signer is finalized, so a required-field failure aborts the whole save
+        // (no status change, nothing persisted) and the guest sees a clean error.
+        captureFormFieldData(signer.Id, signer.Signature_Request__c, token, formFieldJson);
 
         // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
         // Store typed name and mark as signed
@@ -2439,7 +2529,8 @@ public without sharing class DocGenSignatureController {
         String base64Pdf,
         Boolean consentGiven,
         String ipAddress,
-        String userAgent
+        String userAgent,
+        String formFieldJson
     ) {
         SavePdfSignatureResult result = new SavePdfSignatureResult();
         result.success = false;
@@ -2507,6 +2598,10 @@ public without sharing class DocGenSignatureController {
         if (signer.PIN_Verified_At__c == null) {
             throw new AuraHandledException('Email verification is required before signing.');
         }
+
+        // Signer form fields: validate + persist before finalizing the signer (a
+        // required-field failure aborts the save before any status/CV write).
+        captureFormFieldData(signer.Id, signer.Signature_Request__c, token, formFieldJson);
 
         signer.Signature_Data__c = 'Signed (composited)';
         signer.Status__c = 'Signed';
@@ -2627,6 +2722,28 @@ public without sharing class DocGenSignatureController {
         DocGenFlsGuard.guestAssertUpdateable(parentReq, reqUpd);
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
+
+        // Signer form-field writeback: this guided drawn-signature path stores the
+        // client-composited PDF directly and never enqueues TemplateSignaturePdfQueueable
+        // (the typed-name path's finalizer), so the writeback event must be published
+        // HERE — once, after the final signed CV is saved — or writeback never fires for
+        // drawn signatures. Decoupled + post-completion, mirroring the queueable: the
+        // subscriber (DocGenFieldWritebackTrigger) re-derives the writable allowlist from
+        // config and re-checks FLS per field; performWriteback no-ops when the template
+        // has no writeback fields and never throws into signing.
+        if (result.isComplete) {
+            try {
+                DocGen_Field_Writeback__e wbEvent = new DocGen_Field_Writeback__e();
+                wbEvent.Request_Id__c = signer.Signature_Request__c;
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                EventBus.publish(wbEvent);
+            } catch (Exception wbEx) {
+                System.debug(
+                    LoggingLevel.WARN,
+                    'DocGen: composited writeback event publish failed: ' + wbEx.getMessage()
+                );
+            }
+        }
 
         result.success = true;
         return result;
