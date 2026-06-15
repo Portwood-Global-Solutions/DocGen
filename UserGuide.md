@@ -2330,29 +2330,53 @@ For multi-signer flows (parallel: legal + executive sign together; sequential: e
 
 ### 11.7 Recipe — Send a document for signature on the PDF viewer page
 
-Use **DocGen: Send Existing Document for Signature** (`DocGenSignaturePdfFlowAction`) when you want the signer to review the **real, fully rendered PDF in the browser** (rather than the typed-name placement page) and have the completed document land back on the record. The action has **two modes** — pass exactly one of the first two inputs:
+Use **DocGen: Send Existing Document for Signature** (`DocGenSignaturePdfFlowAction`) when you want the signer to review the **real, fully rendered PDF in the browser** (rather than the typed-name placement page) and have the completed document land back on the record. Pass a **Template Id**: DocGen snapshots the record's merge data at send-time and, on completion, re-renders the document from that snapshot (immune to later record edits), appends a signing-certificate page, and attaches the signed PDF to the related record's Files. This supports the [`{#Signatures}` loop block](#signature-loop-block--signatures-variable-signer-count) — one signature layout that repeats per signer. The template must have a **Base Object** and **Query Config** set.
 
-- **Snapshot mode (recommended)** — pass a **Template Id**. DocGen snapshots the record's merge data at send-time and, on completion, re-renders the document from that snapshot (immune to later record edits), appends a signing-certificate page, and attaches the signed PDF to the related record's Files. This mode supports the [`{#Signatures}` loop block](#signature-loop-block--signatures-variable-signer-count) — one signature layout that repeats per signer. The template must have a **Base Object** and **Query Config** set.
-- **Existing-document mode** — pass a **Content Version Id** (`068…`) of a document you already generated. The signer sees that exact PDF as-is. On this path the signed document is not auto-attached to the record (audit + status are still recorded).
+> **Removed in v3.18 — sending a pre-generated PDF (Content Version Id).** E-signature always renders from a **template** now. A finished PDF has no signature tags to detect, so it could never drive field-by-field signing or stamp signatures back into the document. Provide a Template Id; the `Content Version Id` input is ignored. (Generating a PDF normally — outside signing — is unchanged.)
 
 **Trigger:** any Flow (record-triggered, screen, or scheduled). Build the `signers` collection exactly as in [§11.6](#116-recipe--send-a-contract-for-signature-on-opportunity-approval) (an Apex-Defined `DocGenSigner` collection — `name` + `email` required; `role`, `contactId` optional).
 
 **Step — DocGen: Send Existing Document for Signature.**
 
-| Input                 | Value                                                                     |
-| --------------------- | ------------------------------------------------------------------------- |
-| Template Id           | `{!$Label.AgreementTemplateId}` _(snapshot mode — OR Content Version Id)_ |
-| Content Version Id    | _(existing-document mode — OR Template Id; leave one blank)_              |
-| Related Record ID     | `{!$Record.Id}`                                                           |
-| Signers               | `{!signers}`                                                              |
-| Signing Order         | `Parallel` or `Sequential`                                                |
-| Document Title Format | _(optional — overrides the title shown on the signing page)_              |
+| Input                 | Value                                                        |
+| --------------------- | ------------------------------------------------------------ |
+| Template Id           | `{!$Label.AgreementTemplateId}` _(required)_                 |
+| Related Record ID     | `{!$Record.Id}`                                              |
+| Signers               | `{!signers}`                                                 |
+| Signing Order         | `Parallel` or `Sequential`                                   |
+| Document Title Format | _(optional — overrides the title shown on the signing page)_ |
 
 **Outputs:** `success`, `signatureRequestId`, `signerUrls` (per-signer links, 48-hour validity, in signer order), `signerNames` / `signerEmails` / `signerRoles`, and `errorMessage` when `success` is `false`.
 
-**Result:** each signer gets a link to the **PDF-viewer signing page**, reviews the real PDF, and signs through a guided modal. In snapshot mode, once everyone signs, the re-rendered document + certificate page is attached to the related record automatically.
+**Result:** each signer gets a link to the **PDF-viewer signing page**, reviews the real PDF, and signs through a guided modal. Once everyone signs, the re-rendered document + certificate page is attached to the related record automatically.
 
 > **Which signature action?** Use **Create Signature Request** ([§11.6](#116-recipe--send-a-contract-for-signature-on-opportunity-approval)) for the classic typed-name placement page driven by `{@Signature_Role}` tags. Use **Send Existing Document for Signature** (this recipe) when you want the in-browser PDF viewer, snapshot re-render onto the record, and/or the `{#Signatures}` loop block.
+
+#### 11.7.1 Signer form fields — collect input during signing, write it back
+
+On the guided PDF signing path you can ask each signer for extra information **before they sign** — e.g. a PO number, a quantity, an acknowledgement checkbox — and have those answers flow into the finished document, the certificate, and (optionally) back onto the Salesforce record.
+
+**Configure the fields on the template.** In the Template Builder, add one or more **Form Fields**. Each field has:
+
+| Property                | Meaning                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| **Key**                 | A stable id (`[A-Za-z0-9_]+`) you reference in the document with `{?key}`.               |
+| **Label**               | What the signer sees on the "Your Information" step.                                     |
+| **Type**                | `text`, `number`, `date`, `checkbox`, or `picklist` (picklist uses the field's choices). |
+| **Required**            | Signer can't continue until it's filled.                                                 |
+| **Writeback field**     | _(optional)_ A field on the related record to write the answer to on completion.         |
+| **List on certificate** | _(optional)_ Show the answer on the Certificate of Completion.                           |
+
+**Place the value in the document.** Put a `{?key}` tag wherever the answer should appear — e.g. `{?poNumber}`. An optional fallback is supported: `{?poNumber|N/A}`. Like signature tags, give a `{?key}` tag its **own table cell or line** — placed mid-line (e.g. `PO: {?poNumber}`) the value can overprint the label.
+
+**What happens on completion:**
+
+- The signer fills the fields on a **"Your Information"** step, then signs (typed or drawn).
+- The values **render in the signed document** at each `{?key}` position.
+- Fields flagged **List on certificate** appear on the Certificate of Completion (per signer).
+- For a **single-signer** request, mapped answers **write back to the related record** in one update.
+
+> **Multi-signer / packet limitation.** When a request has more than one signer, form-field answers are captured and listed on the certificate but are **not** written back to the record yet (the fields are shared across signers, so there's no single value to write). Per-field signer ownership — assigning each field to a specific signer so multi-signer writeback is unambiguous — is planned. Single-signer writeback works today.
 
 ### 11.8 Recipe — Pass pre-built JSON data instead of querying
 
@@ -2499,13 +2523,13 @@ import generatePdf from '@salesforce/apex/portwoodglobal.DocGenController.genera
 
 Usable from Flow Builder and from Apex via `Invocable.Action.createCustomAction(...)`:
 
-| Action                               | Class                          | Input                                                                                                                                                                                                                 | Output                                                                                                      |
-| ------------------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Generate Document                    | `DocGenFlowAction`             | `templateId`, `recordId`, `saveToRecord`, `documentTitle`, `outputFormatOverride`, `jsonData`                                                                                                                         | `contentDocumentId`, `contentVersionId`, `success`, `errorMessage`                                          |
-| Generate Bulk Documents              | `DocGenBulkFlowAction`         | `templateId`, `queryCondition`, `recordIds`, `jobLabel`, `combinedPdfOnly`, `keepIndividualFiles`, `batchSize`                                                                                                        | `jobId`, `success`, `errorMessage`                                                                          |
-| Generate Document (Auto Giant Query) | `DocGenGiantQueryFlowAction`   | `templateId`, `recordId`                                                                                                                                                                                              | `contentDocumentId` (small) OR `jobId` (giant)                                                              |
-| Create Signature Request             | `DocGenSignatureFlowAction`    | `templateId`, `relatedRecordId`, `signers` (List<Signer>: `name`, `email`, `role`, `contactId`), `signingOrder`                                                                                                       | `success`, `signatureRequestId`, `signerUrls`, `emailStatus`, `errorMessage`                                |
-| Send Existing Document for Signature | `DocGenSignaturePdfFlowAction` | `templateId` (snapshot mode) **or** `contentVersionId` (existing-document mode), `relatedRecordId`, `signerRecords` (List<DocGenSigner>: `name`, `email`, `role`, `contactId`), `signingOrder`, `documentTitleFormat` | `success`, `signatureRequestId`, `signerUrls`, `signerNames`, `signerEmails`, `signerRoles`, `errorMessage` |
+| Action                               | Class                          | Input                                                                                                                                                                                                            | Output                                                                                                      |
+| ------------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Generate Document                    | `DocGenFlowAction`             | `templateId`, `recordId`, `saveToRecord`, `documentTitle`, `outputFormatOverride`, `jsonData`                                                                                                                    | `contentDocumentId`, `contentVersionId`, `success`, `errorMessage`                                          |
+| Generate Bulk Documents              | `DocGenBulkFlowAction`         | `templateId`, `queryCondition`, `recordIds`, `jobLabel`, `combinedPdfOnly`, `keepIndividualFiles`, `batchSize`                                                                                                   | `jobId`, `success`, `errorMessage`                                                                          |
+| Generate Document (Auto Giant Query) | `DocGenGiantQueryFlowAction`   | `templateId`, `recordId`                                                                                                                                                                                         | `contentDocumentId` (small) OR `jobId` (giant)                                                              |
+| Create Signature Request             | `DocGenSignatureFlowAction`    | `templateId`, `relatedRecordId`, `signers` (List<Signer>: `name`, `email`, `role`, `contactId`), `signingOrder`                                                                                                  | `success`, `signatureRequestId`, `signerUrls`, `emailStatus`, `errorMessage`                                |
+| Send Existing Document for Signature | `DocGenSignaturePdfFlowAction` | `templateId` (required; `contentVersionId` deprecated/ignored as of v3.18), `relatedRecordId`, `signerRecords` (List<DocGenSigner>: `name`, `email`, `role`, `contactId`), `signingOrder`, `documentTitleFormat` | `success`, `signatureRequestId`, `signerUrls`, `signerNames`, `signerEmails`, `signerRoles`, `errorMessage` |
 
 ### 12.5 `DocGenDataProvider` interface — custom data source
 
