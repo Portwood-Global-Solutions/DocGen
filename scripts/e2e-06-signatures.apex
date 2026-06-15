@@ -451,85 +451,12 @@ try {
     System.debug('SETUP VALIDATION: FAIL — ' + e.getMessage());
 }
 
-// ===== Send Existing ContentVersion (flat-PDF signing path, Milestone 1) =====
-try {
-    ContentVersion srcCv = new ContentVersion(
-        Title = 'E2E Generated Agreement',
-        PathOnClient = 'e2e-agreement.pdf',
-        VersionData = Blob.valueOf('%PDF-1.7 e2e source document bytes')
-    );
-    insert srcCv;
-    srcCv = [SELECT Id FROM ContentVersion WHERE Id = :srcCv.Id LIMIT 1];
-
-    String pdfSignersJson = '[{"signerName":"Carol Existing","signerEmail":"carol@e2etest.example.com","roleName":"Signer","contactId":""}]';
-
-    List<DocGenSignatureSenderController.SignerResult> pdfResults = DocGenSignatureSenderController.createRequestFromContentVersion(
-        srcCv.Id,
-        acctId,
-        pdfSignersJson,
-        'Parallel',
-        null
-    );
-
-    Boolean urlOk =
-        pdfResults != null &&
-        pdfResults.size() == 1 &&
-        pdfResults[0].signerUrl != null &&
-        pdfResults[0].signerUrl.contains('DocGenSignaturePdf');
-    if (urlOk) {
-        pass++;
-        System.debug('SEND EXISTING CV — SIGNER URL: PASS');
-    } else {
-        fail++;
-        System.debug('SEND EXISTING CV — SIGNER URL: FAIL');
-    }
-
-    DocGen_Signer__c pdfSigner = [
-        SELECT
-            Secure_Token__c,
-            Signature_Request__c,
-            Signature_Request__r.Source_Document_Id__c,
-            Signature_Request__r.Template__c,
-            Signature_Request__r.Status__c
-        FROM DocGen_Signer__c
-        WHERE Signer_Email__c = 'carol@e2etest.example.com'
-        ORDER BY CreatedDate DESC
-        LIMIT 1
-    ];
-    Boolean reqOk =
-        pdfSigner.Signature_Request__r.Source_Document_Id__c == srcCv.Id &&
-        pdfSigner.Signature_Request__r.Template__c == null &&
-        pdfSigner.Signature_Request__r.Status__c == 'Sent';
-    if (reqOk) {
-        pass++;
-        System.debug('SEND EXISTING CV — TEMPLATE-NULL REQUEST: PASS');
-    } else {
-        fail++;
-        System.debug('SEND EXISTING CV — TEMPLATE-NULL REQUEST: FAIL');
-    }
-
-    Map<String, String> pdfBytes = DocGenSignatureController.getSourcePdfBase64(pdfSigner.Secure_Token__c);
-    if (
-        pdfBytes.get('error') == null &&
-        pdfBytes.get('mimeType') == 'application/pdf' &&
-        pdfBytes.get('base64') == EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 e2e source document bytes'))
-    ) {
-        pass++;
-        System.debug('SEND EXISTING CV — getSourcePdfBase64 ROUND-TRIP: PASS');
-    } else {
-        fail++;
-        System.debug('SEND EXISTING CV — getSourcePdfBase64 ROUND-TRIP: FAIL — ' + pdfBytes.get('error'));
-    }
-
-    // Cleanup the request, signer, and source document created here.
-    Id pdfReqId = pdfSigner.Signature_Request__c;
-    delete [SELECT Id FROM DocGen_Signer__c WHERE Signature_Request__c = :pdfReqId];
-    delete [SELECT Id FROM DocGen_Signature_Request__c WHERE Id = :pdfReqId];
-    delete [SELECT Id FROM ContentDocument WHERE LatestPublishedVersionId = :srcCv.Id];
-} catch (Exception e) {
-    fail++;
-    System.debug('SEND EXISTING CV: FAIL — ' + e.getMessage());
-}
+// ===== Send Existing ContentVersion (flat-PDF signing path) — REMOVED in v3.18 =====
+// Sending a pre-generated PDF for signature is no longer supported (a flat PDF has no
+// parseable {@Signature_*} tags). createRequestFromContentVersion now throws an
+// AuraHandledException, which is UNCATCHABLE from anonymous Apex — so the deprecation
+// is asserted in DocGenSignaturePdfTests.testCreateRequestFromContentVersion_removed and
+// .testPdfFlowAction_contentVersionRejected (Apex test context) rather than here.
 
 // ===== Form-field capture -> record writeback round-trip (regression #173) =====
 // Service-level round-trip (unknown keys dropped, only allowlisted mapped field written).

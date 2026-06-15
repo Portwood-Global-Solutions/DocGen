@@ -445,6 +445,27 @@ try {
     System.debug('HTML BARCODE+QR: FAIL — ' + e.getMessage());
 }
 
+// ===== {@Signature_*} leak: stripped in normal generation, kept for signing =====
+try {
+    String sigBody = 'Sign here: {@Signature_Signer:1:Full} end';
+    DocGenService.preserveSignatureTags = false; // normal document generation
+    String genOut = DocGenService.processXmlForTest(sigBody, new Map<String, Object>());
+    DocGenService.preserveSignatureTags = true; // signature send/finalize
+    String sigOut = DocGenService.processXmlForTest(sigBody, new Map<String, Object>());
+    DocGenService.preserveSignatureTags = false; // reset
+    if (!genOut.contains('{@Signature') && sigOut.contains('{@Signature_Signer:1:Full}')) {
+        pass++;
+        System.debug('SIGNATURE TAG LEAK GUARD: PASS');
+    } else {
+        fail++;
+        System.debug('SIGNATURE TAG LEAK GUARD: FAIL — gen=' + genOut + ' sig=' + sigOut);
+    }
+} catch (Exception e) {
+    DocGenService.preserveSignatureTags = false;
+    fail++;
+    System.debug('SIGNATURE TAG LEAK GUARD: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX4 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

@@ -1,24 +1,24 @@
 /**
- * Flow-invocable action to send an ALREADY-GENERATED document (a ContentVersion)
- * for signature, using the Milestone 1 flat-PDF signing page.
+ * Flow-invocable action to send a DocGen TEMPLATE for signature.
  *
- * Two-step flow: generate the document first (DocGenFlowAction.generateDocument →
- * ContentVersion Id), then pass that Id here. This creates a Template__c-null
- * signature request bound to the CV (Source_Document_Id__c), renders the real
- * PDF to each signer, and captures a name+consent signature → audit +
- * Status='Signed'. No template merge, no placements, no DOCX-XML stamping.
+ * As of v3.18 this action is template-only. DocGen snapshots the record data at
+ * send-time and, on completion, re-renders the document from that snapshot and
+ * appends a signing-certificate page to the related record's Files. The legacy
+ * "send a pre-generated ContentVersion" path was removed: a flat PDF has no
+ * parseable {@Signature_*} tags, so it can't drive guided signing or stamp
+ * signatures back into the document (the contentVersionId input is now ignored).
  *
  * PREREQUISITES:
- * 1. A pre-generated document stored as a ContentVersion (e.g. via "DocGen: Generate Document")
- * 2. An Org-Wide Email Address configured in DocGen > Signatures settings (for branded emails)
- * 3. A Salesforce Site configured for the flat-PDF signing page
+ * 1. A DocGen Template with an active version (HTML or Word) — ideally carrying
+ *    {@Signature_Role:Order:Type} placement tags for guided signing.
+ * 2. An Org-Wide Email Address configured in DocGen > Signatures settings.
+ * 3. A Salesforce Site configured for the signing page.
  *
  * QUICK START:
- * 1. Generate a PDF and capture its ContentVersion Id
- * 2. Build a collection of DocGen Signers (Name + Email + optional Role/Contact Id)
- * 3. Drag "DocGen: Send Existing Document for Signature" into your Flow
- * 4. Set Content Version Id, Related Record Id, and the Signers collection
- * 5. The action returns signing URLs and a request Id for downstream automation
+ * 1. Find the template (Get Records) and capture its Id.
+ * 2. Build a collection of DocGen Signers (Name + Email + optional Role/Contact Id).
+ * 3. Drag this action into your Flow, set Template Id + Related Record Id + Signers.
+ * 4. The action returns signing URLs and a request Id for downstream automation.
  */
 global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalModifier - required for @InvocableMethod visibility in subscriber orgs
     global class Request {
@@ -29,8 +29,8 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
         global Id templateId;
 
         @InvocableVariable(
-            label='Content Version Id'
-            description='Send-existing-document path: the Id of an already-generated ContentVersion (068...) the signer will see. Provide this OR Template Id. On this path the signed document is not auto-attached to the record (records audit + status only).'
+            label='Content Version Id (DEPRECATED — ignored)'
+            description='DEPRECATED and ignored as of v3.18. Sending a pre-generated PDF for signature is no longer supported — a flat PDF has no signature tags to place or stamp. Provide a Template Id instead; DocGen renders and tags the document at send time.'
         )
         global Id contentVersionId;
 
@@ -125,9 +125,13 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
         if (req == null) {
             throw new DocGenException('Request is null');
         }
-        if (req.templateId == null && req.contentVersionId == null) {
+        if (req.templateId == null) {
+            // Pre-generated PDF (Content Version) signing was removed (v3.18): a flat PDF
+            // has no parseable signature tags, so it can't drive guided signing or
+            // stamp-back. E-signature always starts from a template now.
             throw new DocGenException(
-                'Provide either a Template Id (snapshot signing) or a Content Version Id (send existing document).'
+                'Template Id is required. Sending a pre-generated document (Content Version) for signature is no ' +
+                'longer supported — provide a Template Id and DocGen will render and tag the document for signing.'
             );
         }
         if (req.relatedRecordId == null) {
@@ -149,27 +153,16 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
             }
 
             String signersJson = JSON.serialize(signerInputs);
-            List<DocGenSignatureSenderController.SignerResult> signerResults;
-            if (req.templateId != null) {
-                // Snapshot signing: snapshot the record data + re-render with a
-                // certificate page on completion (Milestone 2).
-                signerResults = DocGenSignatureSenderController.createTemplateSnapshotRequest(
-                    req.templateId,
-                    req.relatedRecordId,
-                    signersJson,
-                    signingOrder,
-                    req.documentTitleFormat
-                );
-            } else {
-                // Send an already-generated document (Milestone 1).
-                signerResults = DocGenSignatureSenderController.createRequestFromContentVersion(
-                    req.contentVersionId,
-                    req.relatedRecordId,
-                    signersJson,
-                    signingOrder,
-                    req.documentTitleFormat
-                );
-            }
+            // Template-only: snapshot the record data + re-render with a certificate page
+            // on completion. (The pre-generated-PDF path was removed — see the templateId
+            // guard above.)
+            List<DocGenSignatureSenderController.SignerResult> signerResults = DocGenSignatureSenderController.createTemplateSnapshotRequest(
+                req.templateId,
+                req.relatedRecordId,
+                signersJson,
+                signingOrder,
+                req.documentTitleFormat
+            );
 
             // Resolve the created request Id from the first signer (works for both paths).
             if (!signerResults.isEmpty() && signerResults[0].signerId != null) {

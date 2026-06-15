@@ -17,6 +17,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     // the {@Signature_*} preserve-then-stamp lifecycle.
     @TestVisible
     public static Boolean resolveFormFields = false;
+    // Signature placement tags {@Signature_*}: preserved verbatim through the merge
+    // ONLY during a signature send/finalize (set true by mergeTemplateForSignature) so
+    // the signature service can convert them to @@SIG-n@@ sentinels / stamp them after
+    // merge. In normal document generation this stays false and processXml STRIPS the
+    // tags, so a signature template generated as a regular document never leaks raw
+    // "{@Signature_…}" text into the output.
+    @TestVisible
+    public static Boolean preserveSignatureTags = false;
     // Reserved merge-data keys injected into the record data map for the
     // duration of one mergeTemplate call (cleared after use). The signature
     // finalizer uses this to surface collected signer form-field values under
@@ -3324,9 +3332,15 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             Integer tagStartPos = nextTag;
 
             try {
-                // Preserve {@Signature_*} tags — handled by the signature service after merge
+                // {@Signature_*} signing tags. During a signature send/finalize
+                // (preserveSignatureTags) keep them verbatim so the signature service
+                // can sentinel-substitute / stamp them after merge. In normal document
+                // generation, STRIP them so they never render as literal text (the
+                // {@Signature} leak — a generated PDF must not show raw signing tags).
                 if (tagContent.startsWith('@')) {
-                    output += '{' + rawTag + '}';
+                    if (preserveSignatureTags) {
+                        output += '{' + rawTag + '}';
+                    }
                     cursor = tagClose + 1;
                     continue;
                 }
@@ -7776,7 +7790,17 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * Used by the signature flow to pre-compute merge data and render signed PDFs.
      */
     public static Map<String, Object> mergeTemplateForSignature(Id templateId, String recordIdStr) {
-        MergeResult mr = mergeTemplate(templateId, recordIdStr, null, 'PDF');
+        // Keep {@Signature_*} tags through this merge so the signature service can
+        // sentinel-substitute / stamp them; restore the prior value after (normal
+        // generation strips them — see preserveSignatureTags / the {@Signature} leak).
+        Boolean priorPreserve = preserveSignatureTags;
+        preserveSignatureTags = true;
+        MergeResult mr;
+        try {
+            mr = mergeTemplate(templateId, recordIdStr, null, 'PDF');
+        } finally {
+            preserveSignatureTags = priorPreserve;
+        }
 
         if (mr.templateType == 'PowerPoint') {
             throw new DocGenException('Signature PDF generation is only supported for Word and HTML templates.');
