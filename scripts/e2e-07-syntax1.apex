@@ -535,9 +535,11 @@ try {
     System.debug('NESTED CONDITIONAL IN LOOP: FAIL — ' + e.getMessage());
 }
 
-// ===== Signature tag preserved =====
+// ===== Signature tag preserved (strip-in-gen tested in syntax4) =====
 try {
+    DocGenService.preserveSignatureTags = true;
     r = DocGenService.processXmlForTest('<w:t>{@Signature_Buyer}</w:t>', new Map<String, Object>{ 'Name' => 'Test' });
+    DocGenService.preserveSignatureTags = false;
     if (r.contains('{@Signature_Buyer}')) {
         pass++;
         System.debug('SIGNATURE TAG PRESERVED: PASS');
@@ -546,6 +548,7 @@ try {
         System.debug('SIGNATURE TAG PRESERVED: FAIL — ' + r);
     }
 } catch (Exception e) {
+    DocGenService.preserveSignatureTags = false;
     fail++;
     System.debug('SIGNATURE TAG PRESERVED: FAIL — ' + e.getMessage());
 }
