@@ -170,11 +170,10 @@ const COLUMNS = [
 ];
 
 const VERSION_COLUMNS = [
-    { label: 'Version', fieldName: 'VersionNumber', initialWidth: 90 },
+    { label: 'Version', fieldName: 'VersionNumber' },
     {
         label: 'Active',
         fieldName: 'isActiveLabel',
-        initialWidth: 70,
         cellAttributes: {
             class: { fieldName: 'activeClass' }
         }
@@ -195,7 +194,7 @@ const VERSION_COLUMNS = [
     // Body file the version points at — surfaces which underlying ContentVersion
     // generation actually reads (diagnostic for stale/mismatched template bodies).
     // The same CV Id across rows = a metadata-only save reused the prior body.
-    { label: 'File CV Id', fieldName: 'bodyCvId', initialWidth: 170 },
+    { label: 'File CV Id', fieldName: 'bodyCvId' },
     { label: 'File Name', fieldName: 'bodyCvFileName' },
     {
         type: 'button',
