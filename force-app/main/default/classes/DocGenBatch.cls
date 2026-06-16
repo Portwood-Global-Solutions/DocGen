@@ -19,6 +19,18 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
     private Integer heapFailCount = 0;
     private static final Integer MAX_ERROR_LINES = 200;
 
+    // #155 — IDs of records that failed with heap/oversize errors, captured so finish()
+    // can enqueue a Queueable fallback that re-runs each through the giant-query path
+    // (the bulk batch itself cannot launch a Batchable). Stateful — accumulates across
+    // execute() chunks. Capped so a pathological filter can't grow this unbounded; the
+    // overflow count is surfaced in the error log (never silently dropped).
+    @TestVisible
+    private List<Id> oversizedRecordIds = new List<Id>();
+    @TestVisible
+    private Integer oversizedOverflowCount = 0;
+    @TestVisible
+    private static final Integer MAX_FALLBACK_RECORDS = 100;
+
     // Bulk data cache — populated in start(), read in execute()
     public Id dataCacheCvId;
     public String cachedDataJson;
@@ -336,6 +348,12 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         String reason;
         if (e instanceof HeapPressureException || isHeapError(e)) {
             heapFailCount++;
+            // #155 — capture the Id for the giant-query fallback (capped; overflow counted).
+            if (oversizedRecordIds.size() < MAX_FALLBACK_RECORDS) {
+                oversizedRecordIds.add(recordId);
+            } else {
+                oversizedOverflowCount++;
+            }
             reason =
                 'too large for standard bulk generation (too many related rows) — ' +
                 'generate this record individually so it routes through the giant-query path';
@@ -371,8 +389,19 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         if (heapFailCount > 0) {
             lines.add(
                 heapFailCount +
-                    ' record(s) were too large for standard bulk generation — generate those ' +
-                    'individually to use the giant-query path. Details below.'
+                    ' record(s) were too large for standard bulk generation — these are being ' +
+                    'queued automatically for individual giant-query generation (#155). Details below.'
+            );
+        }
+        if (oversizedOverflowCount > 0) {
+            // No silent caps: say plainly how many oversized records exceeded the
+            // auto-recovery cap and still need a manual individual run.
+            lines.add(
+                'Note: only the first ' +
+                    MAX_FALLBACK_RECORDS +
+                    ' oversized record(s) were queued for automatic recovery; ' +
+                    oversizedOverflowCount +
+                    ' more must be generated individually by hand.'
             );
         }
         lines.addAll(errorLog);
@@ -425,6 +454,22 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
                     Error_Count__c = failCount
                 ); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
             }
+        } else if (!oversizedRecordIds.isEmpty()) {
+            // #155 — some records were too large for standard bulk generation. A batch
+            // can't launch a batch, but it can enqueue a Queueable that does: dispatch each
+            // oversized record through the giant-query path. The parent stays 'Recovering'
+            // until DocGenBulkGiantFallbackJob has dispatched them all, then it flips the
+            // job to 'Completed with Errors'. (Merge-mode oversized records are out of
+            // scope — they remain flagged in the log, as before.)
+            status = 'Recovering';
+            update new DocGen_Job__c( // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
+                Id = jobId,
+                Status__c = status,
+                Success_Count__c = successCount,
+                Error_Count__c = failCount,
+                Error_Log__c = buildErrorLog()
+            );
+            System.enqueueJob(new DocGenBulkGiantFallbackJob(jobId, templateId, oversizedRecordIds));
         } else {
             update new DocGen_Job__c( // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
                 Id = jobId,
