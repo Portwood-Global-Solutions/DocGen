@@ -99,8 +99,8 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
     }
 
     @InvocableMethod(
-        label='DocGen: Send Existing Document for Signature'
-        description='Sends an already-generated document (a ContentVersion) for signature on the flat-PDF signing page. Pass the Content Version Id and a collection of Signers. Returns signing URLs.'
+        label='DocGen: Send Existing Document for Signature (Deprecated — use "DocGen: Create Signature Request")'
+        description='DEPRECATED: use "DocGen: Create Signature Request" instead. Kept for existing Flows; now routes through the same unified signing path, so signature placement tags ({@Signature_Role:Order:Type[:inline]}) are honored and the {#Signatures} loop still populates. Pass a Template Id, Related Record Id, and a Signers collection. Returns signing URLs.'
         category='Document Generation'
     )
     global static List<Result> send(List<Request> requests) {
@@ -153,10 +153,13 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
             }
 
             String signersJson = JSON.serialize(signerInputs);
-            // Template-only: snapshot the record data + re-render with a certificate page
-            // on completion. (The pre-generated-PDF path was removed — see the templateId
-            // guard above.)
-            List<DocGenSignatureSenderController.SignerResult> signerResults = DocGenSignatureSenderController.createTemplateSnapshotRequest(
+            // DEPRECATED action — routed through the single canonical entry point so its
+            // behavior is identical to "DocGen: Create Signature Request": placement tags
+            // ({@Signature_Role:Order:Type[:inline]}) are positioned/inline-composited, and
+            // a {#Signatures}-loop template is dispatched to the snapshot render strategy
+            // internally. Previously this called createTemplateSnapshotRequest directly,
+            // which silently dropped {@Signature_*} tags (and :inline). See #NNN.
+            List<DocGenSignatureSenderController.SignerResult> signerResults = DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
                 req.templateId,
                 req.relatedRecordId,
                 signersJson,
