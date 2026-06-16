@@ -436,6 +436,38 @@ private class DocGenControllerTests {
     }
 
     // -----------------------------------------------------------------------
+    // getVersionBodyFileInfo
+    // -----------------------------------------------------------------------
+    @IsTest
+    static void testGetVersionBodyFileInfo() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            ContentVersion cv = new ContentVersion(
+                Title = 'docgen_html_body_test',
+                PathOnClient = 'body.html',
+                VersionData = Blob.valueOf('<html>{Name}</html>'),
+                IsMajorVersion = false
+            );
+            insert cv;
+            String cvId = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1].Id;
+
+            Test.startTest();
+            // Includes a null and a non-Id value to exercise the defensive skip.
+            Map<String, Object> info = DocGenController.getVersionBodyFileInfo(
+                new List<String>{ cvId, null, 'not-an-id' }
+            );
+            Map<String, Object> emptyResult = DocGenController.getVersionBodyFileInfo(new List<String>());
+            Test.stopTest();
+
+            System.assert(info.containsKey(cvId), 'Should return file info keyed by ContentVersion Id');
+            Map<String, Object> meta = (Map<String, Object>) info.get(cvId);
+            System.assertEquals('body.html', meta.get('fileName'), 'fileName should come from PathOnClient');
+            System.assertNotEquals(null, meta.get('versionNumber'), 'versionNumber should be populated');
+            System.assert(emptyResult.isEmpty(), 'Empty input should return an empty map');
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // getObjectOptions (Schema)
     // -----------------------------------------------------------------------
     @IsTest

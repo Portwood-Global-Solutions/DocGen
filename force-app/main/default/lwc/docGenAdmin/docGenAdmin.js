@@ -11,6 +11,7 @@ import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
 import saveTemplate from '@salesforce/apex/DocGenController.saveTemplate';
 import generateDocumentData from '@salesforce/apex/DocGenController.generateDocumentData';
 import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
+import getVersionBodyFileInfo from '@salesforce/apex/DocGenController.getVersionBodyFileInfo';
 import deleteTemplateVersion from '@salesforce/apex/DocGenController.deleteTemplateVersion';
 import generateDocumentParts from '@salesforce/apex/DocGenController.generateDocumentParts';
 import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
@@ -169,11 +170,10 @@ const COLUMNS = [
 ];
 
 const VERSION_COLUMNS = [
-    { label: 'Ver', fieldName: 'VersionNumber', initialWidth: 70 },
+    { label: 'Version', fieldName: 'VersionNumber' },
     {
         label: 'Active',
         fieldName: 'isActiveLabel',
-        initialWidth: 70,
         cellAttributes: {
             class: { fieldName: 'activeClass' }
         }
@@ -191,9 +191,16 @@ const VERSION_COLUMNS = [
         }
     },
     { label: 'Created By', fieldName: 'CreatedByName' },
+    // Body file the version points at — surfaces which underlying ContentVersion
+    // generation actually reads (diagnostic for stale/mismatched template bodies).
+    // The same CV Id across rows = a metadata-only save reused the prior body.
+    { label: 'File CV Id', fieldName: 'bodyCvId' },
+    { label: 'File Name', fieldName: 'bodyCvFileName' },
+    // Action buttons: uniform fixed width + centered so they line up at the right.
     {
         type: 'button',
         initialWidth: 130,
+        cellAttributes: { alignment: 'center' },
         typeAttributes: {
             label: 'Preview',
             name: 'preview',
@@ -203,6 +210,8 @@ const VERSION_COLUMNS = [
     },
     {
         type: 'button',
+        initialWidth: 130,
+        cellAttributes: { alignment: 'center' },
         typeAttributes: {
             label: 'Activate',
             name: 'restore',
@@ -216,7 +225,8 @@ const VERSION_COLUMNS = [
         // Disabled on the active version; the row.disableDelete flag is set in
         // loadVersions() to mirror Is_Active__c.
         type: 'button',
-        initialWidth: 110,
+        initialWidth: 130,
+        cellAttributes: { alignment: 'center' },
         typeAttributes: {
             label: 'Delete',
             name: 'deleteVersion',
@@ -2885,21 +2895,42 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     this.editTemplateWatermarkCvId = null;
                     return;
                 }
-                const total = data.length;
-                this.versions = data.map((v, index) => {
+                this.versions = data.map((v) => {
                     const isActive = v[F.VerIsActive];
                     return {
                         ...v,
-                        VersionNumber: 'v' + (total - index),
+                        // Show the real version record name (e.g. V-0024), not a synthetic index.
+                        VersionNumber: v.Name,
                         CreatedByName: v.CreatedBy ? v.CreatedBy.Name : '',
                         isActiveLabel: isActive ? '✓' : '',
                         activeClass: isActive ? 'slds-text-color_success slds-text-title_bold' : '',
-                        activateVariant: isActive ? 'neutral' : 'brand'
+                        activateVariant: isActive ? 'neutral' : 'brand',
+                        bodyCvId: v[F.VerCvId] || '',
+                        bodyCvFileName: ''
                     };
                 });
                 // Sync watermark CV from the active version so the tab shows current state
                 const active = data.find((v) => v[F.VerIsActive]);
                 this.editTemplateWatermarkCvId = active ? active[F.VerWatermarkCv] || null : null;
+
+                // Enrich with the body ContentVersion's number + filename so the table
+                // shows which underlying file each version points at (diagnostic).
+                const cvIds = data.map((v) => v[F.VerCvId]).filter(Boolean);
+                if (cvIds.length) {
+                    getVersionBodyFileInfo({ contentVersionIds: cvIds })
+                        .then((info) => {
+                            if (!info) {
+                                return;
+                            }
+                            this.versions = this.versions.map((row) => {
+                                const meta = info[row[F.VerCvId]];
+                                return meta ? { ...row, bodyCvFileName: meta.fileName } : row;
+                            });
+                        })
+                        .catch(() => {
+                            // Non-fatal — leave the file columns blank if the lookup fails.
+                        });
+                }
             })
             .catch(() => {
                 this.versions = [];
