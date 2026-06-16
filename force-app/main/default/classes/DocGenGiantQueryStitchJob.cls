@@ -214,10 +214,20 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
                 return;
             }
 
+            // #165 — honor the template's Document_Title_Format__c, matching
+            // DocGenGiantQueryAssembler (v1.90). Stitch-routed documents were
+            // named "<template> - <relationship>" regardless of the configured
+            // format, diverging from the assembler path. Fall back to the legacy
+            // concatenation only when no title format is configured.
+            String baseTitle = DocGenService.computeDocTitle(templateId, recordId);
+            if (String.isBlank(baseTitle)) {
+                baseTitle = templateName + ' - ' + relationshipName;
+            }
+
             // If only 1 part, just rename and link it — no merge needed
             if (parts.size() == 1) {
                 ContentVersion singlePart = parts[0];
-                String docTitle = templateName + ' - ' + relationshipName;
+                String docTitle = baseTitle;
                 ContentVersion finalCv = new ContentVersion(
                     Title = docTitle,
                     PathOnClient = docTitle + '.pdf',
@@ -248,7 +258,7 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
             List<ContentVersion> finalCvs = new List<ContentVersion>();
             Integer partNum = 1;
             for (ContentVersion part : parts) {
-                String docTitle = templateName + ' - ' + relationshipName;
+                String docTitle = baseTitle;
                 if (parts.size() > 1) {
                     docTitle += ' (Page ' + partNum + ' of ' + parts.size() + ')';
                 }
