@@ -2423,6 +2423,10 @@
                         } else {
                             modalMode = 'spot';
                             nameGroup.style.display = '';
+                            // DatePick uses a native date picker (validated — the input only has a
+                            // value once a real date is chosen, so updateSignSubmitState keeps Save
+                            // disabled until then). Every other type uses the free-text input.
+                            nameInput.type = type === 'DatePick' ? 'date' : 'text';
                             if (type === 'Initials') {
                                 titleEl.textContent = 'Add Initials';
                                 subEl.textContent = 'Type your initials for this field.';
@@ -2431,9 +2435,8 @@
                                 nameInput.value = '';
                             } else if (type === 'DatePick') {
                                 titleEl.textContent = 'Select a Date';
-                                subEl.textContent = 'Type the date for this field.';
+                                subEl.textContent = 'Choose the date for this field.';
                                 nameLabel.textContent = 'Date';
-                                nameInput.placeholder = 'e.g., January 1, 2026';
                                 nameInput.value = '';
                             } else {
                                 titleEl.textContent = 'Sign Here';
@@ -2462,6 +2465,8 @@
                         nameGroup.style.display = '';
                         nameLabel.textContent = 'Type your full name to sign';
                         var nameInput = document.getElementById('modal-typed-name');
+                        // Reset to text — a preceding DatePick spot may have left it type="date".
+                        nameInput.type = 'text';
                         nameInput.placeholder = 'e.g., John Smith';
                         nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
                         document.getElementById('modal-consent-checkbox').parentNode.style.display = '';
@@ -2729,6 +2734,8 @@
                             .getElementById('modal-consent-checkbox')
                             .addEventListener('change', updateSignSubmitState);
                         document.getElementById('modal-typed-name').addEventListener('input', updateSignSubmitState);
+                        // Native date inputs (DatePick) fire 'change' on selection, not always 'input'.
+                        document.getElementById('modal-typed-name').addEventListener('change', updateSignSubmitState);
                         document.getElementById('btn-sign-submit').addEventListener('click', handleSignSubmit);
                         // "Save & Next" — guided per-field capture only (shown in spot mode).
                         document.getElementById('btn-sign-submit-next').addEventListener('click', function () {
@@ -2880,6 +2887,18 @@
                         );
                     }
 
+                    // Format a native date input's ISO value (yyyy-mm-dd) like the auto Date stamp
+                    // ("January 1, 2026"). Build a LOCAL date from the parts — new Date('yyyy-mm-dd')
+                    // parses as UTC midnight and can render the prior day in negative timezones.
+                    function formatPickedDate(iso) {
+                        if (!iso) return '';
+                        var p = String(iso).split('-');
+                        if (p.length !== 3) return iso; // not ISO — pass through defensively
+                        var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+                        if (isNaN(d.getTime())) return iso;
+                        return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                    }
+
                     // Guided: persist one placement, mark its chip signed, advance.
                     // openNext: false = "Save" (scroll to next field, don't open it);
                     //           true  = "Save & Next" (save and open the next field's modal).
@@ -2905,8 +2924,11 @@
                             serverValue = 'Signed (drawn)';
                         } else {
                             activeSpot.imageData = null;
-                            activeSpot.value = typed;
-                            serverValue = typed;
+                            // DatePick comes from a native date input as ISO (yyyy-mm-dd); stamp it
+                            // in the same readable form as the auto Date type ("Month D, YYYY").
+                            var captured = type === 'DatePick' ? formatPickedDate(typed) : typed;
+                            activeSpot.value = captured;
+                            serverValue = captured;
                         }
 
                         var saveBtn = document.getElementById('btn-sign-submit');
