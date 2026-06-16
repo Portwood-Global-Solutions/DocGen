@@ -2458,22 +2458,22 @@
                         activeSpot = null;
                         document.getElementById('modal-draw-group').style.display = 'none';
                         document.querySelector('#sign-modal .modal-header h2').textContent = 'Complete Signing';
+                        // Guided flow: every field was already signed individually, so we don't
+                        // re-ask for the signer's name here — it's on the signer record (and is what
+                        // pre-fills each field). Only the electronic-signature consent is needed.
+                        // (The legacy no-placement flow — openSignModal/'pdf' mode — still collects
+                        // the typed name; there the name IS the signature.)
+                        var total = guided && guided.spots ? guided.spots.length : 0;
                         document.querySelector('#sign-modal .modal-subtitle').textContent =
-                            'Confirm your name and consent to finalize all fields.';
-                        var nameGroup = document.getElementById('modal-typed-name').parentNode;
-                        var nameLabel = document.querySelector('label[for="modal-typed-name"]');
-                        nameGroup.style.display = '';
-                        nameLabel.textContent = 'Type your full name to sign';
-                        var nameInput = document.getElementById('modal-typed-name');
-                        // Reset to text — a preceding DatePick spot may have left it type="date".
-                        nameInput.type = 'text';
-                        nameInput.placeholder = 'e.g., John Smith';
-                        nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
+                            (total > 0
+                                ? "You've completed all " + total + ' field' + (total > 1 ? 's' : '') + '. '
+                                : '') + 'Confirm your consent to finalize.';
+                        document.getElementById('modal-typed-name').parentNode.style.display = 'none';
                         document.getElementById('modal-consent-checkbox').parentNode.style.display = '';
                         document.getElementById('modal-consent-checkbox').checked = false;
                         var finalBtn = document.getElementById('btn-sign-submit');
                         finalBtn.className = 'btn btn-brand';
-                        finalBtn.textContent = 'Sign';
+                        finalBtn.textContent = 'Finish & Submit';
                         document.getElementById('btn-sign-submit-next').style.display = 'none';
                         // Form fields were collected up front (before signing) — not here.
                         hideFormFields();
@@ -2792,9 +2792,14 @@
                             var ready = !!(nameVal || DrawPad.hasInk());
                             btn.disabled = !ready;
                             document.getElementById('btn-sign-submit-next').disabled = !ready;
+                        } else if (modalMode === 'final') {
+                            // Guided final step: every field was already signed individually, so
+                            // only the consent affirmation is required (the name comes from the
+                            // signer record — we don't re-ask for it).
+                            btn.disabled = !consentVal;
                         } else {
-                            // 'pdf' (legacy single) and 'final': name + consent. Signer form
-                            // fields (#161) were already collected up front.
+                            // 'pdf' legacy single-modal flow: name + consent (the typed name IS
+                            // the signature). Signer form fields (#161) collected up front.
                             btn.disabled = !(nameVal && consentVal);
                         }
                     }
@@ -2967,9 +2972,15 @@
 
                     // Guided: all spots done — capture consent + finalize the signature.
                     function handleFinalSubmit() {
-                        var typedName = document.getElementById('modal-typed-name').value.trim();
                         var consentGiven = document.getElementById('modal-consent-checkbox').checked;
-                        if (!typedName || !consentGiven) return;
+                        if (!consentGiven) return;
+                        // Name is no longer re-typed here (#183) — use the name already on the
+                        // signer record (what pre-filled each field). Fall back to the input only
+                        // if, somehow, the record has no name.
+                        var typedName =
+                            signerData && signerData.signerName
+                                ? signerData.signerName
+                                : document.getElementById('modal-typed-name').value.trim();
                         // Signer form fields (#161) were collected up front, before signing.
                         var formFieldJson = collectedFormFieldJson;
 
