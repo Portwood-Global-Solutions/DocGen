@@ -1915,6 +1915,7 @@ public without sharing class DocGenSignatureController {
             new Set<String>{
                 'Sequence_Order__c',
                 'Placement_Type__c',
+                'Render_Inline__c',
                 'Status__c',
                 'Signed_Value__c',
                 'Signed_At__c',
@@ -1930,6 +1931,7 @@ public without sharing class DocGenSignatureController {
                 Id,
                 Sequence_Order__c,
                 Placement_Type__c,
+                Render_Inline__c,
                 Status__c,
                 Signed_Value__c,
                 Signed_At__c,
@@ -1948,6 +1950,7 @@ public without sharing class DocGenSignatureController {
             m.put('id', plc.Id);
             m.put('sequence', plc.Sequence_Order__c);
             m.put('type', plc.Placement_Type__c);
+            m.put('renderInline', plc.Render_Inline__c == true);
             m.put('status', plc.Status__c);
             m.put('signedValue', plc.Signed_Value__c);
             m.put('signedAt', plc.Signed_At__c);
@@ -2694,6 +2697,17 @@ public without sharing class DocGenSignatureController {
                     }
                 } catch (Exception titleErr) {
                     System.debug(LoggingLevel.WARN, 'DocGen: signed title format failed: ' + titleErr.getMessage());
+                    // Visible in DocGen_Error_Log__c: when this fails the signed file falls
+                    // back to "<base> - Signed" and the author's Document Title Format is
+                    // silently lost — admins should be able to see why.
+                    DocGenErrorLogger.Entry titleEntry = new DocGenErrorLogger.Entry();
+                    titleEntry.severity = 'Warning';
+                    titleEntry.context = 'Signature Finalize';
+                    titleEntry.operation = 'saveCompositedSignedPdf:titleFormat';
+                    titleEntry.recordId = relatedRecordId == null ? null : String.valueOf(relatedRecordId);
+                    titleEntry.additionalInfo = 'Document_Title_Format__c=' + titleFormat;
+                    titleEntry.cause = titleErr;
+                    DocGenErrorLogger.log(titleEntry);
                 }
             }
             cv.Title = signedTitle;
@@ -2741,6 +2755,29 @@ public without sharing class DocGenSignatureController {
                 System.debug(
                     LoggingLevel.WARN,
                     'DocGen: composited writeback event publish failed: ' + wbEx.getMessage()
+                );
+            }
+
+            // Completion notifications. The typed-name path publishes DocGen_Signature_PDF__e
+            // and DocGenSignaturePdfTrigger sends these; the guided drawn-signature path stores
+            // the composited PDF directly and never fires that event, so the signer never got a
+            // "you're done" email and the sender never got an "all signed" notice (Sarah's #3,
+            // single-signer Flow path). Mirror the trigger here. Same OWA-required, log-and-swallow
+            // contract so a missing Org-Wide Email Address can never block the signer's success.
+            try {
+                DocGenSignatureEmailService.sendAllSignedNotification(signer.Signature_Request__c);
+            } catch (Exception notifEx) {
+                System.debug(
+                    LoggingLevel.WARN,
+                    'DocGen: composited all-signed notification failed: ' + notifEx.getMessage()
+                );
+            }
+            try {
+                DocGenSignatureEmailService.sendSignerCompletionEmails(signer.Signature_Request__c);
+            } catch (Exception signerNotifEx) {
+                System.debug(
+                    LoggingLevel.WARN,
+                    'DocGen: composited signer completion email failed: ' + signerNotifEx.getMessage()
                 );
             }
         }

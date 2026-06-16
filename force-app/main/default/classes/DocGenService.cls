@@ -7654,7 +7654,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 ' FROM ' +
                 objType +
                 ' WHERE Id = :recordId LIMIT 1';
-            List<SObject> rows = Database.query(soql);
+            // Bypass sharing for the title field read. The signed-PDF finalize runs as
+            // the GUEST signer, who can't see the related record under this class's
+            // `with sharing`, so {Name}/{Field} title tokens resolved blank while {Today}
+            // (no query) still worked — the file saved as "<base> - Signed" missing the
+            // name (Sarah's #2). The document body is already merged in system context,
+            // so titling from the same fields is not a new disclosure.
+            List<SObject> rows = new TitleRecordReader().query(soql, recordId);
             if (rows.isEmpty()) {
                 return out;
             }
@@ -7687,6 +7693,20 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             System.debug(LoggingLevel.WARN, 'loadRecordDataForTitle failed for ' + recordId + ': ' + e.getMessage());
         }
         return out;
+    }
+
+    /**
+     * `without sharing` reader for document-title field resolution so the read runs
+     * in system sharing context even when the caller (the guest signed-PDF finalize)
+     * cannot see the record under this class's `with sharing`. Sharing is governed by
+     * the class where the SOQL executes, so the read must live here, not in the caller.
+     */
+    private without sharing class TitleRecordReader {
+        public List<SObject> query(String soql, Id recordId) {
+            // recordId is bound via the :recordId reference inside soql.
+            /* code-analyzer-suppress ApexFlsViolation */
+            return Database.query(soql); // NOPMD — title field read, package-internal, sharing-bypassed by design
+        }
     }
 
     /**

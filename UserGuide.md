@@ -1701,11 +1701,13 @@ See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:
 {@Signature_Buyer:1:Date}           v3 — auto-filled signed date
 {@Signature_Buyer:1:DatePick}       v3 — user-chosen date
 {@Signature_Loan_Officer:2:Full}    Role names with underscores for multi-word
+{@Signature_Buyer:1:Full:inline}    v3 — compact in-place mark, no stamp card (tight layouts)
 ```
 
 - **Role**: any string (Buyer, Seller, Witness, Loan_Officer, etc.). Underscores become spaces in the UI.
 - **Order**: sequence number per-role (optional, defaults to 1). Used for sequential signing and multi-placement per signer.
 - **Type**: `Full` | `Initials` | `Date` | `DatePick` (optional, defaults to `Full`).
+- **Style** (optional): add `:inline` as a final suffix (e.g. `{@Signature_Buyer:1:Full:inline}`, `{@Signature_Buyer:1:Date:inline}`) to render a **compact in-place mark** instead of the stamp card. See [§10.7.2](#1072-stamp-card-vs-inline-how-a-signature-renders).
 
 Pre-signing, tags are preserved in the output (not replaced). Post-signing, they're stamped with the signer's typed name or signed date + a subtle "Electronically signed by X on DATE" verification line.
 
@@ -2065,7 +2067,7 @@ Typed-name electronic signatures with PIN verification, audit trail, packets, an
 6. Pick signing order: **Parallel** (all get emails simultaneously), **Sequential** (each signer emailed only after the previous completes), or **Single** (an explicit one-signer document — behaves like Parallel for delivery).
 7. Click **Send**. Each signer receives a branded invitation email.
 
-> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern.
+> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern. If your layout is tight and you'd rather skip the card entirely, append `:inline` to the tag — see [§10.7.2](#1072-stamp-card-vs-inline-how-a-signature-renders).
 
 > **Triggering from Flow.** The **DocGen: Create Signature Request** invocable action gives you the exact same guided signing experience as the Send-for-Signature UI — pass a Template Id, Related Record Id, and a collection of signers. As long as the template has `{@Signature_…}` tags, signers walk the guided field-to-field flow and the signed PDF is stamped and named from your template's **Document Title Format**.
 
@@ -2085,6 +2087,15 @@ Useful for contract bundles (MSA + SOW + NDA), onboarding packets, etc.
 
 - **Parallel**: everyone gets the invite right away. First to sign = first done. Good for lightweight approvals.
 - **Sequential**: signers are emailed in order (by `Sort_Order__c`). Next signer is automatically emailed when the previous signs. Good for hierarchical approvals (employee → manager → VP → CFO).
+- **Single**: an explicit one-signer document. Behaves like Parallel for delivery, but says clearly that only one person signs.
+
+> **Upgrading from an older version? Add the `Single` value to the picklist.** The **Single** option was added to the **Signing Order** picklist (`Signing_Order__c` on **DocGen Signature Request**) after the package's first release. Salesforce does **not** push new values into a managed package's **restricted** picklists on upgrade — only **fresh installs** receive them automatically. So if your Flow (or process) sets Signing Order to `Single` and you upgraded from an earlier version, the insert fails with:
+>
+> ```
+> INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST, Signing Order: bad value for restricted picklist field: Single
+> ```
+>
+> **One-time fix (admin):** Setup → Object Manager → **DocGen Signature Request** → Fields & Relationships → **Signing Order** → under Values, **New** → add `Single` → Save. The error clears immediately; no package change is needed. (`Parallel` and `Sequential` shipped with the original release, so they're already present.)
 
 ### 10.5 PIN verification
 
@@ -2132,7 +2143,26 @@ For templates that use `{@Signature_Role:Order:Type}` placement tags, the PDF-vi
 
 Created via `createGuidedPdfSignatureRequest` (HTML templates).
 
-> **Authoring tip — give signature fields room.** A mark stamps exactly where its tag sits, so place `{@Signature_Role:Order:Type}` tags **on their own line or in a right-hand cell** with whitespace around them — not inline mid-paragraph — or the mark will overlap nearby text. For initials, use a dedicated line like `Initials: {@Signature_Buyer:1:Initials}`. This mirrors how every e-sign tool reserves space for a signature block.
+> **Authoring tip — give signature fields room.** A mark stamps exactly where its tag sits, so place `{@Signature_Role:Order:Type}` tags **on their own line or in a right-hand cell** with whitespace around them — not inline mid-paragraph — or the mark will overlap nearby text. For initials, use a dedicated line like `Initials: {@Signature_Buyer:1:Initials}`. This mirrors how every e-sign tool reserves space for a signature block. If your layout is tight and you don't want a card at all, use the [`:inline` style](#1072-stamp-card-vs-inline-how-a-signature-renders).
+
+### 10.7.2 Stamp card vs. inline — how a signature renders
+
+When a signer finishes, each field is composited onto the real PDF in one of two styles:
+
+- **Stamp card (default).** A DocuSign-style block: the drawn or typed ink, an opaque white backdrop, a brand-blue border + accent bar, and a small caption (`Signed by <name> · <date> · Portwood DocGen`). It's deliberately a little bigger than the field line, so it needs a bit of whitespace. The renderer is **whitespace-aware** — it reads the text around the tag and grows the card into whichever side (above/below) has more room, so it doesn't cover the line above or a label below. If **neither** side has room (a tag dropped mid-sentence), it **automatically** degrades to the inline mark below so it never covers your text. This is why the authoring tip above says to give the tag its own line or cell — the card looks best with room to breathe.
+- **Inline mark (opt-in, or the auto-fallback).** Just the ink — the drawn signature/initials image, or the typed name in a signature font — sized to the line height, with **no card, border, or caption**. It occupies only the field's own footprint, so it can sit right after a label (`Member Signature: {@Signature_Member:1:Full:inline}`) without overlapping it. Date fields already render as plain inline text and are unaffected.
+
+**Force inline rendering** by adding `:inline` as the final suffix on the tag:
+
+```
+Member Signature: {@Signature_Member:1:Full:inline}     ← compact ink, no card
+Date: {@Signature_Member:1:Date:inline}                 ← (date is already inline)
+Initials: {@Signature_Member:1:Initials:inline}
+```
+
+Use `:inline` when your template is space-constrained or you simply prefer the signature to land exactly where the field is, with no surrounding card. Leave it off to get the full attributed stamp card (recommended for formal contracts, where the caption doubles as a visible audit cue). Either way, the full audit trail (signer, timestamp, IP, consent, document hash) is always recorded on the **Certificate of Completion** page — the on-page caption is presentation only.
+
+> **Why a card at all?** The caption (`Signed by … · Portwood DocGen`) makes a signed document self-evidently signed at a glance, the way commercial e-sign tools stamp their marks. `:inline` trades that visible cue for a tighter footprint; the legal audit record is identical.
 
 ### 10.8 Reminders
 

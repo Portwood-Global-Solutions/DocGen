@@ -2140,12 +2140,21 @@
                                                         ? signerData.signerName
                                                         : typedName || '';
                                                 var fullLabel = 'Signed by ' + (who || '—') + '   ·   ' + capShort;
+                                                // Author opted this tag into compact in-place rendering
+                                                // ({@Signature_…:inline}) → draw just the ink at line height,
+                                                // no stamp card, so it never covers an adjacent label in a
+                                                // tight template. The auto-fallback (no-whitespace) still
+                                                // applies to non-inline tags inside drawStampCard.
+                                                var inlineMode = !!(spot.placement && spot.placement.renderInline);
                                                 if (spot.imageData) {
                                                     var isInitials = spot.placement.type === 'Initials';
                                                     p = doc
                                                         .embedPng(dataUrlToBytes(spot.imageData))
                                                         .then(function (png) {
-                                                            if (isInitials) {
+                                                            if (inlineMode) {
+                                                                // Drawn mark, in-place (no card).
+                                                                markW = drawInlineMark(page, { png: png }, rect);
+                                                            } else if (isInitials) {
                                                                 // Drawn initials → compact stamp card.
                                                                 markW = drawStampCard(
                                                                     page,
@@ -2169,7 +2178,10 @@
                                                     var text = spot.value || spot.placement.signedValue || '';
                                                     if (!text) return;
                                                     var type = spot.placement.type;
-                                                    if (type === 'Full') {
+                                                    if (inlineMode && (type === 'Full' || type === 'Initials')) {
+                                                        // Typed signature/initials, in-place (no card).
+                                                        markW = drawInlineMark(page, { text: text }, rect);
+                                                    } else if (type === 'Full') {
                                                         // Typed signature → same stamp card, name as ink.
                                                         markW = drawStampCard(
                                                             page,

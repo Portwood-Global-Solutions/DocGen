@@ -367,6 +367,11 @@ public with sharing class DocGenSignatureEmailService {
             }
         } catch (Exception e) {
             System.debug(LoggingLevel.WARN, 'DocGen: Signer completion emails failed: ' + e.getMessage());
+            // Surface in DocGen_Error_Log__c, not just the debug log — a silently failed
+            // signer "you're done" email is exactly the symptom admins can't otherwise see
+            // ("my signer isn't getting the completion email"). Email_Status__c on the
+            // request captures the OWA-missing case; this captures send/exception failures.
+            logSignatureEmailFailure('sendSignerCompletionEmails', requestId, e);
         }
     }
 
@@ -481,7 +486,23 @@ public with sharing class DocGenSignatureEmailService {
             Messaging.sendEmail(new List<Messaging.SingleEmailMessage>{ email }, false);
         } catch (Exception e) {
             System.debug(LoggingLevel.WARN, 'DocGen: Sender notification failed: ' + e.getMessage());
+            logSignatureEmailFailure('sendSenderNotification', requestId, e);
         }
+    }
+
+    /**
+     * Records a swallowed signature-email failure to DocGen_Error_Log__c so admins can
+     * see it on the Error Log tab instead of only in a debug log. Best-effort — the
+     * logger itself never throws — so it can't break the signing/finalize that calls it.
+     */
+    private static void logSignatureEmailFailure(String operation, Id requestId, Exception cause) {
+        DocGenErrorLogger.Entry entry = new DocGenErrorLogger.Entry();
+        entry.severity = 'Warning';
+        entry.context = 'Signature Email';
+        entry.operation = operation;
+        entry.recordId = requestId == null ? null : String.valueOf(requestId);
+        entry.cause = cause;
+        DocGenErrorLogger.log(entry);
     }
 
     /**

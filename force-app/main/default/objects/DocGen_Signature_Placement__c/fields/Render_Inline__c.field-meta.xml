@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Render_Inline__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description
+    >When true, the guided-PDF signer renders this placement as a compact in-place mark (just the ink at line height) instead of the DocuSign-style stamp card. Set from an :inline style suffix on the placement tag, e.g. {@Signature_Buyer:1:Full:inline}. For tight templates where the stamp card would overlap an adjacent label.</description>
+    <externalId>false</externalId>
+    <label>Render Inline</label>
+    <type>Checkbox</type>
+</CustomField>
