@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.16.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.20.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -18,10 +18,10 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 ## Install
 
 ```bash
-sf package install --package 04tVx000000nZ4fIAE --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000nij3IAA --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nZ4fIAE) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nZ4fIAE)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nij3IAA) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nij3IAA)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -371,9 +371,9 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.16.0 — Consolidated guided signing**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.20.0 — E-signature reliability + inline signatures**.
 
-See [CHANGELOG.md](CHANGELOG.md) for full version history.
+See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 ---
 
@@ -444,7 +444,11 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.16.0 | **Latest (Released)**                   | `04tVx000000nZ4fIAE` |
+| v3.20.0 | **Latest (Released)**                   | `04tVx000000nij3IAA` |
+| v3.19.0 | Previous                                | `04tVx000000ncSLIAY` |
+| v3.18.0 | Previous                                | `04tVx000000nbBJIAY` |
+| v3.17.0 | Previous                                | `04tVx000000nZJBIA2` |
+| v3.16.0 | Previous                                | `04tVx000000nZ4fIAE` |
 | v3.15.0 | Previous                                | `04tVx000000nZ33IAE` |
 | v3.14.0 | Previous                                | `04tVx000000nYgTIAU` |
 | v3.13.0 | Previous                                | `04tVx000000nYdFIAU` |
