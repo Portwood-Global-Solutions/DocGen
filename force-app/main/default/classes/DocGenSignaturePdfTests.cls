@@ -564,6 +564,101 @@ private class DocGenSignaturePdfTests {
     }
 
     @isTest
+    static void testGuidedEntry_loopOnlyTemplate_routesToSnapshot() {
+        // Consolidation: the single canonical entry (createGuidedPdfSignatureRequest)
+        // dispatches a {#Signatures}-loop template that has NO {@Signature_*} placement
+        // tags to the snapshot render strategy, so the variable-signer loop still
+        // repopulates with signed rows at completion (the guided frozen-body path can't).
+        // Backwards-compat for loop templates after both Flow actions were unified.
+        Account acc = new Account(Name = 'Loop Co', Industry = 'Technology');
+        insert acc;
+        Id templateId = createHtmlSignatureTemplate(
+            '<html><body><h1>{Name}</h1>{#Signatures}<div>{Name} {Date}</div>{/Signatures}</body></html>'
+        );
+        String signersJson = JSON.serialize(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{
+                    'signerName' => 'Loop Signer',
+                    'signerEmail' => 'loop@test.com',
+                    'roleName' => 'Signer'
+                }
+            }
+        );
+
+        Test.startTest();
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
+            templateId,
+            acc.Id,
+            signersJson,
+            'Parallel',
+            null
+        );
+        Test.stopTest();
+
+        DocGen_Signature_Request__c req = [
+            SELECT Render_Data_Snapshot__c, Frozen_Document__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :templateId
+            ORDER BY CreatedDate DESC
+            LIMIT 1
+        ];
+        System.assert(
+            String.isNotBlank(req.Render_Data_Snapshot__c),
+            'Loop-only template must route to the snapshot strategy so the loop repopulates at completion'
+        );
+        System.assert(String.isBlank(req.Frozen_Document__c), 'Snapshot strategy does not freeze a sentinel body');
+    }
+
+    @isTest
+    static void testGuidedEntry_tagTemplate_staysGuidedAndKeepsInline() {
+        // A {@Signature_*} template stays on the guided sentinel path and carries the
+        // :inline flag onto the placement — Sarah's waiver fix (:inline was previously
+        // dropped when the deprecated Flow action sent through the snapshot path).
+        Account acc = new Account(Name = 'Tag Co');
+        insert acc;
+        Id templateId = createHtmlSignatureTemplate(
+            '<html><body><p>Sign: {@Signature_Signer:1:Full:inline}</p></body></html>'
+        );
+        String signersJson = JSON.serialize(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{
+                    'signerName' => 'Tag Signer',
+                    'signerEmail' => 'tag@test.com',
+                    'roleName' => 'Signer'
+                }
+            }
+        );
+
+        Test.startTest();
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(
+            templateId,
+            acc.Id,
+            signersJson,
+            'Parallel',
+            null
+        );
+        Test.stopTest();
+
+        DocGen_Signature_Request__c req = [
+            SELECT Render_Data_Snapshot__c, Frozen_Document__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :templateId
+            ORDER BY CreatedDate DESC
+            LIMIT 1
+        ];
+        System.assert(String.isNotBlank(req.Frozen_Document__c), 'Tag template stays on the guided frozen-body path');
+        System.assert(String.isBlank(req.Render_Data_Snapshot__c), 'Guided path does not snapshot record data');
+
+        DocGen_Signature_Placement__c plc = [
+            SELECT Render_Inline__c
+            FROM DocGen_Signature_Placement__c
+            WHERE Signature_Request__c = :req.Id AND Placement_Type__c = 'Full'
+            LIMIT 1
+        ];
+        System.assertEquals(true, plc.Render_Inline__c, ':inline flag must reach the placement on the guided path');
+    }
+
+    @isTest
     static void testSavePdfSignature_snapshotBacked_leavesInProgressForFinalizer() {
         // A snapshot-backed request must stay 'In Progress' after savePdfSignature so the
         // platform-event trigger can enqueue the finalizer (which sets 'Signed'). This is the

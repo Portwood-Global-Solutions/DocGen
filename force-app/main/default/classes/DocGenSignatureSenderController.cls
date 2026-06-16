@@ -146,6 +146,19 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     /**
+     * True when the template body contains the reserved {#Signatures} variable-signer
+     * loop block. Drives the canonical-entry dispatch in createGuidedPdfSignatureRequest:
+     * a loop-only template (no {@Signature_*} tags) routes to the snapshot render
+     * strategy, because the guided frozen-body path freezes the loop empty at send and
+     * can't repopulate it with signed rows at completion.
+     */
+    @TestVisible
+    private static Boolean templateHasSignaturesLoopBlock(Id templateId) {
+        String plain = extractTemplatePlainText(templateId);
+        return plain != null && plain.contains('{#Signatures}');
+    }
+
+    /**
      * Extracts concatenated plain text from a template's pre-decomposed document.xml.
      * Reads from stored XML ContentVersions — no ZIP decompression needed.
      */
@@ -831,6 +844,12 @@ public with sharing class DocGenSignatureSenderController {
     /**
      * Milestone 2 — "send a template for signature with a data snapshot".
      *
+     * NOTE: no longer a primary entry point. createGuidedPdfSignatureRequest is the
+     * single canonical send method; it dispatches here ONLY for templates that use the
+     * {#Signatures} variable-signer loop block and carry no {@Signature_*} placement
+     * tags, because the loop needs this snapshot/re-render strategy to repopulate signed
+     * rows at completion. Still @AuraEnabled (a thin direct caller + its test remain).
+     *
      * Captures the template's resolved merge data for the record as JSON at
      * send-time (Render_Data_Snapshot__c) and generates the viewing PDF from that
      * SAME snapshot, so what the signer reviews is byte-identical to what the
@@ -1110,6 +1129,48 @@ public with sharing class DocGenSignatureSenderController {
             signerInputs.add((Map<String, Object>) item);
         }
 
+        // ── Single canonical signature-send entry point ─────────────────────────
+        // Every send action (the runner LWC, "DocGen: Create Signature Request", and
+        // the deprecated "DocGen: Send Existing Document for Signature") funnels
+        // through here. Dispatch by template shape:
+        //   • {@Signature_*} placement tags  → guided sentinel path below (inline-aware)
+        //   • tag-less                        → guided synthetic "Signatures" block (#170)
+        //   • {#Signatures} loop block ONLY   → snapshot render strategy (this branch)
+        // The {#Signatures} variable-signer loop is repopulated with the SIGNED rows at
+        // completion (buildSignerLoopData). The guided frozen-body path freezes the loop
+        // empty at send and can't reproduce that, so loop-only templates must use the
+        // snapshot mechanism to stay backwards-compatible. A template that has BOTH tags
+        // and a loop block keeps the guided path (tags win); the loop renders empty — a
+        // rare, documented edge.
+        List<PlacementInfo> placements = getTemplateSignaturePlacements(templateId);
+        if (placements.isEmpty() && templateHasSignaturesLoopBlock(templateId)) {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template__c.sObjectType,
+                new Set<String>{ 'Base_Object_API__c', 'Query_Config__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template__c> shape = [
+                SELECT Base_Object_API__c, Query_Config__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            if (
+                !shape.isEmpty() &&
+                String.isNotBlank(shape[0].Base_Object_API__c) &&
+                String.isNotBlank(shape[0].Query_Config__c)
+            ) {
+                return createTemplateSnapshotRequest(
+                    templateId,
+                    relatedRecordId,
+                    signersJson,
+                    signingOrder,
+                    documentTitleFormat
+                );
+            }
+        }
+
         // Merge the template against the live record (point-in-time body).
         Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
         String templateType = (String) mergeData.get('templateType');
@@ -1122,7 +1183,6 @@ public with sharing class DocGenSignatureSenderController {
             body = (String) mergeData.get('documentXml');
         }
 
-        List<PlacementInfo> placements = getTemplateSignaturePlacements(templateId);
         if (placements.isEmpty()) {
             // Option (b) for tag-less legacy templates (#170): synthesize a "Signatures"
             // block (one Full + Date per signer) and append it to the merged body so the
