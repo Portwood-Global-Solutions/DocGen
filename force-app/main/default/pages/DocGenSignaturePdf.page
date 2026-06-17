@@ -838,6 +838,18 @@
                         <button id="btn-sign-submit" class="btn btn-brand" type="button" disabled="disabled">
                             Sign
                         </button>
+                        <!-- Guided per-field capture only: "Save & Next" saves and opens the
+                             next field; the relabeled "Save" (btn-sign-submit) saves and scrolls
+                             to the next field without opening it. Hidden in final/fields modes. -->
+                        <button
+                            id="btn-sign-submit-next"
+                            class="btn btn-brand"
+                            type="button"
+                            style="display: none"
+                            disabled="disabled"
+                        >
+                            Save &amp; Next
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1567,7 +1579,9 @@
                         // Replace the single-modal click with guided navigation.
                         var freshBtn = btn.cloneNode(true);
                         btn.parentNode.replaceChild(freshBtn, btn);
-                        freshBtn.addEventListener('click', advanceGuided);
+                        freshBtn.addEventListener('click', function () {
+                            advanceGuided(true);
+                        });
 
                         refreshGuidedStatus();
                     }
@@ -1633,22 +1647,63 @@
                         }
                     }
 
-                    // Scroll to and (for non-Date types) open capture for the next pending spot.
-                    function advanceGuided() {
+                    // Move to the next pending spot. openNext controls the two paces:
+                    //   openNext=true  ("Save & Next" / "Start Signing" / "Next Field"): scroll to
+                    //     the next field AND open its capture modal (Date spots auto-fill and the
+                    //     walk continues), or open the final submit when none remain — fast path.
+                    //   openNext=false ("Save" / a direct chip click on a Date): scroll to the next
+                    //     field and highlight it, but DON'T open its modal, so the signer can read
+                    //     before acting — deliberate path. They click the chip or "Next Field" next.
+                    function advanceGuided(openNext) {
                         if (!guided) return;
                         // Form fields first — collect them before the signer signs anything.
                         if (hasPendingFormFields()) {
-                            openFormFieldsStep(advanceGuided);
+                            openFormFieldsStep(function () {
+                                advanceGuided(openNext);
+                            });
                             return;
                         }
                         var pending = firstPendingIndex();
                         if (pending < 0) {
-                            openFinalSubmit();
+                            // All fields done — only the fast path auto-opens the final submit;
+                            // the deliberate path leaves the "Finish & Submit" button for the signer.
+                            if (openNext) openFinalSubmit();
                             return;
                         }
                         var spot = guided.spots[pending];
                         DocGenPdfViewer.scrollToChip(spot.chip);
-                        openPlacementCapture(spot);
+                        if (openNext) {
+                            openPlacementCapture(spot, false, true);
+                        }
+                        // else: scroll-only. refreshGuidedStatus (called by the caller) has already
+                        // marked this chip 'current'; the signer opens it when ready to sign.
+                    }
+
+                    // Finalize an auto-populated Date placement without a modal: mirrors the
+                    // Date branch of handleSpotSubmit (empty value — the server/composite stamp
+                    // today's date), then advances at the caller's pace (openNext). Falls back to
+                    // the manual modal on error so a failed call never strands the signer.
+                    function autoCompleteDateSpot(spot, openNext) {
+                        spot.imageData = null;
+                        spot.value = '';
+                        Visualforce.remoting.Manager.invokeAction(
+                            '{!$RemoteAction.DocGenSignatureController.signPlacement}',
+                            token,
+                            spot.placement.id,
+                            '',
+                            function (placements, event) {
+                                if (!event.status) {
+                                    // Don't strand the signer — show the manual modal
+                                    // (forceModal=true so it doesn't loop back to auto).
+                                    openPlacementCapture(spot, true, openNext);
+                                    return;
+                                }
+                                syncGuidedFromPlacements(placements);
+                                refreshGuidedStatus();
+                                advanceGuided(openNext);
+                            },
+                            { escape: false }
+                        );
                     }
 
                     // ===== byte helpers (base64 <-> Uint8Array) for pdf-lib =====
@@ -2307,9 +2362,39 @@
                             });
                     }
 
-                    function openPlacementCapture(spot) {
+                    function openPlacementCapture(spot, forceModal, openNext) {
                         activeSpot = spot;
                         var type = spot.placement.type;
+
+                        // Date placements are auto-stamped with today's date and need no signer
+                        // input. Complete them silently (no confirm-only modal) from EVERY entry
+                        // point — the guided auto-walk and a direct chip click alike — then move
+                        // to the next pending field. DatePick still prompts (the signer types a
+                        // date). forceModal is the error-fallback escape hatch from
+                        // autoCompleteDateSpot, so a failed auto-call can still show the modal.
+                        if (type === 'Date' && !forceModal) {
+                            autoCompleteDateSpot(spot, openNext);
+                            return;
+                        }
+
+                        // Two-button capture: "Save & Next" (brand, primary) saves and opens the
+                        // next field; "Save" (secondary) saves and scrolls to the next field
+                        // without opening it. The error-fallback Date modal keeps a single button.
+                        var saveBtn = document.getElementById('btn-sign-submit');
+                        var nextBtn = document.getElementById('btn-sign-submit-next');
+                        if (type === 'Date') {
+                            // forceModal error fallback — single confirm button, no "next" variant.
+                            saveBtn.className = 'btn btn-brand';
+                            saveBtn.textContent = 'Add Date';
+                            nextBtn.style.display = 'none';
+                        } else {
+                            saveBtn.className = 'btn';
+                            saveBtn.textContent = 'Save';
+                            nextBtn.className = 'btn btn-brand';
+                            nextBtn.textContent = 'Save & Next';
+                            nextBtn.style.display = '';
+                        }
+
                         var titleEl = document.querySelector('#sign-modal .modal-header h2');
                         var subEl = document.querySelector('#sign-modal .modal-subtitle');
                         var nameGroup = document.getElementById('modal-typed-name').parentNode;
@@ -2338,6 +2423,10 @@
                         } else {
                             modalMode = 'spot';
                             nameGroup.style.display = '';
+                            // DatePick uses a native date picker (validated — the input only has a
+                            // value once a real date is chosen, so updateSignSubmitState keeps Save
+                            // disabled until then). Every other type uses the free-text input.
+                            nameInput.type = type === 'DatePick' ? 'date' : 'text';
                             if (type === 'Initials') {
                                 titleEl.textContent = 'Add Initials';
                                 subEl.textContent = 'Type your initials for this field.';
@@ -2346,9 +2435,8 @@
                                 nameInput.value = '';
                             } else if (type === 'DatePick') {
                                 titleEl.textContent = 'Select a Date';
-                                subEl.textContent = 'Type the date for this field.';
+                                subEl.textContent = 'Choose the date for this field.';
                                 nameLabel.textContent = 'Date';
-                                nameInput.placeholder = 'e.g., January 1, 2026';
                                 nameInput.value = '';
                             } else {
                                 titleEl.textContent = 'Sign Here';
@@ -2370,18 +2458,23 @@
                         activeSpot = null;
                         document.getElementById('modal-draw-group').style.display = 'none';
                         document.querySelector('#sign-modal .modal-header h2').textContent = 'Complete Signing';
+                        // Guided flow: every field was already signed individually, so we don't
+                        // re-ask for the signer's name here — it's on the signer record (and is what
+                        // pre-fills each field). Only the electronic-signature consent is needed.
+                        // (The legacy no-placement flow — openSignModal/'pdf' mode — still collects
+                        // the typed name; there the name IS the signature.)
+                        var total = guided && guided.spots ? guided.spots.length : 0;
                         document.querySelector('#sign-modal .modal-subtitle').textContent =
-                            'Confirm your name and consent to finalize all fields.';
-                        var nameGroup = document.getElementById('modal-typed-name').parentNode;
-                        var nameLabel = document.querySelector('label[for="modal-typed-name"]');
-                        nameGroup.style.display = '';
-                        nameLabel.textContent = 'Type your full name to sign';
-                        var nameInput = document.getElementById('modal-typed-name');
-                        nameInput.placeholder = 'e.g., John Smith';
-                        nameInput.value = signerData && signerData.signerName ? signerData.signerName : '';
+                            (total > 0
+                                ? "You've completed all " + total + ' field' + (total > 1 ? 's' : '') + '. '
+                                : '') + 'Confirm your consent to finalize.';
+                        document.getElementById('modal-typed-name').parentNode.style.display = 'none';
                         document.getElementById('modal-consent-checkbox').parentNode.style.display = '';
                         document.getElementById('modal-consent-checkbox').checked = false;
-                        document.getElementById('btn-sign-submit').textContent = 'Sign';
+                        var finalBtn = document.getElementById('btn-sign-submit');
+                        finalBtn.className = 'btn btn-brand';
+                        finalBtn.textContent = 'Finish & Submit';
+                        document.getElementById('btn-sign-submit-next').style.display = 'none';
                         // Form fields were collected up front (before signing) — not here.
                         hideFormFields();
                         showModalMsg('', 'info');
@@ -2609,7 +2702,10 @@
                         showFormFields();
                         var c = document.getElementById('modal-form-fields');
                         if (c) c.style.display = '';
-                        document.getElementById('btn-sign-submit').textContent = 'Continue';
+                        var fieldsBtn = document.getElementById('btn-sign-submit');
+                        fieldsBtn.className = 'btn btn-brand';
+                        fieldsBtn.textContent = 'Continue';
+                        document.getElementById('btn-sign-submit-next').style.display = 'none';
                         showModalMsg('', 'info');
                         updateSignSubmitState();
                         document.getElementById('sign-modal').style.display = '';
@@ -2638,7 +2734,13 @@
                             .getElementById('modal-consent-checkbox')
                             .addEventListener('change', updateSignSubmitState);
                         document.getElementById('modal-typed-name').addEventListener('input', updateSignSubmitState);
+                        // Native date inputs (DatePick) fire 'change' on selection, not always 'input'.
+                        document.getElementById('modal-typed-name').addEventListener('change', updateSignSubmitState);
                         document.getElementById('btn-sign-submit').addEventListener('click', handleSignSubmit);
+                        // "Save & Next" — guided per-field capture only (shown in spot mode).
+                        document.getElementById('btn-sign-submit-next').addEventListener('click', function () {
+                            handleSpotSubmit(true);
+                        });
                         DrawPad.init();
                     }
 
@@ -2685,11 +2787,19 @@
                             btn.disabled = !validateFormFields().valid;
                         } else if (modalMode === 'spot') {
                             // Per-spot capture: a typed value OR a drawn signature is enough
-                            // (Date types pre-enable in openPlacementCapture).
-                            btn.disabled = !(nameVal || DrawPad.hasInk());
+                            // (Date types pre-enable in openPlacementCapture). Both the "Save" and
+                            // "Save & Next" buttons share the same enablement.
+                            var ready = !!(nameVal || DrawPad.hasInk());
+                            btn.disabled = !ready;
+                            document.getElementById('btn-sign-submit-next').disabled = !ready;
+                        } else if (modalMode === 'final') {
+                            // Guided final step: every field was already signed individually, so
+                            // only the consent affirmation is required (the name comes from the
+                            // signer record — we don't re-ask for it).
+                            btn.disabled = !consentVal;
                         } else {
-                            // 'pdf' (legacy single) and 'final': name + consent. Signer form
-                            // fields (#161) were already collected up front.
+                            // 'pdf' legacy single-modal flow: name + consent (the typed name IS
+                            // the signature). Signer form fields (#161) collected up front.
                             btn.disabled = !(nameVal && consentVal);
                         }
                     }
@@ -2721,7 +2831,8 @@
 
                     function handleSignSubmit() {
                         if (modalMode === 'spot') {
-                            handleSpotSubmit();
+                            // btn-sign-submit is the "Save" action (scroll-only advance).
+                            handleSpotSubmit(false);
                             return;
                         }
                         if (modalMode === 'final') {
@@ -2781,8 +2892,22 @@
                         );
                     }
 
+                    // Format a native date input's ISO value (yyyy-mm-dd) like the auto Date stamp
+                    // ("January 1, 2026"). Build a LOCAL date from the parts — new Date('yyyy-mm-dd')
+                    // parses as UTC midnight and can render the prior day in negative timezones.
+                    function formatPickedDate(iso) {
+                        if (!iso) return '';
+                        var p = String(iso).split('-');
+                        if (p.length !== 3) return iso; // not ISO — pass through defensively
+                        var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+                        if (isNaN(d.getTime())) return iso;
+                        return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                    }
+
                     // Guided: persist one placement, mark its chip signed, advance.
-                    function handleSpotSubmit() {
+                    // openNext: false = "Save" (scroll to next field, don't open it);
+                    //           true  = "Save & Next" (save and open the next field's modal).
+                    function handleSpotSubmit(openNext) {
                         if (!activeSpot) return;
                         var type = activeSpot.placement.type;
                         var typed = document.getElementById('modal-typed-name').value.trim();
@@ -2804,13 +2929,20 @@
                             serverValue = 'Signed (drawn)';
                         } else {
                             activeSpot.imageData = null;
-                            activeSpot.value = typed;
-                            serverValue = typed;
+                            // DatePick comes from a native date input as ISO (yyyy-mm-dd); stamp it
+                            // in the same readable form as the auto Date type ("Month D, YYYY").
+                            var captured = type === 'DatePick' ? formatPickedDate(typed) : typed;
+                            activeSpot.value = captured;
+                            serverValue = captured;
                         }
 
-                        var btn = document.getElementById('btn-sign-submit');
-                        btn.disabled = true;
-                        btn.textContent = 'Saving...';
+                        var saveBtn = document.getElementById('btn-sign-submit');
+                        var nextBtn = document.getElementById('btn-sign-submit-next');
+                        var pressed = openNext ? nextBtn : saveBtn;
+                        var pressedLabel = pressed.textContent;
+                        saveBtn.disabled = true;
+                        nextBtn.disabled = true;
+                        pressed.textContent = 'Saving...';
 
                         Visualforce.remoting.Manager.invokeAction(
                             '{!$RemoteAction.DocGenSignatureController.signPlacement}',
@@ -2818,8 +2950,9 @@
                             activeSpot.placement.id,
                             serverValue,
                             function (placements, event) {
-                                btn.disabled = false;
-                                btn.textContent = 'Sign';
+                                saveBtn.disabled = false;
+                                nextBtn.disabled = false;
+                                pressed.textContent = pressedLabel;
                                 if (!event.status) {
                                     showModalMsg('Save failed: ' + (event.message || 'Unknown error'), 'error');
                                     return;
@@ -2827,12 +2960,11 @@
                                 syncGuidedFromPlacements(placements);
                                 closeSignModal();
                                 refreshGuidedStatus();
-                                // Auto-walk: scroll to the next pending field so the signer
-                                // always sees where to go next.
-                                var nextIdx = firstPendingIndex();
-                                if (nextIdx >= 0) {
-                                    DocGenPdfViewer.scrollToChip(guided.spots[nextIdx].chip);
-                                }
+                                // Walk to the next pending field at the pace the signer chose:
+                                // "Save & Next" opens the next field's modal (or auto-fills a Date
+                                // and continues, or opens final submit); "Save" only scrolls to
+                                // and highlights the next field so they can read before signing.
+                                advanceGuided(openNext);
                             },
                             { escape: false }
                         );
@@ -2840,9 +2972,15 @@
 
                     // Guided: all spots done — capture consent + finalize the signature.
                     function handleFinalSubmit() {
-                        var typedName = document.getElementById('modal-typed-name').value.trim();
                         var consentGiven = document.getElementById('modal-consent-checkbox').checked;
-                        if (!typedName || !consentGiven) return;
+                        if (!consentGiven) return;
+                        // Name is no longer re-typed here (#183) — use the name already on the
+                        // signer record (what pre-filled each field). Fall back to the input only
+                        // if, somehow, the record has no name.
+                        var typedName =
+                            signerData && signerData.signerName
+                                ? signerData.signerName
+                                : document.getElementById('modal-typed-name').value.trim();
                         // Signer form fields (#161) were collected up front, before signing.
                         var formFieldJson = collectedFormFieldJson;
 
