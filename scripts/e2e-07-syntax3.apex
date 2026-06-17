@@ -495,7 +495,9 @@ try {
 // pin the parser-level contract: an unknown {%asset:<key>} degrades to the
 // inline placeholder via processXmlForTest, never a hard mid-generation failure.
 try {
-    DocGenService.assetCvCache = null;
+    // Anonymous Apex starts a fresh transaction, so the per-transaction
+    // assetCvCache static is already null — no reset needed (and it is a
+    // @TestVisible private member, inaccessible from anonymous Apex anyway).
     r = DocGenService.processXmlForTest('A {%asset:nope-185} B', new Map<String, Object>());
     if (r.contains('[missing asset: nope-185]') && !r.contains('{%asset:')) {
         pass++;

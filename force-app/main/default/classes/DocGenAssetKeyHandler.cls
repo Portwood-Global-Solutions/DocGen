@@ -59,8 +59,13 @@ public with sharing class DocGenAssetKeyHandler {
         // batch so a derived/duplicate key gets a numeric suffix instead of
         // failing the unique index. The asset catalog is small (per-org config),
         // so reading existing keys here is cheap.
+        // SYSTEM_MODE: the unique-index guard must see EVERY existing key, not just
+        // the ones the running user has FLS to read — otherwise a hidden key would
+        // collide on insert. The asset catalog is package-internal config.
         Set<String> taken = new Set<String>();
-        for (DocGen_Asset__c existing : [SELECT Asset_Key__c FROM DocGen_Asset__c]) {
+        // NOPMD ApexCRUDViolation — package-internal config read in SYSTEM_MODE; must see all keys to protect the unique index
+        List<DocGen_Asset__c> existingAssets = [SELECT Asset_Key__c FROM DocGen_Asset__c WITH SYSTEM_MODE];
+        for (DocGen_Asset__c existing : existingAssets) {
             if (String.isNotBlank(existing.Asset_Key__c)) {
                 taken.add(existing.Asset_Key__c.toLowerCase());
             }
