@@ -1680,18 +1680,33 @@ Handles multiple sources automatically:
 
 Use a **shared asset** when the same image — a logo, a footer band, a letterhead — appears in many templates and you want to update it in one place. Instead of pasting the same image (or its file ID) into every template, you reference the asset by a short, stable key. When you upload a new version of the asset, **every template that uses its tag picks up the new image automatically** — no template edits.
 
-**Set one up** from the **Command Hub → Assets** tab: give the asset a friendly name (e.g. "Primary Footer"), upload an image, and copy its merge tag. DocGen assigns each asset a permanent key the first time you save it.
+**Set one up** from the **Command Hub → Assets** tab: give the asset a friendly name (e.g. "Primary Footer"), choose its **tag key** (a short, human-readable handle such as `footer`, suggested from the name and checked for availability as you type), upload an image, and copy its merge tag. The key is **permanent** — renaming the asset later never changes the key, so templates keep working — and it is case-insensitive (`{%asset:Footer}` and `{%asset:footer}` are the same asset).
 
 ```
-{%asset:primaryfooter}          Latest version of the asset with that key
-{%asset:companylogo:200x100}    Sized (same width × height grammar as {%Image})
-{%asset:companylogo:200}        Max 200px in either dimension (preserves aspect)
+{%asset:footer}            Latest version of the asset whose key is "footer"
+{%asset:companylogo}       (any key you chose when creating the asset)
+{%asset:companylogo:200x100}   Fixed 200×100 px
+{%asset:companylogo:600x}      Fixed 600 px wide, height auto (keeps aspect)
+{%asset:companylogo:x80}       Fixed 80 px tall, width auto
 ```
+
+A size token must contain an `x` (the width × height separator); a bare number with no `x` is ignored. Pixel sizes are the portable form. For finer control in HTML/PDF — millimetres, percentages, max-size, or aspect-preserving full-page art — leave the tag unsized and style it with CSS instead (see _What the tag produces_ below).
 
 - Resolves to the asset's **latest** uploaded version every time a document is generated, so an updated logo flows through to all referencing templates at once.
-- Works across **Word, HTML, and PDF** output, in the document body and in headers/footers — including very large datasets.
+- Works across **Word, HTML, PDF, and PowerPoint** output, in the document body and in headers/footers — including very large datasets.
 - **Cross-user by design:** an asset one administrator creates renders correctly in documents other users generate.
 - **Deactivate** an asset (rather than deleting it) to retire it without losing history. A tag that points at a deactivated or unknown key renders a small `[missing asset: <key>]` placeholder so you notice it in review — it never breaks document generation.
+
+**What the tag produces.** The tag resolves to the asset's current image and then flows through DocGen's normal image pipeline, so it behaves like an inline image native to each format. You place the tag **where you want the image to appear** — you do not wrap it in your own `<img>` or pass it to a `src`; the tag _is_ the image.
+
+| Output                          | What `{%asset:key}` becomes                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HTML / PDF (HTML template)**  | An `<img src="/sfc/servlet.shepherd/version/download/…">` element. The relative URL is fetched at render — exactly what the PDF engine (Flying Saucer) needs; no absolute URLs or data URIs required. The tag carries only `max-width:100%` inline, so wrap it in a styled container and target it with CSS for anything more (e.g. `.cover img { height: 297mm; width: auto; }`). |
+| **Word (`.docx`)**              | The image bytes are **embedded** directly in the document. The `.docx` is self-contained and shows the image offline.                                                                                                                                                                                                                                                              |
+| **PDF (Word template)**         | Referenced by relative URL via the zero-heap path, so large images don't exhaust heap on big jobs.                                                                                                                                                                                                                                                                                 |
+| **PowerPoint (`.pptx`)**        | Embedded as a picture shape on the slide.                                                                                                                                                                                                                                                                                                                                          |
+| **Excel (`.xlsx`)**             | Image assets are **not** rendered in Excel output in v1 — the tag is removed cleanly (no error).                                                                                                                                                                                                                                                                                   |
+| **Large datasets (>2000 rows)** | Tags in headers, footers, and grand-summary areas resolve the same way (the high-volume rendering path emits the same `<img>`).                                                                                                                                                                                                                                                    |
 
 **Permissions:** administrators (DocGen Admin) create and manage assets; standard DocGen users get read-only access, which is all that is needed to generate documents that reference them.
 
