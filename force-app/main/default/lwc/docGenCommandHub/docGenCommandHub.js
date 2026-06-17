@@ -56,6 +56,9 @@ export default class DocGenCommandHub extends LightningElement {
     get isSignatures() {
         return this.activeSection === 'signatures';
     }
+    get isAssets() {
+        return this.activeSection === 'assets';
+    }
     get isHelp() {
         return this.activeSection === 'help';
     }
@@ -67,6 +70,9 @@ export default class DocGenCommandHub extends LightningElement {
     }
     get signaturesTabClass() {
         return this.activeSection === 'signatures' ? 'tab-active' : '';
+    }
+    get assetsTabClass() {
+        return this.activeSection === 'assets' ? 'tab-active' : '';
     }
     get helpTabClass() {
         return this.activeSection === 'help' ? 'tab-active' : '';
@@ -80,6 +86,9 @@ export default class DocGenCommandHub extends LightningElement {
     }
     handleShowSignatures() {
         this.activeSection = 'signatures';
+    }
+    handleShowAssets() {
+        this.activeSection = 'assets';
     }
     handleShowHelp() {
         this.activeSection = 'help';

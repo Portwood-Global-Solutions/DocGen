@@ -78,6 +78,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     @TestVisible
     private static Map<Id, List<String>> imageCvCache;
 
+    // Per-transaction cache of shared-asset key -> latest ContentVersion Id (or
+    // null when the asset is missing/inactive), mirroring imageCvCache. Seeded by
+    // resolveAssetCvIds so a template that reuses the same {%asset:<key>} many
+    // times (e.g. a footer logo per loop row) costs at most one SOQL.
+    @TestVisible
+    private static Map<String, String> assetCvCache;
+
     // Thread-local storage for pre-loaded record data. When set, mergeTemplate
     // skips DocGenController.generateDocumentData() and uses this data instead. Cleared after each use.
     private static Map<String, Object> preloadedRecordDataOverride;
@@ -3755,6 +3762,25 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     // Image tag: {%FieldName} or {%FieldName:WxH} or {%Image:N} or {%Image:N:SIZE}
                     String imageTagSpec = tagContent.substring(1).trim();
 
+                    // Shared-asset image tag: {%asset:<key>} or {%asset:<key>:SIZE}.
+                    // The key resolves at generation time to the asset's latest
+                    // ContentVersion; the resolved CV Id then flows through the
+                    // EXISTING image pipeline (dispatchImageXml) so every format +
+                    // sizing token is reused with zero new render code. A missing or
+                    // inactive asset degrades gracefully (placeholder, never a hard
+                    // failure) inside resolveAssetTagSpec.
+                    String assetTagHead = imageTagSpec.contains(':')
+                        ? imageTagSpec.substringBefore(':').trim()
+                        : imageTagSpec.trim();
+                    if ('asset'.equalsIgnoreCase(assetTagHead)) {
+                        String assetXml = resolveAssetTagSpec(imageTagSpec);
+                        if (assetXml != null) {
+                            output += assetXml;
+                        }
+                        cursor = tagClose + 1;
+                        continue;
+                    }
+
                     // Positional record-attached-image tag: {%Image:N} or {%Image:N:SIZE}
                     // Renders the Nth oldest image (PNG/JPG/GIF/BMP/TIFF/SVG) attached to the current record.
                     String imageTagHead = imageTagSpec.contains(':')
@@ -7136,6 +7162,140 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 bucket.add(String.valueOf(cdl.ContentDocument.LatestPublishedVersionId));
             }
         }
+    }
+
+    /**
+     * Resolves a shared-asset image tag — the part after the leading '%', i.e.
+     * "asset:<key>" or "asset:<key>:SIZE" — to rendered image XML.
+     *
+     * The asset key is mapped to its latest ContentVersion Id (resolveAssetCvIds,
+     * cached per transaction), the optional WxH size token is parsed with the SAME
+     * grammar the field-image path uses (parseImageTagSpec), and the result is
+     * dispatched through the EXISTING image pipeline so DOCX/PDF/HTML/PowerPoint
+     * + sizing all work with no new render code.
+     *
+     * Robustness: a missing/inactive asset (resolver returns null) is never a hard
+     * mid-generation failure — it logs an error and emits a clear inline placeholder
+     * so the author sees which tag didn't resolve.
+     */
+    @TestVisible
+    private static String resolveAssetTagSpec(String imageTagSpec) {
+        if (String.isBlank(imageTagSpec)) {
+            return null;
+        }
+
+        // Strip the "asset:" head, leaving "<key>" or "<key>:SIZE".
+        String remainder = imageTagSpec.substringAfter(':').trim();
+        if (String.isBlank(remainder)) {
+            return assetPlaceholder('(unknown)');
+        }
+
+        // Split key from the optional size token. Reuse parseImageTagSpec for the
+        // WxH grammar by feeding it "<key>[:SIZE]" — its imageField becomes the key
+        // (unused here) and the size constraints land on the spec we render with.
+        String assetKey = remainder.contains(':') ? remainder.substringBefore(':').trim() : remainder.trim();
+        if (String.isBlank(assetKey)) {
+            return assetPlaceholder('(unknown)');
+        }
+        // Keys are stored lowercase (DocGenAssetKeyHandler.normalizeKey); lowercase
+        // the tag's key so {%asset:Footer} resolves the same asset as {%asset:footer}.
+        assetKey = assetKey.toLowerCase();
+
+        String cvId = resolveAssetCvIds(new Set<String>{ assetKey }).get(assetKey);
+        if (String.isBlank(cvId)) {
+            // Missing or inactive asset, or an asset with no uploaded version yet.
+            System.debug(
+                LoggingLevel.ERROR,
+                'DocGen: {%asset:' + assetKey + '} did not resolve (missing, inactive, or no version).'
+            );
+            return assetPlaceholder(assetKey);
+        }
+
+        ImageRenderSpec spec = parseImageTagSpec(remainder);
+        spec.fieldValue = cvId;
+        return dispatchImageXml(spec);
+    }
+
+    /**
+     * Inline placeholder for an asset tag that couldn't resolve. Visible enough
+     * that an author notices the missing asset, but it never aborts generation.
+     */
+    private static String assetPlaceholder(String assetKey) {
+        return '[missing asset: ' + (assetKey == null ? '' : assetKey.escapeXml()) + ']';
+    }
+
+    /**
+     * Maps shared-asset keys to their latest ContentVersion Id with a single SOQL,
+     * cached per transaction (assetCvCache) like imageCvCache. Only ACTIVE assets
+     * resolve; missing/inactive keys are cached as null so they neither re-query
+     * nor crash the merge — callers treat null as "render a placeholder".
+     *
+     * The live pointer is ContentDocument.LatestPublishedVersionId on the document
+     * linked to the asset (a version's FirstPublishLocationId = assetId natively
+     * creates that ContentDocumentLink; see DocGenController.addAssetVersion). Read
+     * WITH SYSTEM_MODE behind the per-field FLS guard, matching the package's
+     * internal-CV-read convention (the asset catalog is package-internal config,
+     * not user-owned data, and must resolve identically for every running user).
+     */
+    @TestVisible
+    public static Map<String, String> resolveAssetCvIds(Set<String> keys) {
+        if (assetCvCache == null) {
+            assetCvCache = new Map<String, String>();
+        }
+        Map<String, String> result = new Map<String, String>();
+        if (keys == null || keys.isEmpty()) {
+            return result;
+        }
+
+        Set<String> toFetch = new Set<String>();
+        for (String key : keys) {
+            if (String.isBlank(key)) {
+                continue;
+            }
+            if (assetCvCache.containsKey(key)) {
+                result.put(key, assetCvCache.get(key));
+            } else {
+                toFetch.add(key);
+            }
+        }
+        if (toFetch.isEmpty()) {
+            return result;
+        }
+
+        // Seed cache misses as null so unknown/inactive keys don't re-query.
+        for (String key : toFetch) {
+            assetCvCache.put(key, null);
+        }
+
+        DocGenFlsGuard.assertAccessible(DocGen_Asset__c.sObjectType, new Set<String>{ 'Asset_Key__c', 'Is_Active__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Asset__c> assets = [
+            SELECT
+                Asset_Key__c,
+                (
+                    SELECT ContentDocument.LatestPublishedVersionId
+                    FROM ContentDocumentLinks
+                    ORDER BY ContentDocument.CreatedDate DESC, ContentDocument.Id DESC
+                    LIMIT 1
+                )
+            FROM DocGen_Asset__c
+            WHERE Asset_Key__c IN :toFetch AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+        ];
+
+        for (DocGen_Asset__c asset : assets) {
+            String cvId = null;
+            if (asset.ContentDocumentLinks != null && !asset.ContentDocumentLinks.isEmpty()) {
+                Id latest = asset.ContentDocumentLinks[0].ContentDocument.LatestPublishedVersionId;
+                cvId = (latest == null) ? null : String.valueOf(latest);
+            }
+            assetCvCache.put(asset.Asset_Key__c, cvId);
+        }
+
+        for (String key : toFetch) {
+            result.put(key, assetCvCache.get(key));
+        }
+        return result;
     }
 
     /**

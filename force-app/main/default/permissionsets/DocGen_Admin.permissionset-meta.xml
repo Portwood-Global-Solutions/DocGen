@@ -130,6 +130,20 @@
         <field>Product2.Product_Image__c</field>
         <readable>true</readable>
     </fieldPermissions>
+    <!-- Shared Asset fields (#185) (Admin: full access; Name is standard).
+         DocGen_Asset__c.Asset_Key__c is <required>true</required> (the immutable
+         unique system key); Salesforce blocks explicit fieldPermissions on required
+         fields and auto-grants FLS, so it is intentionally NOT declared here. -->
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Asset__c.Asset_Type__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Asset__c.Is_Active__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Job__c.Data_Cache_CV__c</field>
@@ -780,6 +794,16 @@
         <apexPage>DocGenVerify</apexPage>
         <enabled>true</enabled>
     </pageAccesses>
+    <objectPermissions>
+        <allowCreate>true</allowCreate>
+        <allowDelete>true</allowDelete>
+        <allowEdit>true</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>true</modifyAllRecords>
+        <object>DocGen_Asset__c</object>
+        <viewAllFields>false</viewAllFields>
+        <viewAllRecords>true</viewAllRecords>
+    </objectPermissions>
     <objectPermissions>
         <allowCreate>true</allowCreate>
         <allowDelete>true</allowDelete>

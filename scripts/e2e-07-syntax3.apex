@@ -490,6 +490,25 @@ try {
     System.debug('SIBLING SECTIONS IN numPr PARAGRAPH (#112): FAIL — ' + e.getMessage());
 }
 
+// ===== Shared Assets {%asset:<key>} (#185) =====
+// Positive resolution + version-bump are covered in DocGenAssetTest; here we
+// pin the parser-level contract: an unknown {%asset:<key>} degrades to the
+// inline placeholder via processXmlForTest, never a hard mid-generation failure.
+try {
+    DocGenService.assetCvCache = null;
+    r = DocGenService.processXmlForTest('A {%asset:nope-185} B', new Map<String, Object>());
+    if (r.contains('[missing asset: nope-185]') && !r.contains('{%asset:')) {
+        pass++;
+        System.debug('SHARED ASSET TAG (#185): PASS');
+    } else {
+        fail++;
+        System.debug('SHARED ASSET TAG (#185): FAIL — ' + r);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('SHARED ASSET TAG (#185): FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX3 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

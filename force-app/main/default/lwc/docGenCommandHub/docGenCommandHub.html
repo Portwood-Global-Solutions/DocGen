@@ -23,6 +23,10 @@
                     <lightning-icon icon-name="utility:edit_form" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Signatures</span>
                 </button>
+                <button class={assetsTabClass} onclick={handleShowAssets}>
+                    <lightning-icon icon-name="utility:image" size="x-small" class="nav-icon"></lightning-icon>
+                    <span>Assets</span>
+                </button>
                 <button class={helpTabClass} onclick={handleShowHelp}>
                     <lightning-icon icon-name="utility:knowledge_base" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Learning Center</span>
@@ -73,6 +77,17 @@
                         </div>
                         <div class="panel-body">
                             <c-doc-gen-signature-settings></c-doc-gen-signature-settings>
+                        </div>
+                    </template>
+
+                    <!-- ASSETS -->
+                    <template if:true={isAssets}>
+                        <div class="panel-header">
+                            <h2>Shared Assets</h2>
+                            <p>Manage reusable images like logos and footers that update everywhere at once.</p>
+                        </div>
+                        <div class="panel-body">
+                            <c-doc-gen-assets></c-doc-gen-assets>
                         </div>
                     </template>
 
