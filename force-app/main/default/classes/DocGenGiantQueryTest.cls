@@ -622,6 +622,83 @@ private class DocGenGiantQueryTest {
         }
     }
 
+    // #165 regression — the stitch finish() path named final documents
+    // `<template> - <relationship>` regardless of Document_Title_Format__c,
+    // diverging from DocGenGiantQueryAssembler (which honors the format via
+    // computeDocTitle since v1.90). With a format configured, the final CV
+    // must carry the computed title — never the legacy concatenation.
+    @IsTest
+    static void testStitchJobHonorsDocumentTitleFormat() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
+            tpl.Document_Title_Format__c = 'XXXX-premium-{Name}';
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+            DocGen_Job__c job = new DocGen_Job__c(
+                Status__c = 'Harvesting',
+                Template__c = tpl.Id,
+                Label__c = 'Test Stitch Title Format',
+                Parent_Record_Id__c = String.valueOf(acc.Id),
+                Total_Records__c = 10
+            );
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
+
+            // 3 fragments → 1 group → single-part finish() branch.
+            List<ContentVersion> fragments = new List<ContentVersion>();
+            for (Integer i = 0; i < 3; i++) {
+                String seq = String.valueOf(i).leftPad(5, '0');
+                fragments.add(
+                    new ContentVersion(
+                        Title = 'docgen_giant_' + job.Id + '_' + seq,
+                        PathOnClient = 'docgen_giant_' + job.Id + '_' + seq + '.xml',
+                        VersionData = Blob.valueOf('<w:tr><w:tc><w:p>Fragment' + i + '</w:p></w:tc></w:tr>'),
+                        IsMajorVersion = false,
+                        FirstPublishLocationId = job.Id
+                    )
+                );
+            }
+            insert fragments;
+
+            Test.startTest();
+            DocGenGiantQueryStitchJob stitchJob = new DocGenGiantQueryStitchJob(
+                job.Id,
+                tpl.Id,
+                acc.Id,
+                'Contacts',
+                'PDF'
+            );
+            Database.executeBatch(stitchJob, 1);
+            Test.stopTest();
+
+            DocGen_Job__c updatedJob = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :job.Id];
+            if (updatedJob.Status__c == 'Completed') {
+                // The final document (not a fragment/part) must use the computed title.
+                List<ContentVersion> finals = [
+                    SELECT Title
+                    FROM ContentVersion
+                    WHERE Title != NULL AND (NOT Title LIKE 'docgen_giant_%') AND (NOT Title LIKE 'docgen_part_%')
+                ];
+                Boolean foundComputed = false;
+                for (ContentVersion cv : finals) {
+                    System.assertNotEquals(
+                        'Giant Query Test - Contacts',
+                        cv.Title,
+                        'Stitch must not emit the legacy concatenated title when a format is configured'
+                    );
+                    if (cv.Title == 'XXXX-premium-Giant Query Test Account') {
+                        foundComputed = true;
+                    }
+                }
+                System.assert(
+                    foundComputed,
+                    'Final stitched document must carry the Document_Title_Format__c title; got: ' + finals
+                );
+            }
+        }
+    }
+
     @IsTest
     static void testGenerateDocumentGiantQueryFallthrough() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
