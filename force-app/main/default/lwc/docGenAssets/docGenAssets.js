@@ -6,10 +6,27 @@ import { refreshApex } from '@salesforce/apex';
 // Imported against the exact names/signatures in the approved plan (#185 A6).
 import getAssets from '@salesforce/apex/DocGenController.getAssets';
 import createAsset from '@salesforce/apex/DocGenController.createAsset';
+import checkAssetKey from '@salesforce/apex/DocGenController.checkAssetKey';
 import addAssetVersion from '@salesforce/apex/DocGenController.addAssetVersion';
 import renameAsset from '@salesforce/apex/DocGenController.renameAsset';
 import deactivateAsset from '@salesforce/apex/DocGenController.deactivateAsset';
 import getLatestContentVersionId from '@salesforce/apex/DocGenController.getLatestContentVersionId';
+
+// Client-side mirror of DocGenAssetKeyHandler.normalizeKey for the live tag
+// preview + name->key suggestion. The server is authoritative; this only avoids
+// a round-trip on every keystroke.
+function slugify(value) {
+    if (!value) {
+        return '';
+    }
+    return value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40)
+        .replace(/-+$/g, '');
+}
 
 const COLUMNS = [
     { label: 'Name', fieldName: 'name' },
@@ -80,8 +97,16 @@ export default class DocGenAssets extends LightningElement {
     // Create modal state
     @track isCreateModalOpen = false;
     @track createName = '';
+    @track createKey = '';
     @track createdAssetId = null;
     @track isUploading = false;
+    // Live key validation
+    @track keyNormalized = '';
+    @track keyValid = false;
+    @track keyAvailable = false;
+    @track keyMessage = '';
+    keyEdited = false;
+    _keyCheckTimer;
 
     // Upload-new-version modal state
     @track isVersionModalOpen = false;
@@ -123,7 +148,21 @@ export default class DocGenAssets extends LightningElement {
     }
 
     get isCreateDisabled() {
-        return !this.createName || !this.createName.trim() || this.isUploading;
+        return !this.createName || !this.createName.trim() || !this.keyValid || !this.keyAvailable || this.isUploading;
+    }
+
+    // Live preview of the merge tag the author will paste into a template.
+    get createTagPreview() {
+        return this.keyNormalized ? '{%asset:' + this.keyNormalized + '}' : '{%asset:…}';
+    }
+
+    get keyHintClass() {
+        if (!this.createKey) {
+            return 'slds-text-body_small slds-text-color_weak';
+        }
+        return this.keyValid && this.keyAvailable
+            ? 'slds-text-body_small slds-text-color_success'
+            : 'slds-text-body_small slds-text-color_error';
     }
 
     get isRenameDisabled() {
@@ -180,8 +219,14 @@ export default class DocGenAssets extends LightningElement {
 
     handleOpenCreate() {
         this.createName = '';
+        this.createKey = '';
         this.createdAssetId = null;
         this.isUploading = false;
+        this.keyEdited = false;
+        this.keyNormalized = '';
+        this.keyValid = false;
+        this.keyAvailable = false;
+        this.keyMessage = '';
         this.isCreateModalOpen = true;
     }
 
@@ -191,6 +236,52 @@ export default class DocGenAssets extends LightningElement {
 
     handleCreateNameChange(event) {
         this.createName = event.target.value;
+        // Suggest a key from the name until the user hand-edits the key field.
+        if (!this.keyEdited) {
+            this.createKey = slugify(this.createName);
+            this.scheduleKeyCheck();
+        }
+    }
+
+    handleCreateKeyChange(event) {
+        this.keyEdited = true;
+        this.createKey = event.target.value;
+        this.scheduleKeyCheck();
+    }
+
+    // Debounced server check so the user sees the final slug + availability live.
+    scheduleKeyCheck() {
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        clearTimeout(this._keyCheckTimer);
+        const raw = this.createKey;
+        if (!slugify(raw)) {
+            this.keyNormalized = '';
+            this.keyValid = false;
+            this.keyAvailable = false;
+            this.keyMessage = raw ? 'Use letters or numbers.' : '';
+            return;
+        }
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        this._keyCheckTimer = setTimeout(() => {
+            checkAssetKey({ assetKey: raw })
+                .then((res) => {
+                    // Ignore a stale response if the field changed meanwhile.
+                    if (this.createKey !== raw) {
+                        return;
+                    }
+                    this.keyNormalized = res.normalized;
+                    this.keyValid = res.valid;
+                    this.keyAvailable = res.available;
+                    this.keyMessage = res.available
+                        ? 'Available — your tag will be ' + res.mergeTag
+                        : 'That key is already in use.';
+                })
+                .catch((error) => {
+                    this.keyValid = false;
+                    this.keyAvailable = false;
+                    this.keyMessage = this.errMsg(error);
+                });
+        }, 300);
     }
 
     // Step 1: create the asset record so the upload has a record to attach to.
@@ -200,7 +291,7 @@ export default class DocGenAssets extends LightningElement {
         }
         this.isUploading = true;
         try {
-            const asset = await createAsset({ name: this.createName.trim() });
+            const asset = await createAsset({ name: this.createName.trim(), assetKey: this.createKey });
             // createAsset returns a map { id, name, assetKey, mergeTag }.
             this.createdAssetId = asset && asset.id ? asset.id : asset;
             this.showToast('Asset created', 'Now upload an image for "' + this.createName.trim() + '".', 'success');

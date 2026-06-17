@@ -64,8 +64,21 @@
                     ></lightning-input>
 
                     <template if:false={createdAssetId}>
+                        <lightning-input
+                            class="slds-var-m-top_x-small"
+                            label="Tag Key"
+                            value={createKey}
+                            onchange={handleCreateKeyChange}
+                            field-level-help="The short, permanent key used in your template tag. Letters, numbers and hyphens only. It can't be changed after the asset is created, so renaming the asset later won't break templates."
+                            placeholder="e.g. footer"
+                            required
+                        ></lightning-input>
+                        <p class={keyHintClass}>{keyMessage}</p>
+                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">
+                            Template tag: <code>{createTagPreview}</code>
+                        </p>
                         <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_small">
-                            Step 1: name the asset and create it. You can then upload an image.
+                            Step 1: name the asset, confirm its tag key, and create it. You can then upload an image.
                         </p>
                     </template>
 

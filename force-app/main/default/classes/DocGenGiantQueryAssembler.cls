@@ -1033,9 +1033,10 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         Matcher m = p.matcher(html);
 
         // First pass: collect every referenced key so the resolver does one SOQL.
+        // Keys are stored lowercase, so lowercase the tag key to match.
         Set<String> keys = new Set<String>();
         while (m.find()) {
-            String key = m.group(1) == null ? '' : m.group(1).trim();
+            String key = m.group(1) == null ? '' : m.group(1).trim().toLowerCase();
             if (String.isNotBlank(key)) {
                 keys.add(key);
             }
@@ -1050,7 +1051,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         String result = '';
         Integer last = 0;
         while (m.find()) {
-            String key = m.group(1) == null ? '' : m.group(1).trim();
+            String key = m.group(1) == null ? '' : m.group(1).trim().toLowerCase();
             String sizeToken = m.group(2);
             String cvId = cvByKey.get(key);
             String replacement;

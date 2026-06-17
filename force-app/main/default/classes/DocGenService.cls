@@ -7197,6 +7197,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (String.isBlank(assetKey)) {
             return assetPlaceholder('(unknown)');
         }
+        // Keys are stored lowercase (DocGenAssetKeyHandler.normalizeKey); lowercase
+        // the tag's key so {%asset:Footer} resolves the same asset as {%asset:footer}.
+        assetKey = assetKey.toLowerCase();
 
         String cvId = resolveAssetCvIds(new Set<String>{ assetKey }).get(assetKey);
         if (String.isBlank(cvId)) {

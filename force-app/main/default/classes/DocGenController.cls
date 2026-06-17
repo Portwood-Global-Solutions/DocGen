@@ -6898,23 +6898,53 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
-     * Creates a shared asset shell. The immutable Asset_Key__c is minted by
-     * DocGenAssetKeyTrigger on insert; the admin uploads the first image version
-     * separately via addAssetVersion. Returns the new record's id, key and the
-     * ready-to-paste {%asset:<key>} merge tag.
+     * Creates a shared asset shell with a human-readable, immutable Asset_Key__c
+     * (e.g. "footer") that backs the {%asset:<key>} merge tag. The caller supplies
+     * the key; if blank it's derived from the name. The key is canonicalized to a
+     * URL-safe slug (DocGenAssetKeyHandler.normalizeKey) and must be unique — a
+     * friendly error is thrown if it's already in use. The admin uploads the first
+     * image version separately via addAssetVersion. Returns the new record's id,
+     * key and the ready-to-paste merge tag.
      */
     @AuraEnabled
-    public static Map<String, Object> createAsset(String name) {
+    public static Map<String, Object> createAsset(String name, String assetKey) {
         if (String.isBlank(name)) {
             throw DocGenService.ahe('Asset name is required.');
+        }
+        // Canonicalize the chosen key; fall back to a slug of the name when blank.
+        String desiredKey = DocGenAssetKeyHandler.normalizeKey(assetKey);
+        if (String.isBlank(desiredKey)) {
+            desiredKey = DocGenAssetKeyHandler.normalizeKey(name);
+        }
+        if (String.isBlank(desiredKey)) {
+            throw DocGenService.ahe('Could not build a tag key — use letters or numbers in the key or name.');
+        }
+        // Reject a duplicate up front with a clear, un-wrapped message (the unique
+        // index is the final backstop). Kept outside the try so the friendly text
+        // isn't re-wrapped by the generic catch below.
+        DocGenFlsGuard.assertAccessible(DocGen_Asset__c.sObjectType, new Set<String>{ 'Asset_Key__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Asset__c> clash = [
+            SELECT Id
+            FROM DocGen_Asset__c
+            WHERE Asset_Key__c = :desiredKey
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (!clash.isEmpty()) {
+            throw DocGenService.ahe('The tag key "' + desiredKey + '" is already in use. Choose a different key.');
         }
         try {
             DocGen_Asset__c asset = new DocGen_Asset__c(
                 Name = name.trim(),
+                Asset_Key__c = desiredKey,
                 Asset_Type__c = 'Image',
                 Is_Active__c = true
             );
-            DocGenFlsGuard.assertCreateable(asset, new Set<String>{ 'Name', 'Asset_Type__c', 'Is_Active__c' });
+            DocGenFlsGuard.assertCreateable(
+                asset,
+                new Set<String>{ 'Name', 'Asset_Key__c', 'Asset_Type__c', 'Is_Active__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(asset, AccessLevel.SYSTEM_MODE);
 
@@ -6939,6 +6969,42 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error creating asset.');
         }
+    }
+
+    /**
+     * Live validation for the create-asset key field. Canonicalizes the typed key
+     * to the slug the {%asset:<key>} tag will use and reports whether it's a valid,
+     * still-available key — so the UI can show the final tag + a green/red hint as
+     * the user types, before they commit. Read-only; safe to call on every change.
+     *
+     * @return map { normalized, valid, available, mergeTag }
+     */
+    @AuraEnabled
+    public static Map<String, Object> checkAssetKey(String assetKey) {
+        String normalized = DocGenAssetKeyHandler.normalizeKey(assetKey);
+        Boolean valid = String.isNotBlank(normalized);
+        Boolean available = false;
+        if (valid) {
+            try {
+                DocGenFlsGuard.assertAccessible(DocGen_Asset__c.sObjectType, new Set<String>{ 'Asset_Key__c' });
+                /* code-analyzer-suppress ApexFlsViolation */
+                Integer taken = [
+                    SELECT COUNT()
+                    FROM DocGen_Asset__c
+                    WHERE Asset_Key__c = :normalized
+                    WITH SYSTEM_MODE
+                ];
+                available = (taken == 0);
+            } catch (Exception e) {
+                throw DocGenService.ahe(e, 'Error checking asset key.');
+            }
+        }
+        return new Map<String, Object>{
+            'normalized' => normalized,
+            'valid' => valid,
+            'available' => available,
+            'mergeTag' => valid ? '{%asset:' + normalized + '}' : ''
+        };
     }
 
     /**
