@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.21.0 — Unified signature sending (inline signatures on every route)",
-      "versionNumber": "3.21.0.NEXT",
-      "ancestorId": "04tVx000000nij3IAA",
+      "versionName": "v3.22.0 — Shared Assets + bulk oversized auto-recovery + guided-signing UX",
+      "versionNumber": "3.22.0.NEXT",
+      "ancestorId": "04tVx000000npXdIAI",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.21 makes signature placement consistent everywhere you send from — a record page or an automated Flow. Drop {@Signature_Role} tags (with the compact :inline style) anywhere in your template and signers' marks land exactly where you put them, then the signed PDF is filed back to the record automatically. 100% native Salesforce — no external services or callouts. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.22 adds Shared Assets — keep your logos, footers, and other reusable images in one place and drop them into any template with a simple tag, so updating an image once updates every document that uses it. Bulk runs now recover very large records automatically instead of asking you to generate them one by one, and guided signing is smoother with clear step-by-step pacing and a proper date picker. 100% native Salesforce — no external services or callouts. Free for all users."
     }
   ],
   "name": "Portwood DocGen",

@@ -2063,7 +2063,7 @@ Save a filter as a reusable `DocGen_Saved_Query__c`. Gives non-technical users a
 
 Command Hub → **Job History** tab. Every bulk job shows:
 
-- Status (Draft, Harvesting, Running, Completed, Failed)
+- Status (Draft, Harvesting, Running, Completed, Completed with Errors, Recovering, Failed)
 - Record count + success/failure counts
 - Generated PDFs (clickable links)
 - Start + end time
@@ -2082,6 +2082,18 @@ If any projection exceeds governor limits, the runner **blocks submission** and 
 ### 9.5 Heap estimation for merge mode
 
 Combined-PDF mode is memory-heavy. `estimateHeapUsage()` flags risky jobs ahead of time and suggests individual-files mode for large datasets.
+
+### 9.6 Oversized records — automatic giant-query recovery
+
+A record with a very large number of related rows (thousands of children) can be too big to render inside a standard bulk batch — these are the same records that, generated one at a time, automatically route through the **giant-query** path. In a bulk run they used to be flagged in the error log with "generate this one individually," leaving you to re-run each by hand.
+
+Bulk jobs now **recover these records automatically**. When a bulk job finishes and some records failed because they were oversized:
+
+- The job status moves to **`Recovering`**, and each oversized record is dispatched — one at a time — back through the giant-query path that's built for high row counts. Each recovered record produces its own document (and its own job entry) exactly as if you'd generated it individually.
+- Once every oversized record has been dispatched, the original job is marked **`Completed with Errors`** (the records that succeeded the normal way are already done; the oversized ones complete as their individual giant-query jobs finish).
+- Recovery is capped at the first **100** oversized records per job. If a single filter somehow produces more than that, the overflow is reported in the job's error log ("…N more must be generated individually by hand") — never silently dropped.
+
+No setup is required; this happens on its own. **Combined-PDF (merge) mode is the exception** — an oversized record there is still flagged in the error log rather than auto-recovered, because merging an individually-rendered giant PDF into a combined bundle isn't supported.
 
 ---
 
@@ -2173,7 +2185,8 @@ Guided, mobile-friendly. States: PIN verify → signing → review → submit.
 For templates that use `{@Signature_Role:Order:Type}` placement tags, the PDF-viewer page can walk signers field-to-field **on the real rendered PDF**, with hand-drawn or typed signatures:
 
 - The actual generated PDF renders in the browser. Each of the signer's sign-spots gets a positioned chip — **SIGN HERE**, **INITIAL HERE**, or **DATE** — with a "field _N_ of _M_" counter, the current field highlighted, and auto-scroll to the next one.
-- At each spot the signer can **draw** a signature/initials (mouse or finger) **or type** them; date fields auto-stamp. Submission is gated until every required field is done.
+- At each spot the signer can **draw** a signature/initials (mouse or finger) **or type** them. Each field's modal offers **Save** (save and scroll to the next field so the signer can read before signing) and **Save & Next** (save and open the next field immediately). An **auto `Date`** field stamps today's date silently with no prompt; a **`DatePick`** field opens a native date picker and the chosen date is formatted to match. Submission is gated until every required field is done.
+- The final step is a **consent-only** confirmation — it doesn't re-ask for the name (every field was already signed); the signer just affirms the e-signature consent and submits.
 - On completion the captured values are composited onto the PDF **in the browser**, each signature carries a small attribution caption (signer name + date), and a **Certificate of Completion** page is appended — per signer: name, role, email, signed timestamp, email-verified status, **IP address**, consent, plus a **SHA-256 hash** of the signed content and an ESIGN/UETA attestation. The final PDF is attached to the related record.
 - **Multi-signer**: each signer sees only their own spots; the document chains signer-to-signer (each party's marks are baked in before the next signs), and the certificate lists all parties.
 
