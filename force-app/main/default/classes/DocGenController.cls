@@ -6825,6 +6825,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             DocGen_Asset__c.sObjectType,
             new Set<String>{ 'Name', 'Asset_Key__c', 'Asset_Type__c', 'Is_Active__c' }
         );
+        // Read SYSTEM_MODE behind the assertAccessible guard above — matches the asset
+        // catalog's other reads (resolveAssetCvIds + the reads below) and the package's
+        // internal-config-read convention. USER_MODE here masked the new Asset_Type__c
+        // field as "No such column" for any running user without FLS on it (e.g. the
+        // packaging-build test user) — a namespaced-build-only failure invisible to a
+        // no-namespace scratch where the running user holds DocGen_Admin.
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Asset__c> assets = [
             SELECT
@@ -6840,7 +6846,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     LIMIT 1
                 )
             FROM DocGen_Asset__c
-            WITH USER_MODE
+            WITH SYSTEM_MODE
             ORDER BY Name ASC
         ];
 
