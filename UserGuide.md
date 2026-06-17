@@ -1676,6 +1676,27 @@ Handles multiple sources automatically:
 
 **Image size limits.** PDFs with attached images are limited to roughly **30MB of total image content** for reliable Save-to-Record. Above that threshold, the save operation will error out (Salesforce platform limits on the ContentVersion insert path). If you need to include more images than this threshold allows, use **Download** instead of Save-to-Record — downloads work at a higher ceiling because they don't go through the same save pipeline. A typical inspection report with 20–30 phone photos fits within the 30MB ceiling; 50+ high-resolution photos may need to be downloaded and attached manually.
 
+#### 7.7.1 Shared assets (`{%asset:<key>}`)
+
+Use a **shared asset** when the same image — a logo, a footer band, a letterhead — appears in many templates and you want to update it in one place. Instead of pasting the same image (or its file ID) into every template, you reference the asset by a short, stable key. When you upload a new version of the asset, **every template that uses its tag picks up the new image automatically** — no template edits.
+
+**Set one up** from the **Command Hub → Assets** tab: give the asset a friendly name (e.g. "Primary Footer"), upload an image, and copy its merge tag. DocGen assigns each asset a permanent key the first time you save it.
+
+```
+{%asset:primaryfooter}          Latest version of the asset with that key
+{%asset:companylogo:200x100}    Sized (same width × height grammar as {%Image})
+{%asset:companylogo:200}        Max 200px in either dimension (preserves aspect)
+```
+
+- Resolves to the asset's **latest** uploaded version every time a document is generated, so an updated logo flows through to all referencing templates at once.
+- Works across **Word, HTML, and PDF** output, in the document body and in headers/footers — including very large datasets.
+- **Cross-user by design:** an asset one administrator creates renders correctly in documents other users generate.
+- **Deactivate** an asset (rather than deleting it) to retire it without losing history. A tag that points at a deactivated or unknown key renders a small `[missing asset: <key>]` placeholder so you notice it in review — it never breaks document generation.
+
+**Permissions:** administrators (DocGen Admin) create and manage assets; standard DocGen users get read-only access, which is all that is needed to generate documents that reference them.
+
+> **v1 scope:** shared assets are **images** only. Text/HTML snippet assets and pinning a template to a specific asset version are planned follow-ups.
+
 ### 7.8 Barcodes & QR codes
 
 ```

@@ -877,6 +877,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         }
         // Resolve {%Image:N} / {%Image:N:SIZE} tags in the parent HTML (headers/footers/summaries)
         html = resolveParentImageTags(html);
+        // Resolve {%asset:<key>} / {%asset:<key>:SIZE} shared-asset tags in the parent HTML.
+        html = resolveParentAssetTags(html);
         return html;
     }
 
@@ -1009,6 +1011,59 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             }
         }
         return '<img src="' + url + '"' + (String.isBlank(style) ? '' : ' style="' + style + '"') + '/>';
+    }
+
+    /**
+     * Resolves {%asset:<key>} and {%asset:<key>:SIZE} shared-asset tags at the
+     * parent level of a giant-query template (headers, footers, grand summaries).
+     * Each tag resolves its key to the asset's latest ContentVersion Id via the
+     * single source of truth — DocGenService.resolveAssetCvIds (active-only,
+     * per-transaction cached) — then emits an <img src="/sfc/...">  using the SAME
+     * buildParentImageHtml grammar as {%Image:N}, so sizing behaves identically.
+     *
+     * Missing/inactive assets degrade gracefully: a clear inline placeholder, never
+     * a hard failure (consistent with the row-level resolver in DocGenService).
+     */
+    @TestVisible
+    private String resolveParentAssetTags(String html) {
+        if (String.isBlank(html) || !html.containsIgnoreCase('{%asset:'))
+            return html;
+
+        Pattern p = Pattern.compile('\\{%[Aa]sset:([^:}]+)(?::([^}]+))?\\}');
+        Matcher m = p.matcher(html);
+
+        // First pass: collect every referenced key so the resolver does one SOQL.
+        Set<String> keys = new Set<String>();
+        while (m.find()) {
+            String key = m.group(1) == null ? '' : m.group(1).trim();
+            if (String.isNotBlank(key)) {
+                keys.add(key);
+            }
+        }
+        if (keys.isEmpty()) {
+            return html;
+        }
+        Map<String, String> cvByKey = DocGenService.resolveAssetCvIds(keys);
+
+        // Second pass: substitute.
+        m.reset();
+        String result = '';
+        Integer last = 0;
+        while (m.find()) {
+            String key = m.group(1) == null ? '' : m.group(1).trim();
+            String sizeToken = m.group(2);
+            String cvId = cvByKey.get(key);
+            String replacement;
+            if (String.isNotBlank(cvId)) {
+                replacement = buildParentImageHtml(cvId, sizeToken);
+            } else {
+                replacement = '[missing asset: ' + key.escapeHtml4() + ']';
+            }
+            result += html.substring(last, m.start()) + replacement;
+            last = m.end();
+        }
+        result += html.substring(last);
+        return result;
     }
 
     /**

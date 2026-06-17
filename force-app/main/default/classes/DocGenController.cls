@@ -6803,4 +6803,290 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe(e, 'Error importing template.');
         }
     }
+
+    // =========================================================================
+    // Shared Assets (issue #185) — CRUD + version management for DocGen_Asset__c.
+    // Each asset has an immutable Asset_Key__c (auto-set by DocGenAssetKeyTrigger)
+    // and the merge tag {%asset:<key>} resolves at generation time to the asset's
+    // latest ContentVersion (DocGenService.resolveAssetCvIds). Update an asset's
+    // version once and every template that uses the tag picks it up — no per-
+    // template edits. v1 is images only.
+    // =========================================================================
+
+    /**
+     * Lists active and inactive shared assets for the Assets tab. Returns a flat
+     * map per asset: Name, Asset_Key__c, Asset_Type__c, the {%asset:<key>} merge
+     * tag, version count + latest ContentVersion Id (for thumbnail preview) and
+     * the latest version's LastModifiedDate. Cacheable for the datatable wire.
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<Map<String, Object>> getAssets() {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Asset__c.sObjectType,
+            new Set<String>{ 'Name', 'Asset_Key__c', 'Asset_Type__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Asset__c> assets = [
+            SELECT
+                Id,
+                Name,
+                Asset_Key__c,
+                Asset_Type__c,
+                Is_Active__c,
+                (
+                    SELECT ContentDocument.LatestPublishedVersionId, ContentDocument.LastModifiedDate
+                    FROM ContentDocumentLinks
+                    ORDER BY ContentDocument.CreatedDate DESC, ContentDocument.Id DESC
+                    LIMIT 1
+                )
+            FROM DocGen_Asset__c
+            WITH USER_MODE
+            ORDER BY Name ASC
+        ];
+
+        // Collect the latest CV Ids so a single ContentVersion query yields the
+        // version number (VersionNumber) without an N+1 per asset.
+        Set<Id> latestCvIds = new Set<Id>();
+        for (DocGen_Asset__c a : assets) {
+            if (a.ContentDocumentLinks != null && !a.ContentDocumentLinks.isEmpty()) {
+                Id cvId = a.ContentDocumentLinks[0].ContentDocument.LatestPublishedVersionId;
+                if (cvId != null) {
+                    latestCvIds.add(cvId);
+                }
+            }
+        }
+        Map<Id, Integer> versionByCv = new Map<Id, Integer>();
+        if (!latestCvIds.isEmpty()) {
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionNumber' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (ContentVersion cv : [
+                SELECT Id, VersionNumber
+                FROM ContentVersion
+                WHERE Id IN :latestCvIds
+                WITH USER_MODE
+            ]) {
+                versionByCv.put(cv.Id, Integer.valueOf(cv.VersionNumber));
+            }
+        }
+
+        List<Map<String, Object>> result = new List<Map<String, Object>>();
+        for (DocGen_Asset__c a : assets) {
+            String latestCvId = null;
+            Datetime lastModified = null;
+            if (a.ContentDocumentLinks != null && !a.ContentDocumentLinks.isEmpty()) {
+                Id cvId = a.ContentDocumentLinks[0].ContentDocument.LatestPublishedVersionId;
+                latestCvId = (cvId == null) ? null : String.valueOf(cvId);
+                lastModified = a.ContentDocumentLinks[0].ContentDocument.LastModifiedDate;
+            }
+            result.add(
+                new Map<String, Object>{
+                    'id' => a.Id,
+                    'name' => a.Name,
+                    'assetKey' => a.Asset_Key__c,
+                    'assetType' => a.Asset_Type__c,
+                    'isActive' => a.Is_Active__c,
+                    'mergeTag' => '{%asset:' +
+                    a.Asset_Key__c +
+                    '}',
+                    'latestVersionCvId' => latestCvId,
+                    'versionNumber' => (latestCvId != null) ? versionByCv.get(Id.valueOf(latestCvId)) : null,
+                    'lastModified' => lastModified
+                }
+            );
+        }
+        return result;
+    }
+
+    /**
+     * Creates a shared asset shell. The immutable Asset_Key__c is minted by
+     * DocGenAssetKeyTrigger on insert; the admin uploads the first image version
+     * separately via addAssetVersion. Returns the new record's id, key and the
+     * ready-to-paste {%asset:<key>} merge tag.
+     */
+    @AuraEnabled
+    public static Map<String, Object> createAsset(String name) {
+        if (String.isBlank(name)) {
+            throw DocGenService.ahe('Asset name is required.');
+        }
+        try {
+            DocGen_Asset__c asset = new DocGen_Asset__c(
+                Name = name.trim(),
+                Asset_Type__c = 'Image',
+                Is_Active__c = true
+            );
+            DocGenFlsGuard.assertCreateable(asset, new Set<String>{ 'Name', 'Asset_Type__c', 'Is_Active__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(asset, AccessLevel.SYSTEM_MODE);
+
+            // Re-read the trigger-stamped key (not returned on the in-memory record).
+            DocGenFlsGuard.assertAccessible(DocGen_Asset__c.sObjectType, new Set<String>{ 'Name', 'Asset_Key__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            DocGen_Asset__c created = [
+                SELECT Id, Name, Asset_Key__c
+                FROM DocGen_Asset__c
+                WHERE Id = :asset.Id
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            return new Map<String, Object>{
+                'id' => created.Id,
+                'name' => created.Name,
+                'assetKey' => created.Asset_Key__c,
+                'mergeTag' => '{%asset:' +
+                created.Asset_Key__c +
+                '}'
+            };
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error creating asset.');
+        }
+    }
+
+    /**
+     * Attaches an uploaded image (ContentVersion) to an asset as its new latest
+     * version and shares it org-wide. The asset's merge tag always resolves to
+     * ContentDocument.LatestPublishedVersionId, so the new upload becomes live for
+     * every template the moment this returns.
+     *
+     * The ContentDocumentLink to the asset is created with ShareType='V' /
+     * Visibility='AllUsers' — the #114 fix (mirrors saveGeneratedDocument:329 and
+     * insertPdfAcroFormSnapshot:2774) — so the row-level PDF path (Blob.toPdf
+     * fetching /sfc/ as the running user) and the HTML <img> path both load the
+     * asset for any internal user, not just the uploader.
+     *
+     * @param assetId          DocGen_Asset__c to attach to
+     * @param contentVersionId The uploaded ContentVersion (068...)
+     * @return The asset's new latest ContentVersion Id
+     */
+    @AuraEnabled
+    public static Id addAssetVersion(Id assetId, Id contentVersionId) {
+        if (assetId == null || contentVersionId == null) {
+            throw DocGenService.ahe('Asset Id and Content Version Id are required.');
+        }
+        if (!String.valueOf(contentVersionId).startsWith('068')) {
+            throw DocGenService.ahe('Expected a ContentVersion Id.');
+        }
+        if (assetId.getSObjectType() != DocGen_Asset__c.sObjectType) {
+            throw DocGenService.ahe('Expected a DocGen Asset Id.');
+        }
+        try {
+            // Confirm the RUNNING USER can see this ContentVersion under their own
+            // sharing BEFORE the SYSTEM_MODE plumbing publishes it AllUsers. Without
+            // this, a caller could pass an arbitrary 068 Id (a file never shared to
+            // them) and broaden it org-wide via the asset link (confused deputy).
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Id' });
+            List<ContentVersion> visibleToCaller = [
+                SELECT Id
+                FROM ContentVersion
+                WHERE Id = :contentVersionId
+                WITH USER_MODE
+                LIMIT 1
+            ];
+            if (visibleToCaller.isEmpty()) {
+                throw DocGenService.ahe('You do not have access to the uploaded file.');
+            }
+
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'ContentDocumentId' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentVersion> cvs = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :contentVersionId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (cvs.isEmpty() || cvs[0].ContentDocumentId == null) {
+                throw DocGenService.ahe('Uploaded file not found.');
+            }
+            Id contentDocId = cvs[0].ContentDocumentId;
+
+            // Link the document to the asset (or re-share an existing link as
+            // AllUsers). FirstPublishLocationId on upload would set this natively;
+            // here the CV is already created, so we create/patch the link.
+            DocGenFlsGuard.assertAccessible(
+                ContentDocumentLink.sObjectType,
+                new Set<String>{ 'ContentDocumentId', 'LinkedEntityId', 'Visibility', 'ShareType' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentDocumentLink> existing = [
+                SELECT Id, Visibility, ShareType
+                FROM ContentDocumentLink
+                WHERE ContentDocumentId = :contentDocId AND LinkedEntityId = :assetId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (existing.isEmpty()) {
+                ContentDocumentLink cdl = new ContentDocumentLink(
+                    ContentDocumentId = contentDocId,
+                    LinkedEntityId = assetId,
+                    ShareType = 'V',
+                    Visibility = 'AllUsers'
+                );
+                DocGenFlsGuard.assertCreateable(
+                    cdl,
+                    new Set<String>{ 'ContentDocumentId', 'LinkedEntityId', 'ShareType', 'Visibility' }
+                );
+                /* code-analyzer-suppress ApexFlsViolation */
+                Database.insert(cdl, AccessLevel.SYSTEM_MODE);
+            } else if (existing[0].Visibility != 'AllUsers' || existing[0].ShareType != 'V') {
+                existing[0].Visibility = 'AllUsers';
+                existing[0].ShareType = 'V';
+                DocGenFlsGuard.assertUpdateable(existing[0], new Set<String>{ 'ShareType', 'Visibility' });
+                /* code-analyzer-suppress ApexFlsViolation */
+                Database.update(existing[0], AccessLevel.SYSTEM_MODE);
+            }
+
+            DocGenFlsGuard.assertAccessible(ContentDocument.sObjectType, new Set<String>{ 'LatestPublishedVersionId' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            ContentDocument doc = [
+                SELECT LatestPublishedVersionId
+                FROM ContentDocument
+                WHERE Id = :contentDocId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            return doc.LatestPublishedVersionId;
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error adding asset version.');
+        }
+    }
+
+    /**
+     * Renames an asset's friendly Name (the label shown in the Assets tab). The
+     * immutable Asset_Key__c — and therefore every {%asset:<key>} reference in
+     * existing templates — is untouched.
+     */
+    @AuraEnabled
+    public static void renameAsset(Id assetId, String newName) {
+        if (assetId == null || String.isBlank(newName)) {
+            throw DocGenService.ahe('Asset Id and new name are required.');
+        }
+        try {
+            DocGen_Asset__c asset = new DocGen_Asset__c(Id = assetId, Name = newName.trim());
+            DocGenFlsGuard.assertUpdateable(asset, new Set<String>{ 'Name' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.update(asset, AccessLevel.SYSTEM_MODE);
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error renaming asset.');
+        }
+    }
+
+    /**
+     * Retires an asset by clearing Is_Active__c. The resolver skips inactive
+     * assets, so any template still using the tag renders a placeholder + logs an
+     * error rather than the old image. Reversible (re-activate via the platform).
+     */
+    @AuraEnabled
+    public static void deactivateAsset(Id assetId) {
+        if (assetId == null) {
+            throw DocGenService.ahe('Asset Id is required.');
+        }
+        try {
+            DocGen_Asset__c asset = new DocGen_Asset__c(Id = assetId, Is_Active__c = false);
+            DocGenFlsGuard.assertUpdateable(asset, new Set<String>{ 'Is_Active__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.update(asset, AccessLevel.SYSTEM_MODE);
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error deactivating asset.');
+        }
+    }
 }

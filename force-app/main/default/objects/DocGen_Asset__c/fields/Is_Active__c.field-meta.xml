@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Is_Active__c</fullName>
+    <defaultValue>true</defaultValue>
+    <description
+    >When false the asset is retired: the resolver skips it (renders a placeholder + logs an error) instead of resolving its merge tag. Powers deactivate without deleting history.</description>
+    <label>Is Active</label>
+    <type>Checkbox</type>
+</CustomField>
