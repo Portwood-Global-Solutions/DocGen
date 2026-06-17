@@ -79,4 +79,59 @@ private class DocGenBatchErrorLogTest {
         DocGenBatch batch = new DocGenBatch(jobId);
         System.assertEquals(null, batch.buildErrorLog(), 'No failures → null (Error_Log__c stays empty)');
     }
+
+    // #155 — oversized records are captured by Id (not just counted) so finish() can
+    // hand them to the giant-query fallback Queueable.
+    @isTest
+    static void heapFailureCapturesRecordIdForFallback() {
+        Id jobId = newJob();
+        Id recId = anAccountId();
+        DocGenBatch batch = new DocGenBatch(jobId);
+
+        batch.recordFailure(recId, new HeapPressureException());
+
+        System.assertEquals(1, batch.oversizedRecordIds.size(), 'Oversized record Id captured for fallback');
+        System.assertEquals(recId, batch.oversizedRecordIds[0], 'Captured the right record Id');
+        System.assertEquals(0, batch.oversizedOverflowCount, 'No overflow under the cap');
+    }
+
+    @isTest
+    static void genericFailureDoesNotCaptureForFallback() {
+        Id jobId = newJob();
+        Id recId = anAccountId();
+        DocGenBatch batch = new DocGenBatch(jobId);
+
+        // Message deliberately avoids the word "heap" — isHeapError() matches on that substring.
+        batch.recordFailure(recId, new DocGenException('some unrelated validation error'));
+
+        System.assertEquals(0, batch.oversizedRecordIds.size(), 'Non-heap failures are not queued for giant-query');
+    }
+
+    // #155 — the fallback list is capped; overflow is counted and surfaced in the log
+    // rather than silently dropped.
+    @isTest
+    static void oversizedCapOverflowIsNotedInLog() {
+        Id jobId = newJob();
+        Id recId = anAccountId();
+        DocGenBatch batch = new DocGenBatch(jobId);
+
+        Integer attempts = DocGenBatch.MAX_FALLBACK_RECORDS + 3;
+        for (Integer i = 0; i < attempts; i++) {
+            batch.recordFailure(recId, new HeapPressureException());
+        }
+        batch.failCount = attempts;
+
+        System.assertEquals(
+            DocGenBatch.MAX_FALLBACK_RECORDS,
+            batch.oversizedRecordIds.size(),
+            'Fallback list is capped at MAX_FALLBACK_RECORDS'
+        );
+        System.assertEquals(3, batch.oversizedOverflowCount, 'Overflow beyond the cap is counted');
+
+        String log = batch.buildErrorLog();
+        System.assert(
+            log.contains('must be generated individually by hand'),
+            'Overflow note surfaces the records that exceeded auto-recovery: ' + log
+        );
+    }
 }
