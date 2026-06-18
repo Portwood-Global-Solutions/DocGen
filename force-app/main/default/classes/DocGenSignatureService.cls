@@ -1766,6 +1766,14 @@ public without sharing class DocGenSignatureService {
                 ORDER BY Document_Index__c ASC, Sequence_Order__c ASC
             ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
 
+            // Oversized/legacy requests (no Frozen_Document__c) reached this point via a
+            // LIVE re-merge (or a data-snapshot re-merge), so the body carries the ORIGINAL
+            // {@Signature_*} tags rather than the @@SIG-n@@ sentinels the placements key on.
+            // Re-apply the send-time substitution so stampSignaturesInXml/InHtml match lands;
+            // the frozen-body path already carries sentinels (no-op there). Without this,
+            // signatures silently never stamp on templates whose snapshot exceeds the freeze cap.
+            documentXml = DocGenSignatureSenderController.resentinelSignatureBody(documentXml);
+
             String html;
             if (templateType == 'HTML') {
                 html = stampSignaturesInHtml(documentXml, placements);
@@ -1975,6 +1983,11 @@ public without sharing class DocGenSignatureService {
                     if (p.Document_Index__c == docIdx)
                         docPlacements.add(p);
                 }
+
+                // See the single-template finalizer: a per-template live re-merge (no frozen
+                // snapshot) carries the ORIGINAL {@Signature_*} tags, so re-apply the send-time
+                // @@SIG-n@@ sentinel substitution before stamping. No-op on the frozen path.
+                documentXml = DocGenSignatureSenderController.resentinelSignatureBody(documentXml);
 
                 String docHtml;
                 if (templateType == 'HTML') {

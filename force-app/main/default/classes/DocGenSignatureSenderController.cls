@@ -146,6 +146,46 @@ public with sharing class DocGenSignatureSenderController {
     }
 
     /**
+     * Re-applies the send-time {@Signature_*} → @@SIG-n@@ sentinel substitution to an
+     * already-merged document body, in document order. Used by the signature finalizer
+     * when a request has no Frozen_Document__c (oversized snapshot — the body exceeds the
+     * 131072-char freeze cap — or a legacy request): that path LIVE re-merges, so the body
+     * carries the ORIGINAL {@Signature_*} tags rather than the @@SIG-n@@ sentinels the
+     * placements key on. Without this re-substitution, DocGenSignatureService.stampSignaturesInXml
+     * matches nothing (placement Tag_Text__c = @@SIG-n@@) and the signature silently never
+     * stamps — the unstamped tags are then stripped at render, leaving a blank signature line.
+     *
+     * Mirrors the substitution in createGuidedPdfSignatureRequest exactly (same regex set,
+     * same document order, same per-occurrence replaceFirst), but sources the tags from the
+     * merged BODY instead of re-reading the template — the template's pre-decomposed XML CVs
+     * read WITH USER_MODE, which returns empty in the async (Automated Process) finalize
+     * context. Idempotent: a body that already carries @@SIG-n@@ (the frozen path) is a no-op.
+     */
+    public static String resentinelSignatureBody(String body) {
+        if (String.isBlank(body) || body.contains('@@SIG-')) {
+            return body;
+        }
+        // Role-scoped tags first ({@Signature_Role[:order:type]}), in document order — this is
+        // the placement set createGuidedPdfSignatureRequest sentinel-indexes. Only when none
+        // exist does the bare {@Signature} fallback apply (mirrors parseSignaturePlacements).
+        List<String> tagsInOrder = new List<String>();
+        Matcher roleMatch = Pattern.compile('\\{@Signature_[^}]*\\}').matcher(body);
+        while (roleMatch.find()) {
+            tagsInOrder.add(roleMatch.group());
+        }
+        if (tagsInOrder.isEmpty()) {
+            Matcher bareMatch = Pattern.compile('\\{@Signature\\}').matcher(body);
+            while (bareMatch.find()) {
+                tagsInOrder.add(bareMatch.group());
+            }
+        }
+        for (Integer i = 0; i < tagsInOrder.size(); i++) {
+            body = body.replaceFirst(Pattern.quote(tagsInOrder[i]), '@@SIG-' + i + '@@');
+        }
+        return body;
+    }
+
+    /**
      * True when the template body contains the reserved {#Signatures} variable-signer
      * loop block. Drives the canonical-entry dispatch in createGuidedPdfSignatureRequest:
      * a loop-only template (no {@Signature_*} tags) routes to the snapshot render

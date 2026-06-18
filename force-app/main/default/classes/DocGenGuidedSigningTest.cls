@@ -382,4 +382,33 @@ private class DocGenGuidedSigningTest {
         System.assert(a, 'getSignatureCertificate rejects bad token');
         System.assert(b, 'saveCompositedSignedPdf rejects bad token');
     }
+
+    // Regression: oversized templates (merged snapshot > 131072 chars) cannot persist a
+    // Frozen_Document__c, so the finalizer LIVE re-merges and the body carries the ORIGINAL
+    // {@Signature_*} tags — not the @@SIG-n@@ sentinels the placements key on. The finalizer
+    // re-applies resentinelSignatureBody so stampSignaturesInXml's Tag_Text__c match lands;
+    // without it the signature silently never stamps (blank signature line).
+    @IsTest
+    static void resentinelRestoresSentinelsInDocumentOrder() {
+        String body =
+            'Signature: {@Signature_Buyer} Date: {@Signature_Buyer:1:DatePick} ' + 'Witness: {@Signature_Witness}';
+        String out = DocGenSignatureSenderController.resentinelSignatureBody(body);
+        // Document order → @@SIG-0@@ = first tag, etc. (matches createGuidedPdfSignatureRequest).
+        System.assert(out.contains('Signature: @@SIG-0@@'), 'first tag → @@SIG-0@@: ' + out);
+        System.assert(out.contains('Date: @@SIG-1@@'), 'second tag → @@SIG-1@@: ' + out);
+        System.assert(out.contains('Witness: @@SIG-2@@'), 'third tag → @@SIG-2@@: ' + out);
+        System.assert(!out.contains('{@Signature'), 'no original signature tags remain: ' + out);
+    }
+
+    @IsTest
+    static void resentinelIsIdempotentAndHandlesBareTag() {
+        // Frozen-path body already carries sentinels → no-op.
+        String frozen = 'Signature: @@SIG-0@@';
+        System.assertEquals(frozen, DocGenSignatureSenderController.resentinelSignatureBody(frozen));
+        // Bare {@Signature} fallback applies only when no role-scoped tags exist.
+        String bare = DocGenSignatureSenderController.resentinelSignatureBody('Sign here: {@Signature}');
+        System.assertEquals('Sign here: @@SIG-0@@', bare);
+        // Blank/null are safe.
+        System.assertEquals(null, DocGenSignatureSenderController.resentinelSignatureBody(null));
+    }
 }
