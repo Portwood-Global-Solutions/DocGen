@@ -524,13 +524,12 @@ public without sharing class DocGenSignatureService {
     }
 
     /**
-     * Serializes per-template merge outputs into the Frozen_Document__c snapshot JSON
-     * captured at request creation. Stores only the static, point-in-time document body
-     * (combinedDocumentXml/relsXml/contentTypesXml/docTitle + styles/numbering) — the
-     * part that reflects live record data and must not drift before signing. Returns
-     * null when the snapshot would exceed the field limit, so the caller leaves it
-     * unset and the sign path live-merges (logged by the caller). `global`/`public`
-     * visibility kept minimal: callers are in the same namespace.
+     * Serializes per-template merge outputs into the frozen-document snapshot JSON captured
+     * at request creation. Stores only the static, point-in-time document body
+     * (combinedDocumentXml/relsXml/contentTypesXml/docTitle + styles/numbering) — the part
+     * that reflects live record data and must not drift before signing. The caller persists
+     * the result via saveFrozenSnapshotCv (#156, ContentVersion-backed, no size cap).
+     * `global`/`public` visibility kept minimal: callers are in the same namespace.
      */
     public static String buildFrozenDocumentJson(List<Map<String, Object>> mergeOutputs, List<Id> templateIds) {
         if (mergeOutputs == null || mergeOutputs.isEmpty()) {
@@ -565,15 +564,102 @@ public without sharing class DocGenSignatureService {
                 }
             );
         }
-        String frozenJson = JSON.serialize(
-            new Map<String, Object>{ 'v' => 1, 'templateType' => templateType, 'docs' => docs }
-        );
-        // Graceful fallback: a body larger than the LongTextArea limit is not frozen
-        // (returns null → live-merge at sign time) rather than throwing or truncating.
-        if (frozenJson.length() > 131072) {
+        // #156: no size cap — the snapshot is persisted to a ContentVersion
+        // (saveFrozenSnapshotCv), not the 131072-char Frozen_Document__c LongTextArea, so
+        // documents of any size get a true point-in-time snapshot instead of degrading to a
+        // live re-merge. The hash is still computed over this full JSON.
+        return JSON.serialize(new Map<String, Object>{ 'v' => 1, 'templateType' => templateType, 'docs' => docs });
+    }
+
+    /**
+     * #156: persists the frozen-document snapshot JSON to a ContentVersion and returns its
+     * Id (stored on Frozen_Document_CV_Id__c). This removes the 131072-char ceiling that the
+     * Frozen_Document__c LongTextArea imposed — large/image-heavy templates previously
+     * couldn't be frozen at all and silently fell back to a live re-merge at sign time
+     * (integrity gap + the #189 stamp mismatch). The CV is internal (no record link);
+     * the async finalizer reads it WITH SYSTEM_MODE. Returns null for a blank snapshot.
+     */
+    public static Id saveFrozenSnapshotCv(String frozenJson) {
+        if (String.isBlank(frozenJson)) {
             return null;
         }
-        return frozenJson;
+        ContentVersion cv = new ContentVersion();
+        cv.Title = 'docgen_sig_frozen';
+        cv.PathOnClient = 'docgen_sig_frozen.json';
+        cv.VersionData = Blob.valueOf(frozenJson);
+        DocGenFlsGuard.assertCreateable(cv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+        return cv.Id;
+    }
+
+    /**
+     * #156 storage lifecycle: deletes a frozen-snapshot ContentVersion once its request reaches
+     * a terminal state (Signed/Declined/Cancelled). The snapshot has done its job — the signed
+     * PDF and the Snapshot_Hash__c remain as the tamper-evidence record (the hash still proves
+     * the signed document equals what was reviewed), so the bulky body is reclaimed. Best-effort:
+     * a cleanup failure is logged, never thrown — it must not break signing or cancellation.
+     * Callers should also null Frozen_Document_CV_Id__c so the reference doesn't dangle.
+     */
+    public static void purgeFrozenSnapshotCv(Id frozenCvId) {
+        if (frozenCvId == null) {
+            return;
+        }
+        try {
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            List<ContentDocument> docs = [
+                SELECT Id
+                FROM ContentDocument
+                WHERE LatestPublishedVersionId = :frozenCvId
+                WITH SYSTEM_MODE
+            ];
+            if (!docs.isEmpty()) {
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                Database.delete(docs, false, AccessLevel.SYSTEM_MODE);
+            }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: frozen snapshot purge skipped: ' + e.getMessage());
+        }
+    }
+
+    /**
+     * #156 read path: loads + parses the frozen snapshot from its ContentVersion. Runs in the
+     * async (Automated Process) finalize context, so the CV is read WITH SYSTEM_MODE (internal
+     * CV, ContentDocumentLink Visibility=InternalUsers → USER_MODE returns empty). Returns null
+     * (→ legacy field / live-merge fallback) when the CV is missing or empty.
+     */
+    private static List<Map<String, Object>> loadFrozenMergeDataFromCv(Id cvId) {
+        if (cvId == null) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Id = :cvId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (cvs.isEmpty() || cvs[0].VersionData == null) {
+            return null;
+        }
+        return loadFrozenMergeData(cvs[0].VersionData.toString());
+    }
+
+    /**
+     * Resolves the frozen merge data for a request, preferring the CV-backed snapshot (#156,
+     * no size cap) and falling back to the legacy inline Frozen_Document__c field for requests
+     * created before the CV migration. Returns null when neither is present (→ live re-merge).
+     */
+    private static List<Map<String, Object>> resolveFrozenMergeData(DocGen_Signature_Request__c reqData) {
+        if (String.isNotBlank(reqData.Frozen_Document_CV_Id__c)) {
+            List<Map<String, Object>> fromCv = loadFrozenMergeDataFromCv((Id) reqData.Frozen_Document_CV_Id__c);
+            if (fromCv != null) {
+                return fromCv;
+            }
+        }
+        return loadFrozenMergeData(reqData.Frozen_Document__c);
     }
 
     /**
@@ -1366,7 +1452,8 @@ public without sharing class DocGenSignatureService {
                     Template_Ids__c,
                     Related_Record_Id__c,
                     Document_Title_Format__c,
-                    Render_Data_Snapshot__c
+                    Render_Data_Snapshot__c,
+                    Frozen_Document_CV_Id__c
                 FROM DocGen_Signature_Request__c
                 WHERE Id = :requestId
                 WITH SYSTEM_MODE
@@ -1539,15 +1626,22 @@ public without sharing class DocGenSignatureService {
                     Database.update(audits, false, AccessLevel.SYSTEM_MODE);
                 }
 
-                // Mark signed
+                // Mark signed. #156: reclaim the frozen-snapshot CV (signed PDF produced);
+                // Snapshot_Hash__c stays as the retained tamper-evidence.
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 req.Status__c = 'Signed';
                 // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
                 req.Signature_Data__c = null;
+                Id frozenCvToPurge = (Id) req.Frozen_Document_CV_Id__c;
+                req.Frozen_Document_CV_Id__c = null;
                 // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-                DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c', 'Signature_Data__c' });
+                DocGenFlsGuard.assertUpdateable(
+                    req,
+                    new Set<String>{ 'Status__c', 'Signature_Data__c', 'Frozen_Document_CV_Id__c' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.update(req, false, AccessLevel.SYSTEM_MODE);
+                purgeFrozenSnapshotCv(frozenCvToPurge);
             } catch (Exception e) {
                 String errMsg = e.getTypeName() + ': ' + e.getMessage() + '\n' + e.getStackTraceString();
                 System.debug(LoggingLevel.ERROR, 'DocGen: Template signature PDF failed for ' + req.Id + ': ' + errMsg);
@@ -1621,11 +1715,11 @@ public without sharing class DocGenSignatureService {
             // the image/style maps. One query serves both.
             DocGenFlsGuard.assertAccessible(
                 DocGen_Signature_Request__c.sObjectType,
-                new Set<String>{ 'Signature_Data__c', 'Frozen_Document__c' }
+                new Set<String>{ 'Signature_Data__c', 'Frozen_Document__c', 'Frozen_Document_CV_Id__c' }
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             DocGen_Signature_Request__c reqData = [
-                SELECT Signature_Data__c, Frozen_Document__c
+                SELECT Signature_Data__c, Frozen_Document__c, Frozen_Document_CV_Id__c
                 FROM DocGen_Signature_Request__c
                 WHERE Id = :reqId
                 WITH SYSTEM_MODE
@@ -1639,9 +1733,10 @@ public without sharing class DocGenSignatureService {
                 // so the {?key} tokens resolve during this re-merge.
                 mergeData = DocGenService.mergeTemplateForSignatureFromData(templateId, snapshotData);
             } else {
-                // Classic flow: render the frozen document body with no re-merge; legacy/
-                // oversized requests (no Frozen_Document__c) fall back to a live merge.
-                List<Map<String, Object>> frozenDocs = loadFrozenMergeData(reqData.Frozen_Document__c);
+                // Classic flow: render the frozen document body with no re-merge. #156: the
+                // snapshot is CV-backed (no size cap); the legacy inline field is the fallback.
+                // Only genuinely legacy/snapshot-less requests fall through to a live merge.
+                List<Map<String, Object>> frozenDocs = resolveFrozenMergeData(reqData);
                 if (frozenDocs != null && !frozenDocs.isEmpty()) {
                     // Frozen body: {?key} tokens were preserved at send-time and the
                     // frozen XML is not re-merged here, so they cannot resolve on this
@@ -1924,11 +2019,11 @@ public without sharing class DocGenSignatureService {
             // Get cached image map
             DocGenFlsGuard.assertAccessible(
                 DocGen_Signature_Request__c.sObjectType,
-                new Set<String>{ 'Signature_Data__c', 'Frozen_Document__c' }
+                new Set<String>{ 'Signature_Data__c', 'Frozen_Document__c', 'Frozen_Document_CV_Id__c' }
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             DocGen_Signature_Request__c reqData = [
-                SELECT Signature_Data__c, Frozen_Document__c
+                SELECT Signature_Data__c, Frozen_Document__c, Frozen_Document_CV_Id__c
                 FROM DocGen_Signature_Request__c
                 WHERE Id = :reqId
                 WITH SYSTEM_MODE
@@ -1949,8 +2044,9 @@ public without sharing class DocGenSignatureService {
 
             // INTEGRITY: each document renders from its frozen snapshot (captured at
             // creation), not a live re-merge. Aligned to templateIds by index. Null when
-            // no snapshot exists (legacy/oversized packet) → per-doc live-merge fallback.
-            List<Map<String, Object>> frozenDocs = loadFrozenMergeData(reqData.Frozen_Document__c);
+            // no snapshot exists (legacy snapshot-less packet) → per-doc live-merge fallback.
+            // #156: CV-backed snapshot preferred, legacy inline field is the fallback.
+            List<Map<String, Object>> frozenDocs = resolveFrozenMergeData(reqData);
 
             // Merge and stamp each document
             List<String> htmlParts = new List<String>();

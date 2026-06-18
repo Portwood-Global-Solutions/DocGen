@@ -89,14 +89,29 @@ private class DocGenSignatureSnapshotTest {
     }
 
     @isTest
-    static void oversizedBodyReturnsNullForLiveMergeFallback() {
-        // Build a body that pushes the serialized JSON over the 131,072 LongText limit.
+    static void oversizedBodyIsFrozenToContentVersion() {
+        // #156: a body over the old 131,072 LongText limit is no longer dropped — it
+        // serializes in full and persists to a ContentVersion, so large templates get a
+        // true point-in-time snapshot instead of degrading to a live re-merge at sign time.
         String huge = 'X'.repeat(140000);
         String json = DocGenSignatureService.buildFrozenDocumentJson(
             new List<Map<String, Object>>{ mergeOutput(huge, 'Word') },
             new List<Id>{ '0Ax000000000001AAA' }
         );
-        System.assertEquals(null, json, 'Oversized snapshot is not frozen → caller live-merges');
+        System.assert(json != null && json.length() > 131072, 'Oversized snapshot serializes in full (no cap)');
+
+        Test.startTest();
+        Id cvId = DocGenSignatureService.saveFrozenSnapshotCv(json);
+        Test.stopTest();
+
+        System.assertNotEquals(null, cvId, 'Oversized snapshot persists to a ContentVersion');
+        String roundTrip = [SELECT VersionData FROM ContentVersion WHERE Id = :cvId LIMIT 1].VersionData.toString();
+        System.assertEquals(json, roundTrip, 'CV round-trips the oversized snapshot intact');
+        System.assertNotEquals(
+            null,
+            DocGenSignatureService.loadFrozenMergeData(roundTrip),
+            'Oversized snapshot loads back into renderable merge data'
+        );
     }
 
     @isTest

@@ -4915,7 +4915,7 @@ private class DocGenSignatureTests {
                 Signing_Order__c,
                 Template__c,
                 Related_Record_Id__c,
-                Frozen_Document__c,
+                Frozen_Document_CV_Id__c,
                 Snapshot_Hash__c,
                 Snapshot_Taken_At__c
             FROM DocGen_Signature_Request__c
@@ -4927,17 +4927,25 @@ private class DocGenSignatureTests {
         System.assertEquals('Sequential', newReq.Signing_Order__c, 'Signing order persisted');
 
         // INTEGRITY: the real creation path froze a point-in-time snapshot of the merged
-        // document — this is what the signed PDF renders from, not a live re-merge.
-        System.assertNotEquals(null, newReq.Frozen_Document__c, 'Document body was frozen at creation');
+        // document — this is what the signed PDF renders from, not a live re-merge. #156: the
+        // snapshot lives in a ContentVersion (no size cap), referenced by Frozen_Document_CV_Id__c.
+        System.assertNotEquals(null, newReq.Frozen_Document_CV_Id__c, 'Document body was frozen at creation');
         System.assertNotEquals(null, newReq.Snapshot_Taken_At__c, 'Snapshot timestamp captured');
+        String frozenJson = [
+                SELECT VersionData
+                FROM ContentVersion
+                WHERE Id = :newReq.Frozen_Document_CV_Id__c
+                LIMIT 1
+            ]
+            .VersionData.toString();
         System.assertEquals(
-            DocGenSignatureService.hashFrozenDocument(newReq.Frozen_Document__c),
+            DocGenSignatureService.hashFrozenDocument(frozenJson),
             newReq.Snapshot_Hash__c,
             'Stored snapshot hash matches the frozen content (tamper-evidence)'
         );
         System.assertNotEquals(
             null,
-            DocGenSignatureService.loadFrozenMergeData(newReq.Frozen_Document__c),
+            DocGenSignatureService.loadFrozenMergeData(frozenJson),
             'Frozen snapshot loads back into renderable per-document merge data'
         );
 

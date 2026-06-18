@@ -1814,14 +1814,34 @@ public without sharing class DocGenSignatureController {
 
         // Mark parent request as declined. Null out the cached preview HTML — the JSON blob
         // in Signature_Data__c carries the live preview with names already stamped, and
-        // fetchDocumentData would otherwise re-serve it (issue #91).
+        // fetchDocumentData would otherwise re-serve it (issue #91). #156: a declined request
+        // will never be signed, so reclaim the frozen-snapshot CV (hash is retained on the audit).
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{ 'Frozen_Document_CV_Id__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signature_Request__c> snapRows = [
+            SELECT Frozen_Document_CV_Id__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :signer.Signature_Request__c
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        Id frozenCvToPurge = snapRows.isEmpty() ? null : (Id) snapRows[0].Frozen_Document_CV_Id__c;
+
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
         parentReq.Status__c = 'Declined';
         parentReq.Signature_Data__c = null;
+        parentReq.Frozen_Document_CV_Id__c = null;
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.guestAssertUpdateable(parentReq, new Set<String>{ 'Status__c', 'Signature_Data__c' });
+        DocGenFlsGuard.guestAssertUpdateable(
+            parentReq,
+            new Set<String>{ 'Status__c', 'Signature_Data__c', 'Frozen_Document_CV_Id__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.update(parentReq, false, AccessLevel.SYSTEM_MODE);
+        DocGenSignatureService.purgeFrozenSnapshotCv(frozenCvToPurge);
 
         // Create audit record
         DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c();

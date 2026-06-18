@@ -676,26 +676,25 @@ public with sharing class DocGenSignatureSenderController {
 
             // INTEGRITY: freeze the merged document body now, while we're in admin context
             // with the live record. The signed PDF is rendered from THIS snapshot, not a
-            // re-merge at sign time, so the signer signs exactly what was reviewed. Null
-            // (oversized) leaves the sign path to live-merge — logged, never silent.
+            // re-merge at sign time, so the signer signs exactly what was reviewed. #156:
+            // the snapshot is stored in a ContentVersion (no size cap), so even large/
+            // image-heavy templates are frozen rather than degrading to a live merge.
             Set<String> snapshotFields = new Set<String>{ 'Signature_Data__c' };
             String frozenJson = DocGenSignatureService.buildFrozenDocumentJson(
                 new List<Map<String, Object>>{ mergeData },
                 new List<Id>{ templateId }
             );
             if (String.isNotBlank(frozenJson)) {
-                req.Frozen_Document__c = frozenJson;
+                req.Frozen_Document_CV_Id__c = DocGenSignatureService.saveFrozenSnapshotCv(frozenJson);
                 req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(frozenJson);
                 req.Snapshot_Taken_At__c = System.now();
                 snapshotFields.addAll(
-                    new Set<String>{ 'Frozen_Document__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' }
+                    new Set<String>{ 'Frozen_Document_CV_Id__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' }
                 );
             } else {
                 System.debug(
                     LoggingLevel.WARN,
-                    'DocGen: template document too large to freeze; request ' +
-                        req.Id +
-                        ' will live-merge at sign time.'
+                    'DocGen: no document body to freeze; request ' + req.Id + ' will live-merge at sign time.'
                 );
             }
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
@@ -1311,10 +1310,12 @@ public with sharing class DocGenSignatureSenderController {
             'Secure_Token__c'
         };
         if (String.isNotBlank(frozenJson)) {
-            req.Frozen_Document__c = frozenJson;
+            // #156: snapshot persisted to a ContentVersion (no 131072-char cap) and referenced
+            // by Id, so large templates get a true frozen snapshot instead of a live re-merge.
+            req.Frozen_Document_CV_Id__c = DocGenSignatureService.saveFrozenSnapshotCv(frozenJson);
             req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(frozenJson);
             req.Snapshot_Taken_At__c = System.now();
-            reqFields.addAll(new Set<String>{ 'Frozen_Document__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' });
+            reqFields.addAll(new Set<String>{ 'Frozen_Document_CV_Id__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' });
         }
         DocGenFlsGuard.assertCreateable(req, reqFields);
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -1568,10 +1569,11 @@ public with sharing class DocGenSignatureSenderController {
             'Secure_Token__c'
         };
         if (String.isNotBlank(frozenJson)) {
-            req.Frozen_Document__c = frozenJson;
+            // #156: multi-document packet snapshot persisted to a ContentVersion (no size cap).
+            req.Frozen_Document_CV_Id__c = DocGenSignatureService.saveFrozenSnapshotCv(frozenJson);
             req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(frozenJson);
             req.Snapshot_Taken_At__c = System.now();
-            reqFields.addAll(new Set<String>{ 'Frozen_Document__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' });
+            reqFields.addAll(new Set<String>{ 'Frozen_Document_CV_Id__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' });
         }
         DocGenFlsGuard.assertCreateable(req, reqFields);
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -2334,7 +2336,7 @@ public with sharing class DocGenSignatureSenderController {
         DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Status__c' });
         /* code-analyzer-suppress ApexFlsViolation */
         DocGen_Signature_Request__c req = [
-            SELECT Id, Status__c
+            SELECT Id, Status__c, Frozen_Document_CV_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Id = :requestId
             WITH SYSTEM_MODE
@@ -2348,11 +2350,15 @@ public with sharing class DocGenSignatureSenderController {
             throw new AuraHandledException('This request is already cancelled.');
         }
 
+        // #156: a cancelled request will never be signed, so reclaim the frozen-snapshot CV.
+        Id frozenCvToPurge = (Id) req.Frozen_Document_CV_Id__c;
         req.Status__c = 'Cancelled';
+        req.Frozen_Document_CV_Id__c = null;
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c' });
+        DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c', 'Frozen_Document_CV_Id__c' });
         /* code-analyzer-suppress ApexFlsViolation */
         Database.update(req, false, AccessLevel.SYSTEM_MODE);
+        DocGenSignatureService.purgeFrozenSnapshotCv(frozenCvToPurge);
 
         // Invalidate all unsigned signers
         DocGenFlsGuard.assertAccessible(
