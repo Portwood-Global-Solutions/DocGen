@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.23.0 — Reliable e-signatures on large documents (#189, #156, #187)
+
+Fixes a silent failure where signatures never stamped on large templates, plus the storage/integrity work behind it.
+
+- **#189 — signatures stamp on large templates.** When a request had no point-in-time snapshot, the finalizer live re-merged the document, which regenerated the original `{@Signature_*}` tags — but the placements key on the `@@SIG-n@@` sentinels assigned at send. `stampSignaturesInXml` matched nothing → the signature silently never stamped (the leftover tags were stripped at render, leaving a blank signature line) while the request still flipped to `Signed`. `DocGenSignatureSenderController.resentinelSignatureBody` re-applies the send-time substitution to the merged body (in document order, sourced from the body so it's async-finalize-safe) before stamping. Wired into both the single and packet template finalizers.
+- **#156 — frozen snapshot moved to a ContentVersion (no size cap).** The 131072-char `Frozen_Document__c` LongTextArea meant large/image-heavy templates couldn't be frozen and fell back to a live re-merge at sign time (the integrity gap behind #189). New field `Frozen_Document_CV_Id__c` references a CV holding the snapshot JSON; `buildFrozenDocumentJson` drops the cap, and `saveFrozenSnapshotCv`/`loadFrozenMergeDataFromCv`/`resolveFrozenMergeData` write+read it (SYSTEM_MODE). The resolver prefers the CV, falls back to the legacy inline field, then live merge — back-compatible with in-flight requests. **Storage lifecycle:** `purgeFrozenSnapshotCv` reclaims the snapshot file on Signed/Declined/Cancelled (the signed PDF + `Snapshot_Hash__c` remain as tamper-evidence), so file storage is bounded to in-flight requests.
+- **#189 (signing-page preview)** — the opaque "SIGN HERE"/"DATE" chip could cover the adjacent "Signature:"/"Date:" label when the engine merged label + sentinel into one PDF text run. `locateAnchors` now slices the box proportionally to the matched characters (`itemSubBox`) so the chip lands only on the sentinel. Preview-only; the rendered PDF was already correct.
+- **#187 — tamper-evidence on the guided composited path.** Stamp `Document_Hash_SHA256__c` on the audit for client-composited signed PDFs (captured directly from the composited bytes).
+- **New field:** `Frozen_Document_CV_Id__c` (Text 18) on `DocGen_Signature_Request__c`, FLS on `DocGen_Admin`/`DocGen_User`/`DocGen_Guest_Signature`. No new restricted picklist values (no §15 upgrade step); no UserGuide change (internal/bug-fix).
+- **Validation (clean `portwood-staging`):** RunLocalTests 1625 / 100% / 77%; e2e 01–08 + 07-syntax1–4 all `FAIL: 0`; `code-analyzer` 0 High.
+
 ## Unreleased — Shared Assets Manager (`{%asset:<key>}`) (#185, build pending)
 
 A single source of truth for shared images (logos, footers, letterheads). Instead of embedding the same image by ContentVersion Id into 20 templates by hand, an admin creates a **Shared Asset** once and references it by a stable merge tag; updating the asset's image updates every template that uses the tag, with no per-template edits.

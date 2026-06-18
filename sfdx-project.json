@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.22.0 — Shared Assets + bulk oversized auto-recovery + guided-signing UX",
-      "versionNumber": "3.22.0.NEXT",
-      "ancestorId": "04tVx000000npXdIAI",
+      "versionName": "v3.23.0 — Reliable e-signatures on large documents (CV-backed snapshot) + signing-page labels",
+      "versionNumber": "3.23.0.NEXT",
+      "ancestorId": "04tVx000000o2eXIAQ",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.22 adds Shared Assets — keep your logos, footers, and other reusable images in one place and drop them into any template with a simple tag, so updating an image once updates every document that uses it. Bulk runs now recover very large records automatically instead of asking you to generate them one by one, and guided signing is smoother with clear step-by-step pacing and a proper date picker. 100% native Salesforce — no external services or callouts. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.23 makes e-signatures dependable on large and image-heavy documents — signatures and dates now always stamp into the finished document no matter its size, completed documents carry a tamper-evidence seal, and the signing page clearly shows each field's label so signers always know exactly what they're signing. 100% native Salesforce — no external services or callouts. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
