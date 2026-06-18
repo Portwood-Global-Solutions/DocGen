@@ -596,7 +596,7 @@ private class DocGenSignaturePdfTests {
         Test.stopTest();
 
         DocGen_Signature_Request__c req = [
-            SELECT Render_Data_Snapshot__c, Frozen_Document__c
+            SELECT Render_Data_Snapshot__c, Frozen_Document_CV_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Template__c = :templateId
             ORDER BY CreatedDate DESC
@@ -606,7 +606,10 @@ private class DocGenSignaturePdfTests {
             String.isNotBlank(req.Render_Data_Snapshot__c),
             'Loop-only template must route to the snapshot strategy so the loop repopulates at completion'
         );
-        System.assert(String.isBlank(req.Frozen_Document__c), 'Snapshot strategy does not freeze a sentinel body');
+        System.assert(
+            String.isBlank(req.Frozen_Document_CV_Id__c),
+            'Snapshot strategy does not freeze a sentinel body'
+        );
     }
 
     @isTest
@@ -640,13 +643,16 @@ private class DocGenSignaturePdfTests {
         Test.stopTest();
 
         DocGen_Signature_Request__c req = [
-            SELECT Render_Data_Snapshot__c, Frozen_Document__c
+            SELECT Render_Data_Snapshot__c, Frozen_Document_CV_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Template__c = :templateId
             ORDER BY CreatedDate DESC
             LIMIT 1
         ];
-        System.assert(String.isNotBlank(req.Frozen_Document__c), 'Tag template stays on the guided frozen-body path');
+        System.assert(
+            String.isNotBlank(req.Frozen_Document_CV_Id__c),
+            'Tag template stays on the guided frozen-body path'
+        );
         System.assert(String.isBlank(req.Render_Data_Snapshot__c), 'Guided path does not snapshot record data');
 
         DocGen_Signature_Placement__c plc = [

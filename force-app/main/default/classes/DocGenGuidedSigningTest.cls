@@ -60,13 +60,13 @@ private class DocGenGuidedSigningTest {
         Test.stopTest();
 
         DocGen_Signature_Request__c req = [
-            SELECT Id, Template__c, Source_Document_Id__c, Frozen_Document__c, Status__c
+            SELECT Id, Template__c, Source_Document_Id__c, Frozen_Document_CV_Id__c, Status__c
             FROM DocGen_Signature_Request__c
             WHERE Template__c = :tplId
             LIMIT 1
         ];
         System.assertNotEquals(null, req.Source_Document_Id__c, 'Viewing PDF should be stored as Source_Document');
-        System.assertNotEquals(null, req.Frozen_Document__c, 'Frozen sentinel body should be captured');
+        System.assertNotEquals(null, req.Frozen_Document_CV_Id__c, 'Frozen sentinel body should be captured (CV)');
 
         List<DocGen_Signature_Placement__c> plcs = [
             SELECT Tag_Text__c, Placement_Type__c, Status__c
@@ -117,13 +117,13 @@ private class DocGenGuidedSigningTest {
         Test.stopTest();
 
         DocGen_Signature_Request__c req = [
-            SELECT Id, Source_Document_Id__c, Frozen_Document__c
+            SELECT Id, Source_Document_Id__c, Frozen_Document_CV_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Template__c = :tmpl.Id
             LIMIT 1
         ];
         System.assertNotEquals(null, req.Source_Document_Id__c, 'Tag-less template should still produce a viewing PDF');
-        System.assertNotEquals(null, req.Frozen_Document__c, 'Frozen body should be captured');
+        System.assertNotEquals(null, req.Frozen_Document_CV_Id__c, 'Frozen body should be captured (CV)');
 
         List<DocGen_Signature_Placement__c> plcs = [
             SELECT Tag_Text__c, Placement_Type__c
@@ -163,14 +163,14 @@ private class DocGenGuidedSigningTest {
         Test.stopTest();
 
         DocGen_Signature_Request__c req = [
-            SELECT Id, Template_Ids__c, Source_Document_Id__c, Frozen_Document__c
+            SELECT Id, Template_Ids__c, Source_Document_Id__c, Frozen_Document_CV_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Template__c = :t1
             LIMIT 1
         ];
         System.assertNotEquals(null, req.Source_Document_Id__c, 'Combined viewing PDF should be stored');
         System.assertNotEquals(null, req.Template_Ids__c, 'Template_Ids__c set for a packet');
-        System.assertNotEquals(null, req.Frozen_Document__c, 'Frozen multi-document body captured');
+        System.assertNotEquals(null, req.Frozen_Document_CV_Id__c, 'Frozen multi-document body captured (CV)');
 
         List<DocGen_Signature_Placement__c> plcs = [
             SELECT Document_Index__c, Tag_Text__c
@@ -353,13 +353,22 @@ private class DocGenGuidedSigningTest {
         Test.stopTest();
 
         DocGen_Signature_Request__c req = [
-            SELECT Frozen_Document__c
+            SELECT Frozen_Document_CV_Id__c
             FROM DocGen_Signature_Request__c
             WHERE Template__c = :tmpl.Id
             LIMIT 1
         ];
+        // #156: frozen body lives in a ContentVersion (no size cap) — load it to inspect.
+        System.assertNotEquals(null, req.Frozen_Document_CV_Id__c, 'Frozen snapshot CV captured');
+        String frozenJson = [
+                SELECT VersionData
+                FROM ContentVersion
+                WHERE Id = :req.Frozen_Document_CV_Id__c
+                LIMIT 1
+            ]
+            .VersionData.toString();
         System.assert(
-            req.Frozen_Document__c != null && req.Frozen_Document__c.contains('{?favColor}'),
+            frozenJson.contains('{?favColor}'),
             'Frozen body must retain the {?favColor} tag for the typed-path re-render'
         );
     }
@@ -381,5 +390,92 @@ private class DocGenGuidedSigningTest {
         Test.stopTest();
         System.assert(a, 'getSignatureCertificate rejects bad token');
         System.assert(b, 'saveCompositedSignedPdf rejects bad token');
+    }
+
+    // Regression (#189): when a request has no frozen snapshot, the finalizer LIVE re-merges
+    // and the body carries the ORIGINAL {@Signature_*} tags — not the @@SIG-n@@ sentinels the
+    // placements key on. The finalizer re-applies resentinelSignatureBody so stampSignaturesInXml's
+    // Tag_Text__c match lands; without it the signature silently never stamps (blank line).
+    // #156 made the CV-backed snapshot the primary path (no size cap), so this re-merge is now
+    // only the fallback for legacy/snapshot-less requests — resentinel keeps that path correct.
+    @IsTest
+    static void resentinelRestoresSentinelsInDocumentOrder() {
+        String body =
+            'Signature: {@Signature_Buyer} Date: {@Signature_Buyer:1:DatePick} ' + 'Witness: {@Signature_Witness}';
+        String out = DocGenSignatureSenderController.resentinelSignatureBody(body);
+        // Document order → @@SIG-0@@ = first tag, etc. (matches createGuidedPdfSignatureRequest).
+        System.assert(out.contains('Signature: @@SIG-0@@'), 'first tag → @@SIG-0@@: ' + out);
+        System.assert(out.contains('Date: @@SIG-1@@'), 'second tag → @@SIG-1@@: ' + out);
+        System.assert(out.contains('Witness: @@SIG-2@@'), 'third tag → @@SIG-2@@: ' + out);
+        System.assert(!out.contains('{@Signature'), 'no original signature tags remain: ' + out);
+    }
+
+    @IsTest
+    static void resentinelIsIdempotentAndHandlesBareTag() {
+        // Frozen-path body already carries sentinels → no-op.
+        String frozen = 'Signature: @@SIG-0@@';
+        System.assertEquals(frozen, DocGenSignatureSenderController.resentinelSignatureBody(frozen));
+        // Bare {@Signature} fallback applies only when no role-scoped tags exist.
+        String bare = DocGenSignatureSenderController.resentinelSignatureBody('Sign here: {@Signature}');
+        System.assertEquals('Sign here: @@SIG-0@@', bare);
+        // Blank/null are safe.
+        System.assertEquals(null, DocGenSignatureSenderController.resentinelSignatureBody(null));
+    }
+
+    // #156: the frozen snapshot is persisted to a ContentVersion (no 131072-char cap) and
+    // round-trips intact, so large/image-heavy templates get a true point-in-time snapshot
+    // instead of degrading to a live re-merge at sign time.
+    @IsTest
+    static void frozenSnapshotRoundTripsThroughContentVersion() {
+        Map<String, Object> doc = new Map<String, Object>{
+            'templateType' => 'HTML',
+            'combinedDocumentXml' => '<html><body>Sign: @@SIG-0@@</body></html>',
+            'relsXml' => '',
+            'contentTypesXml' => '',
+            'docTitle' => 'T',
+            'stylesXml' => '',
+            'numberingXml' => ''
+        };
+        String frozenJson = DocGenSignatureService.buildFrozenDocumentJson(
+            new List<Map<String, Object>>{ doc },
+            new List<Id>{ null }
+        );
+        System.assert(String.isNotBlank(frozenJson), 'snapshot json built');
+
+        Test.startTest();
+        Id cvId = DocGenSignatureService.saveFrozenSnapshotCv(frozenJson);
+        Test.stopTest();
+
+        System.assertNotEquals(null, cvId, 'snapshot persisted to a ContentVersion');
+        String roundTrip = [SELECT VersionData FROM ContentVersion WHERE Id = :cvId LIMIT 1].VersionData.toString();
+        System.assertEquals(frozenJson, roundTrip, 'CV content round-trips exactly');
+        List<Map<String, Object>> docs = DocGenSignatureService.loadFrozenMergeData(roundTrip);
+        System.assertNotEquals(null, docs, 'snapshot loads back into renderable merge data');
+        System.assertEquals(
+            '<html><body>Sign: @@SIG-0@@</body></html>',
+            (String) docs[0].get('combinedDocumentXml'),
+            'frozen body preserved through the CV round-trip'
+        );
+        // saveFrozenSnapshotCv is null-safe for a blank snapshot.
+        System.assertEquals(null, DocGenSignatureService.saveFrozenSnapshotCv(null));
+    }
+
+    // #156 storage lifecycle: a completed/declined/cancelled request reclaims its snapshot CV
+    // (the Snapshot_Hash__c stays as tamper-evidence). purgeFrozenSnapshotCv deletes the file.
+    @IsTest
+    static void purgeFrozenSnapshotCvReclaimsTheFile() {
+        Id cvId = DocGenSignatureService.saveFrozenSnapshotCv('{"v":1,"templateType":"HTML","docs":[]}');
+        System.assertNotEquals(null, cvId, 'snapshot CV created');
+        Id cdId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cvId LIMIT 1].ContentDocumentId;
+        System.assertEquals(1, [SELECT COUNT() FROM ContentDocument WHERE Id = :cdId], 'file exists before purge');
+
+        Test.startTest();
+        DocGenSignatureService.purgeFrozenSnapshotCv(cvId);
+        Test.stopTest();
+
+        System.assertEquals(0, [SELECT COUNT() FROM ContentDocument WHERE Id = :cdId], 'file reclaimed after purge');
+        // Null-safe / idempotent: purging null or an already-gone CV does not throw.
+        DocGenSignatureService.purgeFrozenSnapshotCv(null);
+        DocGenSignatureService.purgeFrozenSnapshotCv(cvId);
     }
 }

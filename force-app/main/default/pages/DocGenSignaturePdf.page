@@ -996,6 +996,26 @@
                         var width = item.width * viewport.scale;
                         return { x: tx[4], y: tx[5] - fontHeight, w: width, h: fontHeight };
                     }
+                    // Device box for just chars [cs, ce) of an item's string. When a sentinel
+                    // shares a single rendered text run with adjacent label text (e.g. the
+                    // engine merges "Signature: " and "@@SIG-0@@" into one PDF text item), the
+                    // full item box would place an opaque chip over the label and hide it. Slice
+                    // the box proportionally by character offset so the chip lands only on the
+                    // sentinel and the "Signature:"/"Date:" label stays visible. Proportional
+                    // (assumes ~even glyph widths) — exact enough to position a sign field.
+                    function itemSubBox(item, viewport, cs, ce) {
+                        var full = itemDeviceBox(item, viewport);
+                        var len = (item.str || '').length;
+                        if (len <= 0 || (cs <= 0 && ce >= len)) {
+                            return full;
+                        }
+                        return {
+                            x: full.x + (cs / len) * full.w,
+                            y: full.y,
+                            w: ((ce - cs) / len) * full.w,
+                            h: full.h
+                        };
+                    }
                     function unionBox(a, b) {
                         var x1 = Math.min(a.x, b.x),
                             y1 = Math.min(a.y, b.y);
@@ -1111,7 +1131,11 @@
                                         for (var r = 0; r < ranges.length; r++) {
                                             var rg = ranges[r];
                                             if (rg.end <= at || rg.start >= matchEnd) continue;
-                                            var b = itemDeviceBox(rg.item, pg.viewport);
+                                            // Only the slice of this run that the needle covers —
+                                            // keeps an adjacent label (e.g. "Signature:") out of the box.
+                                            var cs = Math.max(at, rg.start) - rg.start;
+                                            var ce = Math.min(matchEnd, rg.end) - rg.start;
+                                            var b = itemSubBox(rg.item, pg.viewport, cs, ce);
                                             box = box ? unionBox(box, b) : b;
                                         }
                                         if (box) {
