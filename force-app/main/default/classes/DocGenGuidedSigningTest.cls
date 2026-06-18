@@ -304,6 +304,55 @@ private class DocGenGuidedSigningTest {
     }
 
     @IsTest
+    static void compositedPath_stampsDocumentHashOnAudit() {
+        // Regression #187: the guided composited path (saveCompositedSignedPdf) stores the
+        // PDF client-side and never publishes DocGen_Signature_PDF__e, so the async finalizer
+        // that back-fills Document_Hash_SHA256__c never runs — the audit was left with a null
+        // hash. The fix hashes the composited bytes directly at audit insert. Assert the audit
+        // now carries the SHA-256 of exactly the bytes that were signed.
+        Id tplId = createTaggedTemplate();
+        Account a = [SELECT Id FROM Account LIMIT 1];
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(tplId, a.Id, signersJson(), 'Parallel', null);
+
+        DocGen_Signer__c signer = [
+            SELECT Id, Secure_Token__c, Signature_Request__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__r.Template__c = :tplId
+            LIMIT 1
+        ];
+        signer.PIN_Verified_At__c = System.now();
+        update signer;
+
+        String b64 = EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.4 composited audit-hash test bytes'));
+        String expectedHash = EncodingUtil.convertToHex(
+            Crypto.generateDigest('SHA-256', EncodingUtil.base64Decode(b64))
+        );
+
+        Test.startTest();
+        DocGenSignatureController.saveCompositedSignedPdf(
+            signer.Secure_Token__c,
+            b64,
+            true,
+            '1.2.3.4',
+            'JUnit/1.0',
+            null
+        );
+        Test.stopTest();
+
+        List<DocGen_Signature_Audit__c> audits = [
+            SELECT Document_Hash_SHA256__c
+            FROM DocGen_Signature_Audit__c
+            WHERE Signature_Request__c = :signer.Signature_Request__c AND Signer__c = :signer.Id
+        ];
+        System.assertEquals(1, audits.size(), 'Exactly one audit for the composited signer');
+        System.assertEquals(
+            expectedHash,
+            audits[0].Document_Hash_SHA256__c,
+            'Composited path must stamp the SHA-256 of the signed bytes on the audit (#187)'
+        );
+    }
+
+    @IsTest
     static void formFieldViewingSentinels_hideTagLeaveLocatable() {
         // The viewing PDF must NOT show the literal {?key} tag; it leaves a white,
         // PDF.js-locatable @@FF-<key>@@ sentinel for the drawn-path client to stamp.

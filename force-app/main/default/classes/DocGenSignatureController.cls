@@ -2647,6 +2647,14 @@ public without sharing class DocGenSignatureController {
         audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
         audit.Consent_Captured__c = true;
         audit.PIN_Verified_At__c = signer.PIN_Verified_At__c;
+        // #187 — capture the tamper-evidence hash directly from the composited bytes.
+        // This guided drawn/typed path stores the PDF client-side and never publishes
+        // DocGen_Signature_PDF__e, so the async finalizer (which back-fills the hash on
+        // the typed/snapshot path) never runs here — leaving Document_Hash_SHA256__c
+        // null. We already hold the final bytes (base64Pdf), so hash them now.
+        audit.Document_Hash_SHA256__c = EncodingUtil.convertToHex(
+            Crypto.generateDigest('SHA-256', EncodingUtil.base64Decode(base64Pdf))
+        );
         DocGenFlsGuard.guestAssertCreateable(
             audit,
             new Set<String>{
@@ -2659,7 +2667,8 @@ public without sharing class DocGenSignatureController {
                 'IP_Address__c',
                 'User_Agent__c',
                 'Consent_Captured__c',
-                'PIN_Verified_At__c'
+                'PIN_Verified_At__c',
+                'Document_Hash_SHA256__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
