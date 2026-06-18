@@ -4,11 +4,11 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.22.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.23.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
-[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1621_passing-brightgreen)](#code-quality)
+[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1626_passing-brightgreen)](#code-quality)
 [![Coverage](https://img.shields.io/badge/Coverage-77%25-brightgreen)](#code-quality)
 [![Security](https://img.shields.io/badge/Code_Analyzer-0%2F0%2F0-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
@@ -18,10 +18,10 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 ## Install
 
 ```bash
-sf package install --package 04tVx000000o2eXIAQ --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000o8wsIAA --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000o2eXIAQ) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000o2eXIAQ)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000o8wsIAA) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000o8wsIAA)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -371,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.22.0 — Shared Assets, bulk oversized auto-recovery, and a smoother guided-signing experience**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.23.0 — reliable e-signatures on large documents: signatures and dates always stamp regardless of size, and the signing page clearly labels each field**.
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +444,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.22.0 | **Latest (Released)**                   | `04tVx000000o2eXIAQ` |
+| v3.23.0 | **Latest (Released)**                   | `04tVx000000o8wsIAA` |
+| v3.22.0 | Previous                                | `04tVx000000o2eXIAQ` |
 | v3.21.0 | Previous                                | `04tVx000000npXdIAI` |
 | v3.20.0 | Previous                                | `04tVx000000nij3IAA` |
 | v3.19.0 | Previous                                | `04tVx000000ncSLIAY` |
