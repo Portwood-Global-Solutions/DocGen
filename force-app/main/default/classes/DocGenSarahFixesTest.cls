@@ -348,4 +348,125 @@ private class DocGenSarahFixesTest {
             'Final CV title should NOT be the "<base> - Signed" fallback, got: ' + cvs[0].Title
         );
     }
+
+    // =========================================================================
+    // #9 — Word template with NO pre-decomposed XML CVs still yields placements.
+    //
+    //   SHWaiver bug: extractTemplatePlainText read its <w:t> text ONLY from the
+    //   pre-decomposed docgen_tmpl_xml_* CVs. A Word version that was never
+    //   (re-)decomposed — e.g. a docx replaced/re-saved during org build-out — has
+    //   none, so the parser returned 0 placements and the send silently fell back to
+    //   the synthetic "Signatures" block, leaking the authored {@Signature_*:inline}
+    //   tags as raw text. The parser now self-heals via
+    //   DocGenService.getActiveTemplateDocumentXml (on-demand read of the raw docx),
+    //   so placement detection no longer depends on decomposition having run.
+    //
+    //   The tag is deliberately SPLIT across multiple <w:r> runs (as Word emits it
+    //   when spell/grammar-check or formatting fragments a tag) to prove the <w:t>
+    //   concatenation still recovers the whole {@Signature_WaiverSigner:1:Full:inline}.
+    // =========================================================================
+    @IsTest
+    static void testWordTemplateWithoutDecompFindsPlacements() {
+        // Minimal valid .docx whose signature tag is run-split with a proofErr marker
+        // injected mid-tag — the shape that produced Sarah's leak.
+        String bodyXml =
+            '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+            '<w:p><w:r><w:t>Signature</w:t></w:r>' +
+            '<w:r><w:t xml:space="preserve">{@Signature_WaiverSigner</w:t></w:r>' +
+            '<w:r><w:t>:</w:t></w:r><w:proofErr w:type="gramStart"/><w:r><w:t>1</w:t></w:r>' +
+            '<w:r><w:t>:Full</w:t></w:r><w:proofErr w:type="gramEnd"/>' +
+            '<w:r><w:t>:inline</w:t></w:r><w:r><w:t>}</w:t></w:r></w:p>' +
+            '<w:p><w:r><w:t>Date</w:t></w:r>' +
+            '<w:r><w:t xml:space="preserve">{@Signature_WaiverSigner</w:t></w:r>' +
+            '<w:r><w:t>:1:Date</w:t></w:r><w:r><w:t>:inline</w:t></w:r><w:r><w:t>}</w:t></w:r></w:p>' +
+            '</w:body></w:document>';
+
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry(
+            '[Content_Types].xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                    '<Default Extension="xml" ContentType="application/xml"/>' +
+                    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+                    '</Types>'
+            )
+        );
+        zw.addEntry(
+            '_rels/.rels',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+                    '</Relationships>'
+            )
+        );
+        zw.addEntry('word/document.xml', Blob.valueOf(bodyXml));
+
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'SarahFix Word ' + Datetime.now().getTime() + Crypto.getRandomInteger(),
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Contact',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        ContentVersion cv = new ContentVersion(
+            Title = tmpl.Name + ' Docx',
+            PathOnClient = 'waiver.docx',
+            VersionData = zw.getArchive(),
+            FirstPublishLocationId = tmpl.Id
+        );
+        insert cv;
+        cv = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
+
+        insert new DocGen_Template_Version__c(
+            Template__c = tmpl.Id,
+            Content_Version_Id__c = cv.Id,
+            Is_Active__c = true,
+            Type__c = 'Word'
+        );
+
+        // No extractAndSaveTemplateImages call → zero docgen_tmpl_xml_* CVs (Sarah's state).
+        DocGen_Template_Version__c ver = [
+            SELECT Id
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :tmpl.Id AND Is_Active__c = TRUE
+            LIMIT 1
+        ];
+        Integer xmlCvCount = [
+            SELECT COUNT()
+            FROM ContentVersion
+            WHERE Title LIKE :('docgen_tmpl_xml_' + ver.Id + '_%')
+        ];
+        System.assertEquals(0, xmlCvCount, 'Precondition: template must have NO pre-decomposed XML CVs');
+
+        Test.startTest();
+        List<DocGenSignatureSenderController.PlacementInfo> placements = DocGenSignatureSenderController.getTemplateSignaturePlacements(
+            tmpl.Id
+        );
+        Test.stopTest();
+
+        // Self-heal: the on-demand document.xml read recovers the run-split inline tag.
+        System.assertEquals(
+            2,
+            placements.size(),
+            'Run-split inline tags must be found even with no pre-decomposed CVs (got ' + placements.size() + ')'
+        );
+        Boolean sawFull = false;
+        Boolean sawDate = false;
+        for (DocGenSignatureSenderController.PlacementInfo p : placements) {
+            if (p.placementType == 'Full') {
+                sawFull = true;
+            }
+            if (p.placementType == 'Date') {
+                sawDate = true;
+            }
+            System.assertEquals('WaiverSigner', p.role, 'Role must parse from the run-split tag');
+        }
+        System.assert(sawFull, 'Full placement must be parsed from the inline tag');
+        System.assert(sawDate, 'Date placement must be parsed from the inline tag');
+    }
 }
