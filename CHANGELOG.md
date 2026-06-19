@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.24.0 — Word signature templates: on-demand decompose for placement parsing (#191)
+
+Fixes a silent failure where a Word signature template's `{@Signature_*:inline}` tags leaked as raw text and the engine appended a phantom "Signatures" block at the bottom of the document.
+
+- **#191 — placement parsing no longer depends on pre-decomposition.** `DocGenSignatureSenderController.getTemplateSignaturePlacements` → `extractTemplatePlainText` read its `<w:t>` text only from the pre-decomposed `docgen_tmpl_xml_*` ContentVersions, which exist only after the async `extractAndSaveTemplateImages` decomposition has run. A Word version that was never (re-)decomposed — e.g. a docx replaced/re-saved during org build-out — had none, so the parser returned **zero placements**, the send fell back to the synthetic "Signatures" block (#170 path), and the authored `{@Signature_*:inline}` tags leaked as raw text. New `DocGenService.getActiveTemplateDocumentXml(templateId)` reads `word/document.xml` **on-demand** straight from the raw template CV (ZipReader, SYSTEM_MODE + FLS-guarded — the same way the merge path already does); `extractTemplatePlainText` calls it as a fallback so detection no longer depends on decomposition. The `<w:t>` concatenation recovers run-split tags (Word fragments a tag across `<w:r>` runs with `<w:proofErr>` markers injected mid-tag).
+- **HTML templates were never affected** — their body is read directly with no decomposition step, which is why signatures rendered correctly with HTML inputs but not docx.
+- **No new fields, objects, or picklist values** (no §15 upgrade step); no UserGuide change (internal/bug-fix). Adds regression test `DocGenSarahFixesTest.testWordTemplateWithoutDecompFindsPlacements`.
+- **Validation (`portwood-staging`):** RunLocalTests 1629 / 100% / 77%; e2e 01–08 + 07-syntax1–4 all `FAIL: 0`; `code-analyzer` 0 High.
+
 ## v3.23.0 — Reliable e-signatures on large documents (#189, #156, #187)
 
 Fixes a silent failure where signatures never stamped on large templates, plus the storage/integrity work behind it.
