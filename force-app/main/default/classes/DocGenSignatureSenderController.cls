@@ -255,6 +255,15 @@ public with sharing class DocGenSignatureSenderController {
                 break;
             }
         }
+        if (documentXml == null) {
+            // No pre-decomposed document.xml CV — the async decomposition never ran for
+            // this active version (e.g. the docx was replaced/re-saved during org build-out
+            // and the new version wasn't re-decomposed). Read document.xml on-demand from the
+            // raw template CV so placement parsing still finds the {@Signature_*:inline} tags
+            // instead of returning empty and silently falling back to the synthetic
+            // "Signatures" block (which leaks the inline tags as raw text). See SHWaiver bug.
+            documentXml = DocGenService.getActiveTemplateDocumentXml(templateId);
+        }
         if (documentXml == null)
             return null;
 

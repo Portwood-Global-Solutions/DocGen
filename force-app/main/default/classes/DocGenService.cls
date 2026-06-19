@@ -1770,6 +1770,60 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * Returns the raw word/document.xml for a template's active version, read on-demand
+     * straight from the template ContentVersion blob — NO pre-decomposed
+     * docgen_tmpl_xml_* ContentVersions required.
+     *
+     * The signature placement parser (DocGenSignatureSenderController.extractTemplatePlainText)
+     * normally reads its <w:t> text from those pre-decomposed CVs, which only exist once the
+     * async decomposition (extractAndSaveTemplateImages) has run for the active version. A
+     * template whose active version was never (re-)decomposed — e.g. a docx replaced/re-saved
+     * during org build-out — has none, so the parser finds zero {@Signature_*} placements and
+     * the send silently falls back to the synthetic "Signatures" block, leaking the authored
+     * inline {@Signature_*:inline} tags as raw text (Sarah's SHWaiver bug). This getter lets
+     * the parser self-heal by reading document.xml the same way the merge path already does.
+     *
+     * Returns null if there is no active version CV or the docx lacks word/document.xml.
+     */
+    public static String getActiveTemplateDocumentXml(Id templateId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Content_Version_Id__c', 'Template__c', 'Is_Active__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> vers = [
+            SELECT Content_Version_Id__c
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ]; // NOPMD ApexCRUDViolation - package-internal custom object
+        if (vers.isEmpty() || vers[0].Content_Version_Id__c == null) {
+            return null;
+        }
+        Id cvId = (Id) vers[0].Content_Version_Id__c;
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Id = :cvId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ]; // NOPMD ApexCRUDViolation - package-internal CV read
+        if (cvs.isEmpty() || cvs[0].VersionData == null) {
+            return null;
+        }
+        Compression.ZipReader reader = new Compression.ZipReader(cvs[0].VersionData);
+        for (Compression.ZipEntry entry : reader.getEntries()) {
+            if (entry.getName() == 'word/document.xml') {
+                return reader.extract(entry.getName()).toString();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Extracts images from a template DOCX/PPTX file and saves them as ContentVersion
      * records linked to the template version. These committed CVs provide stable URLs
      * for Blob.toPdf() which cannot render data URI images (Flying Saucer limitation).
