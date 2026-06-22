@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.25.0 — Guest signing: document preview + drawn-signature reliability, alignment, transparent stamp
+
+Fixes a cluster of guest-signer failures on the guided PDF-viewer signing flow, all tracing to one cause: a guest could not read the source document, which broke both the preview and the drawn-signature path. Reported in #support by Sumit Kasara and Robert Watson on v3.24.0.
+
+- **Blank preview / "Document not found".** The signing page loads the document via `DocGenSignatureController.getSourcePdfBase64`, but the viewing PDF is inserted as a **standalone ContentVersion** (no `ContentDocumentLink`), so it lives in the sending user's private library. A guest signer has no access route to it — and `WITH SYSTEM_MODE` / `without sharing` bypass CRUD/FLS/sharing **rules** but not file **library** membership — so the read returned zero rows. `DocGenSignatureSenderController.shareViewingDocumentWithGuest` now adds a `ShareType='V', Visibility='AllUsers'` link to the request record for the viewing CV in all three send paths (snapshot, guided, packet) — the same mechanism `saveSignedDocument` already uses for the completed document.
+- **Drawn signature replaced by "Electronically signed by …" text.** The same empty `sourcePdfBase64` made the page fall back from the in-browser drawn-signature compositor to the server typed-name path, which stamps text and then re-renders every signer to text. With the source readable, drawn signatures stay on the client-composite path.
+- **Multi-signer: second signer hit the same wall.** When the first signer finishes, `DocGenSignatureController.saveCompositedSignedPdf` inserts a fresh **intermediate** composited PDF and repoints `Source_Document_Id__c` at it — that CV was also standalone, so the next (guest) signer got the blank preview + text fallback. It is now shared with the request the moment it is created.
+- **Signature alignment.** Co-located signatures in a two-column block (e.g. Provider | Client) are composited in **separate** signer sessions, so each independently picked a card grow-direction from local clearance and could diverge (one on the line, one floating a card-height above it). The grow direction is now deterministic (prefer down / ink-on-line, keyed on room-below only) so both sessions agree.
+- **Transparent signature stamp.** The stamp card's opaque white backdrop is removed (border + ink + caption only) so a stamp that overlaps document text no longer masks it; the drawn ink is already a transparent PNG.
+- **No new fields, objects, or picklist values** (no §15 upgrade step); no UserGuide change (bug-fix to existing signing behavior).
+- **Verification:** reproduced the original guest scenario end-to-end (real guest signing, both drawn and typed/server-frozen paths) — preview loads, signatures render correctly, aligned, and the `@@SIG-n@@` sentinels are fully resolved (the frozen-certificate leak does not recur). Gates: RunLocalTests 1627 / 100% / 77% on the namespaced `portwood-pkgval` packaging org; e2e 01–08 + 07-syntax1–4 all `FAIL: 0`; `code-analyzer` 0 High.
+
 ## v3.24.0 — Word signature templates: on-demand decompose for placement parsing (#191)
 
 Fixes a silent failure where a Word signature template's `{@Signature_*:inline}` tags leaked as raw text and the engine appended a phantom "Signatures" block at the bottom of the document.
