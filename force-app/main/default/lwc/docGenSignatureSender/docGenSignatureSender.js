@@ -35,6 +35,7 @@ export default class DocGenSignatureSender extends LightningElement {
     @track signingOrder = 'Parallel';
     @track documentTitleFormat = '';
     @track emailMessage = ''; // #193 — optional send-time custom message
+    @track emailSubject = ''; // #193 — optional send-time custom subject
 
     // Signers
     @track signers = [];
@@ -205,6 +206,10 @@ export default class DocGenSignatureSender extends LightningElement {
 
     handleEmailMessageChange(event) {
         this.emailMessage = event.detail.value || '';
+    }
+
+    handleEmailSubjectChange(event) {
+        this.emailSubject = event.detail.value || '';
     }
 
     // --- Template Selection ---
@@ -569,7 +574,8 @@ export default class DocGenSignatureSender extends LightningElement {
                     signersJson,
                     signingOrder: this.signingOrder,
                     documentTitleFormat: titleFormat,
-                    emailMessage: (this.emailMessage || '').trim() || null
+                    emailMessage: (this.emailMessage || '').trim() || null,
+                    emailSubject: (this.emailSubject || '').trim() || null
                 });
             } else {
                 const templateIds = this.selectedTemplates.map((t) => t.templateId);

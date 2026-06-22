@@ -1,3 +1,10 @@
+.full-html-source textarea {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    min-height: 320px;
+    white-space: pre;
+}
+
 .preview-surface {
     width: 100%;
     min-height: 640px;

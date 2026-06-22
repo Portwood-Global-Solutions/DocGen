@@ -927,7 +927,7 @@ public with sharing class DocGenSignatureSenderController {
         );
     }
 
-    @AuraEnabled
+    // 6-arg overload (message only) — delegates with no subject override (#193).
     public static List<SignerResult> createTemplateSnapshotRequest(
         Id templateId,
         String relatedRecordId,
@@ -935,6 +935,27 @@ public with sharing class DocGenSignatureSenderController {
         String signingOrder,
         String documentTitleFormat,
         String emailMessage
+    ) {
+        return createTemplateSnapshotRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            emailMessage,
+            null
+        );
+    }
+
+    @AuraEnabled
+    public static List<SignerResult> createTemplateSnapshotRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        String emailMessage,
+        String emailSubject
     ) {
         if (templateId == null) {
             throw new AuraHandledException('A template Id is required.');
@@ -1047,7 +1068,8 @@ public with sharing class DocGenSignatureSenderController {
             signerInputs,
             true,
             getSigningPdfPagePath(),
-            emailMessage
+            emailMessage,
+            emailSubject
         );
     }
 
@@ -1190,7 +1212,7 @@ public with sharing class DocGenSignatureSenderController {
         );
     }
 
-    @AuraEnabled
+    // 6-arg overload (message only) — delegates with no subject override (#193).
     public static List<SignerResult> createGuidedPdfSignatureRequest(
         Id templateId,
         String relatedRecordId,
@@ -1198,6 +1220,27 @@ public with sharing class DocGenSignatureSenderController {
         String signingOrder,
         String documentTitleFormat,
         String emailMessage
+    ) {
+        return createGuidedPdfSignatureRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            emailMessage,
+            null
+        );
+    }
+
+    @AuraEnabled
+    public static List<SignerResult> createGuidedPdfSignatureRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        String emailMessage,
+        String emailSubject
     ) {
         List<DocGen_Template__c> tpls = [
             SELECT Id, Name, Document_Title_Format__c
@@ -1263,7 +1306,8 @@ public with sharing class DocGenSignatureSenderController {
                     signersJson,
                     signingOrder,
                     documentTitleFormat,
-                    emailMessage
+                    emailMessage,
+                    emailSubject
                 );
             }
         }
@@ -1388,7 +1432,8 @@ public with sharing class DocGenSignatureSenderController {
             signerInputs,
             true,
             getSigningPdfPagePath(),
-            emailMessage
+            emailMessage,
+            emailSubject
         );
 
         // Map placements → signers by role (fallback: first signer), Tag_Text__c = sentinel.
@@ -2173,6 +2218,28 @@ public with sharing class DocGenSignatureSenderController {
         String pagePath,
         String messageOverride
     ) {
+        return createSignersAndNotify(
+            requestId,
+            templateId,
+            documentTitle,
+            signerInputs,
+            sendEmails,
+            pagePath,
+            messageOverride,
+            null
+        );
+    }
+
+    private static List<SignerResult> createSignersAndNotify(
+        Id requestId,
+        Id templateId,
+        String documentTitle,
+        List<Map<String, Object>> signerInputs,
+        Boolean sendEmails,
+        String pagePath,
+        String messageOverride,
+        String subjectOverride
+    ) {
         String siteUrl = getSiteBaseUrl();
         List<DocGen_Signer__c> signerRecords = new List<DocGen_Signer__c>();
         List<SignerResult> results = new List<SignerResult>();
@@ -2294,7 +2361,8 @@ public with sharing class DocGenSignatureSenderController {
                 emailList,
                 documentTitle,
                 requestId,
-                messageOverride
+                messageOverride,
+                subjectOverride
             );
         }
 

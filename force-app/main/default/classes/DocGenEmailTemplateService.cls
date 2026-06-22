@@ -45,6 +45,10 @@ global with sharing class DocGenEmailTemplateService {
 
     private static final String DEFAULT_BRAND = '#1589EE';
 
+    // Layout_Mode__c values.
+    global static final String MODE_MANAGED = 'Managed';
+    global static final String MODE_FULL_HTML = 'Full_Html';
+
     /** The rendered, ready-to-send parts for one email. */
     global class RenderedEmail {
         @AuraEnabled
@@ -64,6 +68,7 @@ global with sharing class DocGenEmailTemplateService {
         public String brandColorOverride;
         public String logoUrlOverride;
         public String footerTextOverride;
+        public String layoutMode; // MODE_MANAGED (default) or MODE_FULL_HTML
     }
 
     // Per-transaction caches so a bulk send issues one settings read + one
@@ -86,6 +91,22 @@ global with sharing class DocGenEmailTemplateService {
      */
     global static RenderedEmail render(String type, Map<String, String> tokens, String messageOverride) {
         return renderWith(getTemplate(type), tokens, messageOverride);
+    }
+
+    /**
+     * Resolves merge tokens in a caller-supplied subject line — used for the
+     * per-send subject override so the sender can reference {DocumentTitle},
+     * {SignerName}, etc. Values are not HTML (plain subject), so not escaped.
+     */
+    global static String renderSubject(String subjectTemplate, Map<String, String> tokens) {
+        if (String.isBlank(subjectTemplate)) {
+            return subjectTemplate;
+        }
+        Map<String, String> v = tokens == null ? new Map<String, String>() : tokens.clone();
+        if (!v.containsKey('CompanyName')) {
+            v.put('CompanyName', getSettings().Company_Name__c);
+        }
+        return resolveValueTokens(subjectTemplate, v, false);
     }
 
     /**
@@ -132,7 +153,13 @@ global with sharing class DocGenEmailTemplateService {
         out.subject = resolveValueTokens(def.subject, v, false);
 
         String bodyInner = expandBody(def.bodyHtml, v, brand, true);
-        out.htmlBody = wrapChrome(bodyInner, brand, logo, company, footer);
+        if (def.layoutMode == MODE_FULL_HTML) {
+            // Full custom HTML: the body IS the whole document — send it as authored,
+            // tokens/widgets resolved, no DocGen header/footer chrome.
+            out.htmlBody = bodyInner;
+        } else {
+            out.htmlBody = wrapChrome(bodyInner, brand, logo, company, footer);
+        }
 
         // Plain part: explicit override if provided, else derive from the body.
         if (String.isNotBlank(def.bodyPlain)) {
@@ -183,12 +210,21 @@ global with sharing class DocGenEmailTemplateService {
                     'Brand_Color__c',
                     'Logo_Url__c',
                     'Footer_Text__c',
+                    'Layout_Mode__c',
                     'Is_Active__c'
                 }
             );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Email_Template__c> rows = [
-                SELECT Type__c, Subject__c, Body_Html__c, Body_Plain__c, Brand_Color__c, Logo_Url__c, Footer_Text__c
+                SELECT
+                    Type__c,
+                    Subject__c,
+                    Body_Html__c,
+                    Body_Plain__c,
+                    Brand_Color__c,
+                    Logo_Url__c,
+                    Footer_Text__c,
+                    Layout_Mode__c
                 FROM DocGen_Email_Template__c
                 WHERE Is_Active__c = TRUE
                 WITH SYSTEM_MODE
@@ -206,6 +242,7 @@ global with sharing class DocGenEmailTemplateService {
                 d.brandColorOverride = r.Brand_Color__c;
                 d.logoUrlOverride = r.Logo_Url__c;
                 d.footerTextOverride = r.Footer_Text__c;
+                d.layoutMode = r.Layout_Mode__c == MODE_FULL_HTML ? MODE_FULL_HTML : MODE_MANAGED;
                 defCache.put(r.Type__c, d);
             }
         } catch (Exception e) {
@@ -494,6 +531,7 @@ global with sharing class DocGenEmailTemplateService {
     public static TemplateDef builtInDef(String type) {
         TemplateDef d = new TemplateDef();
         d.type = type;
+        d.layoutMode = MODE_MANAGED;
         DocGen_Settings__c s = getSettings();
 
         if (type == TYPE_REQUEST) {

@@ -145,6 +145,11 @@
     <!-- Email Template fields (#193) (Admin: full edit; Type__c is required so FLS is auto-granted). -->
     <fieldPermissions>
         <editable>true</editable>
+        <field>DocGen_Email_Template__c.Layout_Mode__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Email_Template__c.Subject__c</field>
         <readable>true</readable>
     </fieldPermissions>

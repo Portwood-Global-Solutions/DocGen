@@ -48,18 +48,33 @@ public with sharing class DocGenSignatureEmailService {
         Id requestId,
         String messageOverride
     ) {
+        sendSignatureRequestEmails(signers, documentTitle, requestId, messageOverride, null);
+    }
+
+    /**
+     * Adds an optional per-send subjectOverride (merge-token aware) on top of the
+     * messageOverride — the send-time "subject + message" customization.
+     */
+    public static void sendSignatureRequestEmails(
+        List<SignerEmail> signers,
+        String documentTitle,
+        Id requestId,
+        String messageOverride,
+        String subjectOverride
+    ) {
         sendRequestLikeEmails(
             signers,
             documentTitle,
             requestId,
             messageOverride,
-            DocGenEmailTemplateService.TYPE_REQUEST
+            DocGenEmailTemplateService.TYPE_REQUEST,
+            subjectOverride
         );
     }
 
     /** Reminder variant — same recipients/branding, the reminder template. */
     public static void sendSignatureReminderEmails(List<SignerEmail> signers, String documentTitle, Id requestId) {
-        sendRequestLikeEmails(signers, documentTitle, requestId, null, DocGenEmailTemplateService.TYPE_REMINDER);
+        sendRequestLikeEmails(signers, documentTitle, requestId, null, DocGenEmailTemplateService.TYPE_REMINDER, null);
     }
 
     private static void sendRequestLikeEmails(
@@ -67,7 +82,8 @@ public with sharing class DocGenSignatureEmailService {
         String documentTitle,
         Id requestId,
         String messageOverride,
-        String templateType
+        String templateType,
+        String subjectOverride
     ) {
         if (signers == null || signers.isEmpty()) {
             return;
@@ -107,8 +123,12 @@ public with sharing class DocGenSignatureEmailService {
                 messageOverride
             );
 
+            String subject = String.isNotBlank(subjectOverride)
+                ? DocGenEmailTemplateService.renderSubject(subjectOverride, tokens)
+                : rendered.subject;
+
             Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
-            email.setSubject(rendered.subject);
+            email.setSubject(subject);
             email.setHtmlBody(rendered.htmlBody);
             if (String.isNotBlank(rendered.plainBody)) {
                 email.setPlainTextBody(rendered.plainBody);

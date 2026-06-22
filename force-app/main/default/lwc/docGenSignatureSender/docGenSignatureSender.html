@@ -136,8 +136,20 @@
                 ></lightning-input>
             </div>
 
-            <!-- Custom email message (#193) — replaces the default body text for this send -->
+            <!-- Custom subject + message (#193) — override the saved template for this send -->
             <template if:true={isSingleTemplate}>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-input
+                        type="text"
+                        name="emailSubject"
+                        label="Custom Email Subject (optional)"
+                        field-level-help="Replaces the subject line of the request email for this send only. Supports tokens like {DocumentTitle} and {SignerName}. Leave blank to use the configured Email Template subject."
+                        placeholder="Action required: please sign {DocumentTitle}"
+                        value={emailSubject}
+                        onchange={handleEmailSubjectChange}
+                        max-length="255"
+                    ></lightning-input>
+                </div>
                 <div class="slds-var-m-bottom_medium">
                     <lightning-textarea
                         name="emailMessage"

@@ -20,6 +20,7 @@ export default class DocGenEmailTemplates extends LightningElement {
     @track brandColor = '';
     @track logoUrl = '';
     @track footerText = '';
+    @track layoutMode = 'Managed';
     @track isActive = true;
     @track tokens = [];
 
@@ -59,6 +60,7 @@ export default class DocGenEmailTemplates extends LightningElement {
         this.brandColor = row.brandColor || '';
         this.logoUrl = row.logoUrl || '';
         this.footerText = row.footerText || '';
+        this.layoutMode = row.layoutMode || 'Managed';
         this.isActive = row.isActive !== false;
         this.tokens = (row.tokens || []).map((t) => '{' + t + '}');
         this.refreshPreview();
@@ -79,12 +81,33 @@ export default class DocGenEmailTemplates extends LightningElement {
             brandColor: this.brandColor,
             logoUrl: this.logoUrl,
             footerText: this.footerText,
+            layoutMode: this.layoutMode,
             isActive: this.isActive
         };
     }
 
     get statusLabel() {
         return this.recordId ? 'Saved template' : 'Built-in default (not yet saved as a record)';
+    }
+
+    get layoutModeOptions() {
+        return [
+            { label: 'DocGen layout — edit body, branded chrome', value: 'Managed' },
+            { label: 'Full custom HTML — your entire document', value: 'Full_Html' }
+        ];
+    }
+
+    get isFullHtml() {
+        return this.layoutMode === 'Full_Html';
+    }
+
+    get isManaged() {
+        return this.layoutMode !== 'Full_Html';
+    }
+
+    handleLayoutModeChange(event) {
+        this.layoutMode = event.detail.value;
+        this.refreshPreview();
     }
 
     // ===== Field handlers =====

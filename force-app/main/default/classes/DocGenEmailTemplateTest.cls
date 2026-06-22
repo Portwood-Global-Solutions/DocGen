@@ -247,6 +247,70 @@ private class DocGenEmailTemplateTest {
         );
     }
 
+    // ---- Service: Full HTML mode sends the admin's document with no chrome ----
+    @IsTest
+    static void fullHtmlMode_skipsChrome() {
+        insert new DocGen_Email_Template__c(
+            Name = 'Raw Request',
+            Type__c = DocGenEmailTemplateService.TYPE_REQUEST,
+            Layout_Mode__c = DocGenEmailTemplateService.MODE_FULL_HTML,
+            Subject__c = 'Raw {DocumentTitle}',
+            Body_Html__c = '<div id="mine">Hi {SignerName} {ActionButton}</div>',
+            Is_Active__c = true
+        );
+        DocGenEmailTemplateService.clearCache();
+        Map<String, String> tk = sampleTokens(DocGenEmailTemplateService.TYPE_REQUEST);
+        tk.put('SignatureUrl', 'https://sign.example.com/?token=RAW');
+        DocGenEmailTemplateService.RenderedEmail r = DocGenEmailTemplateService.render(
+            DocGenEmailTemplateService.TYPE_REQUEST,
+            tk
+        );
+        System.assert(r.htmlBody.startsWith('<div id="mine">'), 'admin markup is the document root: ' + r.htmlBody);
+        System.assert(r.htmlBody.contains('Jordan Rivera'), 'merge token resolved in full HTML');
+        System.assert(r.htmlBody.contains('https://sign.example.com/?token=RAW'), 'action button widget resolved');
+        System.assert(!r.htmlBody.contains('Powered by DocGen'), 'no DocGen chrome footer in full HTML');
+        System.assert(!r.htmlBody.contains('max-width:600px'), 'no DocGen chrome wrapper in full HTML');
+    }
+
+    // ---- Service: per-send subject override resolves tokens ----
+    @IsTest
+    static void renderSubject_resolvesTokens() {
+        String out = DocGenEmailTemplateService.renderSubject(
+            'Please sign {DocumentTitle}, {SignerName}',
+            sampleTokens(DocGenEmailTemplateService.TYPE_REQUEST)
+        );
+        System.assertEquals('Please sign Master Services Agreement, Jordan Rivera', out);
+    }
+
+    // ---- Controller: layoutMode round-trips through save + reload ----
+    @IsTest
+    static void controller_layoutMode_roundTrips() {
+        Map<String, Object> data = new Map<String, Object>{
+            'type' => DocGenEmailTemplateService.TYPE_COMPLETION,
+            'subject' => 'Done',
+            'bodyHtml' => '<html><body>Thanks {SignerName}</body></html>',
+            'layoutMode' => DocGenEmailTemplateService.MODE_FULL_HTML,
+            'isActive' => true
+        };
+        Test.startTest();
+        DocGenEmailTemplateController.saveTemplate(data);
+        // Preview from unsaved full-HTML values skips chrome too.
+        DocGenEmailTemplateService.RenderedEmail pv = DocGenEmailTemplateController.renderPreview(data);
+        Test.stopTest();
+        System.assert(!pv.htmlBody.contains('Powered by DocGen'), 'full-HTML preview has no chrome');
+
+        List<Map<String, Object>> rows = DocGenEmailTemplateController.getTemplates();
+        for (Map<String, Object> row : rows) {
+            if (row.get('type') == DocGenEmailTemplateService.TYPE_COMPLETION) {
+                System.assertEquals(
+                    DocGenEmailTemplateService.MODE_FULL_HTML,
+                    (String) row.get('layoutMode'),
+                    'saved layoutMode round-trips'
+                );
+            }
+        }
+    }
+
     // ---- helpers ----
     private static Map<String, String> sampleTokens(String type) {
         return new Map<String, String>{

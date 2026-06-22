@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Layout_Mode__c</fullName>
+    <description
+    >Managed = edit the body only; DocGen wraps the branded header/footer chrome around it. Full HTML = the Body (HTML) field IS the entire email document (your own layout/branding/hosted images) and is sent as-is with only merge/widget tokens resolved (no chrome). Defaults to Managed; branding-override fields apply to Managed only.</description>
+    <label>Layout Mode</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Managed</fullName>
+                <default>true</default>
+                <label>DocGen layout (edit body, branded chrome)</label>
+            </value>
+            <value>
+                <fullName>Full_Html</fullName>
+                <default>false</default>
+                <label>Full custom HTML (your entire document)</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

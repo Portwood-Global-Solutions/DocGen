@@ -31,6 +31,16 @@
 
                         <p class="slds-text-body_small slds-text-color_weak slds-p-vertical_xx-small">{statusLabel}</p>
 
+                        <lightning-combobox
+                            name="layoutMode"
+                            label="Layout"
+                            value={layoutMode}
+                            options={layoutModeOptions}
+                            onchange={handleLayoutModeChange}
+                            field-level-help="DocGen layout: edit just the body; we wrap the branded header/footer. Full custom HTML: paste your entire email document (your own layout, branding, and hosted image URLs); we send it as-is with only tokens resolved."
+                            class="slds-p-bottom_x-small"
+                        ></lightning-combobox>
+
                         <lightning-input
                             type="text"
                             label="Subject"
@@ -40,13 +50,28 @@
                             class="slds-p-bottom_x-small"
                         ></lightning-input>
 
-                        <lightning-input-rich-text
-                            value={bodyHtml}
-                            onchange={handleBodyChange}
-                            label="Body"
-                            label-visible
-                            placeholder="Compose the email body…"
-                        ></lightning-input-rich-text>
+                        <!-- Managed mode: rich-text body fragment -->
+                        <template if:true={isManaged}>
+                            <lightning-input-rich-text
+                                value={bodyHtml}
+                                onchange={handleBodyChange}
+                                label="Body"
+                                label-visible
+                                placeholder="Compose the email body…"
+                            ></lightning-input-rich-text>
+                        </template>
+
+                        <!-- Full HTML mode: raw source (rich-text would mangle a full document) -->
+                        <template if:true={isFullHtml}>
+                            <lightning-textarea
+                                name="bodyHtmlSource"
+                                label="Full HTML document"
+                                value={bodyHtml}
+                                onchange={handleBodyChange}
+                                class="full-html-source"
+                                field-level-help="Paste a complete HTML email. Use absolute hosted image URLs (https://…). Merge tokens and the {ActionButton}/{VerificationCode} widgets still resolve."
+                            ></lightning-textarea>
+                        </template>
 
                         <div class="slds-box slds-box_xx-small slds-m-top_x-small slds-theme_shade">
                             <p class="slds-text-title slds-p-bottom_xx-small">Merge tokens for this email</p>
@@ -57,10 +82,16 @@
                                 Type a token (e.g. {SignerName}) into the subject or body. {ActionButton},
                                 {DocumentInfo}, {SecurityNote} and {VerificationCode} are rendered as branded blocks.
                             </p>
+                            <template if:true={isFullHtml}>
+                                <p class="slds-text-body_small slds-text-color_weak slds-p-top_xx-small">
+                                    Full HTML mode: your markup is the entire email — DocGen adds no header/footer.
+                                    Reference org values with {CompanyName} and {BrandColor} if you want them.
+                                </p>
+                            </template>
                         </div>
 
-                        <!-- Branding overrides -->
-                        <div class="slds-grid slds-wrap slds-gutters_xx-small slds-p-top_small">
+                        <!-- Branding overrides (Managed mode only — Full HTML owns the whole document) -->
+                        <div if:true={isManaged} class="slds-grid slds-wrap slds-gutters_xx-small slds-p-top_small">
                             <div class="slds-col slds-size_1-of-2">
                                 <lightning-input
                                     type="text"

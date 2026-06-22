@@ -80,6 +80,7 @@ public with sharing class DocGenEmailTemplateController {
                 'Brand_Color__c',
                 'Logo_Url__c',
                 'Footer_Text__c',
+                'Layout_Mode__c',
                 'Is_Active__c'
             }
         );
@@ -95,6 +96,7 @@ public with sharing class DocGenEmailTemplateController {
                 Brand_Color__c,
                 Logo_Url__c,
                 Footer_Text__c,
+                Layout_Mode__c,
                 Is_Active__c
             FROM DocGen_Email_Template__c
             WITH SYSTEM_MODE
@@ -121,6 +123,10 @@ public with sharing class DocGenEmailTemplateController {
                     'brandColor' => r == null ? '' : r.Brand_Color__c,
                     'logoUrl' => r == null ? '' : r.Logo_Url__c,
                     'footerText' => r == null ? '' : r.Footer_Text__c,
+                    'layoutMode' => (r == null ||
+                        r.Layout_Mode__c == null)
+                        ? DocGenEmailTemplateService.MODE_MANAGED
+                        : r.Layout_Mode__c,
                     'isActive' => r == null ? true : r.Is_Active__c,
                     'hasRecord' => r != null,
                     'tokens' => TYPE_TOKENS.get(type)
@@ -150,6 +156,9 @@ public with sharing class DocGenEmailTemplateController {
         rec.Brand_Color__c = (String) data.get('brandColor');
         rec.Logo_Url__c = (String) data.get('logoUrl');
         rec.Footer_Text__c = (String) data.get('footerText');
+        rec.Layout_Mode__c = (data.get('layoutMode') == DocGenEmailTemplateService.MODE_FULL_HTML)
+            ? DocGenEmailTemplateService.MODE_FULL_HTML
+            : DocGenEmailTemplateService.MODE_MANAGED;
         rec.Is_Active__c = data.get('isActive') == null ? true : (Boolean) data.get('isActive');
 
         Set<String> fields = new Set<String>{
@@ -160,6 +169,7 @@ public with sharing class DocGenEmailTemplateController {
             'Brand_Color__c',
             'Logo_Url__c',
             'Footer_Text__c',
+            'Layout_Mode__c',
             'Is_Active__c'
         };
         if (rec.Id == null) {
@@ -235,6 +245,9 @@ public with sharing class DocGenEmailTemplateController {
         def.brandColorOverride = (String) data.get('brandColor');
         def.logoUrlOverride = (String) data.get('logoUrl');
         def.footerTextOverride = (String) data.get('footerText');
+        def.layoutMode = (data.get('layoutMode') == DocGenEmailTemplateService.MODE_FULL_HTML)
+            ? DocGenEmailTemplateService.MODE_FULL_HTML
+            : DocGenEmailTemplateService.MODE_MANAGED;
         return def;
     }
 

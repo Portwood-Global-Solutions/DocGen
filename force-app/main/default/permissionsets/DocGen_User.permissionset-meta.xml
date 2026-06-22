@@ -134,6 +134,11 @@
          admin-customised templates; editing is admin-only). Type__c required → auto-granted. -->
     <fieldPermissions>
         <editable>false</editable>
+        <field>DocGen_Email_Template__c.Layout_Mode__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>DocGen_Email_Template__c.Subject__c</field>
         <readable>true</readable>
     </fieldPermissions>

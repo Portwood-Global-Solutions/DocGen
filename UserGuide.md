@@ -2293,7 +2293,12 @@ Every email DocGen sends is a fully editable, brandable template — open **DocG
 | Signer Declined         | Sender  | A signer declines                     |
 | Completion Confirmation | Signer  | Everyone has signed                   |
 
-For each template you can edit the **subject** and a **rich-text body**, optionally override **brand color / logo / footer** per template, preview it live with sample data, send a **test email**, and **Reset to Default**. Leave the body blank to use the built-in default.
+For each template you can edit the **subject** and **body**, preview it live with sample data, send a **test email**, and **Reset to Default**. Leave the body blank to use the built-in default.
+
+**Two layout modes** (per template):
+
+- **DocGen layout** (default) — edit just the body in a rich-text editor; DocGen wraps the branded header (logo + brand color) and footer around it. You can override **brand color / logo / footer** per template here. Best when you want consistent branding with minimal effort.
+- **Full custom HTML** — paste your **entire** HTML email document (your own table layout, inline styles, and `<img src="https://…">` images). DocGen sends it exactly as authored, resolving only merge tokens and widgets — no added header/footer. Use this for pixel-perfect, fully on-brand emails. **Images must use absolute, publicly reachable URLs** (your website/CDN); Salesforce file links won't load in a recipient's inbox. You can still reference org values with `{CompanyName}` and `{BrandColor}`, and drop in `{ActionButton}`/`{VerificationCode}` so the signing button/code keep working.
 
 **Merge tokens** resolve at send time and are HTML-escaped: `{SignerName}`, `{SenderName}`, `{CompanyName}`, `{DocumentTitle}`, `{RoleName}`, `{ExpirationHours}`, `{RequestId}`, and `{Message}`. Four **widget tokens** render branded blocks — place them anywhere in the body:
 
@@ -2304,7 +2309,7 @@ For each template you can edit the **subject** and a **rich-text body**, optiona
 
 > **Out of the box:** a default record for each template is created on install, so emails work immediately with zero setup. Delete a record to fall back to the built-in default.
 
-**Send-time custom message.** When sending a single-template request (from the Signature Sender or the `DocGen: Create Signature Request` Flow action), you can type a **Custom Email Message** that replaces the default body text for that one send. The branded layout and signing button are always kept. Bulk/packet sends always use the saved templates.
+**Send-time customization.** When sending a single-template request (from the Signature Sender or the `DocGen: Create Signature Request` Flow action), you can type a **Custom Email Subject** and/or **Custom Email Message** that override the saved template for that one send. The subject supports merge tokens; the branded layout and signing button are always kept. Bulk/packet sends always use the saved templates.
 
 ---
 

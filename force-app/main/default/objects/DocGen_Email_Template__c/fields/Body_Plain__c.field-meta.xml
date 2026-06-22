@@ -5,7 +5,7 @@
     >Optional plain-text alternative part for the email. Supports the same merge tokens. Left blank, the service auto-derives a plain-text part by stripping the rendered HTML, improving deliverability without admin effort.</description>
     <externalId>false</externalId>
     <label>Body (Plain Text)</label>
-    <length>32768</length>
+    <length>131072</length>
     <type>LongTextArea</type>
     <visibleLines>10</visibleLines>
 </CustomField>
