@@ -908,13 +908,33 @@ public with sharing class DocGenSignatureSenderController {
      *
      * signersJson: [{signerName, signerEmail, roleName, contactId}, ...]
      */
-    @AuraEnabled
+    // 5-arg overload (no send-time message). Kept so existing Apex/test/script
+    // callers compile unchanged; delegates with emailMessage = null (#193).
     public static List<SignerResult> createTemplateSnapshotRequest(
         Id templateId,
         String relatedRecordId,
         String signersJson,
         String signingOrder,
         String documentTitleFormat
+    ) {
+        return createTemplateSnapshotRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            null
+        );
+    }
+
+    @AuraEnabled
+    public static List<SignerResult> createTemplateSnapshotRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        String emailMessage
     ) {
         if (templateId == null) {
             throw new AuraHandledException('A template Id is required.');
@@ -1020,7 +1040,15 @@ public with sharing class DocGenSignatureSenderController {
 
         // Create signer records + emails, URLs at the flat-PDF page (signerInputs parsed above).
         // templateId=null → skip {@Signature} placement creation (snapshot signing has no tags).
-        return createSignersAndNotify(req.Id, null, fileTitle, signerInputs, true, getSigningPdfPagePath());
+        return createSignersAndNotify(
+            req.Id,
+            null,
+            fileTitle,
+            signerInputs,
+            true,
+            getSigningPdfPagePath(),
+            emailMessage
+        );
     }
 
     /**
@@ -1143,13 +1171,33 @@ public with sharing class DocGenSignatureSenderController {
         );
     }
 
-    @AuraEnabled
+    // 5-arg overload (no send-time message). Kept so existing Apex/test/script
+    // callers compile unchanged; delegates with emailMessage = null (#193).
     public static List<SignerResult> createGuidedPdfSignatureRequest(
         Id templateId,
         String relatedRecordId,
         String signersJson,
         String signingOrder,
         String documentTitleFormat
+    ) {
+        return createGuidedPdfSignatureRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            null
+        );
+    }
+
+    @AuraEnabled
+    public static List<SignerResult> createGuidedPdfSignatureRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        String emailMessage
     ) {
         List<DocGen_Template__c> tpls = [
             SELECT Id, Name, Document_Title_Format__c
@@ -1214,7 +1262,8 @@ public with sharing class DocGenSignatureSenderController {
                     relatedRecordId,
                     signersJson,
                     signingOrder,
-                    documentTitleFormat
+                    documentTitleFormat,
+                    emailMessage
                 );
             }
         }
@@ -1338,7 +1387,8 @@ public with sharing class DocGenSignatureSenderController {
             fileTitle,
             signerInputs,
             true,
-            getSigningPdfPagePath()
+            getSigningPdfPagePath(),
+            emailMessage
         );
 
         // Map placements → signers by role (fallback: first signer), Tag_Text__c = sentinel.
@@ -2107,6 +2157,22 @@ public with sharing class DocGenSignatureSenderController {
         Boolean sendEmails,
         String pagePath
     ) {
+        return createSignersAndNotify(requestId, templateId, documentTitle, signerInputs, sendEmails, pagePath, null);
+    }
+
+    /**
+     * @param messageOverride optional send-time custom message (#193). Replaces the
+     *        {Message} token in the request email for this send only; null = template default.
+     */
+    private static List<SignerResult> createSignersAndNotify(
+        Id requestId,
+        Id templateId,
+        String documentTitle,
+        List<Map<String, Object>> signerInputs,
+        Boolean sendEmails,
+        String pagePath,
+        String messageOverride
+    ) {
         String siteUrl = getSiteBaseUrl();
         List<DocGen_Signer__c> signerRecords = new List<DocGen_Signer__c>();
         List<SignerResult> results = new List<SignerResult>();
@@ -2224,7 +2290,12 @@ public with sharing class DocGenSignatureSenderController {
                     )
                 );
             }
-            DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle, requestId);
+            DocGenSignatureEmailService.sendSignatureRequestEmails(
+                emailList,
+                documentTitle,
+                requestId,
+                messageOverride
+            );
         }
 
         return results;

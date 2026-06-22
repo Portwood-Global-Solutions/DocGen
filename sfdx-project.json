@@ -7,6 +7,7 @@
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
+      "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
       "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.24 makes e-signatures more reliable on Word templates: signature and date fields now land exactly where you placed them in the document — even right after you re-upload or revise a template — instead of occasionally collapsing into a separate list at the bottom. 100% native Salesforce — no external services or callouts. Free for all users."
     }

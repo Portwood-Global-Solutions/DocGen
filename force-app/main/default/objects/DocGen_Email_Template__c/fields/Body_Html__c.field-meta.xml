@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Body_Html__c</fullName>
+    <description
+    >The editable HTML body of the email (the content inside the branded card). Authored via the rich-text editor on the Email Templates tab. Supports merge tokens ({SignerName}, {DocumentTitle}, {Message}, {ActionButton}, {VerificationCode}, etc.). The service wraps this in the branded header/footer chrome. Left blank falls back to the built-in default for the type.</description>
+    <externalId>false</externalId>
+    <label>Body (HTML)</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>20</visibleLines>
+</CustomField>

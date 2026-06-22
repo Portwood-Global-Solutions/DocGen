@@ -2270,15 +2270,41 @@ Salesforce hides the guest user behind a few clicks. The full path:
 
 ### 10.13 Email branding
 
-Configure in Signature Settings:
+Org-wide branding lives in **Signature Settings** and feeds every email by default:
 
 - Brand color (hex) — used in email header/buttons
 - Logo URL — displayed at top of emails
-- Subject line and body (merge-tag aware — `{RecipientName}`, `{DocumentName}`, etc.)
 - Company name, footer text
 - Reply-to: automatically set to the request creator so signer replies route correctly
 
-Branding applies to all signature emails (invitations, reminders, completion, decline).
+Branding applies to all signature emails (invitations, reminders, verification codes, completion, decline).
+
+### 10.14 Email Templates (Command Hub tab)
+
+Every email DocGen sends is a fully editable, brandable template — open **DocGen Command Hub → Email Templates**. Pick the email to edit from the dropdown:
+
+| Template                | Sent to | When                                  |
+| ----------------------- | ------- | ------------------------------------- |
+| Signature Request       | Signer  | A request is sent                     |
+| Signature Reminder      | Signer  | Scheduled reminder for pending signer |
+| Email Verification Code | Signer  | Signer requests the PIN to sign       |
+| Signer Completed        | Sender  | A signer finishes                     |
+| All Signatures Complete | Sender  | Everyone has signed                   |
+| Signer Declined         | Sender  | A signer declines                     |
+| Completion Confirmation | Signer  | Everyone has signed                   |
+
+For each template you can edit the **subject** and a **rich-text body**, optionally override **brand color / logo / footer** per template, preview it live with sample data, send a **test email**, and **Reset to Default**. Leave the body blank to use the built-in default.
+
+**Merge tokens** resolve at send time and are HTML-escaped: `{SignerName}`, `{SenderName}`, `{CompanyName}`, `{DocumentTitle}`, `{RoleName}`, `{ExpirationHours}`, `{RequestId}`, and `{Message}`. Four **widget tokens** render branded blocks — place them anywhere in the body:
+
+- `{ActionButton}` — the "Review & Sign Document" button (request/reminder)
+- `{DocumentInfo}` — the document title + signer role callout
+- `{SecurityNote}` — the link-expiry note + fallback URL
+- `{VerificationCode}` — the large PIN block (verification email)
+
+> **Out of the box:** a default record for each template is created on install, so emails work immediately with zero setup. Delete a record to fall back to the built-in default.
+
+**Send-time custom message.** When sending a single-template request (from the Signature Sender or the `DocGen: Create Signature Request` Flow action), you can type a **Custom Email Message** that replaces the default body text for that one send. The branded layout and signing button are always kept. Bulk/packet sends always use the saved templates.
 
 ---
 
