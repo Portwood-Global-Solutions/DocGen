@@ -147,13 +147,30 @@ export default class DocGenEmailTemplates extends LightningElement {
         try {
             const r = await renderPreview({ data: this.currentData });
             this.previewHtml = r.htmlBody;
-            this._previewDirty = true;
         } catch (error) {
             this.previewHtml =
                 '<p style="color:#c23934;padding:16px;font-family:sans-serif;">Preview error: ' +
                 this.errMsg(error) +
                 '</p>';
-            this._previewDirty = true;
+        }
+        // previewHtml is not bound in the template, so setting it does not
+        // re-render — push it into the iframe imperatively. The frame already
+        // exists (refreshPreview runs after first render); renderedCallback is
+        // the backstop for the first paint if it doesn't yet.
+        this._previewDirty = true;
+        this.updatePreviewFrame();
+    }
+
+    updatePreviewFrame() {
+        const surface = this.template.querySelector('.preview-surface');
+        if (surface && this._previewDirty) {
+            // Render the email markup directly (not an iframe — Salesforce CSP
+            // blocks iframe srcdoc/data: frames). lwc:dom="manual" lets us set
+            // innerHTML; LWS sanitizes it (our content is style-only, no script).
+            // The <!DOCTYPE>/<html>/<body> wrappers are dropped by the parser;
+            // the inline-styled tables that carry the branding survive.
+            surface.innerHTML = this.previewHtml || '';
+            this._previewDirty = false;
         }
     }
 
@@ -178,13 +195,9 @@ export default class DocGenEmailTemplates extends LightningElement {
     }
 
     renderedCallback() {
-        if (this._previewDirty) {
-            const frame = this.template.querySelector('iframe.preview-frame');
-            if (frame) {
-                frame.srcdoc = this.previewHtml;
-                this._previewDirty = false;
-            }
-        }
+        // Backstop for the first paint: if the preview resolved before the
+        // iframe existed, push it now that the frame is in the DOM.
+        this.updatePreviewFrame();
     }
 
     // ===== Helpers =====

@@ -1,7 +1,19 @@
-.preview-frame {
+.preview-surface {
     width: 100%;
     min-height: 640px;
+    max-height: 760px;
+    overflow: auto;
     border: 1px solid #e5e5e5;
     border-radius: 6px;
     background: #f4f4f4;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+/* The rendered email uses inline styles; just make sure images/tables behave. */
+.preview-surface img {
+    max-width: 100%;
+}
+.preview-surface table {
+    max-width: 100%;
 }
