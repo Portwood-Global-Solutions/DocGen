@@ -1018,6 +1018,11 @@ public with sharing class DocGenSignatureSenderController {
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(req, AccessLevel.SYSTEM_MODE);
 
+        // Share the standalone viewing CV with the guest signer so the signing-page
+        // preview (getSourcePdfBase64) can read it. Without this link the guest's
+        // SYSTEM_MODE read returns 0 rows → "Document not found" → blank preview.
+        shareViewingDocumentWithGuest(viewCv.Id, req.Id);
+
         // Create signer records + emails, URLs at the flat-PDF page (signerInputs parsed above).
         // templateId=null → skip {@Signature} placement creation (snapshot signing has no tags).
         return createSignersAndNotify(req.Id, null, fileTitle, signerInputs, true, getSigningPdfPagePath());
@@ -1330,6 +1335,10 @@ public with sharing class DocGenSignatureSenderController {
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(req, AccessLevel.SYSTEM_MODE);
 
+        // Share the standalone viewing CV with the guest signer so the signing-page
+        // preview (getSourcePdfBase64) can read it (see shareViewingDocumentWithGuest).
+        shareViewingDocumentWithGuest(viewCv.Id, req.Id);
+
         // Create signers at the PDF-viewer page (templateId=null skips the classic
         // placement creation — we create sentinel-keyed placements below).
         List<SignerResult> results = createSignersAndNotify(
@@ -1587,6 +1596,10 @@ public with sharing class DocGenSignatureSenderController {
         DocGenFlsGuard.assertCreateable(req, reqFields);
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(req, AccessLevel.SYSTEM_MODE);
+
+        // Share the standalone viewing CV with the guest signer so the signing-page
+        // preview (getSourcePdfBase64) can read it (see shareViewingDocumentWithGuest).
+        shareViewingDocumentWithGuest(viewCv.Id, req.Id);
 
         List<SignerResult> results = createSignersAndNotify(
             req.Id,
@@ -2068,6 +2081,59 @@ public with sharing class DocGenSignatureSenderController {
             );
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(placementRecords, AccessLevel.SYSTEM_MODE);
+        }
+    }
+
+    /**
+     * Shares a standalone viewing ContentVersion with the guest signer.
+     *
+     * The guided/snapshot send paths insert the viewing PDF as a standalone
+     * ContentVersion (no FirstPublishLocationId, no ContentDocumentLink), so it
+     * lands in the sending user's private library. A guest signer therefore has
+     * no access route to it, and the signing page's SYSTEM_MODE read in
+     * DocGenSignatureController.getSourcePdfBase64 returns 0 rows → the catch
+     * surfaces "Document not found" and the preview goes blank (signing itself
+     * still works because it never reads this CV).
+     *
+     * Linking the document to the DocGen_Signature_Request__c record with
+     * Visibility='AllUsers' makes it guest-readable — the same mechanism
+     * saveSignedDocument uses for the completed document — while keeping the
+     * unsigned preview OFF the customer's business record (only the final signed
+     * + certificate PDF lands there at completion). Best-effort: a failure here
+     * must not block the send (the signer can still proceed without the preview).
+     */
+    private static void shareViewingDocumentWithGuest(Id viewCvId, Id linkedEntityId) {
+        if (viewCvId == null || linkedEntityId == null) {
+            return;
+        }
+        try {
+            DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'ContentDocumentId' });
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            Id contentDocId = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :viewCvId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]
+            .ContentDocumentId;
+
+            ContentDocumentLink cdl = new ContentDocumentLink();
+            cdl.ContentDocumentId = contentDocId;
+            cdl.LinkedEntityId = linkedEntityId;
+            cdl.ShareType = 'V';
+            cdl.Visibility = 'AllUsers';
+            DocGenFlsGuard.assertCreateable(
+                cdl,
+                new Set<String>{ 'ContentDocumentId', 'LinkedEntityId', 'ShareType', 'Visibility' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            Database.insert(cdl, AccessLevel.SYSTEM_MODE);
+        } catch (Exception e) {
+            System.debug(
+                LoggingLevel.ERROR,
+                'DocGen: failed to share viewing document with guest signer: ' + e.getMessage()
+            );
         }
     }
 

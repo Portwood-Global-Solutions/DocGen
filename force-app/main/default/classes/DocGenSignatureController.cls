@@ -2758,9 +2758,41 @@ public without sharing class DocGenSignatureController {
         Set<String> reqUpd = new Set<String>{ 'Status__c' };
         if (!result.isComplete) {
             // Point the next signer's viewer at the just-composited PDF.
-            Id newCvId = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id WITH SYSTEM_MODE LIMIT 1].Id;
-            parentReq.Source_Document_Id__c = newCvId;
+            ContentVersion nextCv = [
+                SELECT Id, ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :cv.Id
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            parentReq.Source_Document_Id__c = nextCv.Id;
             reqUpd.add('Source_Document_Id__c');
+            // Share this intermediate composited PDF with the next signer (often a
+            // guest) so their viewer's getSourcePdfBase64 can read it. Without the
+            // link the next signer sees a blank preview and the signing page falls
+            // back to the typed-name server path — their drawn signature is replaced
+            // by "Electronically signed by <name>" text, and the server re-render
+            // then flattens every signer to text. Mirrors saveSignedDocument's guest
+            // share (ShareType='V', Visibility='AllUsers' on the request record).
+            // Best-effort: never block signing on the share.
+            try {
+                ContentDocumentLink nextCdl = new ContentDocumentLink();
+                nextCdl.ContentDocumentId = nextCv.ContentDocumentId;
+                nextCdl.LinkedEntityId = signer.Signature_Request__c;
+                nextCdl.ShareType = 'V';
+                nextCdl.Visibility = 'AllUsers';
+                DocGenFlsGuard.guestAssertCreateable(
+                    nextCdl,
+                    new Set<String>{ 'ContentDocumentId', 'LinkedEntityId', 'ShareType', 'Visibility' }
+                );
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                Database.insert(nextCdl, AccessLevel.SYSTEM_MODE);
+            } catch (Exception shareErr) {
+                System.debug(
+                    LoggingLevel.ERROR,
+                    'DocGen: failed to share intermediate signing PDF with next signer: ' + shareErr.getMessage()
+                );
+            }
         }
         DocGenFlsGuard.guestAssertUpdateable(parentReq, reqUpd);
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */

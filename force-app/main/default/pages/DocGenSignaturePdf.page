@@ -2128,7 +2128,17 @@
                                                 return drawInlineMark(page, ink, rect);
                                             }
                                             var need = cardH - rect.h; // extra height beyond the field line
-                                            var growDown = below >= above;
+                                            // Signature/initials cards prefer growing DOWN so the ink sits
+                                            // on the signing line. Deterministic — keys off the room BELOW
+                                            // only, not a below-vs-above comparison — so two co-located
+                                            // signatures composited in SEPARATE signer sessions (a
+                                            // "Provider | Client" block signed by different people) make the
+                                            // SAME choice and stay aligned, instead of one hugging the line
+                                            // while the other floats a full card-height above it. Only when
+                                            // the room below is too tight to seat the card do we fall back to
+                                            // the larger gap; co-located fields share that below gap, so they
+                                            // still agree. (14pt ≈ half a line of slack.)
+                                            var growDown = below >= 14 || below >= above;
                                             var room = growDown ? below : above;
                                             if (need > 0 && room < need) {
                                                 // neither gap fits fully — shrink ink to the larger gap,
@@ -2140,14 +2150,16 @@
                                             // at the line bottom. Either way the card brackets the field.
                                             var botY = growDown ? rect.yBottom + rect.h - cardH : rect.yBottom;
                                             var x0 = rect.x;
-                                            // opaque white backdrop + brand border (lifts the stamp off
-                                            // any underlying bleed so it reads cleanly)
+                                            // Transparent backdrop + brand border: the frame still reads as a
+                                            // deliberate stamp, but no opaque fill — so if the stamp ever
+                                            // overlaps document text the text stays visible behind it (the
+                                            // drawn ink itself is a transparent PNG). Omitting `color` leaves
+                                            // the rectangle interior unpainted; only the border is drawn.
                                             page.drawRectangle({
                                                 x: x0,
                                                 y: botY,
                                                 width: cardW,
                                                 height: cardH,
-                                                color: rgb(1, 1, 1),
                                                 borderColor: blue,
                                                 borderWidth: 0.75
                                             });
