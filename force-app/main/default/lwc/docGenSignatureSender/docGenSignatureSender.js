@@ -34,6 +34,9 @@ export default class DocGenSignatureSender extends LightningElement {
     // Signing order
     @track signingOrder = 'Parallel';
     @track documentTitleFormat = '';
+    // #verification — per-send overrides ('Inherit' falls back to template/org default)
+    @track verificationOverride = 'Inherit';
+    @track prefillOverride = 'Inherit';
 
     // Signers
     @track signers = [];
@@ -190,6 +193,46 @@ export default class DocGenSignatureSender extends LightningElement {
 
     handleSigningOrderChange(event) {
         this.signingOrder = event.detail.value;
+    }
+
+    // #verification — per-send controls (single-template path)
+    get isSingleTemplate() {
+        return this.selectedTemplates && this.selectedTemplates.length === 1;
+    }
+
+    get verificationOptions() {
+        return [
+            { label: 'Default (template / org setting)', value: 'Inherit' },
+            { label: 'Require email verification', value: 'Required' },
+            { label: 'No verification', value: 'Off' }
+        ];
+    }
+
+    get prefillOptions() {
+        return [
+            { label: 'Default (template / org setting)', value: 'Inherit' },
+            { label: 'Auto-send code to known email', value: 'Yes' },
+            { label: 'Signer types their email', value: 'No' }
+        ];
+    }
+
+    // Map the tri-state pickers to nullable booleans (null = inherit).
+    get requireVerificationValue() {
+        if (this.verificationOverride === 'Required') return true;
+        if (this.verificationOverride === 'Off') return false;
+        return null;
+    }
+    get prefillValue() {
+        if (this.prefillOverride === 'Yes') return true;
+        if (this.prefillOverride === 'No') return false;
+        return null;
+    }
+
+    handleVerificationOverrideChange(event) {
+        this.verificationOverride = event.detail.value;
+    }
+    handlePrefillOverrideChange(event) {
+        this.prefillOverride = event.detail.value;
     }
 
     handleDocumentTitleChange(event) {
@@ -557,7 +600,9 @@ export default class DocGenSignatureSender extends LightningElement {
                     relatedRecordId: this.recordId,
                     signersJson,
                     signingOrder: this.signingOrder,
-                    documentTitleFormat: titleFormat
+                    documentTitleFormat: titleFormat,
+                    requireVerification: this.requireVerificationValue,
+                    prefillSignerEmail: this.prefillValue
                 });
             } else {
                 const templateIds = this.selectedTemplates.map((t) => t.templateId);

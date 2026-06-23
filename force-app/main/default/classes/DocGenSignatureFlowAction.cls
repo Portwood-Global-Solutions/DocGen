@@ -134,6 +134,18 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
             description='Enter "Parallel" (default) to email all signers at once, "Sequential" to send one at a time (each signer emailed only after the previous completes), or "Single" for a one-signer document.'
         )
         global String signingOrder;
+
+        @InvocableVariable(
+            label='Require Email Verification'
+            description='Optional (#verification). TRUE forces the one-time email-PIN check before signing; FALSE skips it. Leave blank to inherit the template default, then the org default.'
+        )
+        global Boolean requireEmailVerification;
+
+        @InvocableVariable(
+            label='Pre-fill Signer Email'
+            description='Optional. TRUE auto-sends the verification code to the known signer email (skips the type-your-email step); FALSE makes the signer type it. Leave blank to inherit the template/org default.'
+        )
+        global Boolean prefillSignerEmail;
     }
 
     global class Result {
@@ -247,7 +259,9 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
                 req.relatedRecordId,
                 signersJson,
                 signingOrder,
-                null // documentTitleFormat — inherited from the template
+                null, // documentTitleFormat — inherited from the template
+                req.requireEmailVerification, // #verification — null = inherit template/org
+                req.prefillSignerEmail
             );
 
             // Find the request ID

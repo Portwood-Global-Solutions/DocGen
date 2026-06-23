@@ -908,13 +908,34 @@ public with sharing class DocGenSignatureSenderController {
      *
      * signersJson: [{signerName, signerEmail, roleName, contactId}, ...]
      */
-    @AuraEnabled
+    // 5-arg overload — existing callers; inherits verification config (#verification).
     public static List<SignerResult> createTemplateSnapshotRequest(
         Id templateId,
         String relatedRecordId,
         String signersJson,
         String signingOrder,
         String documentTitleFormat
+    ) {
+        return createTemplateSnapshotRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            null,
+            null
+        );
+    }
+
+    @AuraEnabled
+    public static List<SignerResult> createTemplateSnapshotRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        Boolean requireVerification,
+        Boolean prefillSignerEmail
     ) {
         if (templateId == null) {
             throw new AuraHandledException('A template Id is required.');
@@ -1148,13 +1169,34 @@ public with sharing class DocGenSignatureSenderController {
         );
     }
 
-    @AuraEnabled
+    // 5-arg overload — existing callers; inherits verification config (#verification).
     public static List<SignerResult> createGuidedPdfSignatureRequest(
         Id templateId,
         String relatedRecordId,
         String signersJson,
         String signingOrder,
         String documentTitleFormat
+    ) {
+        return createGuidedPdfSignatureRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            null,
+            null
+        );
+    }
+
+    @AuraEnabled
+    public static List<SignerResult> createGuidedPdfSignatureRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        Boolean requireVerification,
+        Boolean prefillSignerEmail
     ) {
         List<DocGen_Template__c> tpls = [
             SELECT Id, Name, Document_Title_Format__c
@@ -1219,7 +1261,9 @@ public with sharing class DocGenSignatureSenderController {
                     relatedRecordId,
                     signersJson,
                     signingOrder,
-                    documentTitleFormat
+                    documentTitleFormat,
+                    requireVerification,
+                    prefillSignerEmail
                 );
             }
         }
@@ -1347,7 +1391,9 @@ public with sharing class DocGenSignatureSenderController {
             fileTitle,
             signerInputs,
             true,
-            getSigningPdfPagePath()
+            getSigningPdfPagePath(),
+            requireVerification,
+            prefillSignerEmail
         );
 
         // Map placements → signers by role (fallback: first signer), Tag_Text__c = sentinel.
@@ -1827,7 +1873,8 @@ public with sharing class DocGenSignatureSenderController {
                     ' (' +
                     UserInfo.getUserEmail() +
                     ')',
-                Consent_Captured__c = true
+                Consent_Captured__c = true,
+                Verification_Method__c = 'In-Person'
             );
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
             DocGenFlsGuard.assertCreateable(
@@ -1840,7 +1887,8 @@ public with sharing class DocGenSignatureSenderController {
                     'PIN_Verified_At__c',
                     'IP_Address__c',
                     'User_Agent__c',
-                    'Consent_Captured__c'
+                    'Consent_Captured__c',
+                    'Verification_Method__c'
                 }
             );
             /* code-analyzer-suppress ApexFlsViolation */
@@ -2165,6 +2213,87 @@ public with sharing class DocGenSignatureSenderController {
         );
     }
 
+    /**
+     * #verification — resolves the email-verification + email-prefill config for a request
+     * (per-send override → template default → org default → hard default of required/no-prefill)
+     * and stamps the resolved values on the request. Runs in sender (internal) context.
+     */
+    private static void applyVerificationConfig(
+        Id requestId,
+        Id templateId,
+        Boolean perSendRequire,
+        Boolean perSendPrefill
+    ) {
+        if (requestId == null) {
+            return;
+        }
+        String tmplVerif = null;
+        String tmplPrefill = null;
+        if ((perSendRequire == null || perSendPrefill == null) && templateId != null) {
+            try {
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Template__c.sObjectType,
+                    new Set<String>{ 'Signer_Verification__c', 'Prefill_Signer_Email__c' }
+                );
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                List<DocGen_Template__c> tpls = [
+                    SELECT Signer_Verification__c, Prefill_Signer_Email__c
+                    FROM DocGen_Template__c
+                    WHERE Id = :templateId
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ]; // NOPMD
+                if (!tpls.isEmpty()) {
+                    tmplVerif = tpls[0].Signer_Verification__c;
+                    tmplPrefill = tpls[0].Prefill_Signer_Email__c;
+                }
+            } catch (Exception e) {
+                // Fall through to org default.
+            }
+        }
+        DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+
+        Boolean require;
+        if (perSendRequire != null) {
+            require = perSendRequire;
+        } else if (tmplVerif == 'Required') {
+            require = true;
+        } else if (tmplVerif == 'Off') {
+            require = false;
+        } else {
+            require = (s == null ||
+                s.Signature_Require_Email_Verification__c == null)
+                ? true
+                : s.Signature_Require_Email_Verification__c;
+        }
+
+        Boolean prefill;
+        if (perSendPrefill != null) {
+            prefill = perSendPrefill;
+        } else if (tmplPrefill == 'Yes') {
+            prefill = true;
+        } else if (tmplPrefill == 'No') {
+            prefill = false;
+        } else {
+            prefill = (s == null ||
+                s.Signature_Prefill_Signer_Email__c == null)
+                ? false
+                : s.Signature_Prefill_Signer_Email__c;
+        }
+
+        DocGen_Signature_Request__c upd = new DocGen_Signature_Request__c(
+            Id = requestId,
+            Require_Email_Verification__c = require,
+            Prefill_Signer_Email__c = prefill
+        );
+        DocGenFlsGuard.assertUpdateable(
+            upd,
+            new Set<String>{ 'Require_Email_Verification__c', 'Prefill_Signer_Email__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.update(upd, AccessLevel.SYSTEM_MODE);
+    }
+
     private static List<SignerResult> createSignersAndNotify(
         Id requestId,
         Id templateId,
@@ -2173,6 +2302,38 @@ public with sharing class DocGenSignatureSenderController {
         Boolean sendEmails,
         String pagePath
     ) {
+        return createSignersAndNotify(
+            requestId,
+            templateId,
+            documentTitle,
+            signerInputs,
+            sendEmails,
+            pagePath,
+            null,
+            null
+        );
+    }
+
+    /**
+     * @param perSendRequire optional per-send override for email verification (#verification);
+     *        null = inherit from template/org. perSendPrefill likewise for email pre-fill.
+     */
+    private static List<SignerResult> createSignersAndNotify(
+        Id requestId,
+        Id templateId,
+        String documentTitle,
+        List<Map<String, Object>> signerInputs,
+        Boolean sendEmails,
+        String pagePath,
+        Boolean perSendRequire,
+        Boolean perSendPrefill
+    ) {
+        // #verification — resolve email-verification config (per-send → template → org default)
+        // and stamp it on the request so the signing page + saveSignature/signPlacement gates
+        // read a single point-in-time record. Field defaults keep the request "required" if this
+        // is never reached.
+        applyVerificationConfig(requestId, templateId, perSendRequire, perSendPrefill);
+
         String siteUrl = getSiteBaseUrl();
         List<DocGen_Signer__c> signerRecords = new List<DocGen_Signer__c>();
         List<SignerResult> results = new List<SignerResult>();
