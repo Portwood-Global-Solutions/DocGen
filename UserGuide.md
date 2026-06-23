@@ -2737,6 +2737,8 @@ If your org has LWS turned on, DocGen still works. We route binary data through 
 
 The signing page runs as a guest user, which the platform restricts pretty heavily. The most visible consequence: **a verified Org-Wide Email Address is required** to send signing emails (Setup → Organization-Wide Email Addresses). Everything else (image rendering, audit logging, platform events) DocGen handles for you.
 
+**Experience Cloud sites — one required preference.** If you host the signing page on an **Experience Cloud** site (rather than a classic Salesforce Site), you must enable **"Let guest users view asset files, library files, and CMS content available to the site"** under the site's **Administration → Preferences**, or the signer sees a blank "Document unavailable" preview. Classic Salesforce Sites (`*.my.salesforce-sites.com`) don't need this. See [§15.9](#159-signing-preview-is-blank--document-unavailable-on-an-experience-cloud-site).
+
 ### 14.8 Template & output size guidance
 
 | Scenario                                        | Limit         | UX                                     |
@@ -2827,6 +2829,22 @@ See [§14.2](#142-pdf-font-limitations). Generate as DOCX for custom fonts.
 - Check **Setup → Apex Jobs** for the batch + queueable status.
 - Most common cause: a field in the query config was deleted or renamed. Fix the query config and re-run.
 
-### 15.9 Still stuck?
+### 15.9 Signing preview is blank / "Document unavailable" on an Experience Cloud site
+
+The signing page opens but shows **"Document unavailable"** (and the browser's network call to `getSourcePdfBase64` returns `"Document not found"`) — even though the email sent, the request was created, and the document is shared correctly.
+
+This is almost always a **site-type setting**, not a data, template, or permissions problem. The signing page runs as a guest user, and **Experience Cloud sites** block guest access to files until one preference is enabled:
+
+1. Setup → **Digital Experiences → All Sites** → your signing site → **Workspaces → Administration → Preferences**.
+2. Enable **"Let guest users view asset files, library files, and CMS content available to the site."**
+3. Save, send a **fresh** signature request, and reopen the signing link.
+
+Notes:
+
+- **Salesforce Sites** (classic, `*.my.salesforce-sites.com`) serve guest file reads **without** this preference — the toggle is only needed for **Experience Cloud** sites.
+- It's not a content problem: the signing document is shared with the guest correctly (on the Signature Request you'll see it with **"customer access" enabled**), but the Experience Cloud site itself won't deliver the file to the guest until this preference is on.
+- If it still fails after enabling the preference, confirm the site's guest user has the **DocGen_Guest_Signature** permission set assigned (see [§10 — Assigning the guest permission set](#assigning-the-guest-permission-set)) and that a verified Org-Wide Email Address exists.
+
+### 15.10 Still stuck?
 
 The web guide at [portwood.dev/guide](https://portwood.dev/guide) is always current with the latest release. For implementation help or training, visit [portwood.dev/support](https://portwood.dev/support) — we'll walk you through it.
