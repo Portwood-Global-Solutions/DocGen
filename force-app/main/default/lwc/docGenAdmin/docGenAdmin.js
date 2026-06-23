@@ -66,6 +66,9 @@ import PAGE_ORIENTATION_FIELD from '@salesforce/schema/DocGen_Template__c.Page_O
 import PAGE_SIZE_FIELD from '@salesforce/schema/DocGen_Template__c.Page_Size__c';
 import PAGE_MARGINS_FIELD from '@salesforce/schema/DocGen_Template__c.Page_Margins__c';
 import CUSTOM_MARGINS_FIELD from '@salesforce/schema/DocGen_Template__c.Custom_Margins__c';
+// #verification — template-level signer-verification defaults
+import SIGNER_VERIFICATION_FIELD from '@salesforce/schema/DocGen_Template__c.Signer_Verification__c';
+import PREFILL_SIGNER_EMAIL_FIELD from '@salesforce/schema/DocGen_Template__c.Prefill_Signer_Email__c';
 import testRecordFilter from '@salesforce/apex/DocGenController.testRecordFilter';
 // 1.61 — HTML zip sidesteps File Upload Security via client-side unzip + per-part upload
 import saveHtmlTemplateImage from '@salesforce/apex/DocGenController.saveHtmlTemplateImage';
@@ -127,6 +130,9 @@ const F = {
     PageSize: PAGE_SIZE_FIELD.fieldApiName,
     PageMargins: PAGE_MARGINS_FIELD.fieldApiName,
     CustomMargins: CUSTOM_MARGINS_FIELD.fieldApiName,
+    // #verification — template-level defaults
+    SignerVerification: SIGNER_VERIFICATION_FIELD.fieldApiName,
+    PrefillSignerEmail: PREFILL_SIGNER_EMAIL_FIELD.fieldApiName,
     // Version fields
     VerIsActive: VER_IS_ACTIVE_FIELD.fieldApiName,
     VerCvId: VER_CV_ID_FIELD.fieldApiName,
@@ -295,6 +301,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // 1.47 — runner visibility & sort
     editTemplateSortOrder;
     editTemplateLockOutputFormat = false;
+    // #verification — template-level defaults (tri-state: Inherit / Required|Off / Yes|No)
+    @track editTemplateSignerVerification = 'Inherit';
+    @track editTemplatePrefillSignerEmail = 'Inherit';
     editTemplateSpecificRecordIds;
     editTemplateRequiredPermissionSets;
     editTemplateRecordFilter;
@@ -2512,6 +2521,28 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.editTemplateTitleFormat = event.detail.value;
     }
 
+    // #verification — template-level signer-verification defaults
+    get signerVerificationOptions() {
+        return [
+            { label: 'Inherit (use org default)', value: 'Inherit' },
+            { label: 'Required (email PIN)', value: 'Required' },
+            { label: 'Off (no verification)', value: 'Off' }
+        ];
+    }
+    get prefillSignerEmailOptions() {
+        return [
+            { label: 'Inherit (use org default)', value: 'Inherit' },
+            { label: 'Yes (auto-send to known email)', value: 'Yes' },
+            { label: 'No (signer types email)', value: 'No' }
+        ];
+    }
+    handleSignerVerificationChange(event) {
+        this.editTemplateSignerVerification = event.detail.value;
+    }
+    handlePrefillSignerEmailChange(event) {
+        this.editTemplatePrefillSignerEmail = event.detail.value;
+    }
+
     get isBuilderDisabled() {
         return this.isManualQuery;
     }
@@ -2808,6 +2839,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.editTemplateIsDefault = row[F.IsDefault] || false;
             this.editTemplateSortOrder = row[F.SortOrder];
             this.editTemplateLockOutputFormat = row[F.LockOutputFormat] || false;
+            this.editTemplateSignerVerification = row[F.SignerVerification] || 'Inherit';
+            this.editTemplatePrefillSignerEmail = row[F.PrefillSignerEmail] || 'Inherit';
             this.editTemplateSpecificRecordIds = row[F.SpecificRecordIds];
             this.editTemplateRequiredPermissionSets = row[F.RequiredPermSets];
             this.editTemplateRecordFilter = row[F.RecordFilter];
@@ -3205,7 +3238,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Page_Orientation__c: this.editTemplatePageOrientation,
             Page_Size__c: this.editTemplatePageSize,
             Page_Margins__c: this.editTemplatePageMargins,
-            Custom_Margins__c: this.editTemplateCustomMargins
+            Custom_Margins__c: this.editTemplateCustomMargins,
+            Signer_Verification__c: this.editTemplateSignerVerification,
+            Prefill_Signer_Email__c: this.editTemplatePrefillSignerEmail
         };
         this.editTemplateQuery = fields['Query_Config__c'];
 
@@ -3250,7 +3285,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Page_Orientation__c: this.editTemplatePageOrientation,
             Page_Size__c: this.editTemplatePageSize,
             Page_Margins__c: this.editTemplatePageMargins,
-            Custom_Margins__c: this.editTemplateCustomMargins
+            Custom_Margins__c: this.editTemplateCustomMargins,
+            Signer_Verification__c: this.editTemplateSignerVerification,
+            Prefill_Signer_Email__c: this.editTemplatePrefillSignerEmail
         };
         this.editTemplateQuery = fields['Query_Config__c'];
 

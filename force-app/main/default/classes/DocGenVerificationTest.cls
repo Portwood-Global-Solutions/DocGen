@@ -156,4 +156,32 @@ private class DocGenVerificationTest {
         System.assertEquals(false, s.get('Signature_Require_Email_Verification__c'));
         System.assertEquals(true, s.get('Signature_Prefill_Signer_Email__c'));
     }
+
+    // ---- Command Hub template editor save path persists the template defaults ----
+    @IsTest
+    static void templateEditor_savesVerificationFields() {
+        Id tplId = createTaggedTemplate('Inherit', 'Inherit');
+        Test.startTest();
+        DocGenController.saveTemplate(
+            new Map<String, Object>{
+                'Id' => tplId,
+                'Name' => 'Verif Edit',
+                'Type__c' => 'HTML',
+                'Base_Object_API__c' => 'Account',
+                'Query_Config__c' => 'Name',
+                'Signer_Verification__c' => 'Off',
+                'Prefill_Signer_Email__c' => 'Yes'
+            },
+            false,
+            null
+        );
+        Test.stopTest();
+        DocGen_Template__c t = [
+            SELECT Signer_Verification__c, Prefill_Signer_Email__c
+            FROM DocGen_Template__c
+            WHERE Id = :tplId
+        ];
+        System.assertEquals('Off', t.Signer_Verification__c, 'editor save persists verification');
+        System.assertEquals('Yes', t.Prefill_Signer_Email__c, 'editor save persists prefill');
+    }
 }

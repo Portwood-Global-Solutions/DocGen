@@ -2328,7 +2328,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 'Page_Orientation__c',
                 'Page_Size__c',
                 'Page_Margins__c',
-                'Custom_Margins__c'
+                'Custom_Margins__c',
+                'Signer_Verification__c',
+                'Prefill_Signer_Email__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation */
@@ -2358,6 +2360,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Page_Size__c,
                 Page_Margins__c,
                 Custom_Margins__c,
+                Signer_Verification__c,
+                Prefill_Signer_Email__c,
                 (SELECT ContentDocumentId FROM ContentDocumentLinks ORDER BY ContentDocument.CreatedDate DESC LIMIT 1)
             FROM DocGen_Template__c
             WITH SYSTEM_MODE
@@ -2444,6 +2448,13 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (fields.containsKey('Custom_Margins__c')) {
                 template.Custom_Margins__c = (String) fields.get('Custom_Margins__c');
             }
+            // #verification — template-level signer-verification defaults
+            if (fields.containsKey('Signer_Verification__c')) {
+                template.Signer_Verification__c = (String) fields.get('Signer_Verification__c');
+            }
+            if (fields.containsKey('Prefill_Signer_Email__c')) {
+                template.Prefill_Signer_Email__c = (String) fields.get('Prefill_Signer_Email__c');
+            }
             // #85 — Active flag. Default true on new records; only update when the
             // caller explicitly sends the field (so legacy save paths that omit it
             // don't accidentally toggle an existing template's active state).
@@ -2507,6 +2518,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     'Page_Size__c',
                     'Page_Margins__c',
                     'Custom_Margins__c',
+                    'Signer_Verification__c',
+                    'Prefill_Signer_Email__c',
                     'Is_Active__c',
                     'Is_Default__c'
                 }
