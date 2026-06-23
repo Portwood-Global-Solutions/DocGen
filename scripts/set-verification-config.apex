@@ -14,7 +14,7 @@ if (SET_ORG_DEFAULT) {
     if (s == null || s.Id == null) {
         s = new DocGen_Settings__c(SetupOwnerId = UserInfo.getOrganizationId());
     }
-    s.Signature_Require_Email_Verification__c = ORG_REQUIRE_VERIFICATION;
+    s.Signature_Skip_Email_Verification__c = !ORG_REQUIRE_VERIFICATION; // stored inverted (skip = !require)
     s.Signature_Prefill_Signer_Email__c = ORG_PREFILL_EMAIL;
     upsert s;
     System.debug('Org default → require=' + ORG_REQUIRE_VERIFICATION + ' prefill=' + ORG_PREFILL_EMAIL);
@@ -24,10 +24,10 @@ if (SET_ORG_DEFAULT) {
 // Map of Template Name → Signer_Verification__c ('Inherit' | 'Required' | 'Off')
 // and optional Prefill_Signer_Email__c ('Inherit' | 'Yes' | 'No').
 Map<String, String> TEMPLATE_VERIFICATION = new Map<String, String>{};
-    // 'My Waiver Template' => 'Off',
-    // 'NDA Template' => 'Required'
+// 'My Waiver Template' => 'Off',
+// 'NDA Template' => 'Required'
 Map<String, String> TEMPLATE_PREFILL = new Map<String, String>{};
-    // 'My Waiver Template' => 'Yes'
+// 'My Waiver Template' => 'Yes'
 
 if (!TEMPLATE_VERIFICATION.isEmpty() || !TEMPLATE_PREFILL.isEmpty()) {
     Set<String> names = new Set<String>();
@@ -50,9 +50,9 @@ if (!TEMPLATE_VERIFICATION.isEmpty() || !TEMPLATE_PREFILL.isEmpty()) {
 DocGen_Settings__c cur = DocGen_Settings__c.getOrgDefaults();
 System.debug(
     'CURRENT ORG: require=' +
-        (cur == null ? null : cur.Signature_Require_Email_Verification__c) +
+        (cur == null ? true : !cur.Signature_Skip_Email_Verification__c) +
         ' prefill=' +
-        (cur == null ? null : cur.Signature_Prefill_Signer_Email__c)
+        (cur == null ? false : cur.Signature_Prefill_Signer_Email__c)
 );
 for (DocGen_Template__c t : [
     SELECT Name, Signer_Verification__c, Prefill_Signer_Email__c

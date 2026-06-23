@@ -2227,9 +2227,34 @@ public with sharing class DocGenSignatureSenderController {
         if (requestId == null) {
             return;
         }
+        // The guided/snapshot paths call createSignersAndNotify with templateId=null
+        // (placements are created separately), so fall back to the request's Template__c
+        // for the template-level cascade read.
+        Id effectiveTemplateId = templateId;
+        if (effectiveTemplateId == null && (perSendRequire == null || perSendPrefill == null)) {
+            try {
+                DocGenFlsGuard.assertAccessible(
+                    DocGen_Signature_Request__c.sObjectType,
+                    new Set<String>{ 'Template__c' }
+                );
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                List<DocGen_Signature_Request__c> rs = [
+                    SELECT Template__c
+                    FROM DocGen_Signature_Request__c
+                    WHERE Id = :requestId
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ]; // NOPMD
+                if (!rs.isEmpty()) {
+                    effectiveTemplateId = rs[0].Template__c;
+                }
+            } catch (Exception e) {
+                // Fall through to org default.
+            }
+        }
         String tmplVerif = null;
         String tmplPrefill = null;
-        if ((perSendRequire == null || perSendPrefill == null) && templateId != null) {
+        if ((perSendRequire == null || perSendPrefill == null) && effectiveTemplateId != null) {
             try {
                 DocGenFlsGuard.assertAccessible(
                     DocGen_Template__c.sObjectType,
@@ -2239,7 +2264,7 @@ public with sharing class DocGenSignatureSenderController {
                 List<DocGen_Template__c> tpls = [
                     SELECT Signer_Verification__c, Prefill_Signer_Email__c
                     FROM DocGen_Template__c
-                    WHERE Id = :templateId
+                    WHERE Id = :effectiveTemplateId
                     WITH SYSTEM_MODE
                     LIMIT 1
                 ]; // NOPMD
@@ -2261,10 +2286,10 @@ public with sharing class DocGenSignatureSenderController {
         } else if (tmplVerif == 'Off') {
             require = false;
         } else {
-            require = (s == null ||
-                s.Signature_Require_Email_Verification__c == null)
-                ? true
-                : s.Signature_Require_Email_Verification__c;
+            // Inverted "skip" semantics: required unless the org EXPLICITLY set skip=true.
+            // A checkbox can't represent "unset", so the safe default (required) is the
+            // field's natural false state — upgrade-safe for orgs with an existing settings row.
+            require = !(s != null && s.Signature_Skip_Email_Verification__c == true);
         }
 
         Boolean prefill;
@@ -2275,10 +2300,7 @@ public with sharing class DocGenSignatureSenderController {
         } else if (tmplPrefill == 'No') {
             prefill = false;
         } else {
-            prefill = (s == null ||
-                s.Signature_Prefill_Signer_Email__c == null)
-                ? false
-                : s.Signature_Prefill_Signer_Email__c;
+            prefill = (s == null || s.Id == null) ? false : s.Signature_Prefill_Signer_Email__c;
         }
 
         DocGen_Signature_Request__c upd = new DocGen_Signature_Request__c(

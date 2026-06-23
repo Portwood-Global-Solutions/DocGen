@@ -5,6 +5,7 @@ import saveSignatureSettings from '@salesforce/apex/DocGenSetupController.saveSi
 import getOrgWideEmailAddresses from '@salesforce/apex/DocGenSetupController.getOrgWideEmailAddresses';
 import validateSignatureSetup from '@salesforce/apex/DocGenSetupController.validateSignatureSetup';
 import saveReminderSettings from '@salesforce/apex/DocGenSetupController.saveReminderSettings';
+import saveVerificationSettings from '@salesforce/apex/DocGenSetupController.saveVerificationSettings';
 
 export default class DocGenSignatureSettings extends LightningElement {
     @track isLoaded = false;
@@ -25,6 +26,10 @@ export default class DocGenSignatureSettings extends LightningElement {
     // Reminders
     @track reminderEnabled = false;
     @track reminderHours = 24;
+
+    // #verification — org defaults
+    @track requireVerification = true;
+    @track prefillEmail = false;
 
     // Setup checks
     @track setupChecks = [];
@@ -48,6 +53,9 @@ export default class DocGenSignatureSettings extends LightningElement {
             this.owaId = data.Signature_OWA_Id__c || '';
             this.reminderEnabled = data.Signature_Reminder_Enabled__c === true;
             this.reminderHours = data.Signature_Reminder_Hours__c || 24;
+            // null → required (upgrade-safe default)
+            this.requireVerification = data.Signature_Require_Email_Verification__c !== false;
+            this.prefillEmail = data.Signature_Prefill_Signer_Email__c === true;
         } catch (_err) {
             // Settings not yet created — use defaults
         }
@@ -100,6 +108,12 @@ export default class DocGenSignatureSettings extends LightningElement {
     }
     handleReminderHoursChange(e) {
         this.reminderHours = e.target.value;
+    }
+    handleRequireVerificationChange(e) {
+        this.requireVerification = e.target.checked;
+    }
+    handlePrefillEmailChange(e) {
+        this.prefillEmail = e.target.checked;
     }
 
     handleRefreshChecks() {
@@ -165,6 +179,11 @@ export default class DocGenSignatureSettings extends LightningElement {
             await saveReminderSettings({
                 enabled: this.reminderEnabled,
                 hours: parseInt(this.reminderHours, 10) || 24
+            });
+            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
+            await saveVerificationSettings({
+                requireVerification: this.requireVerification,
+                prefillEmail: this.prefillEmail
             });
             this.saveSuccess = true;
             this.saveMessage =

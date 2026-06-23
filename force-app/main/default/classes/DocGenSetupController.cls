@@ -41,6 +41,13 @@ public with sharing class DocGenSetupController {
         result.put('Signature_OWA_Id__c', s.Signature_OWA_Id__c);
         result.put('Signature_Reminder_Enabled__c', s.Signature_Reminder_Enabled__c);
         result.put('Signature_Reminder_Hours__c', s.Signature_Reminder_Hours__c);
+        // #verification — stored as inverted "skip" so the safe default (required) survives
+        // upgrades. Report require = NOT skip; key kept stable for the LWC.
+        result.put(
+            'Signature_Require_Email_Verification__c',
+            !(s != null && s.Signature_Skip_Email_Verification__c == true)
+        );
+        result.put('Signature_Prefill_Signer_Email__c', s != null && s.Signature_Prefill_Signer_Email__c == true);
         return result;
     }
 
@@ -361,5 +368,31 @@ public with sharing class DocGenSetupController {
         } catch (Exception e) {
             System.debug(LoggingLevel.WARN, 'DocGen: Failed to schedule/abort reminder job: ' + e.getMessage());
         }
+    }
+
+    /**
+     * #verification — saves the org-default signer-verification settings (require email PIN,
+     * pre-fill signer email). Templates and individual sends can override these.
+     */
+    @AuraEnabled
+    public static void saveVerificationSettings(Boolean requireVerification, Boolean prefillEmail) {
+        if (
+            !FeatureManagement.checkPermission('DocGen_Admin_Access') &&
+            !Schema.sObjectType.DocGen_Settings__c.isUpdateable()
+        ) {
+            throw DocGenService.ahe('Insufficient privileges to modify DocGen settings.');
+        }
+        DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
+        // Stored inverted: require=false → skip=true. Default (require true) → skip false.
+        settings.Signature_Skip_Email_Verification__c = (requireVerification == false);
+        settings.Signature_Prefill_Signer_Email__c = prefillEmail == true;
+        Set<String> verifFields = new Set<String>{
+            'Signature_Skip_Email_Verification__c',
+            'Signature_Prefill_Signer_Email__c'
+        };
+        DocGenFlsGuard.assertCreateable(settings, verifFields);
+        DocGenFlsGuard.assertUpdateable(settings, verifFields);
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.upsert(settings, AccessLevel.SYSTEM_MODE);
     }
 }
