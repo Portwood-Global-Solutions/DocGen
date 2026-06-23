@@ -2147,13 +2147,25 @@ Useful for contract bundles (MSA + SOW + NDA), onboarding packets, etc.
 
 ### 10.5 PIN verification
 
-Every signer receives a one-time email PIN before they can view the document. Protects against leaked signing URLs.
+By default, every signer verifies a one-time email PIN before they can view the document. Protects against leaked signing URLs.
 
 - Signer clicks link → lands on the verify-PIN page.
 - They request a PIN → it's emailed from your Org-Wide Email Address.
 - They enter the PIN → the signing page unlocks.
 
 PIN hashes are stored (not the PIN itself). Timestamps on `PIN_Verified_At__c`.
+
+#### Making verification configurable (on/off, pre-fill)
+
+Email verification can be turned **off** (or forced on) at three levels — the most specific wins:
+
+1. **Per-send** — in the Signature runner (single-template), the **Signer Verification** picker (Default / Require / No verification) and **Email Pre-fill** picker. The `DocGen: Create Signature Request` Flow action exposes the same as optional inputs.
+2. **Per-template** — on the DocGen Template record, **Signer Verification** (Inherit / Required / Off) and **Pre-fill Signer Email** (Inherit / Yes / No).
+3. **Org default** — DocGen Command Hub → **Signatures** settings → **Require Email Verification** and **Pre-fill Signer Email** toggles.
+
+The setting is resolved when the request is sent and stored on the request, so later config changes don't affect in-flight requests. With verification **off**, the signer goes straight to the document — no PIN. The signed audit record's **Verification Method** field records `Email PIN`, `None`, or `In-Person` either way, so you always know how (or whether) identity was checked.
+
+**Pre-fill** (when verification is on) skips the "type your email" step and sends the code straight to the signer's known address. The code still only goes to the real inbox — it's a convenience, not a reduction in security. Default off.
 
 ### 10.6 In-person signing (PIN bypass)
 

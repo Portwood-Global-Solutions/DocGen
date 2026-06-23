@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — Configurable signer verification (toggle email PIN + pre-fill)
+
+Makes the signer email-PIN check **configurable** instead of always-on, with a three-level cascade and an optional email pre-fill. Existing behavior is unchanged on upgrade (verification stays required by default).
+
+- **On/off cascade** — resolved at send time (per-send override → template default → org default → hard default of _required_) and stamped on the request (`DocGen_Signature_Request__c.Require_Email_Verification__c`), mirroring the `Signing_Order__c` pattern. The four PIN gates (`saveSignature`, `signPlacement`, two legacy paths) and `validateSignerToken` honor it; with verification off, the signing page goes straight to signing.
+- **Pre-fill** (`Prefill_Signer_Email__c`) — when verification is on, the signing page can skip the "type your email" step and auto-send the one-time code to the signer's known address. The code still goes only to the real inbox, so this is a UX shortcut, not a security change. Default off.
+- **Config surfaces** — org defaults in the Signature **Settings** panel (`DocGenSetupController.saveVerificationSettings`); template defaults on the DocGen Template layout (`Signer_Verification__c` = Inherit/Required/Off, `Prefill_Signer_Email__c` = Inherit/Yes/No); per-send pickers in the Signature runner LWC (single-template) and two `@InvocableVariable`s on the `DocGen: Create Signature Request` Flow action (nullable = inherit).
+- **Audit** — `DocGen_Signature_Audit__c.Verification_Method__c` records `Email PIN` / `None` / `In-Person`, preserving verification evidence even when the PIN is skipped.
+- **Upgrade-safety detail** — a Checkbox custom-setting field is never null (unset = false), so an unconfigured org is detected by a null settings Id and defaults to _required_; a configured org honors the checkbox.
+- New fields on Settings / Template / Request / Audit; FLS for Admin (edit), User (edit templates/requests, read audit), Guest (read the request flags, create the audit method). Tests: `DocGenVerificationTest` (cascade, validateToken, settings round-trip). `scripts/set-verification-config.apex` helper.
+
 ## v3.25.0 — Guest signing: document preview + drawn-signature reliability, alignment, transparent stamp
 
 Fixes a cluster of guest-signer failures on the guided PDF-viewer signing flow, all tracing to one cause: a guest could not read the source document, which broke both the preview and the drawn-signature path. Reported in #support by Sumit Kasara and Robert Watson on v3.24.0.

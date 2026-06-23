@@ -136,6 +136,30 @@
                 ></lightning-input>
             </div>
 
+            <!-- Signer verification (#verification) — single-template path only -->
+            <template if:true={isSingleTemplate}>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-combobox
+                        name="verificationOverride"
+                        label="Signer Verification"
+                        value={verificationOverride}
+                        options={verificationOptions}
+                        onchange={handleVerificationOverrideChange}
+                        field-level-help="Whether signers must verify a one-time email code before signing. Default uses the template's setting, then the org default."
+                    ></lightning-combobox>
+                </div>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-combobox
+                        name="prefillOverride"
+                        label="Email Pre-fill"
+                        value={prefillOverride}
+                        options={prefillOptions}
+                        onchange={handlePrefillOverrideChange}
+                        field-level-help="When verification is on, auto-send the code to the signer's known email and skip the 'type your email' step. The code still goes only to the real inbox."
+                    ></lightning-combobox>
+                </div>
+            </template>
+
             <!-- Signers Table -->
             <div class="slds-var-m-bottom_medium">
                 <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Signers</h3>

@@ -365,6 +365,17 @@
         <field>DocGen_Template__c.Document_Title_Format__c</field>
         <readable>true</readable>
     </fieldPermissions>
+    <!-- Signer verification template defaults (#verification) -->
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Template__c.Signer_Verification__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Template__c.Prefill_Signer_Email__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Template__c.Footer_Html__c</field>
@@ -516,6 +527,17 @@
         <field>DocGen_Signature_Request__c.Signing_Order__c</field>
         <readable>true</readable>
     </fieldPermissions>
+    <!-- Resolved signer-verification flags (#verification) -->
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Signature_Request__c.Require_Email_Verification__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Signature_Request__c.Prefill_Signer_Email__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
         <field>DocGen_Signature_Request__c.Email_Status__c</field>
@@ -582,6 +604,11 @@
     <fieldPermissions>
         <editable>false</editable>
         <field>DocGen_Signature_Audit__c.Consent_Captured__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Signature_Audit__c.Verification_Method__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
