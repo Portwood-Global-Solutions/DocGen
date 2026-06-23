@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Signature_Require_Email_Verification__c</fullName>
+    <defaultValue>true</defaultValue>
+    <description
+    >Org default (#verification): when true, signers must verify a one-time email PIN before signing. Templates can override (Signer_Verification__c) and individual sends can override again. Default true preserves the historical mandatory-verification behavior on upgrade.</description>
+    <externalId>false</externalId>
+    <label>Require Email Verification (Signatures)</label>
+    <type>Checkbox</type>
+</CustomField>

@@ -154,6 +154,17 @@
         <field>DocGen_Signature_Request__c.Signing_Order__c</field>
         <readable>true</readable>
     </fieldPermissions>
+    <!-- Resolved signer-verification flags read by the signing page (#verification) -->
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Signature_Request__c.Require_Email_Verification__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>DocGen_Signature_Request__c.Prefill_Signer_Email__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
         <field>DocGen_Signature_Request__c.Email_Status__c</field>
@@ -256,6 +267,11 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Signature_Audit__c.Consent_Captured__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Signature_Audit__c.Verification_Method__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Signature_Prefill_Signer_Email__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description
+    >Org default (#verification): when true and email verification is required, the signing page skips the "type your email" step and sends the one-time code straight to the signer's known address. The code still goes only to the real inbox, so this is a UX shortcut, not a security change. Default false preserves the historical typed-email flow.</description>
+    <externalId>false</externalId>
+    <label>Pre-fill Signer Email (Signatures)</label>
+    <type>Checkbox</type>
+</CustomField>
