@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.25.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.26.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -21,7 +21,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 sf package install --package 04tVx000000oCvdIAE --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000oCvdIAE) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000oCvdIAE)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ohhhIAA) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000ohhhIAA)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -371,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.25.0 — Guest e-signing: signers reliably see the document preview, hand-drawn signatures render crisply, multi-party signature blocks line up, and signatures no longer cover nearby text**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.26.0 — Precise image sizing in PDF templates (give any image tag a width or width × height and it's honored exactly) plus tidier records (template images no longer pile up on the record)**.
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +444,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.25.0 | **Latest (Released)**                   | `04tVx000000oCvdIAE` |
+| v3.26.0 | **Latest (Released)**                   | `04tVx000000ohhhIAA` |
+| v3.25.0 | Previous                                | `04tVx000000oCvdIAE` |
 | v3.24.0 | Previous                                | `04tVx000000oAnNIAU` |
 | v3.23.0 | Previous                                | `04tVx000000o8wsIAA` |
 | v3.22.0 | Previous                                | `04tVx000000o2eXIAQ` |
