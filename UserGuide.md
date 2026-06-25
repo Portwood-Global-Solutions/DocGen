@@ -2315,16 +2315,9 @@ Salesforce hides the guest user behind a few clicks. The full path:
 
 ### 10.13 Email branding
 
-Org-wide branding lives in **Signature Settings** and feeds every email by default:
+> **Changed in v3.27:** Email content and branding are now managed entirely in the **Email Templates** tab (§10.14) — subject, wording, layout, brand color, logo, and footer are all set there, per template, with a live preview. The old brand-color / logo / subject / message / footer fields have been **removed from the Signature Settings page** to avoid two places editing the same thing.
 
-- Brand color (hex) — used in email header/buttons
-- Logo URL — displayed at top of emails
-- Company name, footer text
-- Reply-to: automatically set to the request creator so signer replies route correctly
-
-Branding applies to all signature emails (invitations, reminders, verification codes, completion, decline).
-
-> **New in v3.27:** these Settings values are the org-wide _defaults_. To change the actual wording, subject, layout, or per-email branding, use the new **Email Templates** tab below (§10.14) — a template's own brand color / logo / footer override the Settings defaults for that one email, and "Full custom HTML" mode replaces the branded chrome entirely.
+The **Signature Settings** page now covers setup only: public site URL, the **Send Emails From** address (Org-Wide Email Address), automated reminders, and signer verification defaults. Any branding values previously saved there are preserved and still act as the org-wide fallback when a template doesn't override them. Reply-to is automatically set to the request creator so signer replies route correctly.
 
 ### 10.14 Email Templates (Command Hub tab)
 

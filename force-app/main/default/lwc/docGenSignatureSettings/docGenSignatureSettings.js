@@ -82,26 +82,8 @@ export default class DocGenSignatureSettings extends LightningElement {
     handleSiteUrlChange(e) {
         this.siteUrl = e.target.value;
     }
-    handleCompanyNameChange(e) {
-        this.companyName = e.target.value;
-    }
-    handleBrandColorChange(e) {
-        this.brandColor = e.target.value;
-    }
-    handleLogoUrlChange(e) {
-        this.logoUrl = e.target.value;
-    }
     handleOwaChange(e) {
         this.owaId = e.detail.value;
-    }
-    handleEmailSubjectChange(e) {
-        this.emailSubject = e.target.value;
-    }
-    handleEmailMessageChange(e) {
-        this.emailMessage = e.target.value;
-    }
-    handleFooterTextChange(e) {
-        this.footerText = e.target.value;
     }
     handleReminderEnabledChange(e) {
         this.reminderEnabled = e.target.checked;
@@ -126,30 +108,6 @@ export default class DocGenSignatureSettings extends LightningElement {
 
     get saveLabel() {
         return this.isSaving ? 'Saving...' : 'Save Settings';
-    }
-
-    get headerStyle() {
-        return `background-color:${this.brandColor};padding:12px 20px;text-align:center;border-radius:6px 6px 0 0;`;
-    }
-
-    get docBoxStyle() {
-        return `border-left:3px solid ${this.brandColor};background:#f8f9fa;padding:8px 12px;border-radius:0 4px 4px 0;margin:0.75rem 0;`;
-    }
-
-    get btnStyle() {
-        return `display:inline-block;background:${this.brandColor};color:#fff;padding:8px 20px;border-radius:4px;font-weight:bold;font-size:0.8125rem;`;
-    }
-
-    get companyNameDisplay() {
-        return this.companyName || 'Your Company';
-    }
-
-    get emailMessageDisplay() {
-        return this.emailMessage || 'You have a document that requires your signature.';
-    }
-
-    get footerTextDisplay() {
-        return this.footerText || 'Powered by DocGen';
     }
 
     get saveMessageClass() {
