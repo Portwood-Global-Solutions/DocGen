@@ -105,9 +105,10 @@ public with sharing class DocGenSignatureReminderSchedulable implements Schedula
         }
 
         if (!emailList.isEmpty()) {
-            DocGenSignatureEmailService.sendSignatureRequestEmails(
+            DocGenSignatureEmailService.sendSignatureReminderEmails(
                 emailList,
-                'Reminder: Document awaiting your signature'
+                'Document awaiting your signature',
+                null
             );
 
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").

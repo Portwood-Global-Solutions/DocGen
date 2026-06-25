@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Type__c</fullName>
+    <description
+    >Which outbound email this template drives. The service resolves the single active record for each type at send time; one active record per type is expected. Required, so FLS is auto-granted (including to the guest profile that sends the PIN/request emails).</description>
+    <label>Type</label>
+    <required>true</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Signature_Request</fullName>
+                <default>true</default>
+                <label>Signature Request (to signer)</label>
+            </value>
+            <value>
+                <fullName>Signature_Reminder</fullName>
+                <default>false</default>
+                <label>Signature Reminder (to signer)</label>
+            </value>
+            <value>
+                <fullName>Verification_PIN</fullName>
+                <default>false</default>
+                <label>Email Verification Code (to signer)</label>
+            </value>
+            <value>
+                <fullName>Signer_Completed</fullName>
+                <default>false</default>
+                <label>Signer Completed (to sender)</label>
+            </value>
+            <value>
+                <fullName>All_Signed</fullName>
+                <default>false</default>
+                <label>All Signatures Complete (to sender)</label>
+            </value>
+            <value>
+                <fullName>Signer_Declined</fullName>
+                <default>false</default>
+                <label>Signer Declined (to sender)</label>
+            </value>
+            <value>
+                <fullName>Completion_Confirmation</fullName>
+                <default>false</default>
+                <label>Completion Confirmation (to signers)</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

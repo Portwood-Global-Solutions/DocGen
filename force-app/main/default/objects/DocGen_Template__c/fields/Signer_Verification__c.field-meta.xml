@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Signer_Verification__c</fullName>
+    <description
+    >Template default for signer email-PIN verification (#verification). Inherit = use the org default (DocGen Settings); Required = always verify; Off = skip verification. Individual sends can still override. Resolved at send time and stored on the signature request.</description>
+    <externalId>false</externalId>
+    <label>Signer Verification</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value><fullName>Inherit</fullName><default>true</default><label>Inherit (use org default)</label></value>
+            <value><fullName>Required</fullName><default>false</default><label>Required (email PIN)</label></value>
+            <value><fullName>Off</fullName><default>false</default><label>Off (no verification)</label></value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

@@ -5,6 +5,45 @@ public without sharing class DocGenSignatureController {
     private static final Integer PIN_EXPIRATION_MINUTES = 10;
     private static final Integer MAX_PIN_ATTEMPTS = 3;
 
+    /**
+     * #verification — does this request still require an email-PIN check before signing?
+     * Reads the per-request resolved flag (DocGen_Signature_Request__c.Require_Email_Verification__c)
+     * with guest-aware FLS; defaults to TRUE (required) if missing/unreadable, so verification is
+     * never silently dropped by an error. Cached per transaction by request Id.
+     */
+    private static Map<Id, Boolean> verificationRequiredCache = new Map<Id, Boolean>();
+
+    private static Boolean requestRequiresVerification(Id requestId) {
+        if (requestId == null) {
+            return true;
+        }
+        if (verificationRequiredCache.containsKey(requestId)) {
+            return verificationRequiredCache.get(requestId);
+        }
+        Boolean required = true;
+        try {
+            DocGenFlsGuard.guestAssertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'Require_Email_Verification__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            List<DocGen_Signature_Request__c> reqs = [
+                SELECT Require_Email_Verification__c
+                FROM DocGen_Signature_Request__c
+                WHERE Id = :requestId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD
+            if (!reqs.isEmpty() && reqs[0].Require_Email_Verification__c != null) {
+                required = reqs[0].Require_Email_Verification__c;
+            }
+        } catch (Exception e) {
+            required = true; // fail safe: keep verification on
+        }
+        verificationRequiredCache.put(requestId, required);
+        return required;
+    }
+
     public class SignatureInitResponse {
         @AuraEnabled
         public Boolean isValid;
@@ -32,6 +71,10 @@ public without sharing class DocGenSignatureController {
         public Boolean isSignerToken;
         @AuraEnabled
         public Boolean requiresPin;
+        // #verification — when true the signing page may skip the "type your email" step and
+        // auto-send the PIN to signerEmail (the code still goes only to the real inbox).
+        @AuraEnabled
+        public Boolean prefillEmail;
         // Signer form fields to render during e-signing. PUBLIC-SAFE projection
         // only — {key,label,type,required,choices}. The writeback flags and the
         // base-object field API names from the template config are deliberately
@@ -264,6 +307,8 @@ public without sharing class DocGenSignatureController {
                 PIN_Verified_At__c,
                 Signature_Request__r.Id,
                 Signature_Request__r.Status__c,
+                Signature_Request__r.Require_Email_Verification__c,
+                Signature_Request__r.Prefill_Signer_Email__c,
                 Signature_Request__r.Source_Document_Id__c,
                 Signature_Request__r.Related_Record_Id__c,
                 Signature_Request__r.Template__c,
@@ -545,13 +590,9 @@ public without sharing class DocGenSignatureController {
      */
     private static String sendPinEmail(String email, String pin) {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
-        String brandColor = String.isNotBlank(settings.Signature_Email_Brand_Color__c)
-            ? settings.Signature_Email_Brand_Color__c
-            : '#0176D3';
-        String companyName = settings.Company_Name__c;
 
         // OWA is required for guest user context — warn if not configured
-        String owaId = settings.Signature_OWA_Id__c;
+        String owaId = settings == null ? null : settings.Signature_OWA_Id__c;
         if (String.isBlank(owaId) && UserInfo.getUserType() == 'Guest') {
             System.debug(
                 LoggingLevel.ERROR,
@@ -560,37 +601,20 @@ public without sharing class DocGenSignatureController {
             return 'No Org-Wide Email Address configured. An admin must set one in DocGen Signature Settings.';
         }
 
-        String html = '<!DOCTYPE html><html><head><meta charset="utf-8"/></head>';
-        html += '<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">';
-        html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;">';
-        html += '<tr><td align="center" style="padding:24px 16px;">';
-        html += '<table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">';
-        html += '<tr><td style="background-color:' + brandColor + ';padding:16px 32px;text-align:center;">';
-        if (String.isNotBlank(companyName)) {
-            html +=
-                '<span style="color:#ffffff;font-size:18px;font-weight:bold;">' +
-                companyName.escapeHtml4() +
-                '</span>';
-        }
-        html += '</td></tr>';
-        html += '<tr><td style="padding:32px;text-align:center;">';
-        html += '<p style="font-size:16px;color:#333333;margin:0 0 8px 0;">Your verification code is:</p>';
-        html +=
-            '<p style="font-size:36px;font-weight:bold;color:#181818;letter-spacing:8px;margin:16px 0;font-family:monospace;">' +
-            pin.escapeHtml4() +
-            '</p>';
-        html +=
-            '<p style="font-size:13px;color:#706e6b;margin:16px 0 0 0;">This code expires in ' +
-            PIN_EXPIRATION_MINUTES +
-            ' minutes.</p>';
-        html += '<p style="font-size:13px;color:#706e6b;margin:4px 0 0 0;">If you did not request this code, you can safely ignore this email.</p>';
-        html += '</td></tr>';
-        html += '</table></td></tr></table></body></html>';
+        // #193 — render the verification email from the brandable template
+        // (built-in default falls back automatically if no record exists).
+        DocGenEmailTemplateService.RenderedEmail rendered = DocGenEmailTemplateService.render(
+            DocGenEmailTemplateService.TYPE_PIN,
+            new Map<String, String>{ 'Pin' => pin, 'ExpirationMinutes' => String.valueOf(PIN_EXPIRATION_MINUTES) }
+        );
 
         Messaging.SingleEmailMessage email2 = new Messaging.SingleEmailMessage();
         email2.setToAddresses(new List<String>{ email });
-        email2.setSubject('Your DocGen Signature Verification Code');
-        email2.setHtmlBody(html);
+        email2.setSubject(rendered.subject);
+        email2.setHtmlBody(rendered.htmlBody);
+        if (String.isNotBlank(rendered.plainBody)) {
+            email2.setPlainTextBody(rendered.plainBody);
+        }
         email2.setSaveAsActivity(false);
         if (String.isNotBlank(owaId)) {
             email2.setOrgWideEmailAddressId(owaId);
@@ -638,8 +662,11 @@ public without sharing class DocGenSignatureController {
         res.signerName = signer.Signer_Name__c;
         res.signerEmail = signer.Signer_Email__c;
         res.roleName = signer.Role_Name__c;
-        // PIN is required if not yet verified
-        res.requiresPin = (signer.PIN_Verified_At__c == null);
+        // #verification — PIN is required only if this request still requires it AND the signer
+        // hasn't verified yet. When pre-fill is on, the page may auto-send to signerEmail.
+        Boolean requireVerification = parentReq.Require_Email_Verification__c != false; // null → required (default)
+        res.requiresPin = requireVerification && (signer.PIN_Verified_At__c == null);
+        res.prefillEmail = requireVerification && parentReq.Prefill_Signer_Email__c == true;
 
         // Count total and signed signers
         // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
@@ -1139,7 +1166,7 @@ public without sharing class DocGenSignatureController {
         }
 
         // Require PIN verification before allowing signature
-        if (signer.PIN_Verified_At__c == null) {
+        if (requestRequiresVerification(signer.Signature_Request__c) && signer.PIN_Verified_At__c == null) {
             throw new AuraHandledException('Email verification is required before signing.');
         }
 
@@ -1173,6 +1200,8 @@ public without sharing class DocGenSignatureController {
         audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
         audit.Consent_Captured__c = true;
         audit.PIN_Verified_At__c = signer.PIN_Verified_At__c;
+        // #verification — record how identity was checked, even when the PIN was skipped.
+        audit.Verification_Method__c = signer.PIN_Verified_At__c != null ? 'Email PIN' : 'None';
         // Document hash is set later when PDF is generated
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.guestAssertCreateable(
@@ -1180,6 +1209,7 @@ public without sharing class DocGenSignatureController {
             new Set<String>{
                 'Signature_Request__c',
                 'Signer__c',
+                'Verification_Method__c',
                 'Signer_Name__c',
                 'Signer_Email__c',
                 'Contact__c',
@@ -1860,6 +1890,7 @@ public without sharing class DocGenSignatureController {
             new Set<String>{
                 'Signature_Request__c',
                 'Signer__c',
+                'Verification_Method__c',
                 'Signer_Name__c',
                 'Signer_Email__c',
                 'Contact__c',
@@ -2003,7 +2034,7 @@ public without sharing class DocGenSignatureController {
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
-            SELECT Id, CreatedDate, PIN_Verified_At__c, Status__c
+            SELECT Id, CreatedDate, PIN_Verified_At__c, Status__c, Signature_Request__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -2018,7 +2049,7 @@ public without sharing class DocGenSignatureController {
         if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
             throw new AuraHandledException('This signature link has expired.');
         }
-        if (signer.PIN_Verified_At__c == null) {
+        if (requestRequiresVerification(signer.Signature_Request__c) && signer.PIN_Verified_At__c == null) {
             throw new AuraHandledException('Email verification is required.');
         }
 
@@ -2413,7 +2444,7 @@ public without sharing class DocGenSignatureController {
         }
 
         // Require PIN verification before allowing signature
-        if (signer.PIN_Verified_At__c == null) {
+        if (requestRequiresVerification(signer.Signature_Request__c) && signer.PIN_Verified_At__c == null) {
             throw new AuraHandledException('Email verification is required before signing.');
         }
 
@@ -2447,6 +2478,8 @@ public without sharing class DocGenSignatureController {
         audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
         audit.Consent_Captured__c = true;
         audit.PIN_Verified_At__c = signer.PIN_Verified_At__c;
+        // #verification — record how identity was checked, even when the PIN was skipped.
+        audit.Verification_Method__c = signer.PIN_Verified_At__c != null ? 'Email PIN' : 'None';
         // No Document_Hash_SHA256__c — there is no stamped output in Milestone 1.
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.guestAssertCreateable(
@@ -2454,6 +2487,7 @@ public without sharing class DocGenSignatureController {
             new Set<String>{
                 'Signature_Request__c',
                 'Signer__c',
+                'Verification_Method__c',
                 'Signer_Name__c',
                 'Signer_Email__c',
                 'Contact__c',
@@ -2618,7 +2652,7 @@ public without sharing class DocGenSignatureController {
         if (signer.Status__c == 'Signed') {
             throw new AuraHandledException('You have already signed this document.');
         }
-        if (signer.PIN_Verified_At__c == null) {
+        if (requestRequiresVerification(signer.Signature_Request__c) && signer.PIN_Verified_At__c == null) {
             throw new AuraHandledException('Email verification is required before signing.');
         }
 
@@ -2647,6 +2681,8 @@ public without sharing class DocGenSignatureController {
         audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
         audit.Consent_Captured__c = true;
         audit.PIN_Verified_At__c = signer.PIN_Verified_At__c;
+        // #verification — record how identity was checked, even when the PIN was skipped.
+        audit.Verification_Method__c = signer.PIN_Verified_At__c != null ? 'Email PIN' : 'None';
         // #187 — capture the tamper-evidence hash directly from the composited bytes.
         // This guided drawn/typed path stores the PDF client-side and never publishes
         // DocGen_Signature_PDF__e, so the async finalizer (which back-fills the hash on
@@ -2660,6 +2696,7 @@ public without sharing class DocGenSignatureController {
             new Set<String>{
                 'Signature_Request__c',
                 'Signer__c',
+                'Verification_Method__c',
                 'Signer_Name__c',
                 'Signer_Email__c',
                 'Contact__c',

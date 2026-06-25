@@ -5,6 +5,7 @@ import saveSignatureSettings from '@salesforce/apex/DocGenSetupController.saveSi
 import getOrgWideEmailAddresses from '@salesforce/apex/DocGenSetupController.getOrgWideEmailAddresses';
 import validateSignatureSetup from '@salesforce/apex/DocGenSetupController.validateSignatureSetup';
 import saveReminderSettings from '@salesforce/apex/DocGenSetupController.saveReminderSettings';
+import saveVerificationSettings from '@salesforce/apex/DocGenSetupController.saveVerificationSettings';
 
 export default class DocGenSignatureSettings extends LightningElement {
     @track isLoaded = false;
@@ -25,6 +26,10 @@ export default class DocGenSignatureSettings extends LightningElement {
     // Reminders
     @track reminderEnabled = false;
     @track reminderHours = 24;
+
+    // #verification — org defaults
+    @track requireVerification = true;
+    @track prefillEmail = false;
 
     // Setup checks
     @track setupChecks = [];
@@ -48,6 +53,9 @@ export default class DocGenSignatureSettings extends LightningElement {
             this.owaId = data.Signature_OWA_Id__c || '';
             this.reminderEnabled = data.Signature_Reminder_Enabled__c === true;
             this.reminderHours = data.Signature_Reminder_Hours__c || 24;
+            // null → required (upgrade-safe default)
+            this.requireVerification = data.Signature_Require_Email_Verification__c !== false;
+            this.prefillEmail = data.Signature_Prefill_Signer_Email__c === true;
         } catch (_err) {
             // Settings not yet created — use defaults
         }
@@ -74,32 +82,20 @@ export default class DocGenSignatureSettings extends LightningElement {
     handleSiteUrlChange(e) {
         this.siteUrl = e.target.value;
     }
-    handleCompanyNameChange(e) {
-        this.companyName = e.target.value;
-    }
-    handleBrandColorChange(e) {
-        this.brandColor = e.target.value;
-    }
-    handleLogoUrlChange(e) {
-        this.logoUrl = e.target.value;
-    }
     handleOwaChange(e) {
         this.owaId = e.detail.value;
-    }
-    handleEmailSubjectChange(e) {
-        this.emailSubject = e.target.value;
-    }
-    handleEmailMessageChange(e) {
-        this.emailMessage = e.target.value;
-    }
-    handleFooterTextChange(e) {
-        this.footerText = e.target.value;
     }
     handleReminderEnabledChange(e) {
         this.reminderEnabled = e.target.checked;
     }
     handleReminderHoursChange(e) {
         this.reminderHours = e.target.value;
+    }
+    handleRequireVerificationChange(e) {
+        this.requireVerification = e.target.checked;
+    }
+    handlePrefillEmailChange(e) {
+        this.prefillEmail = e.target.checked;
     }
 
     handleRefreshChecks() {
@@ -112,30 +108,6 @@ export default class DocGenSignatureSettings extends LightningElement {
 
     get saveLabel() {
         return this.isSaving ? 'Saving...' : 'Save Settings';
-    }
-
-    get headerStyle() {
-        return `background-color:${this.brandColor};padding:12px 20px;text-align:center;border-radius:6px 6px 0 0;`;
-    }
-
-    get docBoxStyle() {
-        return `border-left:3px solid ${this.brandColor};background:#f8f9fa;padding:8px 12px;border-radius:0 4px 4px 0;margin:0.75rem 0;`;
-    }
-
-    get btnStyle() {
-        return `display:inline-block;background:${this.brandColor};color:#fff;padding:8px 20px;border-radius:4px;font-weight:bold;font-size:0.8125rem;`;
-    }
-
-    get companyNameDisplay() {
-        return this.companyName || 'Your Company';
-    }
-
-    get emailMessageDisplay() {
-        return this.emailMessage || 'You have a document that requires your signature.';
-    }
-
-    get footerTextDisplay() {
-        return this.footerText || 'Powered by DocGen';
     }
 
     get saveMessageClass() {
@@ -165,6 +137,11 @@ export default class DocGenSignatureSettings extends LightningElement {
             await saveReminderSettings({
                 enabled: this.reminderEnabled,
                 hours: parseInt(this.reminderHours, 10) || 24
+            });
+            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
+            await saveVerificationSettings({
+                requireVerification: this.requireVerification,
+                prefillEmail: this.prefillEmail
             });
             this.saveSuccess = true;
             this.saveMessage =
