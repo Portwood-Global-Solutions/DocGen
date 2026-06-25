@@ -425,6 +425,75 @@
                     inset: 0;
                 }
 
+                /* ===== MARKUP OVERLAY (M2) ===== */
+                /* One transparent canvas per page, stacked above the sign-spot chips (z5)
+                   only while marking; otherwise pointer-events are off so chips stay live. */
+                .dg-markup-canvas {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    z-index: 6;
+                    cursor: crosshair;
+                    touch-action: none;
+                }
+                .dg-markup-canvas.dg-markup-off {
+                    pointer-events: none;
+                    cursor: default;
+                }
+                .markup-toolbar {
+                    display: none;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 8px 12px;
+                    background: #1c2b3a;
+                    border-bottom: 1px solid #0d1722;
+                }
+                .markup-toolbar .mk-label {
+                    color: #9fb3c8;
+                    font-size: 12px;
+                    font-weight: 600;
+                    margin-right: 4px;
+                }
+                .markup-toolbar .mk-tool,
+                .markup-toolbar .mk-btn {
+                    background: #2b3f54;
+                    color: #e8eef5;
+                    border: 1px solid #3c5a76;
+                    border-radius: 4px;
+                    padding: 5px 10px;
+                    font-size: 12px;
+                    cursor: pointer;
+                }
+                .markup-toolbar .mk-tool.active {
+                    background: #2563eb;
+                    border-color: #2563eb;
+                }
+                .markup-toolbar .mk-btn.mk-done {
+                    background: #16a34a;
+                    border-color: #16a34a;
+                    margin-left: auto;
+                }
+                .markup-toolbar .mk-colors {
+                    display: inline-flex;
+                    gap: 4px;
+                    margin: 0 4px;
+                }
+                .markup-toolbar .mk-swatch {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 50%;
+                    border: 2px solid #fff;
+                    cursor: pointer;
+                    padding: 0;
+                }
+                .markup-toolbar .mk-swatch.active {
+                    outline: 2px solid #2563eb;
+                    outline-offset: 1px;
+                }
+
                 /* ===== SIGN-SPOT OVERLAY CHIPS ===== */
                 .spot-chip {
                     position: absolute;
@@ -699,6 +768,21 @@
                             <span id="pdf-role-badge" class="role-badge" style="display: none"></span>
                         </div>
 
+                        <!-- Markup toolbar (M2) — shown only while in Mark Up mode. -->
+                        <div id="markup-toolbar" class="markup-toolbar">
+                            <span class="mk-label">Markup:</span>
+                            <button type="button" class="mk-tool active" data-tool="pen">Pen</button>
+                            <button type="button" class="mk-tool" data-tool="text">Text</button>
+                            <button type="button" class="mk-tool" data-tool="rect">Box</button>
+                            <button type="button" class="mk-tool" data-tool="arrow">Arrow</button>
+                            <button type="button" class="mk-tool" data-tool="line">Line</button>
+                            <button type="button" class="mk-tool" data-tool="highlight">Highlight</button>
+                            <span id="markup-colors" class="mk-colors"></span>
+                            <button type="button" id="mk-undo" class="mk-btn">Undo</button>
+                            <button type="button" id="mk-clear" class="mk-btn">Clear</button>
+                            <button type="button" id="mk-done" class="mk-btn mk-done">Done</button>
+                        </div>
+
                         <!-- DocGenPdfViewer.render() renders into this container. -->
                         <div class="pdf-viewer" id="pdf-viewer-container">
                             <div class="spinner-container"><div class="spinner"></div></div>
@@ -709,6 +793,7 @@
                                 Signing as: <strong id="pdf-signer-name"></strong>
                                 <span id="pdf-progress-info" style="display: none"></span>
                             </div>
+                            <button id="btn-markup" class="btn" type="button" style="display: none">Mark Up</button>
                             <button id="btn-decline" class="btn btn-destructive" type="button">Decline</button>
                             <button id="btn-open-sign" class="btn btn-brand btn-lg" type="button">Sign Document</button>
                         </div>
@@ -758,6 +843,11 @@
                                 placeholder="Let the sender know why you're declining..."
                             ></textarea>
                         </div>
+                        <div
+                            id="decline-status"
+                            class="slds-text-color_weak"
+                            style="display: none; margin-bottom: 12px"
+                        ></div>
                         <div class="btn-row">
                             <button id="btn-decline-cancel" class="btn" type="button">Go Back</button>
                             <button id="btn-decline-confirm" class="btn btn-destructive" type="button">
@@ -1105,6 +1195,27 @@
                             return ready;
                         },
 
+                        // Markup (M2): lightweight geometry per rendered page so the markup
+                        // overlay can attach a transparent canvas and convert its pixels to
+                        // PDF points at flatten time. Same scale + Y-flip basis as hitToPdfRect.
+                        getPages: function () {
+                            var out = [];
+                            for (var i = 0; i < pages.length; i++) {
+                                var vp = pages[i].viewport;
+                                out.push({
+                                    pageIndex: i,
+                                    pageNum: pages[i].pageNum,
+                                    wrapEl: pages[i].wrapEl,
+                                    cssW: vp.width,
+                                    cssH: vp.height,
+                                    scale: vp.scale,
+                                    widthPts: vp.width / vp.scale,
+                                    heightPts: vp.height / vp.scale
+                                });
+                            }
+                            return out;
+                        },
+
                         // Find EVERY occurrence of each needle across all pages, tolerating
                         // a match split across text runs. Occurrences are returned in
                         // document order so callers can map duplicate needles to records.
@@ -1305,6 +1416,10 @@
                         function (result, event) {
                             if (event.status && result && result.isValid) {
                                 signerData = result;
+                                markupAllowed = !!result.allowMarkup;
+                                // Org-setting seam (Chunk D): vector flatten is still a stub in
+                                // flattenMarkupInto, so this safely no-ops to raster today.
+                                markupFlattenMode = result.markupVectorFlatten ? 'vector' : 'raster';
                                 if (result.requiresPin) {
                                     initVerifyScreen(result);
                                 } else {
@@ -1460,6 +1575,7 @@
 
                         // Wire the action bar.
                         document.getElementById('btn-open-sign').addEventListener('click', openSignModal);
+                        document.getElementById('btn-markup').addEventListener('click', enterMarkup);
                         document.getElementById('btn-decline').addEventListener('click', function () {
                             showState('decline');
                         });
@@ -1492,6 +1608,7 @@
                                     DocGenPdfViewer.render(result.base64, containerEl)
                                         .then(function () {
                                             initGuidedOverlay();
+                                            initMarkupLayer();
                                         })
                                         .catch(function () {
                                             /* render error already shown by the viewer */
@@ -2016,6 +2133,377 @@
                         );
                     }
 
+                    // ===== MARKUP LAYER (M2) =====
+                    // A transparent canvas over each rendered page captures freehand ink,
+                    // text notes, boxes, arrows/lines, and highlights as STRUCTURED marks
+                    // (device px relative to the page canvas). Marks are re-rendered for
+                    // display and, at finalize, flattened into the PDF (raster v1; the
+                    // structured model leaves room for a vector flatten later). Pointer
+                    // events are off unless Mark Up mode is active, so sign-spot chips stay
+                    // live the rest of the time.
+                    var MarkupLayer = (function () {
+                        var layers = []; // [{ pageIndex, canvas, ctx, marks: [] }]
+                        var active = false;
+                        var tool = 'pen';
+                        var color = '#e11d48';
+                        var PALETTE = ['#e11d48', '#2563eb', '#16a34a', '#f59e0b', '#111827'];
+                        var drawing = false;
+                        var cur = null;
+                        var curLayer = null;
+                        var seq = 0;
+
+                        function evtPos(e, canvas) {
+                            var r = canvas.getBoundingClientRect();
+                            var src = e.touches && e.touches.length ? e.touches[0] : e;
+                            return {
+                                x: (src.clientX - r.left) * (canvas.width / r.width),
+                                y: (src.clientY - r.top) * (canvas.height / r.height)
+                            };
+                        }
+
+                        function widthFor(t) {
+                            return t === 'highlight' ? 14 : t === 'pen' ? 2.5 : 2;
+                        }
+
+                        function arrowHead(ctx, x0, y0, x1, y1) {
+                            var a = Math.atan2(y1 - y0, x1 - x0);
+                            var len = 12;
+                            ctx.beginPath();
+                            ctx.moveTo(x1, y1);
+                            ctx.lineTo(x1 - len * Math.cos(a - Math.PI / 6), y1 - len * Math.sin(a - Math.PI / 6));
+                            ctx.lineTo(x1 - len * Math.cos(a + Math.PI / 6), y1 - len * Math.sin(a + Math.PI / 6));
+                            ctx.closePath();
+                            ctx.fill();
+                        }
+
+                        function drawMark(ctx, m) {
+                            ctx.save();
+                            ctx.lineCap = 'round';
+                            ctx.lineJoin = 'round';
+                            ctx.strokeStyle = m.color;
+                            ctx.fillStyle = m.color;
+                            ctx.lineWidth = m.width;
+                            ctx.globalAlpha = m.opacity != null ? m.opacity : 1;
+                            if (m.type === 'pen' || m.type === 'highlight') {
+                                if (m.points.length) {
+                                    ctx.beginPath();
+                                    ctx.moveTo(m.points[0].x, m.points[0].y);
+                                    for (var i = 1; i < m.points.length; i++) ctx.lineTo(m.points[i].x, m.points[i].y);
+                                    ctx.stroke();
+                                }
+                            } else if (m.type === 'rect') {
+                                ctx.strokeRect(m.x0, m.y0, m.x1 - m.x0, m.y1 - m.y0);
+                            } else if (m.type === 'line' || m.type === 'arrow') {
+                                ctx.beginPath();
+                                ctx.moveTo(m.x0, m.y0);
+                                ctx.lineTo(m.x1, m.y1);
+                                ctx.stroke();
+                                if (m.type === 'arrow') arrowHead(ctx, m.x0, m.y0, m.x1, m.y1);
+                            } else if (m.type === 'text') {
+                                ctx.globalAlpha = 1;
+                                ctx.font = m.fontSize + 'px Helvetica, Arial, sans-serif';
+                                ctx.textBaseline = 'top';
+                                ctx.fillText(m.text, m.x0, m.y0);
+                            }
+                            ctx.restore();
+                        }
+
+                        function repaint(layer) {
+                            layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+                            for (var i = 0; i < layer.marks.length; i++) drawMark(layer.ctx, layer.marks[i]);
+                            if (cur && curLayer === layer) drawMark(layer.ctx, cur);
+                        }
+
+                        function onDown(e, layer) {
+                            if (!active) return;
+                            if (e.cancelable) e.preventDefault();
+                            var p = evtPos(e, layer.canvas);
+                            if (tool === 'text') {
+                                var txt = window.prompt('Note text:');
+                                if (txt) {
+                                    layer.marks.push({
+                                        type: 'text',
+                                        text: txt,
+                                        x0: p.x,
+                                        y0: p.y,
+                                        color: color,
+                                        fontSize: 16,
+                                        width: 1,
+                                        opacity: 1,
+                                        seq: ++seq
+                                    });
+                                    repaint(layer);
+                                }
+                                return;
+                            }
+                            drawing = true;
+                            curLayer = layer;
+                            if (tool === 'pen' || tool === 'highlight') {
+                                cur = {
+                                    type: tool,
+                                    points: [p],
+                                    color: color,
+                                    width: widthFor(tool),
+                                    opacity: tool === 'highlight' ? 0.35 : 1
+                                };
+                            } else {
+                                cur = {
+                                    type: tool,
+                                    x0: p.x,
+                                    y0: p.y,
+                                    x1: p.x,
+                                    y1: p.y,
+                                    color: color,
+                                    width: widthFor(tool),
+                                    opacity: 1
+                                };
+                            }
+                        }
+
+                        function onMove(e, layer) {
+                            if (!active || !drawing || curLayer !== layer) return;
+                            if (e.cancelable) e.preventDefault();
+                            var p = evtPos(e, layer.canvas);
+                            if (cur.type === 'pen' || cur.type === 'highlight') cur.points.push(p);
+                            else {
+                                cur.x1 = p.x;
+                                cur.y1 = p.y;
+                            }
+                            repaint(layer);
+                        }
+
+                        function onUp() {
+                            if (!drawing) return;
+                            drawing = false;
+                            if (cur && curLayer) {
+                                var keep = true;
+                                if ((cur.type === 'pen' || cur.type === 'highlight') && cur.points.length < 2)
+                                    keep = false;
+                                if (
+                                    (cur.type === 'rect' || cur.type === 'line' || cur.type === 'arrow') &&
+                                    Math.abs(cur.x1 - cur.x0) < 3 &&
+                                    Math.abs(cur.y1 - cur.y0) < 3
+                                )
+                                    keep = false;
+                                if (keep) {
+                                    cur.seq = ++seq;
+                                    curLayer.marks.push(cur);
+                                }
+                                repaint(curLayer);
+                            }
+                            cur = null;
+                            curLayer = null;
+                        }
+
+                        return {
+                            init: function (viewerPages) {
+                                layers = [];
+                                for (var i = 0; i < viewerPages.length; i++) {
+                                    (function (vp) {
+                                        var c = document.createElement('canvas');
+                                        c.className = 'dg-markup-canvas dg-markup-off';
+                                        c.width = vp.cssW;
+                                        c.height = vp.cssH;
+                                        vp.wrapEl.appendChild(c);
+                                        var layer = {
+                                            pageIndex: vp.pageIndex,
+                                            canvas: c,
+                                            ctx: c.getContext('2d'),
+                                            marks: []
+                                        };
+                                        c.addEventListener('mousedown', function (e) {
+                                            onDown(e, layer);
+                                        });
+                                        c.addEventListener('mousemove', function (e) {
+                                            onMove(e, layer);
+                                        });
+                                        c.addEventListener('touchstart', function (e) {
+                                            onDown(e, layer);
+                                        });
+                                        c.addEventListener('touchmove', function (e) {
+                                            onMove(e, layer);
+                                        });
+                                        c.addEventListener('touchend', onUp);
+                                        layers.push(layer);
+                                    })(viewerPages[i]);
+                                }
+                                window.addEventListener('mouseup', onUp);
+                            },
+                            setActive: function (on) {
+                                active = !!on;
+                                for (var i = 0; i < layers.length; i++) {
+                                    layers[i].canvas.classList.toggle('dg-markup-off', !active);
+                                }
+                            },
+                            setTool: function (t) {
+                                tool = t;
+                            },
+                            setColor: function (c) {
+                                color = c;
+                            },
+                            palette: function () {
+                                return PALETTE;
+                            },
+                            undo: function () {
+                                var best = null,
+                                    bestLayer = null;
+                                for (var i = 0; i < layers.length; i++) {
+                                    var ms = layers[i].marks;
+                                    if (ms.length && (!best || ms[ms.length - 1].seq > best.seq)) {
+                                        best = ms[ms.length - 1];
+                                        bestLayer = layers[i];
+                                    }
+                                }
+                                if (bestLayer) {
+                                    bestLayer.marks.pop();
+                                    repaint(bestLayer);
+                                }
+                            },
+                            clear: function () {
+                                for (var i = 0; i < layers.length; i++) {
+                                    layers[i].marks = [];
+                                    repaint(layers[i]);
+                                }
+                            },
+                            hasMarks: function () {
+                                for (var i = 0; i < layers.length; i++) if (layers[i].marks.length) return true;
+                                return false;
+                            },
+                            // Raster flatten source: transparent PNG of one page's marks, or
+                            // null if that page has none. (M2-2 consumes this.)
+                            pageImage: function (pageIndex) {
+                                for (var i = 0; i < layers.length; i++) {
+                                    if (layers[i].pageIndex === pageIndex && layers[i].marks.length) {
+                                        return layers[i].canvas.toDataURL('image/png');
+                                    }
+                                }
+                                return null;
+                            }
+                        };
+                    })();
+
+                    var markupMode = false;
+                    var markupAllowed = false; // set from validateToken (template Allow_Markup__c)
+                    // Flatten strategy for the markup overlay at composite/finalize time.
+                    // 'raster' (v1): rasterize each page's marks to a transparent full-page
+                    // PNG and draw it onto the matching pdf-lib page. 'vector' (future):
+                    // re-emit the captured strokes as native pdf-lib vector ops; not yet
+                    // implemented (see flattenMarkupInto + TODO(vector)). Chunk D flips this
+                    // from a DocGen_Settings__c-backed flag on the validateToken response.
+                    var markupFlattenMode = 'raster';
+
+                    function setMarkupTool(t, btn) {
+                        MarkupLayer.setTool(t);
+                        var tb = document.getElementById('markup-toolbar');
+                        if (tb) {
+                            var bs = tb.querySelectorAll('.mk-tool');
+                            for (var i = 0; i < bs.length; i++) bs[i].classList.remove('active');
+                        }
+                        if (btn) btn.classList.add('active');
+                    }
+
+                    function enterMarkup() {
+                        markupMode = true;
+                        MarkupLayer.setActive(true);
+                        document.getElementById('markup-toolbar').style.display = 'flex';
+                        var mb = document.getElementById('btn-markup');
+                        if (mb) mb.style.display = 'none';
+                    }
+
+                    function exitMarkup() {
+                        markupMode = false;
+                        MarkupLayer.setActive(false);
+                        document.getElementById('markup-toolbar').style.display = 'none';
+                        var mb = document.getElementById('btn-markup');
+                        if (mb && markupAllowed) mb.style.display = '';
+                    }
+
+                    function wireMarkupToolbar() {
+                        var tb = document.getElementById('markup-toolbar');
+                        if (!tb || tb.getAttribute('data-wired')) return;
+                        tb.setAttribute('data-wired', '1');
+                        var tools = tb.querySelectorAll('[data-tool]');
+                        for (var i = 0; i < tools.length; i++) {
+                            (function (b) {
+                                b.addEventListener('click', function () {
+                                    setMarkupTool(b.getAttribute('data-tool'), b);
+                                });
+                            })(tools[i]);
+                        }
+                        var sw = document.getElementById('markup-colors');
+                        var pal = MarkupLayer.palette();
+                        for (var c = 0; c < pal.length; c++) {
+                            (function (col, first) {
+                                var s = document.createElement('button');
+                                s.type = 'button';
+                                s.className = 'mk-swatch' + (first ? ' active' : '');
+                                s.style.background = col;
+                                s.addEventListener('click', function () {
+                                    MarkupLayer.setColor(col);
+                                    var all = sw.querySelectorAll('.mk-swatch');
+                                    for (var k = 0; k < all.length; k++) all[k].classList.remove('active');
+                                    s.classList.add('active');
+                                });
+                                sw.appendChild(s);
+                            })(pal[c], c === 0);
+                        }
+                        document.getElementById('mk-undo').addEventListener('click', function () {
+                            MarkupLayer.undo();
+                        });
+                        document.getElementById('mk-clear').addEventListener('click', function () {
+                            if (window.confirm('Clear all markup?')) MarkupLayer.clear();
+                        });
+                        document.getElementById('mk-done').addEventListener('click', exitMarkup);
+                    }
+
+                    // Called after the viewer paints. No-op unless the template allows markup.
+                    function initMarkupLayer() {
+                        if (!markupAllowed) return;
+                        MarkupLayer.init(DocGenPdfViewer.getPages());
+                        wireMarkupToolbar();
+                        var mb = document.getElementById('btn-markup');
+                        if (mb) mb.style.display = '';
+                    }
+
+                    // ===== Markup flatten (M2) — shared seam for approve + reject paths =====
+                    // Burn the on-screen markup overlay into the pdf-lib document so the saved
+                    // PDF carries the reviewer's marks. Returns a Promise that resolves once
+                    // every marked page has been drawn. Callers MUST chain this BEFORE drawing
+                    // signature stamps so the marks sit underneath the signatures.
+                    //   doc          : PDFLib.PDFDocument (source already loaded)
+                    //   pdfLibPages  : doc.getPages() — index-aligned with DocGenPdfViewer pages
+                    function flattenMarkupInto(doc, pdfLibPages) {
+                        // 'vector' is a planned alternative that would re-emit captured strokes
+                        // as native pdf-lib path ops (crisper, smaller, selectable). Not built
+                        // yet — warn and fall through to raster so the document is never lost.
+                        // TODO(vector): implement vector stroke re-emission and remove this
+                        // fall-through; gate is markupFlattenMode === 'vector'.
+                        if (markupFlattenMode === 'vector') {
+                            console.warn('vector markup flatten not implemented; using raster');
+                        }
+                        // Raster: one transparent, full-page PNG per marked page, drawn full-bleed
+                        // at the page's PDF-point size so it overlays the source content exactly.
+                        var viewerPages = DocGenPdfViewer.getPages();
+                        var chain = Promise.resolve();
+                        viewerPages.forEach(function (entry) {
+                            chain = chain.then(function () {
+                                var pngData = MarkupLayer.pageImage(entry.pageIndex);
+                                if (!pngData) return; // no marks on this page
+                                var target = pdfLibPages[entry.pageIndex];
+                                if (!target) return; // viewer/pdf-lib page count mismatch guard
+                                return doc.embedPng(dataUrlToBytes(pngData)).then(function (png) {
+                                    target.drawImage(png, {
+                                        x: 0,
+                                        y: 0,
+                                        width: entry.widthPts,
+                                        height: entry.heightPts
+                                    });
+                                });
+                            });
+                        });
+                        return chain;
+                    }
+
                     // Composite ALL captured fields (drawn images + typed text + dates) onto
                     // the source PDF with pdf-lib, add signature attribution captions, and —
                     // when this signer completes the request — a Certificate of Completion
@@ -2218,7 +2706,14 @@
                                             });
                                             return cardW;
                                         }
-                                        var chain = Promise.resolve();
+                                        // Markup (M2): burn the reviewer's overlay into the
+                                        // document FIRST so signature stamps draw on top of it.
+                                        // No-markup path is untouched — chain stays a bare
+                                        // resolved promise exactly as before.
+                                        var chain =
+                                            markupAllowed && MarkupLayer.hasMarks()
+                                                ? flattenMarkupInto(doc, pages)
+                                                : Promise.resolve();
                                         guided.spots.forEach(function (spot) {
                                             chain = chain.then(function () {
                                                 var rect = DocGenPdfViewer.hitToPdfRect(spot.hit);
@@ -3105,34 +3600,118 @@
                     }
 
                     // ===== DECLINE =====
+                    // Small non-fatal status line inside the decline card (used to surface a
+                    // markup-save warning without blocking the decline itself).
+                    function setDeclineStatus(msg) {
+                        var el = document.getElementById('decline-status');
+                        if (!el) return;
+                        if (!msg) {
+                            el.style.display = 'none';
+                            el.textContent = '';
+                            return;
+                        }
+                        el.textContent = msg;
+                        el.style.display = '';
+                    }
+
+                    // If the reviewer drew markup before declining, flatten + save the marked-up
+                    // PDF to the record FIRST (mirrors the approve path's pdf-lib flatten), then
+                    // record the decline. Returns a Promise that ALWAYS resolves — a markup-save
+                    // failure must never block the decline (see saveMarkupBeforeDecline comment).
+                    function saveMarkupBeforeDecline(ua) {
+                        if (!(markupAllowed && MarkupLayer.hasMarks() && sourcePdfBase64)) {
+                            return Promise.resolve(); // no marks / not allowed → byte-identical to old path
+                        }
+                        if (typeof PDFLib === 'undefined') {
+                            console.warn('Markup save skipped before decline: PDFLib not loaded');
+                            return Promise.resolve();
+                        }
+                        // Load the served source PDF into pdf-lib, flatten the overlay onto it, and
+                        // save the marked-up document via saveMarkupDocument. Same pattern as
+                        // compositeAndFinalize (b64ToBytes -> PDFLib.PDFDocument.load -> flatten ->
+                        // doc.save() -> bytesToB64).
+                        return PDFLib.PDFDocument.load(b64ToBytes(sourcePdfBase64))
+                            .then(function (doc) {
+                                return flattenMarkupInto(doc, doc.getPages()).then(function () {
+                                    return doc.save();
+                                });
+                            })
+                            .then(function (outBytes) {
+                                var b64 = bytesToB64(outBytes);
+                                // $RemoteAction callbacks are NOT promises, so wrap the invoke so we
+                                // can sequence it before declineSignature.
+                                return new Promise(function (resolve) {
+                                    Visualforce.remoting.Manager.invokeAction(
+                                        '{!$RemoteAction.DocGenSignatureController.saveMarkupDocument}',
+                                        token,
+                                        b64,
+                                        capturedIp,
+                                        ua,
+                                        function (result, event) {
+                                            if (!event.status || !result || result.success === false) {
+                                                // Non-fatal: warn but resolve so the decline still
+                                                // proceeds. The reject must never be blocked by a
+                                                // markup-save failure.
+                                                var m = (result && result.message) || event.message || 'Unknown error';
+                                                console.warn('Markup save before decline failed: ' + m);
+                                                setDeclineStatus(
+                                                    'Your markup could not be saved, but your decline will still be recorded.'
+                                                );
+                                            }
+                                            resolve();
+                                        },
+                                        { escape: false, buffer: false, timeout: 120000 }
+                                    );
+                                });
+                            })
+                            .catch(function (e) {
+                                // Same non-fatal stance for client-side flatten/load errors: warn
+                                // and resolve so the decline below is never blocked.
+                                console.warn('Markup flatten before decline failed: ' + (e && e.message));
+                                setDeclineStatus(
+                                    'Your markup could not be saved, but your decline will still be recorded.'
+                                );
+                                return Promise.resolve();
+                            });
+                    }
+
                     function handleDecline() {
                         var reason = document.getElementById('decline-reason').value.trim();
                         var btn = document.getElementById('btn-decline-confirm');
                         btn.disabled = true;
                         btn.textContent = 'Declining...';
+                        setDeclineStatus('');
 
                         var ua = navigator.userAgent || 'Unknown';
-                        Visualforce.remoting.Manager.invokeAction(
-                            '{!$RemoteAction.DocGenSignatureController.declineSignature}',
-                            token,
-                            reason,
-                            capturedIp,
-                            ua,
-                            function (result, event) {
-                                btn.disabled = false;
-                                btn.textContent = 'Confirm Decline';
-                                if (event.status && result && result.success) {
-                                    document.getElementById('error-message').textContent =
-                                        'You have declined this signature request.';
-                                    document.querySelector('.error-card h2').textContent = 'Request Declined';
-                                    document.querySelector('.error-icon').textContent = '✖';
-                                    showState('error');
-                                } else {
-                                    alert(result ? result.message : 'Failed to decline. Please try again.');
-                                }
-                            },
-                            { escape: false }
-                        );
+
+                        // The existing decline RemoteAction — unchanged from before, just hoisted
+                        // into an inner fn so it can run AFTER the optional markup save completes.
+                        function doDecline() {
+                            Visualforce.remoting.Manager.invokeAction(
+                                '{!$RemoteAction.DocGenSignatureController.declineSignature}',
+                                token,
+                                reason,
+                                capturedIp,
+                                ua,
+                                function (result, event) {
+                                    btn.disabled = false;
+                                    btn.textContent = 'Confirm Decline';
+                                    if (event.status && result && result.success) {
+                                        document.getElementById('error-message').textContent =
+                                            'You have declined this signature request.';
+                                        document.querySelector('.error-card h2').textContent = 'Request Declined';
+                                        document.querySelector('.error-icon').textContent = '✖';
+                                        showState('error');
+                                    } else {
+                                        alert(result ? result.message : 'Failed to decline. Please try again.');
+                                    }
+                                },
+                                { escape: false }
+                            );
+                        }
+
+                        // Sequence: markup save (best-effort, always resolves) → decline.
+                        saveMarkupBeforeDecline(ua).then(doDecline);
                     }
                 })();
             </script>

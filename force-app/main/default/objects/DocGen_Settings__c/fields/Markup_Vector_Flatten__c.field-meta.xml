@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Markup_Vector_Flatten__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description
+    >When enabled, PDF markup is flattened using vector drawing instead of the default rasterized PNG overlay. Vector flattening is not yet implemented; the markup page falls back to raster regardless until it ships, so this switch is a no-op today.</description>
+    <externalId>false</externalId>
+    <inlineHelpText
+    >Switches markup flattening from raster (default) to vector once vector flattening is implemented. Leave off until vector support ships.</inlineHelpText>
+    <label>Markup Vector Flatten</label>
+    <type>Checkbox</type>
+</CustomField>

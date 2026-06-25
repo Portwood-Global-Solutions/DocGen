@@ -4,6 +4,14 @@ private class DocGenSignaturePdfTests {
     // 64-char hex tokens (the only valid Secure_Token__c shape).
     private static final String SIGNER_TOKEN = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
     private static final String FOREIGN_TOKEN = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+    // Markup-enabled signer: request carries a Template__c with Allow_Markup__c=true and the
+    // signer is PIN-verified, so saveMarkupDocument's gates (size, expiry, terminal-state, PIN,
+    // per-template toggle) all pass and the happy/IDOR paths reach the document write.
+    private static final String MARKUP_TOKEN = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1111111111111111cccccccccccccccc';
+    // Markup-enabled request but signer is NOT PIN-verified (exercises the PIN gate).
+    private static final String MARKUP_NOPIN_TOKEN = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2222222222222222dddddddddddddddd';
+    // Markup-enabled request whose signer is already Declined (exercises the terminal-state gate).
+    private static final String MARKUP_DECLINED_TOKEN = 'cccccccccccccccccccccccccccccccc3333333333333333eeeeeeeeeeeeeeee';
 
     @testSetup
     static void setup() {
@@ -65,6 +73,65 @@ private class DocGenSignaturePdfTests {
             Sort_Order__c = 1
         );
         Database.insert(foreignSigner, AccessLevel.SYSTEM_MODE);
+
+        // ---- Markup-enabled fixtures (M2, Chunk E) ---------------------------------
+        // A template with the per-template markup toggle ON. saveMarkupDocument reads
+        // Template__r.Allow_Markup__c server-side and rejects when null/false.
+        DocGen_Template__c markupTmpl = new DocGen_Template__c(
+            Name = 'Markup Enabled Template',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Allow_Markup__c = true
+        );
+        Database.insert(markupTmpl, AccessLevel.SYSTEM_MODE);
+
+        // Request on the markup-enabled template, bound to the same Account.
+        DocGen_Signature_Request__c markupReq = new DocGen_Signature_Request__c(
+            Template__c = markupTmpl.Id,
+            Related_Record_Id__c = acc.Id,
+            Status__c = 'Sent',
+            Signing_Order__c = 'Parallel'
+        );
+        Database.insert(markupReq, AccessLevel.SYSTEM_MODE);
+
+        // PIN-verified signer → happy/IDOR path reaches the document write.
+        DocGen_Signer__c markupSigner = new DocGen_Signer__c(
+            Signature_Request__c = markupReq.Id,
+            Signer_Name__c = 'Mark Upton',
+            Signer_Email__c = 'mark@test.com',
+            Role_Name__c = 'Signer',
+            Secure_Token__c = MARKUP_TOKEN,
+            Status__c = 'Pending',
+            Sort_Order__c = 1,
+            PIN_Verified_At__c = System.now()
+        );
+        // NOT PIN-verified signer on the same markup-enabled request → exercises the PIN gate.
+        DocGen_Signer__c markupNoPinSigner = new DocGen_Signer__c(
+            Signature_Request__c = markupReq.Id,
+            Signer_Name__c = 'No Pin Signer',
+            Signer_Email__c = 'nopin@test.com',
+            Role_Name__c = 'Signer',
+            Secure_Token__c = MARKUP_NOPIN_TOKEN,
+            Status__c = 'Pending',
+            Sort_Order__c = 2
+        );
+        // Already-Declined signer → exercises the terminal-state gate (PIN-verified so the
+        // Declined check is the one that fires).
+        DocGen_Signer__c markupDeclinedSigner = new DocGen_Signer__c(
+            Signature_Request__c = markupReq.Id,
+            Signer_Name__c = 'Declined Signer',
+            Signer_Email__c = 'declined@test.com',
+            Role_Name__c = 'Signer',
+            Secure_Token__c = MARKUP_DECLINED_TOKEN,
+            Status__c = 'Declined',
+            Sort_Order__c = 3,
+            PIN_Verified_At__c = System.now()
+        );
+        Database.insert(
+            new List<DocGen_Signer__c>{ markupSigner, markupNoPinSigner, markupDeclinedSigner },
+            AccessLevel.SYSTEM_MODE
+        );
     }
 
     private static DocGen_Signer__c getSigner(String token) {
@@ -1178,5 +1245,251 @@ private class DocGenSignaturePdfTests {
             threw = true;
         }
         System.assert(threw, 'A null snapshot data map must throw rather than fall back to the live record');
+    }
+
+    // =========================================================================
+    // M2 — saveMarkupDocument (document-markup reject-with-markup path, Chunk B/E).
+    // Lands a flattened markup PDF on the request's OWN Related_Record_Id__c + an
+    // audit row, WITHOUT setting signer/request Status='Signed' and without
+    // publishing any platform event. Record id is resolved server-side from the
+    // token (IDOR-safe), never passed by the client.
+    // =========================================================================
+
+    @isTest
+    static void testSaveMarkupDocument_success() {
+        Account acc = [SELECT Id FROM Account WHERE Name = 'PDF Sign Test Co' LIMIT 1];
+        DocGen_Signer__c signer = getSigner(MARKUP_TOKEN);
+        Id requestId = signer.Signature_Request__c;
+
+        Test.startTest();
+        DocGenSignatureController.SavePdfSignatureResult result = DocGenSignatureController.saveMarkupDocument(
+            MARKUP_TOKEN,
+            EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 markup')),
+            '203.0.113.7',
+            'UA'
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.success, 'Markup save must succeed for a valid token');
+
+        // A marked-up document is linked to the token-bound related record (the setup Account).
+        List<ContentDocumentLink> links = [
+            SELECT ContentDocumentId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id
+        ];
+        System.assert(!links.isEmpty(), 'A markup document is linked to the related record');
+        Set<Id> docIds = new Set<Id>();
+        for (ContentDocumentLink link : links) {
+            docIds.add(link.ContentDocumentId);
+        }
+        System.assertEquals(1, docIds.size(), 'Exactly one markup document landed on the related record');
+
+        // An audit row was written for the markup save.
+        List<DocGen_Signature_Audit__c> audits = [
+            SELECT Document_Hash_SHA256__c, IP_Address__c
+            FROM DocGen_Signature_Audit__c
+            WHERE Signer__c = :signer.Id
+        ];
+        System.assertEquals(1, audits.size(), 'One audit row created for the markup save');
+        System.assert(
+            String.isNotBlank(audits[0].Document_Hash_SHA256__c),
+            'Markup audit records the SHA-256 of the saved PDF for tamper-evidence'
+        );
+
+        // Status must NOT change — this is a markup save, not a signature.
+        DocGen_Signer__c after = [SELECT Status__c FROM DocGen_Signer__c WHERE Id = :signer.Id];
+        System.assertNotEquals('Signed', after.Status__c, 'Markup save must NOT mark the signer Signed');
+        System.assertEquals('Pending', after.Status__c, 'Signer status is left untouched by the markup save');
+
+        DocGen_Signature_Request__c req = [
+            SELECT Status__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+        ];
+        System.assertNotEquals('Signed', req.Status__c, 'Markup save must NOT flip the request to Signed');
+        System.assertEquals('Sent', req.Status__c, 'Request status is left untouched by the markup save');
+    }
+
+    @isTest
+    static void testSaveMarkupDocument_invalidToken() {
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveMarkupDocument(
+                'not-a-hex-token',
+                EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 markup')),
+                '1.1.1.1',
+                'UA'
+            );
+            System.assert(false, 'A malformed (non-64-hex) token must be rejected');
+        } catch (Exception e) {
+            // AuraHandledException
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSaveMarkupDocument_blankPdf() {
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveMarkupDocument(SIGNER_TOKEN, '', '1.1.1.1', 'UA');
+            System.assert(false, 'A blank markup PDF must be rejected');
+        } catch (Exception e) {
+            // AuraHandledException
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSaveMarkupDocument_expiredToken() {
+        // Backdate CreatedDate past the 48h expiry window (mirrors the getSourcePdf expiry test).
+        // Uses the markup-enabled+PIN-verified signer so the expiry check (which runs BEFORE the
+        // terminal-state/PIN/toggle gates) is unambiguously the gate that rejects it.
+        DocGen_Signer__c signer = getSigner(MARKUP_TOKEN);
+        Test.setCreatedDate(signer.Id, System.now().addHours(-49));
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveMarkupDocument(
+                MARKUP_TOKEN,
+                EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 markup')),
+                '1.1.1.1',
+                'UA'
+            );
+            System.assert(false, 'An expired token must be rejected');
+        } catch (Exception e) {
+            // AuraHandledException
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSaveMarkupDocument_markupNotEnabled() {
+        // SIGNER_TOKEN's request is Template__c-null → Allow_Markup__c is not enabled.
+        // The signer is PIN-verified-agnostic here; the toggle check rejects it.
+        DocGen_Signer__c signer = getSigner(SIGNER_TOKEN);
+        signer.PIN_Verified_At__c = System.now();
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
+
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveMarkupDocument(
+                SIGNER_TOKEN,
+                EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 markup')),
+                '1.1.1.1',
+                'UA'
+            );
+            System.assert(false, 'A request without an Allow_Markup__c=true template must be rejected');
+        } catch (Exception e) {
+            // AuraHandledException — the per-template Allow_Markup__c=true gate rejects it.
+            // (AuraHandledException.getMessage() returns the generic "Script-thrown exception"
+            // in test context, so we assert the throw rather than the message text.)
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSaveMarkupDocument_pinNotVerified() {
+        // Markup-enabled request, but this signer has not verified their email PIN.
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveMarkupDocument(
+                MARKUP_NOPIN_TOKEN,
+                EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 markup')),
+                '1.1.1.1',
+                'UA'
+            );
+            System.assert(false, 'A signer who has not verified their email must be rejected');
+        } catch (Exception e) {
+            // AuraHandledException — the PIN_Verified_At__c != null gate rejects it.
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSaveMarkupDocument_declinedSigner() {
+        // Markup-enabled request whose signer already Declined → terminal state, no further markup.
+        Test.startTest();
+        try {
+            DocGenSignatureController.saveMarkupDocument(
+                MARKUP_DECLINED_TOKEN,
+                EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 markup')),
+                '1.1.1.1',
+                'UA'
+            );
+            System.assert(false, 'A signer in a terminal (Declined) state must be rejected');
+        } catch (Exception e) {
+            // AuraHandledException — the terminal-state (Declined) gate rejects it.
+        }
+        Test.stopTest();
+    }
+
+    // NOTE: the 16,000,000-char base64 size cap is a simple String.length() guard in
+    // saveMarkupDocument; it is deliberately NOT unit-tested here because materializing a
+    // 16M-char string blows the Apex test heap. The guard is verified by inspection.
+
+    @isTest
+    static void testSaveMarkupDocument_idor() {
+        // The markup PDF is linked ONLY to the record bound to the token's request,
+        // resolved server-side — the caller never passes a record id, so it cannot
+        // target an arbitrary record.
+        DocGen_Signer__c signer = getSigner(MARKUP_TOKEN);
+        DocGen_Signature_Request__c boundReq = [
+            SELECT Related_Record_Id__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :signer.Signature_Request__c
+        ];
+        Id boundRecordId = (Id) boundReq.Related_Record_Id__c;
+
+        Test.startTest();
+        DocGenSignatureController.SavePdfSignatureResult result = DocGenSignatureController.saveMarkupDocument(
+            MARKUP_TOKEN,
+            EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 markup')),
+            '1.1.1.1',
+            'UA'
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.success);
+
+        // CDL queries must be filtered by Id (platform restriction). Resolve the just-created
+        // markup CV, then prove ITS document link targets only the token-bound related record.
+        ContentVersion markupCv = [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Title LIKE '%Markup%'
+            ORDER BY CreatedDate DESC
+            LIMIT 1
+        ];
+        List<ContentDocumentLink> links = [
+            SELECT LinkedEntityId
+            FROM ContentDocumentLink
+            WHERE ContentDocumentId = :markupCv.ContentDocumentId
+        ];
+        System.assert(!links.isEmpty(), 'Markup document is linked to the related record');
+
+        // The method controls exactly one record-targeting link: the token-bound record.
+        // (Publishing a CV via FirstPublishLocationId also creates an automatic link to the
+        // running user — a 005 owner link — which is platform behavior, not a record target.)
+        Boolean linkedToBoundRecord = false;
+        for (ContentDocumentLink link : links) {
+            Id linked = link.LinkedEntityId;
+            if (linked == boundRecordId) {
+                linkedToBoundRecord = true;
+            } else {
+                // The only other permissible link is the automatic owner (User) link.
+                System.assertEquals(
+                    'User',
+                    linked.getSObjectType().getDescribe().getName(),
+                    'Markup document must not be linked to any record other than the token-bound one ' +
+                        '(record id resolved server-side, IDOR-safe). Unexpected link to: ' +
+                        linked
+                );
+            }
+        }
+        System.assert(
+            linkedToBoundRecord,
+            'Markup document is linked to the token-bound related record (the only record target)'
+        );
     }
 }

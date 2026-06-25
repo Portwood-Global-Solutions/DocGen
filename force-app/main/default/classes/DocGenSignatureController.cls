@@ -4,6 +4,12 @@ public without sharing class DocGenSignatureController {
     // PIN verification settings
     private static final Integer PIN_EXPIRATION_MINUTES = 10;
     private static final Integer MAX_PIN_ATTEMPTS = 3;
+    // Defensive cap on the guest-supplied markup PDF (base64 chars) to bound heap/DoS.
+    // ~8M base64 chars ≈ 6MB decoded, matched to the synchronous RemoteAction heap ceiling
+    // so an oversized payload fails cleanly here instead of a raw LimitException mid-decode.
+    // Raster markup PDFs can be large (full-page transparent PNG overlays); the future
+    // vector flatten mode is the real size fix — this is only a guard rail.
+    private static final Integer MAX_MARKUP_BASE64_LENGTH = 8000000;
 
     public class SignatureInitResponse {
         @AuraEnabled
@@ -32,6 +38,14 @@ public without sharing class DocGenSignatureController {
         public Boolean isSignerToken;
         @AuraEnabled
         public Boolean requiresPin;
+        // M2: whether the request's template enables PDF markup (draw/annotate).
+        @AuraEnabled
+        public Boolean allowMarkup;
+        // M2 (Chunk D): org-level flatten mode seam. true => the page should flatten
+        // markup as vector once vector flattening ships; false (default) => raster.
+        // Vector is still stubbed, so the page falls back to raster regardless today.
+        @AuraEnabled
+        public Boolean markupVectorFlatten;
         // Signer form fields to render during e-signing. PUBLIC-SAFE projection
         // only — {key,label,type,required,choices}. The writeback flags and the
         // base-object field API names from the template config are deliberately
@@ -249,7 +263,7 @@ public without sharing class DocGenSignatureController {
         // SYSTEM_MODE on the SOQL below; documented FLS describe signal here.
         DocGenFlsGuard.guestAssertAccessible(
             DocGen_Template__c.sObjectType,
-            new Set<String>{ 'Name', 'Form_Fields_Config__c' }
+            new Set<String>{ 'Name', 'Form_Fields_Config__c', 'Allow_Markup__c' }
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
@@ -268,7 +282,8 @@ public without sharing class DocGenSignatureController {
                 Signature_Request__r.Related_Record_Id__c,
                 Signature_Request__r.Template__c,
                 Signature_Request__r.Template__r.Name,
-                Signature_Request__r.Template__r.Form_Fields_Config__c
+                Signature_Request__r.Template__r.Form_Fields_Config__c,
+                Signature_Request__r.Template__r.Allow_Markup__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -699,6 +714,16 @@ public without sharing class DocGenSignatureController {
         if (parentReq.Template__c != null && parentReq.Template__r != null) {
             res.formFields = DocGenFieldWritebackService.publicFormFields(parentReq.Template__r.Form_Fields_Config__c);
         }
+
+        // M2: per-template markup toggle — the page shows the Mark Up tools only when on.
+        res.allowMarkup = (parentReq.Template__r != null && parentReq.Template__r.Allow_Markup__c == true);
+
+        // M2 (Chunk D): org-level flatten-mode seam. DocGen_Settings__c is a hierarchy
+        // custom setting read everywhere else via getOrgDefaults() (see DocGenSetupController
+        // / sendPinEmail); reuse that mechanism. getOrgDefaults() never returns null, but the
+        // checkbox can be null for a brand-new org with no saved row — default to false.
+        DocGen_Settings__c docGenSettings = DocGen_Settings__c.getOrgDefaults();
+        res.markupVectorFlatten = (docGenSettings != null && docGenSettings.Markup_Vector_Flatten__c == true);
 
         return res;
     }
@@ -2842,6 +2867,209 @@ public without sharing class DocGenSignatureController {
                 );
             }
         }
+
+        result.success = true;
+        return result;
+    }
+
+    /**
+     * Markup-save for the document-markup path (M2, Chunk B).
+     *
+     * The browser flattens the signer's markup annotations onto the source PDF with
+     * pdf-lib and posts the finished PDF here. This is NOT a signature: it lands a
+     * marked-up copy of the document on the request's related record and writes an
+     * audit row for tamper-evidence, but it deliberately does NOT touch signer or
+     * request Status__c and never publishes a platform event. Used by the
+     * reject-with-markup path (Chunk C) so a declining signer's annotations are
+     * still preserved on the record alongside the decline.
+     *
+     * IDOR-safe: the related record id is resolved from the token-bound request
+     * (Related_Record_Id__c), never from a client parameter — a foreign token can
+     * only ever land its markup on its own bound record. Mirrors saveCompositedSignedPdf's
+     * security guards exactly (token format, guest CRUD/FLS gates, SYSTEM_MODE,
+     * expiry check).
+     */
+    @AuraEnabled
+    @RemoteAction
+    public static SavePdfSignatureResult saveMarkupDocument(
+        String token,
+        String base64Pdf,
+        String ipAddress,
+        String userAgent
+    ) {
+        SavePdfSignatureResult result = new SavePdfSignatureResult();
+        result.success = false;
+
+        if (String.isBlank(token) || token.length() != 64 || !Pattern.matches('[a-fA-F0-9]{64}', token)) {
+            throw new AuraHandledException('Invalid security token.');
+        }
+        if (String.isBlank(base64Pdf)) {
+            throw new AuraHandledException('No markup document was provided.');
+        }
+        // Guard rail against a guest posting a pathologically large payload (heap/DoS).
+        if (base64Pdf.length() > MAX_MARKUP_BASE64_LENGTH) {
+            throw new AuraHandledException('Markup document is too large.');
+        }
+
+        DocGenSignatureGuestSecurity.assertSignerWritableFields(token);
+        DocGenSignatureGuestSecurity.assertAuditCreateable(token);
+
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Status__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Signature_Request__c',
+                'Role_Name__c',
+                'Contact__c',
+                'CreatedDate',
+                'PIN_Verified_At__c',
+                'Secure_Token__c'
+            }
+        );
+        // Per-template markup toggle is the SERVER-SIDE control (not just a UI hint),
+        // so the Template field read is FLS-guarded separately — mirrors validateSignerToken.
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Name', 'Allow_Markup__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Signer__c> signers = [
+            SELECT
+                Id,
+                Status__c,
+                Signer_Name__c,
+                Signer_Email__c,
+                Signature_Request__c,
+                Signature_Request__r.Related_Record_Id__c,
+                Signature_Request__r.Template__r.Name,
+                Signature_Request__r.Template__r.Allow_Markup__c,
+                Role_Name__c,
+                Contact__c,
+                CreatedDate,
+                PIN_Verified_At__c
+            FROM DocGen_Signer__c
+            WHERE Secure_Token__c = :token
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (signers.isEmpty()) {
+            throw new AuraHandledException('Signer not found.');
+        }
+
+        DocGen_Signer__c signer = signers[0];
+        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+            throw new AuraHandledException('This signature link has expired.');
+        }
+        // Terminal-state guard — once a signer has signed or declined, no further
+        // markup may be appended under their token (mirrors saveCompositedSignedPdf's
+        // already-signed reject; declined is also terminal for this token).
+        if (signer.Status__c == 'Signed') {
+            throw new AuraHandledException('You have already signed this document.');
+        }
+        if (signer.Status__c == 'Declined') {
+            throw new AuraHandledException('You have already declined this request.');
+        }
+        // Email verification is required before any document write, same as signing.
+        if (signer.PIN_Verified_At__c == null) {
+            throw new AuraHandledException('Email verification is required before signing.');
+        }
+        // Enforce the per-template Allow_Markup__c toggle server-side. Requests on the
+        // merged-approval flow always carry a Template__c, so a null template / null /
+        // false all mean markup is not enabled — reject rather than silently save.
+        Boolean markupEnabled =
+            signer.Signature_Request__r != null &&
+            signer.Signature_Request__r.Template__r != null &&
+            signer.Signature_Request__r.Template__r.Allow_Markup__c == true;
+        if (!markupEnabled) {
+            throw new AuraHandledException('Markup is not enabled for this document.');
+        }
+
+        // Related record id comes from the token-bound request ONLY (IDOR-safe).
+        String baseName = (signer.Signature_Request__r != null &&
+            signer.Signature_Request__r.Template__r != null)
+            ? signer.Signature_Request__r.Template__r.Name
+            : null;
+        Id relatedRecordId = signer.Signature_Request__r != null
+            ? (Id) signer.Signature_Request__r.Related_Record_Id__c
+            : null;
+
+        Blob markupBytes = EncodingUtil.base64Decode(base64Pdf);
+        String markupTitle = String.isNotBlank(baseName) ? (baseName + ' - Markup') : 'Markup Document';
+
+        // Land the marked-up PDF on the related record. Mirrors saveCompositedSignedPdf's
+        // final-doc write: FirstPublishLocationId on the CV + an explicit ContentDocumentLink
+        // (ShareType 'V', Visibility 'AllUsers') so the document is visible on the record.
+        ContentVersion cv = new ContentVersion();
+        cv.Title = markupTitle;
+        cv.PathOnClient = markupTitle + '.pdf';
+        cv.VersionData = markupBytes;
+        if (relatedRecordId != null) {
+            cv.FirstPublishLocationId = relatedRecordId;
+        }
+        DocGenFlsGuard.guestAssertCreateable(cv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+
+        if (relatedRecordId != null) {
+            // Best-effort share — never block the markup save on the link.
+            try {
+                ContentVersion savedCv = [
+                    SELECT Id, ContentDocumentId
+                    FROM ContentVersion
+                    WHERE Id = :cv.Id
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                ContentDocumentLink cdl = new ContentDocumentLink();
+                cdl.ContentDocumentId = savedCv.ContentDocumentId;
+                cdl.LinkedEntityId = relatedRecordId;
+                cdl.ShareType = 'V';
+                cdl.Visibility = 'AllUsers';
+                DocGenFlsGuard.guestAssertCreateable(
+                    cdl,
+                    new Set<String>{ 'ContentDocumentId', 'LinkedEntityId', 'ShareType', 'Visibility' }
+                );
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                Database.insert(cdl, AccessLevel.SYSTEM_MODE);
+            } catch (Exception shareErr) {
+                System.debug(
+                    LoggingLevel.ERROR,
+                    'DocGen: failed to share markup document with related record: ' + shareErr.getMessage()
+                );
+            }
+        }
+
+        // Audit row — tamper-evidence only. Note: signer/request Status__c are NOT
+        // changed and no platform event is published. This is a markup-save, not a
+        // signature.
+        DocGen_Signature_Audit__c audit = new DocGen_Signature_Audit__c();
+        audit.Signature_Request__c = signer.Signature_Request__c;
+        audit.Signer__c = signer.Id;
+        audit.Signer_Name__c = signer.Signer_Name__c;
+        audit.Signer_Email__c = signer.Signer_Email__c;
+        audit.Contact__c = signer.Contact__c;
+        audit.Signed_Date__c = System.now();
+        audit.IP_Address__c = resolveClientIp(ipAddress);
+        audit.User_Agent__c = String.isNotBlank(userAgent) ? userAgent.left(255) : 'Unknown';
+        audit.Document_Hash_SHA256__c = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', markupBytes));
+        DocGenFlsGuard.guestAssertCreateable(
+            audit,
+            new Set<String>{
+                'Signature_Request__c',
+                'Signer__c',
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Contact__c',
+                'Signed_Date__c',
+                'IP_Address__c',
+                'User_Agent__c',
+                'Document_Hash_SHA256__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(new List<DocGen_Signature_Audit__c>{ audit }, false, AccessLevel.SYSTEM_MODE);
 
         result.success = true;
         return result;

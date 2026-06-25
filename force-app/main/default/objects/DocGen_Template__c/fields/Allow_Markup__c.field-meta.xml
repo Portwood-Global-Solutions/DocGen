@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Allow_Markup__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description
+    >When enabled, signers using this template can draw, add text, shapes and highlights (markup) on the document during signing. The marked-up PDF is saved back to the related record.</description>
+    <inlineHelpText
+    >Let signers mark up the PDF (pen, text, shapes, highlighter) while signing. The marked-up document is saved to the related record on approve or reject.</inlineHelpText>
+    <label>Allow Markup</label>
+    <type>Checkbox</type>
+</CustomField>

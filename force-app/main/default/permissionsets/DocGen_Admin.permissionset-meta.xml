@@ -229,6 +229,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>DocGen_Settings__c.Markup_Vector_Flatten__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Settings__c.Signature_Email_Brand_Color__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -376,6 +381,11 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Template__c.Footer_Html__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Template__c.Allow_Markup__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
