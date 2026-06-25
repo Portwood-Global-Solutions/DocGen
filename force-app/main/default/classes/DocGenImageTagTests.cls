@@ -372,7 +372,11 @@ private class DocGenImageTagTests {
             imgCount,
             'Should emit 2 img tags (indexes 1 and 2), not 3 (99 is out of range): ' + resolved
         );
-        System.assert(resolved.contains('max-width:150px'), 'Size token should produce CSS max-width: ' + resolved);
+        // Single-number token {%Image:2:150} → width:150px plus a size-keyed
+        // cache-bust (?dgsz=m150) so Flying Saucer honors it (see
+        // DocGenService.buildHtmlImageMarkup).
+        System.assert(resolved.contains('width:150px'), 'Single-number token should emit width:150px: ' + resolved);
+        System.assert(resolved.contains('dgsz=m150'), 'Sized img must carry a size-keyed cache-bust: ' + resolved);
     }
 
     @IsTest
@@ -441,20 +445,70 @@ private class DocGenImageTagTests {
         Database.insert(job, AccessLevel.SYSTEM_MODE);
         DocGenGiantQueryAssembler asm = new DocGenGiantQueryAssembler(job.Id, tpl.Id, a.Id, 'Contacts');
 
-        String r1 = asm.resolveParentImageTags('{%Image:1:200x100}');
-        System.assert(r1.contains('width:200px') && r1.contains('height:100px'), 'WxH style: ' + r1);
-
-        String r2 = asm.resolveParentImageTags('{%Image:1:400x}');
-        System.assert(r2.contains('width:400px') && !r2.contains('height:'), 'Wx style: ' + r2);
-
-        String r3 = asm.resolveParentImageTags('{%Image:1:x250}');
-        System.assert(r3.contains('height:250px') && !r3.contains('width:'), 'xH style: ' + r3);
-
-        String r4 = asm.resolveParentImageTags('{%Image:1}');
+        // Each size token emits CSS px width/height PLUS a size-keyed cache-bust
+        // (?dgsz=…) so Flying Saucer honors each requested size on /sfc/ URLs.
+        String wxh = asm.resolveParentImageTags('{%Image:1:200x100}');
         System.assert(
-            r4.contains('<img src="/sfc/') && !r4.contains(' style='),
-            'No size token → no style attr: ' + r4
+            wxh.contains('width:200px') && wxh.contains('height:100px') && wxh.contains('dgsz=w200h100'),
+            'WxH must emit width+height+cache-bust: ' + wxh
         );
+        String wOnly = asm.resolveParentImageTags('{%Image:1:400x}');
+        System.assert(
+            wOnly.contains('width:400px') && wOnly.contains('height:auto') && wOnly.contains('dgsz=w400'),
+            'Width-only must emit width+auto+cache-bust: ' + wOnly
+        );
+        String hOnly = asm.resolveParentImageTags('{%Image:1:x250}');
+        System.assert(
+            hOnly.contains('height:250px') && hOnly.contains('width:auto') && hOnly.contains('dgsz=h250'),
+            'Height-only must emit height+auto+cache-bust: ' + hOnly
+        );
+        String none = asm.resolveParentImageTags('{%Image:1}');
+        System.assert(
+            none.contains('<img src="/sfc/') && none.contains('max-width:100%') && !none.contains('dgsz='),
+            'No token → intrinsic bare img, no cache-bust: ' + none
+        );
+    }
+
+    // ==================================================================
+    // HTML-template image sizing (DocGenService.buildImageXml HTML branch).
+    // Empirically proven (probe PDFs measured with pdfimages -list): Flying
+    // Saucer / Blob.toPdf computes ONE layout size per unique image URL and
+    // reuses it for repeats — so same-URL sized images collapse to one size.
+    // The fix emits CSS px width/height PLUS a size-keyed cache-bust query param
+    // so each distinct size gets its own URL and is honored exactly.
+    // ==================================================================
+
+    @IsTest
+    static void htmlTemplate_sizeTokensEmitWidthAndCacheBust() {
+        Account a = setupAccountWithImages(1);
+        Map<String, Object> data = new Map<String, Object>{ 'Id' => a.Id };
+
+        String wxh = DocGenService.processXmlForTest('{%Image:1:340x97}', data, 'HTML');
+        System.assert(
+            wxh.contains('width:340px') && wxh.contains('height:97px') && wxh.contains('dgsz=w340h97'),
+            'Fixed WxH must emit px width+height + cache-bust: ' + wxh
+        );
+
+        String wOnly = DocGenService.processXmlForTest('{%Image:1:230x}', data, 'HTML');
+        System.assert(
+            wOnly.contains('width:230px') && wOnly.contains('height:auto') && wOnly.contains('dgsz=w230'),
+            'Width-only must emit px width + auto + cache-bust: ' + wOnly
+        );
+    }
+
+    @IsTest
+    static void htmlTemplate_differentTokensProduceDifferentUrls() {
+        // The fix: different size tokens on the SAME image must produce DIFFERENT
+        // markup (distinct widths + distinct cache-bust URLs) so Flying Saucer
+        // renders them at different sizes instead of collapsing to one.
+        Account a = setupAccountWithImages(1);
+        Map<String, Object> data = new Map<String, Object>{ 'Id' => a.Id };
+
+        String small = DocGenService.processXmlForTest('{%Image:1:180x}', data, 'HTML');
+        String large = DocGenService.processXmlForTest('{%Image:1:360x}', data, 'HTML');
+        System.assert(small.contains('width:180px') && small.contains('dgsz=w180'), '180 token: ' + small);
+        System.assert(large.contains('width:360px') && large.contains('dgsz=w360'), '360 token: ' + large);
+        System.assertNotEquals(small, large, 'Distinct size tokens must produce distinct sized URLs');
     }
 
     // ==================================================================

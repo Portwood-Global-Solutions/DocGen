@@ -990,27 +990,30 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
      */
     private String buildParentImageHtml(String cvId, String sizeToken) {
         String url = '/sfc/servlet.shepherd/version/download/' + cvId;
-        String style = '';
+        Integer widthPx = null;
+        Integer heightPx = null;
+        Integer maxPx = null;
         if (String.isNotBlank(sizeToken)) {
             String t = sizeToken.trim().toLowerCase();
             if (!t.contains('x')) {
                 if (t.isNumeric()) {
-                    Integer nv = Integer.valueOf(t);
-                    style = 'max-width:' + nv + 'px;max-height:' + nv + 'px;';
+                    maxPx = Integer.valueOf(t);
                 }
             } else {
                 Integer xIdx = t.indexOf('x');
                 String w = t.substring(0, xIdx).trim();
                 String h = t.substring(xIdx + 1).trim();
                 if (String.isNotBlank(w) && w.isNumeric()) {
-                    style += 'width:' + w + 'px;';
+                    widthPx = Integer.valueOf(w);
                 }
                 if (String.isNotBlank(h) && h.isNumeric()) {
-                    style += 'height:' + h + 'px;';
+                    heightPx = Integer.valueOf(h);
                 }
             }
         }
-        return '<img src="' + url + '"' + (String.isBlank(style) ? '' : ' style="' + style + '"') + '/>';
+        // Shared HTML image builder applies the size-keyed cache-bust so Flying
+        // Saucer honors each requested size (see DocGenService.buildHtmlImageMarkup).
+        return DocGenService.buildHtmlImageMarkup(url, widthPx, heightPx, maxPx, null);
     }
 
     /**

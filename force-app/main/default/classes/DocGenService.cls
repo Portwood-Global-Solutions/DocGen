@@ -2346,6 +2346,79 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(links, false, AccessLevel.SYSTEM_MODE);
         }
+
+        pruneStaleTemplateImageLinks(templateId, recordId, versionId, assetDocIds);
+    }
+
+    /**
+     * Removes orphaned template-image ContentDocumentLinks that earlier
+     * generations attached to this record for OLD (non-active) versions of this
+     * template. `ensureTemplateAssetImageAccessForPdf` links the active version's
+     * embedded images to the record so Blob.toPdf can read them, but every
+     * template re-save mints a new version with freshly-decomposed image CVs —
+     * the prior version's links stay behind and pile up in the record's Files
+     * (the "hundreds of images on the record" report). We never touch the active
+     * version's links (`keepDocIds`), so rendering is unaffected; we only drop
+     * links whose backing CV title is a DocGen template image (`docgen_html_img_`
+     * / `docgen_tmpl_img_`) belonging to a DIFFERENT version of THIS template.
+     */
+    private static void pruneStaleTemplateImageLinks(
+        Id templateId,
+        Id recordId,
+        String activeVersionId,
+        Set<Id> keepDocIds
+    ) {
+        // All version Ids for this template — scopes the prune to THIS template so
+        // we never delete another template's (or a user's own) attached images.
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> templateVersions = [
+            SELECT Id
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId
+            WITH SYSTEM_MODE
+        ];
+        Set<Id> templateVersionIds = new Map<Id, DocGen_Template_Version__c>(templateVersions).keySet();
+        if (templateVersionIds.size() <= 1) {
+            return; // only the active version exists — nothing stale to prune
+        }
+
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentDocumentLink> recordImgLinks = [
+            SELECT Id, ContentDocumentId, ContentDocument.Title
+            FROM ContentDocumentLink
+            WHERE
+                LinkedEntityId = :recordId
+                AND (ContentDocument.Title LIKE 'docgen_html_img_%'
+                OR ContentDocument.Title LIKE 'docgen_tmpl_img_%')
+            WITH SYSTEM_MODE
+        ];
+
+        List<ContentDocumentLink> staleLinks = new List<ContentDocumentLink>();
+        for (ContentDocumentLink link : recordImgLinks) {
+            if (keepDocIds.contains(link.ContentDocumentId)) {
+                continue; // active version's image — required for rendering
+            }
+            // Title shape: docgen_(html|tmpl)_img_<versionId>_<...>
+            List<String> parts = (link.ContentDocument.Title == null)
+                ? new List<String>()
+                : link.ContentDocument.Title.split('_');
+            if (parts.size() < 5) {
+                continue;
+            }
+            String titleVersionId = parts[3];
+            if (
+                titleVersionId != activeVersionId &&
+                (titleVersionId.length() == 15 ||
+                titleVersionId.length() == 18) &&
+                templateVersionIds.contains((Id) titleVersionId)
+            ) {
+                staleLinks.add(link);
+            }
+        }
+        if (!staleLinks.isEmpty()) {
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.delete(staleLinks, false, AccessLevel.SYSTEM_MODE);
+        }
     }
 
     private static Set<Id> extractShepherdContentVersionIds(String html) {
@@ -6365,17 +6438,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 if (String.isBlank(imgUrl) || imgUrl.startsWith('data:')) {
                     return '';
                 }
-                String sizeCss = '';
-                if (spec.widthPx != null) {
-                    sizeCss += 'width:' + spec.widthPx + 'px;';
-                }
-                if (spec.heightPx != null) {
-                    sizeCss += 'height:' + spec.heightPx + 'px;';
-                }
-                if (String.isBlank(sizeCss)) {
-                    sizeCss = 'max-width:100%;';
-                }
-                return '<img src="' + imgUrl.escapeHtml4() + '" style="' + sizeCss + '"/>';
+                return buildHtmlImageMarkup(imgUrl, spec.widthPx, spec.heightPx, spec.maxWidthPx, spec.widthPercent);
             }
 
             // Register image — blob for DOCX, URL for PDF
@@ -6500,6 +6563,91 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // Image injection failed (invalid CV ID, corrupt base64, etc.) — skip this image
             return null;
         }
+    }
+
+    /**
+     * Builds the <img> markup for an HTML-template image ({%Field}, {%Image:N},
+     * {%asset:key}) so Flying Saucer (Blob.toPdf) actually honors the requested
+     * size.
+     *
+     * CRITICAL: for ContentVersion images resolved to a /sfc/servlet.shepherd/...
+     * URL, Flying Saucer's image loader uses the source's NATURAL pixel
+     * dimensions and ignores a bare inline `style="width:Npx"` on the <img> — so
+     * every {%Field:WxH} token renders at the same fixed size (the in-thread
+     * report behind this fix). The reliable shape, proven in
+     * THE CACHE-BUST RULE (load-bearing) — established by controlled probe PDFs
+     * measured with `pdfimages -list`:
+     *
+     *   Flying Saucer / Blob.toPdf computes the layout size of a replaced image
+     *   ONCE PER UNIQUE URL and reuses it for every later <img> that points at the
+     *   same URL. So when a template references the same /sfc/ ContentVersion at
+     *   several sizes (the common case — one logo used big and small), they ALL
+     *   collapse to the first occurrence's size. That is why {%Field:WxH} tokens
+     *   appeared to be "ignored" — the CSS width WAS being honored, just computed
+     *   once and shared.
+     *
+     *   Fix: give each distinct size its own URL by appending a size-keyed query
+     *   param (`?dgsz=<key>`). The shepherd download endpoint ignores the extra
+     *   param and still serves the image, but FS now treats each size as a
+     *   separate replaced element and honors its CSS width/height EXACTLY:
+     *     - {%Field:200x}  → width:200px;height:auto   → 200 CSS px, aspect kept
+     *     - {%Field:340x97}→ width:340px;height:97px   → exact 340×97
+     *   Same image at the SAME size shares a URL (laid out once, efficient);
+     *   different sizes get different URLs. Units are CSS px (FS maps px→physical
+     *   at 96 DPI per the R8 guide FAQ #8). With NO size token we emit a bare
+     *   <img> at the image's intrinsic size (pixelWidth ÷ 96 in) — no cache-bust
+     *   needed since unsized repeats are meant to be identical.
+     *
+     * Size tokens also remain meaningful for DOCX/Word output via the DrawingML
+     * (`wp:extent`) path; this method is the HTML→PDF surface only.
+     *
+     * @param imgUrl   resolved (un-escaped) image URL — escaped here
+     * @param widthPx  fixed width in px, or null
+     * @param heightPx fixed height in px, or null
+     * @param maxPx    single-number / m-prefixed max dimension in px, or null
+     * @param widthPct fixed width as a percentage of the content area, or null
+     */
+    public static String buildHtmlImageMarkup(
+        String imgUrl,
+        Integer widthPx,
+        Integer heightPx,
+        Integer maxPx,
+        Integer widthPct
+    ) {
+        if (String.isBlank(imgUrl)) {
+            return '';
+        }
+        String orient = 'image-orientation:from-image;';
+
+        String css;
+        String sizeKey;
+        if (widthPx != null && heightPx != null) {
+            css = 'width:' + widthPx + 'px;height:' + heightPx + 'px;';
+            sizeKey = 'w' + widthPx + 'h' + heightPx;
+        } else if (widthPx != null) {
+            css = 'width:' + widthPx + 'px;height:auto;';
+            sizeKey = 'w' + widthPx;
+        } else if (heightPx != null) {
+            css = 'height:' + heightPx + 'px;width:auto;';
+            sizeKey = 'h' + heightPx;
+        } else if (widthPct != null) {
+            css = 'width:' + widthPct + '%;height:auto;';
+            sizeKey = 'p' + widthPct;
+        } else if (maxPx != null) {
+            // Single-number / m-prefixed token: render at that width, aspect kept.
+            // (We can't read the image bytes on the PDF path to know orientation,
+            // so treat the max dimension as the width — predictable and honored.)
+            css = 'width:' + maxPx + 'px;height:auto;';
+            sizeKey = 'm' + maxPx;
+        } else {
+            // No size token — intrinsic size (pixelWidth ÷ 96 in). No cache-bust
+            // needed; unsized repeats of the same image are meant to be identical.
+            return '<img src="' + imgUrl.escapeHtml4() + '" style="max-width:100%;' + orient + '"/>';
+        }
+
+        // Distinct URL per size so Flying Saucer honors each (see method doc).
+        String bustedUrl = imgUrl + (imgUrl.contains('?') ? '&' : '?') + 'dgsz=' + sizeKey;
+        return '<img src="' + bustedUrl.escapeHtml4() + '" style="' + css + orient + '"/>';
     }
 
     /**

@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.25.0 — Guest signing: document preview + drawn-signature reliability, multi-signer alignment, transparent stamp",
-      "versionNumber": "3.25.0.NEXT",
+      "versionName": "v3.26.0 — Precise image sizing in PDF templates + tidier record files (includes guest-signing improvements)",
+      "versionNumber": "3.26.0.NEXT",
       "ancestorId": "04tVx000000oAnNIAU",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.25 makes e-signing smoother for the people who sign: signers now reliably see a preview of the document before they sign, hand-drawn signatures appear crisply on the finished document, and multi-party signature blocks line up neatly. Signatures also no longer cover up text they sit near. 100% native Salesforce — no external services or callouts. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.26 makes images render at exactly the size you ask for in PDF templates — give any image tag a width (or width × height) and it's honored precisely. It also keeps your records tidier by no longer leaving behind extra template image files. This release also rolls in the e-signing improvements: signers reliably see a document preview before signing, hand-drawn signatures appear crisply, multi-party signature blocks line up neatly, and signatures no longer cover up text they sit near. 100% native Salesforce — no external services or callouts. Free for all users."
     }
   ],
   "name": "Portwood DocGen",

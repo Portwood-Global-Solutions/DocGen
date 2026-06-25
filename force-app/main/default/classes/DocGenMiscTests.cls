@@ -9584,6 +9584,94 @@ private class DocGenMiscTests {
         System.assertEquals('V', links[0].ShareType, 'PDF fetch link should grant viewer access only.');
     }
 
+    @IsTest
+    static void testStalePriorVersionImageLinksArePruned() {
+        // A template re-save creates a new version with freshly-decomposed image
+        // CVs; the prior version's record links must be pruned on the next
+        // generation so the record's Files don't accumulate (the "hundreds of
+        // images on the record" report). The active version's link must remain.
+        Account acc = new Account(Name = 'Stale Image Link Prune');
+        insert acc;
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Stale Image Link Prune',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Query_Config__c = 'Name'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        // Version 1 (will become stale) + its image
+        DocGen_Template_Version__c v1 = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Type__c = 'HTML',
+            Base_Object_API__c = 'Account',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(v1, AccessLevel.SYSTEM_MODE);
+        ContentVersion img1 = new ContentVersion(
+            Title = 'docgen_html_img_' + v1.Id + '_logo',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('PNG')
+        );
+        insert img1;
+        String html1 = '<html><body><img src="/sfc/servlet.shepherd/version/download/' + img1.Id + '"/></body></html>';
+        DocGenService.ensureTemplateAssetImageAccessForPdf(tpl.Id, acc.Id, html1);
+
+        Integer afterV1 = [
+            SELECT COUNT()
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id AND ContentDocument.Title LIKE 'docgen_html_img_%'
+        ];
+        System.assertEquals(1, afterV1, 'Version 1 image should be linked.');
+
+        // Re-save: deactivate v1, activate a new v2 with a new image
+        v1.Is_Active__c = false;
+        Database.update(v1, AccessLevel.SYSTEM_MODE);
+        DocGen_Template_Version__c v2 = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Type__c = 'HTML',
+            Base_Object_API__c = 'Account',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(v2, AccessLevel.SYSTEM_MODE);
+        ContentVersion img2 = new ContentVersion(
+            Title = 'docgen_html_img_' + v2.Id + '_logo',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('PNG')
+        );
+        insert img2;
+        String html2 = '<html><body><img src="/sfc/servlet.shepherd/version/download/' + img2.Id + '"/></body></html>';
+
+        Test.startTest();
+        DocGenService.ensureTemplateAssetImageAccessForPdf(tpl.Id, acc.Id, html2);
+        Test.stopTest();
+
+        // Net: still 1 (v2 linked, v1 pruned) — not 2.
+        Integer afterV2 = [
+            SELECT COUNT()
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id AND ContentDocument.Title LIKE 'docgen_html_img_%'
+        ];
+        System.assertEquals(
+            1,
+            afterV2,
+            'Stale version-1 link must be pruned; only the active version-2 image remains.'
+        );
+
+        // And the surviving link is the active version's image.
+        Id v2DocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :img2.Id].ContentDocumentId;
+        Integer activeStillLinked = [
+            SELECT COUNT()
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :v2DocId
+        ];
+        System.assertEquals(1, activeStillLinked, 'Active version image link must be preserved for rendering.');
+    }
+
     private static void assertGiantLauncherUsesInternalLoader(String body, String className) {
         Integer idx = body.indexOf('docgen_tmpl_xml_');
         System.assert(idx >= 0, className + ' should reference pre-decomposed template XML.');
