@@ -495,6 +495,23 @@ try {
     System.debug('WRITEBACK ROUND-TRIP: FAIL — ' + e.getMessage());
 }
 
+// #193 email templates
+try {
+    DocGenEmailTemplateInstall.seedDefaults();
+    Integer n = [SELECT COUNT() FROM DocGen_Email_Template__c];
+    DocGenEmailTemplateService.RenderedEmail er = DocGenEmailTemplateService.render(
+        DocGenEmailTemplateService.TYPE_REQUEST,
+        new Map<String, String>{ 'SignatureUrl' => 'https://s/?k=1' }
+    );
+    Boolean ok = n == DocGenEmailTemplateService.ALL_TYPES.size() && er.htmlBody.contains('https://s/?k=1');
+    pass += ok ? 1 : 0;
+    fail += ok ? 0 : 1;
+    System.debug('EMAIL TPL seed+render: ' + (ok ? 'PASS' : 'FAIL n=' + n));
+} catch (Exception e) {
+    fail++;
+    System.debug('EMAIL TPL: FAIL ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-06 SIGNATURES — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')

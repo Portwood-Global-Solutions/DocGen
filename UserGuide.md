@@ -2303,15 +2303,46 @@ Salesforce hides the guest user behind a few clicks. The full path:
 
 ### 10.13 Email branding
 
-Configure in Signature Settings:
+Org-wide branding lives in **Signature Settings** and feeds every email by default:
 
 - Brand color (hex) — used in email header/buttons
 - Logo URL — displayed at top of emails
-- Subject line and body (merge-tag aware — `{RecipientName}`, `{DocumentName}`, etc.)
 - Company name, footer text
 - Reply-to: automatically set to the request creator so signer replies route correctly
 
-Branding applies to all signature emails (invitations, reminders, completion, decline).
+Branding applies to all signature emails (invitations, reminders, verification codes, completion, decline).
+
+### 10.14 Email Templates (Command Hub tab)
+
+Every email DocGen sends is a fully editable, brandable template — open **DocGen Command Hub → Email Templates**. Pick the email to edit from the dropdown:
+
+| Template                | Sent to | When                                  |
+| ----------------------- | ------- | ------------------------------------- |
+| Signature Request       | Signer  | A request is sent                     |
+| Signature Reminder      | Signer  | Scheduled reminder for pending signer |
+| Email Verification Code | Signer  | Signer requests the PIN to sign       |
+| Signer Completed        | Sender  | A signer finishes                     |
+| All Signatures Complete | Sender  | Everyone has signed                   |
+| Signer Declined         | Sender  | A signer declines                     |
+| Completion Confirmation | Signer  | Everyone has signed                   |
+
+For each template you can edit the **subject** and **body**, preview it live with sample data, send a **test email**, and **Reset to Default**. Leave the body blank to use the built-in default.
+
+**Two layout modes** (per template):
+
+- **DocGen layout** (default) — edit just the body in a rich-text editor; DocGen wraps the branded header (logo + brand color) and footer around it. You can override **brand color / logo / footer** per template here. Best when you want consistent branding with minimal effort.
+- **Full custom HTML** — paste your **entire** HTML email document (your own table layout, inline styles, and `<img src="https://…">` images). DocGen sends it exactly as authored, resolving only merge tokens and widgets — no added header/footer. Use this for pixel-perfect, fully on-brand emails. **Images must use absolute, publicly reachable URLs** (your website/CDN); Salesforce file links won't load in a recipient's inbox. You can still reference org values with `{CompanyName}` and `{BrandColor}`, and drop in `{ActionButton}`/`{VerificationCode}` so the signing button/code keep working.
+
+**Merge tokens** resolve at send time and are HTML-escaped: `{SignerName}`, `{SenderName}`, `{CompanyName}`, `{DocumentTitle}`, `{RoleName}`, `{ExpirationHours}`, `{RequestId}`, and `{Message}`. Four **widget tokens** render branded blocks — place them anywhere in the body:
+
+- `{ActionButton}` — the "Review & Sign Document" button (request/reminder)
+- `{DocumentInfo}` — the document title + signer role callout
+- `{SecurityNote}` — the link-expiry note + fallback URL
+- `{VerificationCode}` — the large PIN block (verification email)
+
+> **Out of the box:** a default record for each template is created on install, so emails work immediately with zero setup. Delete a record to fall back to the built-in default.
+
+**Send-time customization.** When sending a single-template request (from the Signature Sender or the `DocGen: Create Signature Request` Flow action), you can type a **Custom Email Subject** and/or **Custom Email Message** that override the saved template for that one send. The subject supports merge tokens; the branded layout and signing button are always kept. Bulk/packet sends always use the saved templates.
 
 ---
 

@@ -545,13 +545,9 @@ public without sharing class DocGenSignatureController {
      */
     private static String sendPinEmail(String email, String pin) {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
-        String brandColor = String.isNotBlank(settings.Signature_Email_Brand_Color__c)
-            ? settings.Signature_Email_Brand_Color__c
-            : '#0176D3';
-        String companyName = settings.Company_Name__c;
 
         // OWA is required for guest user context — warn if not configured
-        String owaId = settings.Signature_OWA_Id__c;
+        String owaId = settings == null ? null : settings.Signature_OWA_Id__c;
         if (String.isBlank(owaId) && UserInfo.getUserType() == 'Guest') {
             System.debug(
                 LoggingLevel.ERROR,
@@ -560,37 +556,20 @@ public without sharing class DocGenSignatureController {
             return 'No Org-Wide Email Address configured. An admin must set one in DocGen Signature Settings.';
         }
 
-        String html = '<!DOCTYPE html><html><head><meta charset="utf-8"/></head>';
-        html += '<body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,Helvetica,sans-serif;">';
-        html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;">';
-        html += '<tr><td align="center" style="padding:24px 16px;">';
-        html += '<table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">';
-        html += '<tr><td style="background-color:' + brandColor + ';padding:16px 32px;text-align:center;">';
-        if (String.isNotBlank(companyName)) {
-            html +=
-                '<span style="color:#ffffff;font-size:18px;font-weight:bold;">' +
-                companyName.escapeHtml4() +
-                '</span>';
-        }
-        html += '</td></tr>';
-        html += '<tr><td style="padding:32px;text-align:center;">';
-        html += '<p style="font-size:16px;color:#333333;margin:0 0 8px 0;">Your verification code is:</p>';
-        html +=
-            '<p style="font-size:36px;font-weight:bold;color:#181818;letter-spacing:8px;margin:16px 0;font-family:monospace;">' +
-            pin.escapeHtml4() +
-            '</p>';
-        html +=
-            '<p style="font-size:13px;color:#706e6b;margin:16px 0 0 0;">This code expires in ' +
-            PIN_EXPIRATION_MINUTES +
-            ' minutes.</p>';
-        html += '<p style="font-size:13px;color:#706e6b;margin:4px 0 0 0;">If you did not request this code, you can safely ignore this email.</p>';
-        html += '</td></tr>';
-        html += '</table></td></tr></table></body></html>';
+        // #193 — render the verification email from the brandable template
+        // (built-in default falls back automatically if no record exists).
+        DocGenEmailTemplateService.RenderedEmail rendered = DocGenEmailTemplateService.render(
+            DocGenEmailTemplateService.TYPE_PIN,
+            new Map<String, String>{ 'Pin' => pin, 'ExpirationMinutes' => String.valueOf(PIN_EXPIRATION_MINUTES) }
+        );
 
         Messaging.SingleEmailMessage email2 = new Messaging.SingleEmailMessage();
         email2.setToAddresses(new List<String>{ email });
-        email2.setSubject('Your DocGen Signature Verification Code');
-        email2.setHtmlBody(html);
+        email2.setSubject(rendered.subject);
+        email2.setHtmlBody(rendered.htmlBody);
+        if (String.isNotBlank(rendered.plainBody)) {
+            email2.setPlainTextBody(rendered.plainBody);
+        }
         email2.setSaveAsActivity(false);
         if (String.isNotBlank(owaId)) {
             email2.setOrgWideEmailAddressId(owaId);

@@ -134,6 +134,18 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
             description='Enter "Parallel" (default) to email all signers at once, "Sequential" to send one at a time (each signer emailed only after the previous completes), or "Single" for a one-signer document.'
         )
         global String signingOrder;
+
+        @InvocableVariable(
+            label='Custom Email Message'
+            description='Optional. Replaces the default body message in the signature request email for this send only (the branded layout and signing button are kept). Leave blank to use the configured Email Template.'
+        )
+        global String emailMessage;
+
+        @InvocableVariable(
+            label='Custom Email Subject'
+            description='Optional. Replaces the subject line of the signature request email for this send only. Supports merge tokens like {DocumentTitle} and {SignerName}. Leave blank to use the configured Email Template subject.'
+        )
+        global String emailSubject;
     }
 
     global class Result {
@@ -247,7 +259,9 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
                 req.relatedRecordId,
                 signersJson,
                 signingOrder,
-                null // documentTitleFormat — inherited from the template
+                null, // documentTitleFormat — inherited from the template
+                req.emailMessage, // #193 — optional send-time custom message
+                req.emailSubject // #193 — optional send-time custom subject
             );
 
             // Find the request ID

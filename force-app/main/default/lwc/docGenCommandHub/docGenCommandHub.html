@@ -27,6 +27,10 @@
                     <lightning-icon icon-name="utility:image" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Assets</span>
                 </button>
+                <button class={emailTabClass} onclick={handleShowEmail}>
+                    <lightning-icon icon-name="utility:email" size="x-small" class="nav-icon"></lightning-icon>
+                    <span>Email Templates</span>
+                </button>
                 <button class={helpTabClass} onclick={handleShowHelp}>
                     <lightning-icon icon-name="utility:knowledge_base" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Learning Center</span>
@@ -88,6 +92,19 @@
                         </div>
                         <div class="panel-body">
                             <c-doc-gen-assets></c-doc-gen-assets>
+                        </div>
+                    </template>
+
+                    <!-- EMAIL TEMPLATES -->
+                    <template if:true={isEmail}>
+                        <div class="panel-header">
+                            <h2>Email Templates</h2>
+                            <p>
+                                Brand and edit every signature email — request, reminder, verification, and completion.
+                            </p>
+                        </div>
+                        <div class="panel-body">
+                            <c-doc-gen-email-templates></c-doc-gen-email-templates>
                         </div>
                     </template>
 
