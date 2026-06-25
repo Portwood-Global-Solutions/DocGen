@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.26.0 — Precise image sizing in PDF templates + tidier record files",
-      "versionNumber": "3.26.0.NEXT",
-      "ancestorId": "04tVx000000oCvdIAE",
+      "versionName": "v3.27.0 — Configurable email templates + signer verification (PRs #194, #196)",
+      "versionNumber": "3.27.0.NEXT",
+      "ancestorId": "04tVx000000ohhhIAA",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.26 makes images render at exactly the size you ask for in PDF templates — give any image tag a width (or width × height) and it's honored precisely. It also keeps your records tidier by no longer leaving behind extra template image files. 100% native Salesforce — no external services or callouts. Free for all users."
+      "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.27 makes every signature and notification email fully editable and on-brand — design your own templates with your logo, colors, and wording right inside DocGen, and tailor the subject or message for a single send. It also lets you choose how signers verify their identity: keep the one-time email PIN, or turn it off for a faster signing experience — set the default for your whole org, per template, or per send. 100% native Salesforce — no external services or callouts. Free for all users."
     }
   ],
   "name": "Portwood DocGen",
