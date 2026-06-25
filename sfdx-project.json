@@ -7,6 +7,7 @@
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
+      "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
       "versionDescription": "Portwood DocGen generates Word and PDF documents from any Salesforce record. v3.26 makes images render at exactly the size you ask for in PDF templates — give any image tag a width (or width × height) and it's honored precisely. It also keeps your records tidier by no longer leaving behind extra template image files. 100% native Salesforce — no external services or callouts. Free for all users."
     }

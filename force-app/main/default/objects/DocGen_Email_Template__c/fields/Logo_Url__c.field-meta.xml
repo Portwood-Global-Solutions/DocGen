@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Logo_Url__c</fullName>
+    <description
+    >Optional per-template logo URL override shown in the branded header. Blank inherits the org default from DocGen Settings (Signature_Email_Logo_Url__c).</description>
+    <externalId>false</externalId>
+    <label>Logo URL Override</label>
+    <required>false</required>
+    <type>Url</type>
+</CustomField>

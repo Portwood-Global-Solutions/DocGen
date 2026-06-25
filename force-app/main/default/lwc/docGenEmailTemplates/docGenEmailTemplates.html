@@ -1,0 +1,187 @@
+<template>
+    <div class="slds-grid slds-wrap slds-gutters">
+        <!-- Editor column -->
+        <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-2">
+            <lightning-card title="Email Templates" icon-name="utility:email">
+                <div slot="actions">
+                    <lightning-button-icon
+                        icon-name="utility:refresh"
+                        alternative-text="Reload"
+                        title="Reload templates"
+                        onclick={loadTemplates}
+                    ></lightning-button-icon>
+                </div>
+
+                <template if:true={isLoading}>
+                    <div class="slds-p-around_medium slds-align_absolute-center">
+                        <lightning-spinner alternative-text="Loading" size="small"></lightning-spinner>
+                    </div>
+                </template>
+
+                <template if:false={isLoading}>
+                    <div class="slds-p-horizontal_medium slds-p-bottom_medium">
+                        <lightning-combobox
+                            name="emailType"
+                            label="Email"
+                            value={selectedType}
+                            options={typeOptions}
+                            onchange={handleTypeChange}
+                            field-level-help="Pick which outbound email to edit. Every signature/notification email is configurable here."
+                        ></lightning-combobox>
+
+                        <p class="slds-text-body_small slds-text-color_weak slds-p-vertical_xx-small">{statusLabel}</p>
+
+                        <lightning-combobox
+                            name="layoutMode"
+                            label="Layout"
+                            value={layoutMode}
+                            options={layoutModeOptions}
+                            onchange={handleLayoutModeChange}
+                            field-level-help="DocGen layout: edit just the body; we wrap the branded header/footer. Full custom HTML: paste your entire email document (your own layout, branding, and hosted image URLs); we send it as-is with only tokens resolved."
+                            class="slds-p-bottom_x-small"
+                        ></lightning-combobox>
+
+                        <lightning-input
+                            type="text"
+                            label="Subject"
+                            value={subject}
+                            onchange={handleSubjectChange}
+                            max-length="255"
+                            class="slds-p-bottom_x-small"
+                        ></lightning-input>
+
+                        <!-- Managed mode: rich-text body fragment -->
+                        <template if:true={isManaged}>
+                            <lightning-input-rich-text
+                                value={bodyHtml}
+                                onchange={handleBodyChange}
+                                label="Body"
+                                label-visible
+                                placeholder="Compose the email body…"
+                            ></lightning-input-rich-text>
+                        </template>
+
+                        <!-- Full HTML mode: raw source (rich-text would mangle a full document) -->
+                        <template if:true={isFullHtml}>
+                            <lightning-textarea
+                                name="bodyHtmlSource"
+                                label="Full HTML document"
+                                value={bodyHtml}
+                                onchange={handleBodyChange}
+                                class="full-html-source"
+                                field-level-help="Paste a complete HTML email. Use absolute hosted image URLs (https://…). Merge tokens and the {ActionButton}/{VerificationCode} widgets still resolve."
+                            ></lightning-textarea>
+                        </template>
+
+                        <div class="slds-box slds-box_xx-small slds-m-top_x-small slds-theme_shade">
+                            <p class="slds-text-title slds-p-bottom_xx-small">Merge tokens for this email</p>
+                            <template for:each={tokens} for:item="tok">
+                                <lightning-badge key={tok} label={tok} class="slds-m-right_xx-small"></lightning-badge>
+                            </template>
+                            <p class="slds-text-body_small slds-text-color_weak slds-p-top_xx-small">
+                                Type a token (e.g. {SignerName}) into the subject or body. {ActionButton},
+                                {DocumentInfo}, {SecurityNote} and {VerificationCode} are rendered as branded blocks.
+                            </p>
+                            <template if:true={isFullHtml}>
+                                <p class="slds-text-body_small slds-text-color_weak slds-p-top_xx-small">
+                                    Full HTML mode: your markup is the entire email — DocGen adds no header/footer.
+                                    Reference org values with {CompanyName} and {BrandColor} if you want them.
+                                </p>
+                            </template>
+                        </div>
+
+                        <!-- Branding overrides (Managed mode only — Full HTML owns the whole document) -->
+                        <div if:true={isManaged} class="slds-grid slds-wrap slds-gutters_xx-small slds-p-top_small">
+                            <div class="slds-col slds-size_1-of-2">
+                                <lightning-input
+                                    type="text"
+                                    label="Brand Color Override"
+                                    value={brandColor}
+                                    onchange={handleBrandChange}
+                                    placeholder="#1589EE"
+                                    max-length="7"
+                                    field-level-help="Optional #RRGGBB. Blank uses the org default from DocGen Settings."
+                                ></lightning-input>
+                            </div>
+                            <div class="slds-col slds-size_1-of-2">
+                                <lightning-input
+                                    type="text"
+                                    label="Logo URL Override"
+                                    value={logoUrl}
+                                    onchange={handleLogoChange}
+                                    placeholder="https://…/logo.png"
+                                ></lightning-input>
+                            </div>
+                            <div class="slds-col slds-size_1-of-1 slds-p-top_xx-small">
+                                <lightning-input
+                                    type="text"
+                                    label="Footer Text Override"
+                                    value={footerText}
+                                    onchange={handleFooterChange}
+                                    max-length="255"
+                                ></lightning-input>
+                            </div>
+                        </div>
+
+                        <lightning-input
+                            type="toggle"
+                            label="Active"
+                            checked={isActive}
+                            onchange={handleActiveChange}
+                            message-toggle-active="On"
+                            message-toggle-inactive="Off"
+                            class="slds-p-top_x-small"
+                            field-level-help="When off, this email falls back to the next active record or the built-in default."
+                        ></lightning-input>
+
+                        <!-- Actions -->
+                        <div class="slds-p-top_small">
+                            <lightning-button
+                                variant="brand"
+                                label="Save"
+                                onclick={handleSave}
+                                disabled={isSaving}
+                                class="slds-m-right_x-small"
+                            ></lightning-button>
+                            <lightning-button
+                                label="Reset to Default"
+                                onclick={handleReset}
+                                class="slds-m-right_x-small"
+                            ></lightning-button>
+                            <lightning-button label="Refresh Preview" onclick={handleRefreshPreview}></lightning-button>
+                        </div>
+
+                        <!-- Test send -->
+                        <div class="slds-grid slds-grid_vertical-align-end slds-gutters_xx-small slds-p-top_medium">
+                            <div class="slds-col slds-grow">
+                                <lightning-input
+                                    type="email"
+                                    label="Send a test to"
+                                    value={testEmail}
+                                    onchange={handleTestEmailChange}
+                                    placeholder="you@example.com"
+                                ></lightning-input>
+                            </div>
+                            <div class="slds-col slds-no-flex">
+                                <lightning-button
+                                    label="Send Test"
+                                    onclick={handleSendTest}
+                                    disabled={isTesting}
+                                ></lightning-button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </lightning-card>
+        </div>
+
+        <!-- Preview column -->
+        <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-2">
+            <lightning-card title="Live Preview" icon-name="utility:preview">
+                <div class="slds-p-horizontal_small slds-p-bottom_small">
+                    <div class="preview-surface" lwc:dom="manual"></div>
+                </div>
+            </lightning-card>
+        </div>
+    </div>
+</template>

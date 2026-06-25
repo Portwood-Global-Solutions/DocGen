@@ -244,6 +244,38 @@
                     </div>
                 </div>
 
+                <!-- ===== SIGNER VERIFICATION (#verification) ===== -->
+                <div class="slds-section slds-is-open slds-m-top_medium">
+                    <h3 class="slds-section__title slds-theme_shade slds-p-around_x-small">
+                        <span class="slds-text-title_caps">Signer Verification</span>
+                    </h3>
+                    <div class="slds-section__content slds-p-top_small">
+                        <lightning-input
+                            type="toggle"
+                            label="Require Email Verification"
+                            checked={requireVerification}
+                            onchange={handleRequireVerificationChange}
+                            message-toggle-active="Signers must enter a one-time email code before signing"
+                            message-toggle-inactive="Signers can sign without email verification"
+                            field-level-help="Org default. Individual templates and sends can override this."
+                        >
+                        </lightning-input>
+                        <template if:true={requireVerification}>
+                            <lightning-input
+                                type="toggle"
+                                label="Pre-fill Signer Email"
+                                checked={prefillEmail}
+                                onchange={handlePrefillEmailChange}
+                                message-toggle-active="Auto-send the code to the signer's known email (skips the email step)"
+                                message-toggle-inactive="Signer types their email to receive the code"
+                                field-level-help="The code is always sent only to the signer's real inbox; this only removes the typing step."
+                                class="slds-m-top_small"
+                            >
+                            </lightning-input>
+                        </template>
+                    </div>
+                </div>
+
                 <!-- ===== EMAIL PREVIEW ===== -->
                 <div class="slds-section slds-is-open slds-m-top_medium">
                     <h3 class="slds-section__title slds-theme_shade slds-p-around_x-small">

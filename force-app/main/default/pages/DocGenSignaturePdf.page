@@ -1307,6 +1307,16 @@
                                 signerData = result;
                                 if (result.requiresPin) {
                                     initVerifyScreen(result);
+                                    // #verification — pre-fill: skip the "type your email" step and
+                                    // auto-send the code to the signer's known address. The code
+                                    // still goes only to the real inbox.
+                                    if (result.prefillEmail && result.signerEmail) {
+                                        var pfEmail = document.getElementById('verify-email');
+                                        if (pfEmail) {
+                                            pfEmail.value = result.signerEmail;
+                                        }
+                                        handleSendPin();
+                                    }
                                 } else {
                                     initAfterVerification(result);
                                 }

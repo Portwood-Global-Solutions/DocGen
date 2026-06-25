@@ -136,6 +136,53 @@
                 ></lightning-input>
             </div>
 
+            <!-- Custom subject + message (#193) + signer verification (#verification) — single-template path only -->
+            <template if:true={isSingleTemplate}>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-input
+                        type="text"
+                        name="emailSubject"
+                        label="Custom Email Subject (optional)"
+                        field-level-help="Replaces the subject line of the request email for this send only. Supports tokens like {DocumentTitle} and {SignerName}. Leave blank to use the configured Email Template subject."
+                        placeholder="Action required: please sign {DocumentTitle}"
+                        value={emailSubject}
+                        onchange={handleEmailSubjectChange}
+                        max-length="255"
+                    ></lightning-input>
+                </div>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-textarea
+                        name="emailMessage"
+                        label="Custom Email Message (optional)"
+                        field-level-help="Replaces the default message in the signature request email for this send only. The branded layout and the signing button are always kept. Leave blank to use the configured Email Template. Edit the templates themselves under DocGen Command Hub → Email Templates."
+                        placeholder="Add a personal note for the signer…"
+                        value={emailMessage}
+                        onchange={handleEmailMessageChange}
+                        max-length="2000"
+                    ></lightning-textarea>
+                </div>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-combobox
+                        name="verificationOverride"
+                        label="Signer Verification"
+                        value={verificationOverride}
+                        options={verificationOptions}
+                        onchange={handleVerificationOverrideChange}
+                        field-level-help="Whether signers must verify a one-time email code before signing. Default uses the template's setting, then the org default."
+                    ></lightning-combobox>
+                </div>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-combobox
+                        name="prefillOverride"
+                        label="Email Pre-fill"
+                        value={prefillOverride}
+                        options={prefillOptions}
+                        onchange={handlePrefillOverrideChange}
+                        field-level-help="When verification is on, auto-send the code to the signer's known email and skip the 'type your email' step. The code still goes only to the real inbox."
+                    ></lightning-combobox>
+                </div>
+            </template>
+
             <!-- Signers Table -->
             <div class="slds-var-m-bottom_medium">
                 <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Signers</h3>

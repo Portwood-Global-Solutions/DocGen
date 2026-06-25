@@ -93,3 +93,6 @@ runner-after-*.png
 
 # Confidential security reports — keep local only
 Security Report*.html
+
+# Local scratch / working files
+.tmp/
