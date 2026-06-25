@@ -1224,6 +1224,106 @@ public with sharing class DocGenSignatureSenderController {
             }
         }
 
+        // Render the tagged viewing document (sentinels + frozen snapshot). Extracted to
+        // renderGuidedViewing so the merged-approval path (prepareApprovalForMerge) builds
+        // a byte-compatible viewing PDF through the SAME code and gets identical sentinels.
+        GuidedViewingDraft draft = renderGuidedViewing(templateId, relatedRecordId, signerInputs, tpls[0].Name);
+        placements = draft.placements;
+        List<String> sentinels = draft.sentinels;
+        String frozenJson = draft.frozenJson;
+        String fileTitle = draft.fileTitle;
+
+        // Render the viewing PDF (invisible sentinels) → standalone ContentVersion.
+        ContentVersion viewCv = new ContentVersion();
+        viewCv.Title = fileTitle;
+        viewCv.PathOnClient = fileTitle + '.pdf';
+        viewCv.VersionData = draft.viewingBlob;
+        DocGenFlsGuard.assertCreateable(viewCv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(viewCv, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
+        req.Template__c = templateId;
+        req.Related_Record_Id__c = relatedRecordId;
+        req.Source_Document_Id__c = viewCv.Id;
+        req.Status__c = 'Sent';
+        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
+        if (String.isNotBlank(documentTitleFormat)) {
+            req.Document_Title_Format__c = documentTitleFormat;
+        }
+        req.Secure_Token__c = generateRequestVerificationToken();
+        Set<String> reqFields = new Set<String>{
+            'Template__c',
+            'Related_Record_Id__c',
+            'Source_Document_Id__c',
+            'Status__c',
+            'Signing_Order__c',
+            'Document_Title_Format__c',
+            'Secure_Token__c'
+        };
+        if (String.isNotBlank(frozenJson)) {
+            // #156: snapshot persisted to a ContentVersion (no 131072-char cap) and referenced
+            // by Id, so large templates get a true frozen snapshot instead of a live re-merge.
+            req.Frozen_Document_CV_Id__c = DocGenSignatureService.saveFrozenSnapshotCv(frozenJson);
+            req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(frozenJson);
+            req.Snapshot_Taken_At__c = System.now();
+            reqFields.addAll(new Set<String>{ 'Frozen_Document_CV_Id__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' });
+        }
+        DocGenFlsGuard.assertCreateable(req, reqFields);
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+
+        // Share the standalone viewing CV with the guest signer so the signing-page
+        // preview (getSourcePdfBase64) can read it (see shareViewingDocumentWithGuest).
+        shareViewingDocumentWithGuest(viewCv.Id, req.Id);
+
+        // Create signers at the PDF-viewer page (templateId=null skips the classic
+        // placement creation — we create sentinel-keyed placements below).
+        List<SignerResult> results = createSignersAndNotify(
+            req.Id,
+            null,
+            fileTitle,
+            signerInputs,
+            true,
+            getSigningPdfPagePath()
+        );
+
+        // Map placements → signers by role and persist (shared with prepareApprovalForMerge).
+        createGuidedPlacementRecords(req.Id, placements, sentinels);
+
+        return results;
+    }
+
+    /**
+     * Small struct returned by renderGuidedViewing: the rendered sentinel-bearing viewing
+     * PDF plus the placement/sentinel/frozen-snapshot metadata the caller needs to persist.
+     */
+    private class GuidedViewingDraft {
+        Blob viewingBlob;
+        String fileTitle;
+        String frozenJson;
+        List<PlacementInfo> placements;
+        List<String> sentinels;
+    }
+
+    /**
+     * Shared tagged-viewing render for the guided PDF path. Merges the template against the
+     * record, synthesizes a "Signatures" block for tag-less templates (#170 option b),
+     * swaps each placement tag to a unique invisible @@SIG-n@@ sentinel, freezes that body
+     * for the completion re-render, and renders the sentinel-bearing viewing PDF.
+     *
+     * NO DML — callers persist the ContentVersion / request / placements. Used by
+     * createGuidedPdfSignatureRequest (template-only source) and prepareApprovalForMerge
+     * (the client merges this PDF with a pre-existing record PDF before it becomes the
+     * signing source). Sentinels are deterministic (@@SIG-i@@ by index), so both callers
+     * — and the deferred phase-2 placement create — stay in lockstep.
+     */
+    private static GuidedViewingDraft renderGuidedViewing(
+        Id templateId,
+        String relatedRecordId,
+        List<Map<String, Object>> signerInputs,
+        String fileTitle
+    ) {
         // Merge the template against the live record (point-in-time body).
         Map<String, Object> mergeData = DocGenService.mergeTemplateForSignature(templateId, relatedRecordId);
         String templateType = (String) mergeData.get('templateType');
@@ -1236,6 +1336,7 @@ public with sharing class DocGenSignatureSenderController {
             body = (String) mergeData.get('documentXml');
         }
 
+        List<PlacementInfo> placements = getTemplateSignaturePlacements(templateId);
         if (placements.isEmpty()) {
             // Option (b) for tag-less legacy templates (#170): synthesize a "Signatures"
             // block (one Full + Date per signer) and append it to the merged body so the
@@ -1293,64 +1394,25 @@ public with sharing class DocGenSignatureSenderController {
         // @@FF-<key>@@ sentinel for the drawn-path client to stamp the value onto.
         viewingHtml = applyFormFieldViewingSentinels(viewingHtml);
 
-        // Render the viewing PDF (invisible sentinels) → standalone ContentVersion.
-        Blob viewingBlob = Blob.toPdf(viewingHtml);
-        String fileTitle = tpls[0].Name;
-        ContentVersion viewCv = new ContentVersion();
-        viewCv.Title = fileTitle;
-        viewCv.PathOnClient = fileTitle + '.pdf';
-        viewCv.VersionData = viewingBlob;
-        DocGenFlsGuard.assertCreateable(viewCv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
-        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-        Database.insert(viewCv, AccessLevel.SYSTEM_MODE);
+        GuidedViewingDraft d = new GuidedViewingDraft();
+        d.viewingBlob = Blob.toPdf(viewingHtml);
+        d.fileTitle = fileTitle;
+        d.frozenJson = frozenJson;
+        d.placements = placements;
+        d.sentinels = sentinels;
+        return d;
+    }
 
-        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
-        req.Template__c = templateId;
-        req.Related_Record_Id__c = relatedRecordId;
-        req.Source_Document_Id__c = viewCv.Id;
-        req.Status__c = 'Sent';
-        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
-        if (String.isNotBlank(documentTitleFormat)) {
-            req.Document_Title_Format__c = documentTitleFormat;
-        }
-        req.Secure_Token__c = generateRequestVerificationToken();
-        Set<String> reqFields = new Set<String>{
-            'Template__c',
-            'Related_Record_Id__c',
-            'Source_Document_Id__c',
-            'Status__c',
-            'Signing_Order__c',
-            'Document_Title_Format__c',
-            'Secure_Token__c'
-        };
-        if (String.isNotBlank(frozenJson)) {
-            // #156: snapshot persisted to a ContentVersion (no 131072-char cap) and referenced
-            // by Id, so large templates get a true frozen snapshot instead of a live re-merge.
-            req.Frozen_Document_CV_Id__c = DocGenSignatureService.saveFrozenSnapshotCv(frozenJson);
-            req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(frozenJson);
-            req.Snapshot_Taken_At__c = System.now();
-            reqFields.addAll(new Set<String>{ 'Frozen_Document_CV_Id__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' });
-        }
-        DocGenFlsGuard.assertCreateable(req, reqFields);
-        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-        Database.insert(req, AccessLevel.SYSTEM_MODE);
-
-        // Share the standalone viewing CV with the guest signer so the signing-page
-        // preview (getSourcePdfBase64) can read it (see shareViewingDocumentWithGuest).
-        shareViewingDocumentWithGuest(viewCv.Id, req.Id);
-
-        // Create signers at the PDF-viewer page (templateId=null skips the classic
-        // placement creation — we create sentinel-keyed placements below).
-        List<SignerResult> results = createSignersAndNotify(
-            req.Id,
-            null,
-            fileTitle,
-            signerInputs,
-            true,
-            getSigningPdfPagePath()
-        );
-
-        // Map placements → signers by role (fallback: first signer), Tag_Text__c = sentinel.
+    /**
+     * Creates DocGen_Signature_Placement__c rows for a guided request: maps each placement
+     * to a signer by role (fallback: first signer) and stores the sentinel in Tag_Text__c.
+     * Shared by createGuidedPdfSignatureRequest and the merged-approval phase-1 path.
+     */
+    private static void createGuidedPlacementRecords(
+        Id requestId,
+        List<PlacementInfo> placements,
+        List<String> sentinels
+    ) {
         DocGenFlsGuard.assertAccessible(
             DocGen_Signer__c.sObjectType,
             new Set<String>{ 'Role_Name__c', 'Signature_Request__c', 'Sort_Order__c' }
@@ -1359,7 +1421,7 @@ public with sharing class DocGenSignatureSenderController {
         List<DocGen_Signer__c> signerRecs = [
             SELECT Id, Role_Name__c
             FROM DocGen_Signer__c
-            WHERE Signature_Request__c = :req.Id
+            WHERE Signature_Request__c = :requestId
             WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC
         ];
@@ -1381,7 +1443,7 @@ public with sharing class DocGenSignatureSenderController {
             placementRecords.add(
                 new DocGen_Signature_Placement__c(
                     Signer__c = signer.Id,
-                    Signature_Request__c = req.Id,
+                    Signature_Request__c = requestId,
                     Document_Index__c = 0,
                     Sequence_Order__c = p.sequence,
                     Placement_Type__c = p.placementType,
@@ -1408,7 +1470,245 @@ public with sharing class DocGenSignatureSenderController {
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.insert(placementRecords, AccessLevel.SYSTEM_MODE);
         }
+    }
 
+    /**
+     * MERGED-APPROVAL (exp/document-markup, M1) — phase 1 of 2.
+     *
+     * Renders the approval/signature template's tagged viewing PDF and stands up a DRAFT
+     * guided request (signers + placements + frozen snapshot) WITHOUT notifying anyone.
+     * Returns the viewing PDF as base64 so the client can merge it with a pre-existing
+     * record PDF (e.g. an A3 technical drawing) via docGenPdfMerger, then call
+     * attachMergedSourceAndSend with the combined bytes. The merged document — drawing
+     * pages + the tagged approval page — becomes the signing source, so the appended
+     * template carries the {@Signature_*}/synthetic sign-spots (mainline guided model; we
+     * never sign a bare tag-less PDF — that path was removed in v3.18). Source_Document_Id__c
+     * initially points at the template-only viewing CV; phase 2 repoints it to the merge.
+     *
+     * Returns: { requestId, viewingPdfBase64, fileTitle }.
+     */
+    @AuraEnabled
+    public static Map<String, String> prepareApprovalForMerge(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat
+    ) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Name', 'Document_Title_Format__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> tpls = [
+            SELECT Id, Name, Document_Title_Format__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (tpls.isEmpty()) {
+            throw new AuraHandledException('Template not found.');
+        }
+        if (String.isBlank(relatedRecordId)) {
+            throw new AuraHandledException('A related record Id is required.');
+        }
+        if (String.isBlank(documentTitleFormat) && String.isNotBlank(tpls[0].Document_Title_Format__c)) {
+            documentTitleFormat = tpls[0].Document_Title_Format__c;
+        }
+
+        List<Object> rawInputs = (List<Object>) JSON.deserializeUntyped(signersJson);
+        List<Map<String, Object>> signerInputs = new List<Map<String, Object>>();
+        for (Object item : rawInputs) {
+            signerInputs.add((Map<String, Object>) item);
+        }
+        if (signerInputs.isEmpty()) {
+            throw new AuraHandledException('At least one signer is required.');
+        }
+
+        GuidedViewingDraft draft = renderGuidedViewing(templateId, relatedRecordId, signerInputs, tpls[0].Name);
+
+        // Standalone template-only viewing CV. Phase 2 swaps Source_Document_Id__c to the
+        // merged drawing+approval PDF; this stub keeps the request valid in the meantime.
+        ContentVersion viewCv = new ContentVersion();
+        viewCv.Title = draft.fileTitle;
+        viewCv.PathOnClient = draft.fileTitle + '.pdf';
+        viewCv.VersionData = draft.viewingBlob;
+        DocGenFlsGuard.assertCreateable(viewCv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(viewCv, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c();
+        req.Template__c = templateId;
+        req.Related_Record_Id__c = relatedRecordId;
+        req.Source_Document_Id__c = viewCv.Id;
+        req.Status__c = 'Draft';
+        req.Signing_Order__c = String.isNotBlank(signingOrder) ? signingOrder : 'Parallel';
+        if (String.isNotBlank(documentTitleFormat)) {
+            req.Document_Title_Format__c = documentTitleFormat;
+        }
+        req.Secure_Token__c = generateRequestVerificationToken();
+        Set<String> reqFields = new Set<String>{
+            'Template__c',
+            'Related_Record_Id__c',
+            'Source_Document_Id__c',
+            'Status__c',
+            'Signing_Order__c',
+            'Document_Title_Format__c',
+            'Secure_Token__c'
+        };
+        if (String.isNotBlank(draft.frozenJson)) {
+            req.Frozen_Document_CV_Id__c = DocGenSignatureService.saveFrozenSnapshotCv(draft.frozenJson);
+            req.Snapshot_Hash__c = DocGenSignatureService.hashFrozenDocument(draft.frozenJson);
+            req.Snapshot_Taken_At__c = System.now();
+            reqFields.addAll(new Set<String>{ 'Frozen_Document_CV_Id__c', 'Snapshot_Hash__c', 'Snapshot_Taken_At__c' });
+        }
+        DocGenFlsGuard.assertCreateable(req, reqFields);
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+
+        // Signers WITHOUT notification — emails go out in phase 2 once the merged
+        // drawing+approval PDF is the signing source (sendEmails=false).
+        createSignersAndNotify(req.Id, null, draft.fileTitle, signerInputs, false, getSigningPdfPagePath());
+        createGuidedPlacementRecords(req.Id, draft.placements, draft.sentinels);
+
+        Map<String, String> result = new Map<String, String>();
+        result.put('requestId', req.Id);
+        result.put('viewingPdfBase64', EncodingUtil.base64Encode(draft.viewingBlob));
+        result.put('fileTitle', draft.fileTitle);
+        return result;
+    }
+
+    /**
+     * MERGED-APPROVAL (exp/document-markup, M1) — phase 2 of 2.
+     *
+     * Stores the client-merged PDF (pre-existing record PDF + the tagged approval page from
+     * phase 1) as the signing source, shares it with the guest, flips the request to
+     * 'Sent', and sends the signer invitations (deferred from phase 1). Signers and
+     * placements already exist from phase 1; their @@SIG-n@@ sentinels are position-
+     * independent, so they resolve against the approval page wherever it sits in the merge.
+     */
+    @AuraEnabled
+    public static List<SignerResult> attachMergedSourceAndSend(Id requestId, String mergedPdfBase64) {
+        if (requestId == null) {
+            throw new AuraHandledException('A request Id is required.');
+        }
+        if (String.isBlank(mergedPdfBase64)) {
+            throw new AuraHandledException('Merged PDF data is required.');
+        }
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{ 'Status__c', 'Source_Document_Id__c', 'Template__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Signature_Request__c> reqs = [
+            SELECT Id, Status__c, Source_Document_Id__c, Template__r.Name
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (reqs.isEmpty()) {
+            throw new AuraHandledException('Signature request not found.');
+        }
+        DocGen_Signature_Request__c req = reqs[0];
+        if (req.Status__c != 'Draft') {
+            throw new AuraHandledException('This request has already been sent.');
+        }
+
+        String fileTitle = (req.Template__r != null && String.isNotBlank(req.Template__r.Name))
+            ? req.Template__r.Name
+            : 'Approval Document';
+
+        ContentVersion mergedCv = new ContentVersion();
+        mergedCv.Title = fileTitle;
+        mergedCv.PathOnClient = fileTitle + '.pdf';
+        mergedCv.VersionData = EncodingUtil.base64Decode(mergedPdfBase64);
+        DocGenFlsGuard.assertCreateable(mergedCv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.insert(mergedCv, AccessLevel.SYSTEM_MODE);
+
+        req.Source_Document_Id__c = mergedCv.Id;
+        req.Status__c = 'Sent';
+        DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Source_Document_Id__c', 'Status__c' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        Database.update(req, AccessLevel.SYSTEM_MODE);
+
+        // Share the merged signing source with the guest so getSourcePdfBase64 can read it.
+        shareViewingDocumentWithGuest(mergedCv.Id, req.Id);
+
+        // Send the initial invitations now (guided PDF page URLs), respecting signing order.
+        List<SignerResult> results = sendGuidedInvitations(req.Id, fileTitle);
+        return results;
+    }
+
+    /**
+     * Builds guided-PDF-page invitations from a request's EXISTING signer tokens and sends
+     * them (respecting Sequential order). Used to send the deferred phase-1 invitations
+     * after the merged source is attached. Unlike resendSignatureRequest it does NOT rotate
+     * tokens and always targets the guided PDF page.
+     */
+    private static List<SignerResult> sendGuidedInvitations(Id requestId, String documentTitle) {
+        DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Signing_Order__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        DocGen_Signature_Request__c reqCheck = [
+            SELECT Signing_Order__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        Boolean isSequential = reqCheck.Signing_Order__c == 'Sequential';
+
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Signer__c.sObjectType,
+            new Set<String>{
+                'Signer_Name__c',
+                'Signer_Email__c',
+                'Role_Name__c',
+                'Secure_Token__c',
+                'Contact__c',
+                'Sort_Order__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Signer__c> signers = [
+            SELECT Id, Signer_Name__c, Signer_Email__c, Role_Name__c, Secure_Token__c, Contact__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__c = :requestId
+            WITH SYSTEM_MODE
+            ORDER BY Sort_Order__c ASC
+        ];
+
+        String urlBase = getSiteBaseUrl() + getSigningPdfPagePath() + '?token=';
+        List<SignerResult> results = new List<SignerResult>();
+        List<DocGenSignatureEmailService.SignerEmail> emailList = new List<DocGenSignatureEmailService.SignerEmail>();
+        for (Integer i = 0; i < signers.size(); i++) {
+            DocGen_Signer__c s = signers[i];
+            SignerResult sr = new SignerResult();
+            sr.signerId = s.Id;
+            sr.signerName = s.Signer_Name__c;
+            sr.signerEmail = s.Signer_Email__c;
+            sr.roleName = s.Role_Name__c;
+            sr.signerUrl = urlBase + s.Secure_Token__c;
+            results.add(sr);
+
+            // Sequential: only invite the first signer now; later signers are invited as
+            // each prior one completes (existing completion flow).
+            if (isSequential && i > 0) {
+                continue;
+            }
+            emailList.add(
+                new DocGenSignatureEmailService.SignerEmail(
+                    s.Signer_Name__c,
+                    s.Signer_Email__c,
+                    s.Role_Name__c,
+                    sr.signerUrl,
+                    s.Contact__c
+                )
+            );
+        }
+        DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle, requestId);
         return results;
     }
 

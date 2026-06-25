@@ -347,6 +347,166 @@ private class DocGenSignaturePdfTests {
         Test.stopTest();
     }
 
+    // =========================================================================
+    // Merged-approval (exp/document-markup, M1) — prepareApprovalForMerge +
+    // attachMergedSourceAndSend. The client merges a pre-existing record PDF with
+    // the tagged approval-template PDF between the two calls.
+    // =========================================================================
+
+    @isTest
+    static void testPrepareApprovalForMerge_createsDraftAndReturnsPdf() {
+        Account acc = new Account(Name = 'Drawing Approval Co', Industry = 'Manufacturing');
+        insert acc;
+        Id templateId = createHtmlSignatureTemplate(
+            '<html><body><h1>Approval — {Name}</h1><p>Approve: {@Signature_Approver:1:Full}</p></body></html>'
+        );
+        String signersJson = JSON.serialize(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{
+                    'signerName' => 'Dana Approver',
+                    'signerEmail' => 'dana@test.com',
+                    'roleName' => 'Approver',
+                    'contactId' => ''
+                }
+            }
+        );
+
+        Test.startTest();
+        Map<String, String> result = DocGenSignatureSenderController.prepareApprovalForMerge(
+            templateId,
+            acc.Id,
+            signersJson,
+            'Parallel',
+            null
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('requestId'), 'Draft request Id returned');
+        System.assert(String.isNotBlank(result.get('viewingPdfBase64')), 'Approval-template viewing PDF returned');
+        Id requestId = (Id) result.get('requestId');
+
+        DocGen_Signature_Request__c req = [
+            SELECT Status__c, Template__c, Source_Document_Id__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+        ];
+        System.assertEquals('Draft', req.Status__c, 'Phase 1 leaves the request in Draft (not yet sent)');
+        System.assertEquals(templateId, req.Template__c, 'Approval template recorded');
+        System.assertNotEquals(null, req.Source_Document_Id__c, 'Stub template-only source set until phase 2');
+
+        System.assertEquals(
+            1,
+            [SELECT COUNT() FROM DocGen_Signer__c WHERE Signature_Request__c = :requestId],
+            'One signer created'
+        );
+        List<DocGen_Signature_Placement__c> placements = [
+            SELECT Tag_Text__c
+            FROM DocGen_Signature_Placement__c
+            WHERE Signature_Request__c = :requestId
+        ];
+        System.assertEquals(1, placements.size(), 'One placement for the single signature tag');
+        System.assertEquals('@@SIG-0@@', placements[0].Tag_Text__c, 'Deterministic sentinel stored on the placement');
+    }
+
+    @isTest
+    static void testAttachMergedSourceAndSend_sendsAndRepoints() {
+        Account acc = new Account(Name = 'Merge Send Co', Industry = 'Manufacturing');
+        insert acc;
+        Id templateId = createHtmlSignatureTemplate(
+            '<html><body><p>Approve: {@Signature_Approver:1:Full}</p></body></html>'
+        );
+        String signersJson = JSON.serialize(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{
+                    'signerName' => 'Dana Approver',
+                    'signerEmail' => 'dana@test.com',
+                    'roleName' => 'Approver',
+                    'contactId' => ''
+                }
+            }
+        );
+
+        Test.startTest();
+        Map<String, String> prep = DocGenSignatureSenderController.prepareApprovalForMerge(
+            templateId,
+            acc.Id,
+            signersJson,
+            'Parallel',
+            null
+        );
+        Id requestId = (Id) prep.get('requestId');
+
+        // Stand in for the client-side merge of [drawing, approval].
+        String mergedBase64 = EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 merged drawing + approval page'));
+        List<DocGenSignatureSenderController.SignerResult> results = DocGenSignatureSenderController.attachMergedSourceAndSend(
+            requestId,
+            mergedBase64
+        );
+        Test.stopTest();
+
+        System.assertEquals(1, results.size(), 'One signer result returned');
+        System.assert(
+            results[0].signerUrl != null && results[0].signerUrl.contains('DocGenSignaturePdf'),
+            'Invitation targets the guided PDF page: ' + results[0].signerUrl
+        );
+
+        DocGen_Signature_Request__c req = [
+            SELECT Status__c, Source_Document_Id__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+        ];
+        System.assertEquals('Sent', req.Status__c, 'Phase 2 flips the request to Sent');
+
+        // Source now points at the merged CV, shared with the request so the guest's
+        // getSourcePdfBase64 can read it (same pattern as the single-template guided path;
+        // the SIGNED output is what the finalizer links back to the related record).
+        ContentVersion mergedCv = [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Id = :req.Source_Document_Id__c
+            LIMIT 1
+        ];
+        Integer links = [
+            SELECT COUNT()
+            FROM ContentDocumentLink
+            WHERE ContentDocumentId = :mergedCv.ContentDocumentId AND LinkedEntityId = :requestId
+        ];
+        System.assert(links > 0, 'Merged signing source is shared with the request for guest read');
+    }
+
+    @isTest
+    static void testAttachMergedSourceAndSend_rejectsNonDraft() {
+        Account acc = new Account(Name = 'Non Draft Co');
+        insert acc;
+        Id templateId = createHtmlSignatureTemplate(
+            '<html><body><p>Approve: {@Signature_Approver:1:Full}</p></body></html>'
+        );
+        String signersJson = '[{"signerName":"Dana","signerEmail":"dana@test.com","roleName":"Approver","contactId":""}]';
+
+        Test.startTest();
+        Map<String, String> prep = DocGenSignatureSenderController.prepareApprovalForMerge(
+            templateId,
+            acc.Id,
+            signersJson,
+            'Parallel',
+            null
+        );
+        Id requestId = (Id) prep.get('requestId');
+        String mergedBase64 = EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.7 merged'));
+        // First call sends it.
+        DocGenSignatureSenderController.attachMergedSourceAndSend(requestId, mergedBase64);
+
+        // Second call must be rejected — the request is no longer Draft.
+        Boolean threw = false;
+        try {
+            DocGenSignatureSenderController.attachMergedSourceAndSend(requestId, mergedBase64);
+        } catch (Exception e) {
+            threw = true;
+        }
+        Test.stopTest();
+        System.assert(threw, 'A non-Draft request cannot be re-sent');
+    }
+
     @isTest
     static void testSignatureTagStrippedInNormalGeneration() {
         // Leak fix: {@Signature_*} must be stripped from a normally-generated document

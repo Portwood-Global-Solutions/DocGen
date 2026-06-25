@@ -89,6 +89,51 @@
                 </template>
             </div>
 
+            <!-- Approve an existing drawing (exp/document-markup, M1) -->
+            <template if:true={hasRecordPdfs}>
+                <div class="slds-box slds-var-m-bottom_medium" style="border-radius: 6px">
+                    <div class="slds-grid slds-grid_vertical-align-center slds-var-m-bottom_x-small">
+                        <lightning-icon
+                            icon-name="utility:file"
+                            size="x-small"
+                            class="slds-var-m-right_x-small"
+                        ></lightning-icon>
+                        <h3 class="slds-text-title_bold">Approve an Existing Drawing (optional)</h3>
+                    </div>
+                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
+                        Pick a PDF already on this record (e.g. an A3 technical drawing). It is combined with the single
+                        approval template selected above and sent as one document for the client to approve or reject.
+                    </p>
+                    <lightning-combobox
+                        name="selectDrawing"
+                        label="Drawing on this record"
+                        value={selectedDrawingCvId}
+                        placeholder="None — send the template only"
+                        options={recordPdfOptions}
+                        onchange={handleDrawingChange}
+                    ></lightning-combobox>
+                    <template if:true={isMergedApprovalMode}>
+                        <div class="slds-var-m-top_small">
+                            <lightning-radio-group
+                                name="drawingOrder"
+                                label="Document order"
+                                type="button"
+                                options={drawingOrderOptions}
+                                value={drawingOrderValue}
+                                onchange={handleDrawingOrderChange}
+                            ></lightning-radio-group>
+                            <lightning-button
+                                label="Clear drawing"
+                                variant="base"
+                                icon-name="utility:close"
+                                onclick={handleClearDrawing}
+                                class="slds-var-m-top_x-small"
+                            ></lightning-button>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
             <!-- Detected Placements Summary -->
             <template if:true={hasDetectedPlacements}>
                 <div class="slds-box slds-theme_shade slds-var-m-bottom_medium" style="border-radius: 6px">

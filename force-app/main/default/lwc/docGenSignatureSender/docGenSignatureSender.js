@@ -9,6 +9,11 @@ import getPendingSignatureRequests from '@salesforce/apex/DocGenSignatureSenderC
 import getDocGenTemplates from '@salesforce/apex/DocGenSignatureSenderController.getDocGenTemplatesForRecord';
 import getTemplateSignaturePlacements from '@salesforce/apex/DocGenSignatureSenderController.getTemplateSignaturePlacements';
 import getDocumentPreviewPdfBase64 from '@salesforce/apex/DocGenSignatureSenderController.getDocumentPreviewPdfBase64';
+import prepareApprovalForMerge from '@salesforce/apex/DocGenSignatureSenderController.prepareApprovalForMerge';
+import attachMergedSourceAndSend from '@salesforce/apex/DocGenSignatureSenderController.attachMergedSourceAndSend';
+import getRecordPdfs from '@salesforce/apex/DocGenController.getRecordPdfs';
+import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
+import { mergePdfs } from './docGenPdfMerger';
 
 let signerIdCounter = 0;
 let templateIdCounter = 0;
@@ -51,6 +56,15 @@ export default class DocGenSignatureSender extends LightningElement {
     @track previousRequests = [];
     @track showPreviousRequests = false;
 
+    // --- Approve an existing drawing (exp/document-markup, M1) ---
+    // Optional: prepend a PDF already on the record (e.g. an A3 technical drawing) to the
+    // selected approval template, merge them client-side, and send the combined document
+    // for signing. The appended template carries the sign-spots; the drawing is the content
+    // being approved/rejected.
+    @track recordPdfOptions = [];
+    @track selectedDrawingCvId = '';
+    @track drawingFirst = true; // drawing pages first, approval/signature page last
+
     @wire(getSignerRolePicklistValues)
     wiredRoles({ error, data }) {
         if (data) {
@@ -88,11 +102,44 @@ export default class DocGenSignatureSender extends LightningElement {
         }
     }
 
+    connectedCallback() {
+        this._loadRecordPdfs();
+    }
+
     disconnectedCallback() {
         this._revokePreviewUrls();
     }
 
+    async _loadRecordPdfs() {
+        try {
+            const pdfs = await getRecordPdfs({ recordId: this.recordId });
+            this.recordPdfOptions = pdfs || [];
+        } catch (_err) {
+            this.recordPdfOptions = [];
+        }
+    }
+
     // --- Computed Properties ---
+
+    get hasRecordPdfs() {
+        return this.recordPdfOptions.length > 0;
+    }
+
+    // True once the sender has chosen an existing record PDF to send for approval.
+    get isMergedApprovalMode() {
+        return !!this.selectedDrawingCvId;
+    }
+
+    get drawingOrderOptions() {
+        return [
+            { label: 'Drawing first, signature page last', value: 'first' },
+            { label: 'Signature page first, drawing after', value: 'last' }
+        ];
+    }
+
+    get drawingOrderValue() {
+        return this.drawingFirst ? 'first' : 'last';
+    }
 
     get hasSelectedTemplates() {
         return this.selectedTemplates.length > 0;
@@ -104,6 +151,8 @@ export default class DocGenSignatureSender extends LightningElement {
 
     get isGenerateDisabled() {
         if (this.selectedTemplates.length === 0 || this.signers.length === 0) return true;
+        // Merged-approval supports a single approval template only (no packets).
+        if (this.isMergedApprovalMode && this.selectedTemplates.length !== 1) return true;
         return this.signers.some((s) => !s.signerName || !s.signerEmail || !s.roleName);
     }
 
@@ -178,7 +227,22 @@ export default class DocGenSignatureSender extends LightningElement {
     }
 
     get generateButtonLabel() {
+        if (this.isMergedApprovalMode) return 'Send Drawing for Approval';
         return this.isPacketMode ? 'Generate Packet Signature Links' : 'Generate Signature Links';
+    }
+
+    // --- Approve-an-existing-drawing handlers ---
+
+    handleDrawingChange(event) {
+        this.selectedDrawingCvId = event.detail.value || '';
+    }
+
+    handleDrawingOrderChange(event) {
+        this.drawingFirst = event.detail.value === 'first';
+    }
+
+    handleClearDrawing() {
+        this.selectedDrawingCvId = '';
     }
 
     get signingOrderOptions() {
@@ -544,7 +608,11 @@ export default class DocGenSignatureSender extends LightningElement {
             const signersJson = JSON.stringify(signersPayload);
 
             const titleFormat = (this.documentTitleFormat || '').trim() || null;
-            if (this.selectedTemplates.length === 1) {
+            if (this.isMergedApprovalMode) {
+                // Approve an existing drawing: merge the record PDF with the approval
+                // template client-side, then send the combined document for signing.
+                this.signerResults = await this._runMergedApproval(signersJson, titleFormat);
+            } else if (this.selectedTemplates.length === 1) {
                 const single = this.selectedTemplates[0];
                 // Consolidated signing (#170): single-template signing always uses the
                 // guided PDF path — draw/type on the real PDF, walk field-to-field, with a
@@ -582,6 +650,59 @@ export default class DocGenSignatureSender extends LightningElement {
         } finally {
             this.isLoading = false;
         }
+    }
+
+    /**
+     * Merged-approval flow (exp/document-markup, M1). Two server calls bracket a
+     * client-side PDF merge:
+     *   1. prepareApprovalForMerge → Draft request + the tagged approval-template PDF.
+     *   2. fetch the existing drawing PDF, merge [drawing, approval] (or reversed) with
+     *      docGenPdfMerger, then attachMergedSourceAndSend → stores the merged signing
+     *      source and sends invitations.
+     * Merge stays client-side (large A3 scans would blow the Apex heap — same reason
+     * docGenPdfMerger exists for the runner).
+     */
+    async _runMergedApproval(signersJson, titleFormat) {
+        const single = this.selectedTemplates[0];
+        const prep = await prepareApprovalForMerge({
+            templateId: single.templateId,
+            relatedRecordId: this.recordId,
+            signersJson,
+            signingOrder: this.signingOrder,
+            documentTitleFormat: titleFormat
+        });
+
+        const drawingBase64 = await getContentVersionBase64({ contentVersionId: this.selectedDrawingCvId });
+        const drawingBytes = this._base64ToBytes(drawingBase64);
+        const approvalBytes = this._base64ToBytes(prep.viewingPdfBase64);
+        const ordered = this.drawingFirst ? [drawingBytes, approvalBytes] : [approvalBytes, drawingBytes];
+
+        const mergedBytes = mergePdfs(ordered);
+        const mergedBase64 = this._bytesToBase64(mergedBytes);
+
+        return attachMergedSourceAndSend({
+            requestId: prep.requestId,
+            mergedPdfBase64: mergedBase64
+        });
+    }
+
+    _base64ToBytes(base64) {
+        const binary = atob(base64);
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    }
+
+    _bytesToBase64(bytes) {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
     }
 
     // --- Previous Requests ---
