@@ -1661,7 +1661,7 @@ Inside a `{#Relationship}` loop, `{%Image:N}` scopes to the iterating record's i
 
 ```
 {%ImageField}                   Embed an image from a rich text field or Files
-{%LogoImage:200x100}            Specify max width × height in pixels
+{%LogoImage:200x100}            Width × height in pixels (see §7.7.2 for sizing in PDF)
 ```
 
 Handles multiple sources automatically:
@@ -1690,7 +1690,7 @@ Use a **shared asset** when the same image — a logo, a footer band, a letterhe
 {%asset:companylogo:x80}       Fixed 80 px tall, width auto
 ```
 
-A size token must contain an `x` (the width × height separator); a bare number with no `x` is ignored. Pixel sizes are the portable form. For finer control in HTML/PDF — millimetres, percentages, max-size, or aspect-preserving full-page art — leave the tag unsized and style it with CSS instead (see _What the tag produces_ below).
+A size token must contain an `x` (the width × height separator); a bare number with no `x` is ignored. **Pixels (`px`, or a bare number) and percentages (`50%x`) are the supported units** — see **§7.7.2** for exactly what works in HTML → PDF (and the named-unit / max-width limits to be aware of).
 
 - Resolves to the asset's **latest** uploaded version every time a document is generated, so an updated logo flows through to all referencing templates at once.
 - Works across **Word, HTML, PDF, and PowerPoint** output, in the document body and in headers/footers — including very large datasets.
@@ -1699,18 +1699,51 @@ A size token must contain an `x` (the width × height separator); a bare number 
 
 **What the tag produces.** The tag resolves to the asset's current image and then flows through DocGen's normal image pipeline, so it behaves like an inline image native to each format. You place the tag **where you want the image to appear** — you do not wrap it in your own `<img>` or pass it to a `src`; the tag _is_ the image.
 
-| Output                          | What `{%asset:key}` becomes                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **HTML / PDF (HTML template)**  | An `<img src="/sfc/servlet.shepherd/version/download/…">` element. The relative URL is fetched at render — exactly what the PDF engine (Flying Saucer) needs; no absolute URLs or data URIs required. The tag carries only `max-width:100%` inline, so wrap it in a styled container and target it with CSS for anything more (e.g. `.cover img { height: 297mm; width: auto; }`). |
-| **Word (`.docx`)**              | The image bytes are **embedded** directly in the document. The `.docx` is self-contained and shows the image offline.                                                                                                                                                                                                                                                              |
-| **PDF (Word template)**         | Referenced by relative URL via the zero-heap path, so large images don't exhaust heap on big jobs.                                                                                                                                                                                                                                                                                 |
-| **PowerPoint (`.pptx`)**        | Embedded as a picture shape on the slide.                                                                                                                                                                                                                                                                                                                                          |
-| **Excel (`.xlsx`)**             | Image assets are **not** rendered in Excel output in v1 — the tag is removed cleanly (no error).                                                                                                                                                                                                                                                                                   |
-| **Large datasets (>2000 rows)** | Tags in headers, footers, and grand-summary areas resolve the same way (the high-volume rendering path emits the same `<img>`).                                                                                                                                                                                                                                                    |
+| Output                          | What `{%asset:key}` becomes                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HTML / PDF (HTML template)**  | An `<img src="/sfc/servlet.shepherd/version/download/…">` element. The relative URL is fetched at render — exactly what the PDF engine (Flying Saucer) needs; no absolute URLs or data URIs required. A size token on the tag (`:300x`, `:200x100`, `:50%x`) is honored precisely; with no token the image renders at its natural size (capped to `max-width:100%`). See **§7.7.2** for the supported units and limits. |
+| **Word (`.docx`)**              | The image bytes are **embedded** directly in the document. The `.docx` is self-contained and shows the image offline.                                                                                                                                                                                                                                                                                                   |
+| **PDF (Word template)**         | Referenced by relative URL via the zero-heap path, so large images don't exhaust heap on big jobs.                                                                                                                                                                                                                                                                                                                      |
+| **PowerPoint (`.pptx`)**        | Embedded as a picture shape on the slide.                                                                                                                                                                                                                                                                                                                                                                               |
+| **Excel (`.xlsx`)**             | Image assets are **not** rendered in Excel output in v1 — the tag is removed cleanly (no error).                                                                                                                                                                                                                                                                                                                        |
+| **Large datasets (>2000 rows)** | Tags in headers, footers, and grand-summary areas resolve the same way (the high-volume rendering path emits the same `<img>`).                                                                                                                                                                                                                                                                                         |
 
 **Permissions:** administrators (DocGen Admin) create and manage assets; standard DocGen users get read-only access, which is all that is needed to generate documents that reference them.
 
 > **v1 scope:** shared assets are **images** only. Text/HTML snippet assets and pinning a template to a specific asset version are planned follow-ups.
+
+#### 7.7.2 Sizing images in HTML → PDF
+
+The size token on any image tag — `{%Image:N:…}`, `{%ImageField:…}`, `{%asset:key:…}` — controls the rendered size in **HTML-template → PDF** output. (As of **v3.26** these are honored precisely; earlier versions could collapse every size of the same image to one.) The rules below are specific to the PDF engine (Flying Saucer); Word/DOCX output is more flexible because Word does its own layout.
+
+**Supported units: pixels and percent only.**
+
+| Token         | Result                                                                                         |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `:300x100`    | 300 px wide × 100 px tall (exact — may stretch off-aspect)                                     |
+| `:300x`       | 300 px wide, height **auto** (keeps aspect)                                                    |
+| `:x100`       | 100 px tall, width **auto** (keeps aspect)                                                     |
+| `:50%x`       | 50% of the page content width, height auto                                                     |
+| `:300` (bare) | `{%Image:N}` only → 300 px wide; on `{%Field}`/`{%asset}` a bare number with no `x` is ignored |
+
+A blank side means **auto** (aspect-preserving): `{%LogoImage:100x}` is the same as 100 px wide with auto height. Pixels map to physical size at **96 DPI** (so `:96x` ≈ 1 inch wide, `:288x` ≈ 3 inches).
+
+**Named units are not parsed.** `in`, `pt`, `cm`, `mm`, `pc` (e.g. `:3inx`, `:x25mm`) are silently ignored and the image falls back to natural size. Convert to pixels at 96 DPI:
+
+| 1 in  | 1 cm    | 1 mm    | 1 pt    | 1 pc  |
+| ----- | ------- | ------- | ------- | ----- |
+| 96 px | 37.8 px | 3.78 px | 1.33 px | 16 px |
+
+So `:3inx` → `:288x`, `:x25mm` → `:x95`.
+
+**`max-width` / `max-height` are _not_ honored in PDF.** Flying Saucer applies only an explicit `width`/`height` to these images — a CSS `max-width`, `max-height`, or a "max size" token is ignored and the image renders at its natural size. There is no "cap large, leave small alone" sizing in PDF.
+
+- **Fitting a row of mismatched logos** (partner firms upload very different dimensions): give them all a **uniform width**, `{%Firm__r.Logo__c:200x}`. Each renders 200 px wide with proportional height — small logos scale up, large scale down, none distorted. (Avoid a fixed `:200x80` box for logos — it stretches them off-aspect.)
+
+**Hand-authored `<img>` tags (advanced).** If you write your own `<img src="/sfc/servlet.shepherd/version/download/068…">` instead of a `{%}` tag, you control the CSS directly, but two caveats apply:
+
+1. Only `width`/`height` take effect — `max-width` does not (same engine limit as above).
+2. The renderer computes one rendered size **per image URL** and reuses it. If you reference the **same** file at two different sizes, both come out the same. Add a throwaway query parameter to make each distinct (`…/068…?n=1`, `…/068…?n=2`). DocGen's `{%}` tags do this automatically, so prefer the tag unless you specifically need raw markup. (A grid of _different_ logos — different files — isn't affected.)
 
 ### 7.8 Barcodes & QR codes
 
