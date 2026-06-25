@@ -3,7 +3,7 @@
         <!-- Refined Professional Sidebar -->
         <nav class="sidebar">
             <div class="sidebar-header">
-                <lightning-icon icon-name="standard:document" size="medium" class="logo-icon"></lightning-icon>
+                <img src={logoUrl} alt="Portwood DocGen" class="logo-icon" />
                 <div class="logo-text">
                     <h2>DocGen</h2>
                     <p>Document Automation</p>
@@ -26,6 +26,10 @@
                 <button class={assetsTabClass} onclick={handleShowAssets}>
                     <lightning-icon icon-name="utility:image" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Assets</span>
+                </button>
+                <button class={emailTabClass} onclick={handleShowEmail}>
+                    <lightning-icon icon-name="utility:email" size="x-small" class="nav-icon"></lightning-icon>
+                    <span>Email Templates</span>
                 </button>
                 <button class={helpTabClass} onclick={handleShowHelp}>
                     <lightning-icon icon-name="utility:knowledge_base" size="x-small" class="nav-icon"></lightning-icon>
@@ -88,6 +92,19 @@
                         </div>
                         <div class="panel-body">
                             <c-doc-gen-assets></c-doc-gen-assets>
+                        </div>
+                    </template>
+
+                    <!-- EMAIL TEMPLATES -->
+                    <template if:true={isEmail}>
+                        <div class="panel-header">
+                            <h2>Email Templates</h2>
+                            <p>
+                                Brand and edit every signature email — request, reminder, verification, and completion.
+                            </p>
+                        </div>
+                        <div class="panel-body">
+                            <c-doc-gen-email-templates></c-doc-gen-email-templates>
                         </div>
                     </template>
 

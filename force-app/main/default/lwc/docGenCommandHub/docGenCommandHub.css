@@ -23,6 +23,13 @@
     padding: 0 var(--slds-g-spacing-5, 1.5rem) var(--slds-g-spacing-6, 2rem) var(--slds-g-spacing-5, 1.5rem);
 }
 
+.logo-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    object-fit: contain;
+    flex: 0 0 auto;
+}
+
 .logo-text h2 {
     font-size: var(--slds-g-font-scale-3, 1.25rem);
     font-weight: var(--slds-g-font-weight-7, 700);

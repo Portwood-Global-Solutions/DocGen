@@ -1,8 +1,10 @@
 import { LightningElement, track, wire } from 'lwc';
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
 import getOrgId from '@salesforce/apex/DocGenController.getOrgId';
+import DOCGEN_LOGO from '@salesforce/resourceUrl/DocGenLogo';
 
 export default class DocGenCommandHub extends LightningElement {
+    logoUrl = DOCGEN_LOGO;
     @track templateCount = 0;
     communityOrgId = '';
     @track showBanner = false;
@@ -59,6 +61,9 @@ export default class DocGenCommandHub extends LightningElement {
     get isAssets() {
         return this.activeSection === 'assets';
     }
+    get isEmail() {
+        return this.activeSection === 'email';
+    }
     get isHelp() {
         return this.activeSection === 'help';
     }
@@ -73,6 +78,9 @@ export default class DocGenCommandHub extends LightningElement {
     }
     get assetsTabClass() {
         return this.activeSection === 'assets' ? 'tab-active' : '';
+    }
+    get emailTabClass() {
+        return this.activeSection === 'email' ? 'tab-active' : '';
     }
     get helpTabClass() {
         return this.activeSection === 'help' ? 'tab-active' : '';
@@ -89,6 +97,9 @@ export default class DocGenCommandHub extends LightningElement {
     }
     handleShowAssets() {
         this.activeSection = 'assets';
+    }
+    handleShowEmail() {
+        this.activeSection = 'email';
     }
     handleShowHelp() {
         this.activeSection = 'help';
