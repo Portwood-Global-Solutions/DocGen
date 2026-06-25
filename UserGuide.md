@@ -2324,6 +2324,8 @@ Org-wide branding lives in **Signature Settings** and feeds every email by defau
 
 Branding applies to all signature emails (invitations, reminders, verification codes, completion, decline).
 
+> **New in v3.27:** these Settings values are the org-wide _defaults_. To change the actual wording, subject, layout, or per-email branding, use the new **Email Templates** tab below (§10.14) — a template's own brand color / logo / footer override the Settings defaults for that one email, and "Full custom HTML" mode replaces the branded chrome entirely.
+
 ### 10.14 Email Templates (Command Hub tab)
 
 Every email DocGen sends is a fully editable, brandable template — open **DocGen Command Hub → Email Templates**. Pick the email to edit from the dropdown:
