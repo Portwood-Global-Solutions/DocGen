@@ -1,0 +1,39 @@
+<template>
+    <div class="slds-p-around_medium slds-align_absolute-center docgen-button-shell">
+        <template lwc:if={loading}>
+            <div class="slds-text-align_center">
+                <lightning-spinner alternative-text="Generating document" size="medium"></lightning-spinner>
+                <p class="slds-m-top_large slds-text-body_regular">{statusMessage}</p>
+            </div>
+        </template>
+
+        <template lwc:if={showPicker}>
+            <div class="slds-text-align_center">
+                <p class="slds-text-heading_small slds-m-bottom_medium">Choose a document to generate</p>
+                <template for:each={options} for:item="opt">
+                    <lightning-button
+                        key={opt.developerName}
+                        label={opt.label}
+                        data-name={opt.developerName}
+                        variant="brand"
+                        class="slds-m-around_xx-small"
+                        onclick={handlePick}
+                    ></lightning-button>
+                </template>
+            </div>
+        </template>
+
+        <template lwc:if={errorMessage}>
+            <div class="slds-text-align_center">
+                <lightning-icon
+                    icon-name="utility:error"
+                    variant="error"
+                    size="small"
+                    class="slds-m-bottom_x-small"
+                ></lightning-icon>
+                <p class="slds-text-color_error">{errorMessage}</p>
+                <lightning-button label="Close" class="slds-m-top_medium" onclick={handleClose}></lightning-button>
+            </div>
+        </template>
+    </div>
+</template>
