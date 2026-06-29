@@ -2,7 +2,7 @@
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Output_Format_Override__c</fullName>
     <label>Output Format Override</label>
-    <description>Optional. Override the template Output Format at runtime: PDF, Word, or PowerPoint. Leave blank for the template default. Ignored/errors if the template has Lock Output Format = true.</description>
+    <description>Optional. Override the template's output format at runtime: PDF, Word, PowerPoint, or HTML (Excel is not supported as an override). Leave blank to use the template default. Errors if the template has Lock Output Format enabled.</description>
     <type>Text</type>
     <length>40</length>
     <required>false</required>
