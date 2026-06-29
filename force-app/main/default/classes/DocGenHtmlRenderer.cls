@@ -1486,11 +1486,23 @@ public with sharing class DocGenHtmlRenderer {
         }
 
         // Spacing: <w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/>
+        // Per-attribute cascade: an inline value wins; otherwise inherit from the paragraph's
+        // style chain / document defaults. Reading inline alone dropped spacing authors set via
+        // Word Styles or document defaults (Sarah's line-spacing-not-respected bug).
+        String pStyleVal = extractAttr(pPr, 'w:pStyle', 'w:val');
+        Map<String, String> inheritedSpacing = resolveInheritedSpacing(pStyleVal);
+
         String spacingBefore = extractAttr(pPr, 'w:spacing', 'w:before');
+        if (spacingBefore == null) {
+            spacingBefore = inheritedSpacing.get('before');
+        }
         if (spacingBefore != null && spacingBefore.isNumeric()) {
             styles.add('margin-top:' + twipsToPt(Integer.valueOf(spacingBefore)) + 'pt');
         }
         String spacingAfter = extractAttr(pPr, 'w:spacing', 'w:after');
+        if (spacingAfter == null) {
+            spacingAfter = inheritedSpacing.get('after');
+        }
         if (spacingAfter != null && spacingAfter.isNumeric()) {
             styles.add('margin-bottom:' + twipsToPt(Integer.valueOf(spacingAfter)) + 'pt');
         }
@@ -1499,7 +1511,13 @@ public with sharing class DocGenHtmlRenderer {
         // In "auto" mode: 240 = single, 360 = 1.5, 480 = double
         // In "exact"/"atLeast" mode: value is in twips
         String lineSpacing = extractAttr(pPr, 'w:spacing', 'w:line');
+        if (lineSpacing == null) {
+            lineSpacing = inheritedSpacing.get('line');
+        }
         String lineRule = extractAttr(pPr, 'w:spacing', 'w:lineRule');
+        if (lineRule == null) {
+            lineRule = inheritedSpacing.get('lineRule');
+        }
         if (lineSpacing != null && lineSpacing.isNumeric()) {
             Integer lineVal = Integer.valueOf(lineSpacing);
             if (lineRule == 'exact' || lineRule == 'atLeast') {
@@ -2131,6 +2149,118 @@ public with sharing class DocGenHtmlRenderer {
         if (isOoxmlOnOffElementTrue(styleDef, 'w:i'))
             out.put('italic', 'true');
         return out;
+    }
+
+    // Per-render memo for inherited paragraph spacing, keyed by pStyle. Self-invalidates
+    // when stylesXml changes (each template/version load swaps it in).
+    private static Map<String, Map<String, String>> inheritedSpacingCache = new Map<String, Map<String, String>>();
+    private static Integer inheritedSpacingCacheKey = null;
+
+    /**
+     * Resolves the effective <w:spacing> attributes (before / after / line / lineRule) that a
+     * paragraph INHERITS from the document defaults and/or its named-style basedOn chain — for
+     * use only to fill in a value the inline <w:pPr><w:spacing> doesn't set. Word stores paragraph
+     * spacing in any of three places (docDefaults, the paragraph style chain, or inline) and the
+     * most-specific wins; reading inline alone silently dropped spacing authors set via Styles or
+     * document defaults, collapsing to the hardcoded body line-height (Sarah's docx line-spacing
+     * bug). Returns an empty map in the async render context where stylesXml isn't loaded, so the
+     * pre-existing inline-only behavior is preserved there.
+     */
+    private static Map<String, String> resolveInheritedSpacing(String pStyleVal) {
+        if (String.isBlank(stylesXml)) {
+            return new Map<String, String>();
+        }
+        Integer key = stylesXml.hashCode();
+        if (key != inheritedSpacingCacheKey) {
+            inheritedSpacingCache.clear();
+            inheritedSpacingCacheKey = key;
+        }
+        String cacheKey = pStyleVal == null ? '' : pStyleVal;
+        if (inheritedSpacingCache.containsKey(cacheKey)) {
+            return inheritedSpacingCache.get(cacheKey);
+        }
+
+        Map<String, String> out = new Map<String, String>();
+        // 1) document-wide defaults baseline (<w:docDefaults><w:pPrDefault><w:pPr><w:spacing/>)
+        String pPrDefault = extractElement(stylesXml, 'w:pPrDefault');
+        if (String.isNotBlank(pPrDefault)) {
+            mergeSpacingAttrs(out, pPrDefault);
+        }
+        // 2) the style chain, base → derived (so a more-derived style overrides its base)
+        List<String> chain = paragraphStyleChain(pStyleVal);
+        for (Integer i = chain.size() - 1; i >= 0; i--) {
+            String def = findStyleDef(chain[i]);
+            if (String.isNotBlank(def)) {
+                mergeSpacingAttrs(out, def);
+            }
+        }
+        inheritedSpacingCache.put(cacheKey, out);
+        return out;
+    }
+
+    /**
+     * Copies the before/after/line/lineRule attributes of the FIRST <w:spacing> in scopeXml
+     * into out (overwriting — callers apply scopes from least- to most-specific). In a style
+     * definition the paragraph-level <w:pPr><w:spacing> precedes any run-level letter-spacing
+     * <w:rPr><w:spacing w:val=...>, so the first match is the paragraph spacing.
+     */
+    private static void mergeSpacingAttrs(Map<String, String> out, String scopeXml) {
+        String b = extractAttr(scopeXml, 'w:spacing', 'w:before');
+        if (b != null) {
+            out.put('before', b);
+        }
+        String a = extractAttr(scopeXml, 'w:spacing', 'w:after');
+        if (a != null) {
+            out.put('after', a);
+        }
+        String l = extractAttr(scopeXml, 'w:spacing', 'w:line');
+        if (l != null) {
+            out.put('line', l);
+        }
+        String lr = extractAttr(scopeXml, 'w:spacing', 'w:lineRule');
+        if (lr != null) {
+            out.put('lineRule', lr);
+        }
+    }
+
+    /**
+     * Returns the paragraph style and its basedOn ancestors, most-derived first, following
+     * <w:basedOn w:val="..."/> in styles.xml. Guards against cycles.
+     */
+    private static List<String> paragraphStyleChain(String styleId) {
+        List<String> chain = new List<String>();
+        Set<String> seen = new Set<String>();
+        String cur = styleId;
+        while (String.isNotBlank(cur) && !seen.contains(cur)) {
+            seen.add(cur);
+            chain.add(cur);
+            String def = findStyleDef(cur);
+            if (String.isBlank(def)) {
+                break;
+            }
+            cur = extractAttr(def, 'w:basedOn', 'w:val');
+        }
+        return chain;
+    }
+
+    /**
+     * Returns the <w:style ...>...</w:style> definition for a styleId, or null. Mirrors the
+     * locating logic in resolveStyleTextAttributes.
+     */
+    private static String findStyleDef(String styleId) {
+        if (String.isBlank(stylesXml) || String.isBlank(styleId)) {
+            return null;
+        }
+        Integer idx = stylesXml.indexOf('w:styleId="' + styleId + '"');
+        if (idx < 0) {
+            return null;
+        }
+        Integer s = stylesXml.lastIndexOf('<w:style', idx);
+        Integer e = stylesXml.indexOf('</w:style>', idx);
+        if (s < 0 || e < 0) {
+            return null;
+        }
+        return stylesXml.substring(s, e);
     }
 
     /**
