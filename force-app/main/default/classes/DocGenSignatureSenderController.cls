@@ -987,6 +987,33 @@ public with sharing class DocGenSignatureSenderController {
         Boolean requireVerification,
         Boolean prefillSignerEmail
     ) {
+        return createTemplateSnapshotRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            emailMessage,
+            emailSubject,
+            requireVerification,
+            prefillSignerEmail,
+            null
+        );
+    }
+
+    /** 10-arg canonical — #195: see createGuidedPdfSignatureRequest. */
+    public static List<SignerResult> createTemplateSnapshotRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        String emailMessage,
+        String emailSubject,
+        Boolean requireVerification,
+        Boolean prefillSignerEmail,
+        Boolean sendEmails
+    ) {
         if (templateId == null) {
             throw new AuraHandledException('A template Id is required.');
         }
@@ -1101,7 +1128,8 @@ public with sharing class DocGenSignatureSenderController {
             null,
             fileTitle,
             signerInputs,
-            true,
+            sendEmails !=
+            false, // #195 — null/true sends; explicit false suppresses
             getSigningPdfPagePath(),
             emailMessage,
             emailSubject,
@@ -1333,6 +1361,37 @@ public with sharing class DocGenSignatureSenderController {
         Boolean requireVerification,
         Boolean prefillSignerEmail
     ) {
+        return createGuidedPdfSignatureRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            emailMessage,
+            emailSubject,
+            requireVerification,
+            prefillSignerEmail,
+            null
+        );
+    }
+
+    /**
+     * 10-arg canonical — #195: sendEmails=false suppresses the branded invitation
+     * emails so a Flow can send its own using the returned signer URLs. null/true
+     * sends (the long-standing behavior; every pre-existing caller delegates null).
+     */
+    public static List<SignerResult> createGuidedPdfSignatureRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        String emailMessage,
+        String emailSubject,
+        Boolean requireVerification,
+        Boolean prefillSignerEmail,
+        Boolean sendEmails
+    ) {
         List<DocGen_Template__c> tpls = [
             SELECT Id, Name, Document_Title_Format__c
             FROM DocGen_Template__c
@@ -1400,7 +1459,8 @@ public with sharing class DocGenSignatureSenderController {
                     emailMessage,
                     emailSubject,
                     requireVerification,
-                    prefillSignerEmail
+                    prefillSignerEmail,
+                    sendEmails
                 );
             }
         }
@@ -1527,7 +1587,8 @@ public with sharing class DocGenSignatureSenderController {
             null,
             fileTitle,
             signerInputs,
-            true,
+            sendEmails !=
+            false, // #195 — null/true sends; explicit false suppresses
             getSigningPdfPagePath(),
             emailMessage,
             emailSubject,
