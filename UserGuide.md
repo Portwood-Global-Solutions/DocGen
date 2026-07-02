@@ -2595,14 +2595,13 @@ Most customers don't need this. Use the bundled Visualforce signing pages unless
 
 ### 11.10 Polling an async job from a screen Flow
 
-Bulk and Giant Query actions return a `jobId`. To poll inside a screen Flow:
+Bulk and Giant Query actions return a `jobId`. Screen Flows have **no Wait element** (Wait/Pause exists only in autolaunched/record-triggered Flows), so poll with a user-driven refresh loop:
 
-1. Add a **Loop** with a manual exit condition.
-2. Inside the loop: **Get Records** on `DocGen_Job__c` where `Id = {!jobId}`.
-3. Branch on `Status__c`: `Completed` → exit and show the file; `Failed` → exit and show the error; anything else → wait + loop.
-4. Add a **Wait** element (5 seconds) between iterations.
+1. **Get Records** on `DocGen_Job__c` where `Id = {!jobId}`.
+2. **Decision** on `Status__c`: `Completed` → show the file; `Failed` → show the error; anything else → a **Screen** with the current status and a "Refresh" button.
+3. Connect the screen's next path **back to the Get Records element** — each click re-reads the job until it finishes.
 
-Or call `DocGenBulkController.getJobStatus(jobId)` directly from Apex — see [§12.3](#123-docgenbulkcontroller--bulk-generation).
+In an **autolaunched or record-triggered** Flow you can instead use a real **Pause/Wait** element between iterations. Or call `DocGenBulkController.getJobStatus(jobId)` directly from Apex — see [§12.3](#123-docgenbulkcontroller--bulk-generation).
 
 ### 11.11 Error handling
 
