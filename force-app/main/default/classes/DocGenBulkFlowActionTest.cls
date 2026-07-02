@@ -76,7 +76,7 @@ private class DocGenBulkFlowActionTest {
 
     @IsTest
     static void testBuildEffectiveCondition_idsOnly() {
-        Account a = [SELECT Id FROM Account WHERE Name = 'Test Account 1' LIMIT 1];
+        Account a = TestDataFactory.accountByName('Test Account 1');
         String result = DocGenBulkFlowAction.buildEffectiveCondition(null, new List<String>{ a.Id });
         System.assert(result.startsWith('Id IN ('), 'Should start with Id IN, got: ' + result);
         System.assert(result.contains(a.Id), 'Should include the supplied ID');
@@ -84,7 +84,7 @@ private class DocGenBulkFlowActionTest {
 
     @IsTest
     static void testBuildEffectiveCondition_idsAndCondition_combine() {
-        Account a = [SELECT Id FROM Account WHERE Name = 'Test Account 1' LIMIT 1];
+        Account a = TestDataFactory.accountByName('Test Account 1');
         String result = DocGenBulkFlowAction.buildEffectiveCondition('Industry = \'Tech\'', new List<String>{ a.Id });
         // Expect the user condition to be parenthesized then AND-ed with Id IN
         System.assert(result.contains('Industry'), 'Should preserve user condition');
@@ -109,7 +109,7 @@ private class DocGenBulkFlowActionTest {
 
     @IsTest
     static void testBuildEffectiveCondition_blanksSkipped() {
-        Account a = [SELECT Id FROM Account WHERE Name = 'Test Account 1' LIMIT 1];
+        Account a = TestDataFactory.accountByName('Test Account 1');
         String result = DocGenBulkFlowAction.buildEffectiveCondition(null, new List<String>{ '', null, a.Id, '   ' });
         System.assertEquals('Id IN (\'' + a.Id + '\')', result, 'Blanks should be skipped silently');
     }
