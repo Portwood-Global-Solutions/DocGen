@@ -22,7 +22,8 @@ public with sharing class DocGenButtonController {
     @TestVisible
     private static Integer inlineDownloadMaxBytes = 3500000; // ~3.5 MB
 
-    public class DocGenButtonException extends Exception {}
+    public class DocGenButtonException extends Exception {
+    }
 
     // ---------------------------------------------------------------------
     // Generation seam (lets tests run the controller without real rendering)
@@ -211,7 +212,9 @@ public with sharing class DocGenButtonController {
                 LIMIT 1
             ];
             if (cvs.isEmpty()) {
-                throw new DocGenButtonException('Generated file could not be read back. Check file sharing/visibility.');
+                throw new DocGenButtonException(
+                    'Generated file could not be read back. Check file sharing/visibility.'
+                );
             }
             ContentVersion cv = cvs[0];
 
@@ -275,9 +278,10 @@ public with sharing class DocGenButtonController {
                 Active__c,
                 Sort_Order__c
             FROM DocGen_Button__mdt
-            WHERE Active__c = true AND Object_API_Name__c = :objectApiName
+            WHERE Active__c = TRUE AND Object_API_Name__c = :objectApiName
+            WITH SYSTEM_MODE
             ORDER BY Sort_Order__c NULLS LAST, MasterLabel
-        ];
+        ]; // NOPMD ApexCRUDViolation — CMDT is admin-authored config; internal config reads use SYSTEM_MODE (USER_MODE breaks the namespaced build + is permission-gated for CMDT)
     }
 
     @TestVisible
@@ -301,9 +305,10 @@ public with sharing class DocGenButtonController {
                 Document_Title__c,
                 Active__c
             FROM DocGen_Button__mdt
-            WHERE DeveloperName = :developerName AND Active__c = true
+            WHERE DeveloperName = :developerName AND Active__c = TRUE
+            WITH SYSTEM_MODE
             LIMIT 1
-        ];
+        ]; // NOPMD ApexCRUDViolation — CMDT is admin-authored config; internal config reads use SYSTEM_MODE
         return rows.isEmpty() ? null : rows[0];
     }
 

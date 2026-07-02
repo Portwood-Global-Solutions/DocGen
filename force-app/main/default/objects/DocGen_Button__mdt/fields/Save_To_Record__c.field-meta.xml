@@ -1,8 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Save_To_Record__c</fullName>
     <label>Save To Record</label>
-    <description>If checked, the generated file is attached to the source record (Files related list). Either way it is downloaded.</description>
+    <description
+    >If checked, the generated file is attached to the source record (Files related list). Either way it is downloaded.</description>
     <type>Checkbox</type>
     <defaultValue>true</defaultValue>
 </CustomField>

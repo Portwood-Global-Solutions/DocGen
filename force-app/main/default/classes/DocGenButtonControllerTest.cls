@@ -122,7 +122,10 @@ private class DocGenButtonControllerTest {
         };
 
         Test.startTest();
-        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(UserInfo.getUserId(), 'DOES_NOT_EXIST');
+        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(
+            UserInfo.getUserId(),
+            'DOES_NOT_EXIST'
+        );
         Test.stopTest();
 
         System.assertEquals(false, dto.success, 'Unknown config should fail');
@@ -132,9 +135,7 @@ private class DocGenButtonControllerTest {
     @IsTest
     static void generate_blankTemplateId_returnsError() {
         DocGenButtonController.generator = new MockGenerator();
-        DocGenButtonController.configOverride = new List<DocGen_Button__mdt>{
-            cfg('WO_PDF', OBJ, null, true)
-        };
+        DocGenButtonController.configOverride = new List<DocGen_Button__mdt>{ cfg('WO_PDF', OBJ, null, true) };
 
         Test.startTest();
         DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(UserInfo.getUserId(), 'WO_PDF');
@@ -156,7 +157,11 @@ private class DocGenButtonControllerTest {
         Test.stopTest();
 
         System.assertEquals(false, dto.success, 'Package failure should surface as error');
-        System.assertEquals('Simulated package failure.', dto.errorMessage, 'Package error message should pass through');
+        System.assertEquals(
+            'Simulated package failure.',
+            dto.errorMessage,
+            'Package error message should pass through'
+        );
     }
 
     /**
@@ -174,13 +179,14 @@ private class DocGenButtonControllerTest {
         };
 
         Test.startTest();
-        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(
-            UserInfo.getUserId(),
-            'WO_PDF'
-        );
+        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(UserInfo.getUserId(), 'WO_PDF');
         Test.stopTest();
 
-        System.assertEquals(false, dto.success, 'A non-existent template via the real package path should fail gracefully');
+        System.assertEquals(
+            false,
+            dto.success,
+            'A non-existent template via the real package path should fail gracefully'
+        );
         System.assertNotEquals(null, dto.errorMessage, 'A user-facing error message should be returned');
     }
 }

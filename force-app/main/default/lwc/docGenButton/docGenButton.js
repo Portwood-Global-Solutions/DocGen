@@ -146,11 +146,7 @@ export default class DocGenButton extends LightningElement {
         if (!mimeType) {
             return false;
         }
-        return (
-            mimeType === 'application/pdf' ||
-            mimeType.startsWith('image/') ||
-            mimeType === 'text/plain'
-        );
+        return mimeType === 'application/pdf' || mimeType.startsWith('image/') || mimeType === 'text/plain';
     }
 
     base64ToBlob(base64, mimeType) {

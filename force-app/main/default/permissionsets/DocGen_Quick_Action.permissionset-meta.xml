@@ -1,7 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
     <label>DocGen Quick Action</label>
-    <description>Use of the DocGen quick action: Apex access to DocGenButtonController and read on DocGen_Button__mdt. Can be merged into the existing DocGen permission set. Generation still requires the grants the DocGen permission set already provides.</description>
+    <description
+    >Use of the DocGen quick action: Apex access to DocGenButtonController and read on DocGen_Button__mdt. Can be merged into the existing DocGen permission set. Generation still requires the grants the DocGen permission set already provides.</description>
     <hasActivationRequired>false</hasActivationRequired>
     <classAccesses>
         <apexClass>DocGenButtonController</apexClass>
