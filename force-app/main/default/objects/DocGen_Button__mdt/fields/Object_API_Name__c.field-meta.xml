@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Object_API_Name__c</fullName>
+    <label>Object API Name</label>
+    <description>API name of the object whose record page hosts the button (e.g., sm1a__WorkOrder__c). Used to match the record context.</description>
+    <type>Text</type>
+    <length>255</length>
+    <required>true</required>
+    <unique>false</unique>
+</CustomField>

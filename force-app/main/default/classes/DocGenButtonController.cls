@@ -1,0 +1,327 @@
+/**
+ * DocGenButtonController
+ * -----------------------
+ * Backs the docGenButton quick action. Resolves a pre-configured template from the
+ * DocGen_Button__mdt custom metadata type, generates the document through the DocGen
+ * service layer, and returns the file to the browser for download (and, optionally,
+ * attaches it to the record).
+ *
+ * Generation goes through DocGenService.generateDocument(...) — the same service
+ * entry DocGenFlowAction uses internally — then the resulting ContentVersion is read
+ * back and returned to the client either as a base64 payload (small files with an
+ * LWS-safe MIME type: PDF, images, text) or as a file-servlet download URL (everything
+ * else, including Office formats that Lightning Web Security blocks for Blob URLs).
+ *
+ * The generation call is isolated behind the Generator seam so the full controller
+ * flow can be unit-tested without invoking real document rendering.
+ */
+public with sharing class DocGenButtonController {
+    /** Files at/under this byte size are returned inline as base64 for a direct
+     *  client-side download. Larger files fall back to the download servlet URL to
+     *  stay within Apex heap. Not final so tests can exercise both branches. */
+    @TestVisible
+    private static Integer inlineDownloadMaxBytes = 3500000; // ~3.5 MB
+
+    public class DocGenButtonException extends Exception {}
+
+    // ---------------------------------------------------------------------
+    // Generation seam (lets tests run the controller without real rendering)
+    // ---------------------------------------------------------------------
+    public interface Generator {
+        GenResult generate(GenRequest req);
+    }
+
+    public class GenRequest {
+        public Id templateId;
+        public Id recordId;
+        public Boolean saveToRecord;
+        public String documentTitle;
+        public String outputFormatOverride;
+    }
+
+    public class GenResult {
+        public Id contentDocumentId;
+        public Id contentVersionId;
+        public Boolean success;
+        public String errorMessage;
+    }
+
+    /** Default generator: delegates to the DocGen service layer. */
+    public class ServiceGenerator implements Generator {
+        public GenResult generate(GenRequest r) {
+            GenResult out = new GenResult();
+            try {
+                // attachmentRecordId = recordId links the file to the record (Files
+                // related list); null produces a standalone ContentVersion that is
+                // still downloadable via the returned ContentDocumentId.
+                Id attachmentRecordId = (r.saveToRecord == true) ? r.recordId : null;
+                Id contentDocumentId = DocGenService.generateDocument(
+                    r.templateId,
+                    r.recordId,
+                    r.outputFormatOverride,
+                    r.documentTitle,
+                    attachmentRecordId
+                );
+                out.contentDocumentId = contentDocumentId;
+                out.success = (contentDocumentId != null);
+                if (!out.success) {
+                    out.errorMessage = 'DocGen did not return a document.';
+                }
+            } catch (Exception e) {
+                out.success = false;
+                out.errorMessage = e.getMessage();
+            }
+            return out;
+        }
+    }
+
+    @TestVisible
+    private static Generator generator = new ServiceGenerator();
+
+    /** Optional test override of the config source. Custom metadata records cannot
+     *  be inserted via DML in tests, so tests inject rows here instead of querying. */
+    @TestVisible
+    private static List<DocGen_Button__mdt> configOverride;
+
+    // ---------------------------------------------------------------------
+    // LWC-facing DTOs
+    // ---------------------------------------------------------------------
+    public class ButtonOption {
+        @AuraEnabled
+        public String developerName;
+        @AuraEnabled
+        public String label;
+    }
+
+    public class GenerateResultDTO {
+        @AuraEnabled
+        public Boolean success;
+        @AuraEnabled
+        public String errorMessage;
+        @AuraEnabled
+        public String fileName;
+        @AuraEnabled
+        public String mimeType;
+        @AuraEnabled
+        public String base64Data; // populated for small files
+        @AuraEnabled
+        public String downloadUrl; // populated for large files
+        @AuraEnabled
+        public Id contentDocumentId;
+        @AuraEnabled
+        public Id contentVersionId;
+    }
+
+    // ---------------------------------------------------------------------
+    // Public API (called from the LWC)
+    // ---------------------------------------------------------------------
+
+    /** Returns the active button configurations for the record's object so the LWC
+     *  can auto-run a single button or present a small picker for several.
+     *  Takes recordId (always injected into quick actions) and derives the object
+     *  API name server-side from the Id — quick actions don't reliably inject
+     *  objectApiName before connectedCallback, and this also removes any
+     *  namespace/case/whitespace mismatch. Not cacheable: config reads happen once
+     *  per click and caching would let a stale/empty result persist. */
+    @AuraEnabled
+    public static List<ButtonOption> getButtons(Id recordId) {
+        List<ButtonOption> options = new List<ButtonOption>();
+        if (recordId == null) {
+            return options;
+        }
+        String objectApiName = recordId.getSObjectType().getDescribe().getName();
+        for (DocGen_Button__mdt cfg : loadConfigs(objectApiName)) {
+            ButtonOption opt = new ButtonOption();
+            opt.developerName = cfg.DeveloperName;
+            opt.label = String.isNotBlank(cfg.MasterLabel) ? cfg.MasterLabel : cfg.DeveloperName;
+            options.add(opt);
+        }
+        return options;
+    }
+
+    /** Generates the document for the chosen configuration and returns it for download. */
+    @AuraEnabled
+    public static GenerateResultDTO generate(Id recordId, String configDeveloperName) {
+        GenerateResultDTO dto = new GenerateResultDTO();
+        try {
+            DocGen_Button__mdt cfg = getConfig(configDeveloperName);
+            if (cfg == null) {
+                throw new DocGenButtonException(
+                    'No active DocGen Button configuration named "' + configDeveloperName + '".'
+                );
+            }
+            if (String.isBlank(cfg.Template_Id__c)) {
+                throw new DocGenButtonException(
+                    'DocGen Button "' + configDeveloperName + '" has no Template Id configured.'
+                );
+            }
+
+            Id templateId;
+            try {
+                templateId = (Id) cfg.Template_Id__c;
+            } catch (Exception idEx) {
+                throw new DocGenButtonException(
+                    'DocGen Button "' +
+                        configDeveloperName +
+                        '" has an invalid Template Id (' +
+                        cfg.Template_Id__c +
+                        '). Set it to a DocGen Template record Id.'
+                );
+            }
+
+            GenRequest gReq = new GenRequest();
+            gReq.templateId = templateId;
+            gReq.recordId = recordId;
+            gReq.saveToRecord = cfg.Save_To_Record__c == true;
+            gReq.documentTitle = cfg.Document_Title__c;
+            gReq.outputFormatOverride = cfg.Output_Format_Override__c;
+
+            GenResult res = generator.generate(gReq);
+            if (res == null || res.success != true) {
+                throw new DocGenButtonException(
+                    (res != null && String.isNotBlank(res.errorMessage))
+                        ? res.errorMessage
+                        : 'Document generation failed.'
+                );
+            }
+
+            Id cvId = res.contentVersionId;
+            if (cvId == null && res.contentDocumentId != null) {
+                List<ContentVersion> latest = [
+                    SELECT Id
+                    FROM ContentVersion
+                    WHERE ContentDocumentId = :res.contentDocumentId
+                    WITH USER_MODE
+                    ORDER BY CreatedDate DESC
+                    LIMIT 1
+                ];
+                if (!latest.isEmpty()) {
+                    cvId = latest[0].Id;
+                }
+            }
+            if (cvId == null) {
+                throw new DocGenButtonException('The document was generated but no file reference was returned.');
+            }
+
+            List<ContentVersion> cvs = [
+                SELECT Id, Title, FileExtension, ContentSize, ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :cvId
+                WITH USER_MODE
+                LIMIT 1
+            ];
+            if (cvs.isEmpty()) {
+                throw new DocGenButtonException('Generated file could not be read back. Check file sharing/visibility.');
+            }
+            ContentVersion cv = cvs[0];
+
+            dto.success = true;
+            dto.contentVersionId = cv.Id;
+            dto.contentDocumentId = cv.ContentDocumentId;
+            dto.fileName = buildFileName(cv);
+            dto.mimeType = mimeFor(cv.FileExtension);
+
+            // Always provide a file-servlet download URL. It works for every MIME type
+            // and any size, and sidesteps Lightning Web Security's Blob/createObjectURL
+            // MIME allowlist (which rejects Office formats like .docx/.pptx/.xlsx).
+            dto.downloadUrl = '/sfc/servlet.shepherd/version/download/' + cv.Id;
+
+            // Also return base64 for small files. The LWC uses the Blob path only for
+            // LWS-safe MIME types (PDF, images, text) and otherwise uses downloadUrl.
+            if (cv.ContentSize != null && cv.ContentSize <= inlineDownloadMaxBytes) {
+                List<ContentVersion> withData = [
+                    SELECT VersionData
+                    FROM ContentVersion
+                    WHERE Id = :cv.Id
+                    WITH USER_MODE
+                    LIMIT 1
+                ];
+                if (!withData.isEmpty() && withData[0].VersionData != null) {
+                    dto.base64Data = EncodingUtil.base64Encode(withData[0].VersionData);
+                }
+            }
+
+            return dto;
+        } catch (Exception e) {
+            dto.success = false;
+            dto.errorMessage = e.getMessage();
+            return dto;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+    @TestVisible
+    private static List<DocGen_Button__mdt> loadConfigs(String objectApiName) {
+        if (configOverride != null) {
+            List<DocGen_Button__mdt> filtered = new List<DocGen_Button__mdt>();
+            for (DocGen_Button__mdt c : configOverride) {
+                if (c.Active__c == true && c.Object_API_Name__c == objectApiName) {
+                    filtered.add(c);
+                }
+            }
+            return filtered;
+        }
+        return [
+            SELECT
+                DeveloperName,
+                MasterLabel,
+                Object_API_Name__c,
+                Template_Id__c,
+                Save_To_Record__c,
+                Output_Format_Override__c,
+                Document_Title__c,
+                Active__c,
+                Sort_Order__c
+            FROM DocGen_Button__mdt
+            WHERE Active__c = true AND Object_API_Name__c = :objectApiName
+            ORDER BY Sort_Order__c NULLS LAST, MasterLabel
+        ];
+    }
+
+    @TestVisible
+    private static DocGen_Button__mdt getConfig(String developerName) {
+        if (configOverride != null) {
+            for (DocGen_Button__mdt c : configOverride) {
+                if (c.DeveloperName == developerName && c.Active__c == true) {
+                    return c;
+                }
+            }
+            return null;
+        }
+        List<DocGen_Button__mdt> rows = [
+            SELECT
+                DeveloperName,
+                MasterLabel,
+                Object_API_Name__c,
+                Template_Id__c,
+                Save_To_Record__c,
+                Output_Format_Override__c,
+                Document_Title__c,
+                Active__c
+            FROM DocGen_Button__mdt
+            WHERE DeveloperName = :developerName AND Active__c = true
+            LIMIT 1
+        ];
+        return rows.isEmpty() ? null : rows[0];
+    }
+
+    private static String buildFileName(ContentVersion cv) {
+        String base = String.isNotBlank(cv.Title) ? cv.Title : 'Document';
+        String ext = String.isNotBlank(cv.FileExtension) ? cv.FileExtension.toLowerCase() : 'pdf';
+        return base.endsWithIgnoreCase('.' + ext) ? base : base + '.' + ext;
+    }
+
+    private static String mimeFor(String ext) {
+        String e = (ext == null) ? '' : ext.toLowerCase();
+        Map<String, String> m = new Map<String, String>{
+            'pdf' => 'application/pdf',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'doc' => 'application/msword',
+            'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        };
+        return m.containsKey(e) ? m.get(e) : 'application/octet-stream';
+    }
+}
