@@ -1222,6 +1222,15 @@
                                         field-level-help="When verification is on, auto-send the code to the signer's known email and skip the 'type your email' step. Inherit uses the org default."
                                         class="slds-var-m-top_small"
                                     ></lightning-combobox>
+                                    <!-- PHD-9 — stable developer key for Flow lookups -->
+                                    <lightning-input
+                                        label="API Name"
+                                        value={editTemplateApiName}
+                                        onchange={handleApiNameChange}
+                                        max-length="80"
+                                        field-level-help="Stable key for referencing this template from Flows (Template API Name input on the DocGen actions). Survives sandbox-to-production deploys, unlike the record Id. Must be unique."
+                                        class="slds-var-m-top_small"
+                                    ></lightning-input>
                                 </div>
                             </div>
                             <div class="slds-var-p-horizontal_small">

@@ -255,6 +255,64 @@ private class DocGenMiscTests {
         System.assertEquals(null, responses[0].contentDocumentId, 'ContentDocumentId should be null on error');
     }
 
+    // ─── PHD-9: Template API Name resolution ────────────────────────────────
+
+    @IsTest
+    static void testFlowAction_templateApiName_resolvesToTemplate() {
+        TestDataFactory.attachRealDocxToTestTemplate();
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        tpl.API_Name__c = 'Test_Template_Key';
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateApiName = 'Test_Template_Key'; // no templateId — resolve by key
+        req.jsonData = '{"Name":"Api Name Co"}';
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+            new List<DocGenFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(
+            true,
+            responses[0].success,
+            'API-name-addressed render should succeed: ' + responses[0].errorMessage
+        );
+        System.assertNotEquals(null, responses[0].contentVersionId);
+    }
+
+    @IsTest
+    static void testFlowAction_templateApiName_unknownKeyFailsClearly() {
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateApiName = 'No_Such_Key';
+        req.jsonData = '{"Name":"X"}';
+
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+            new List<DocGenFlowAction.Request>{ req }
+        );
+        System.assertEquals(false, responses[0].success);
+        System.assert(
+            responses[0].errorMessage.contains('No_Such_Key'),
+            'Error names the missing key: ' + responses[0].errorMessage
+        );
+    }
+
+    @IsTest
+    static void testFlowAction_neitherTemplateInputFailsClearly() {
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.jsonData = '{"Name":"X"}';
+
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+            new List<DocGenFlowAction.Request>{ req }
+        );
+        System.assertEquals(false, responses[0].success);
+        System.assert(
+            responses[0].errorMessage.contains('Template ID or Template API Name'),
+            'Error explains both inputs: ' + responses[0].errorMessage
+        );
+    }
+
     @IsTest
     static void testGenerateDocumentFlowActionResponseStructure() {
         DocGenFlowAction.Response res = new DocGenFlowAction.Response();

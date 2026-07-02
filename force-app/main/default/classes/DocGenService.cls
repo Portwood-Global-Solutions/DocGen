@@ -8266,6 +8266,36 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * Merges a template with record data and returns intermediate XML parts + image map.
      * Used by the signature flow to pre-compute merge data and render signed PDFs.
      */
+    /**
+     * PHD-9 — resolves a template's record Id from its API_Name__c so Flows can
+     * reference templates by a stable developer key instead of an
+     * environment-specific record Id (sandbox-to-production safe). FLS-guard +
+     * SYSTEM_MODE: internal config read on a new packaged field (USER_MODE here
+     * breaks the namespaced package build when the build user lacks the permset).
+     */
+    public static Id templateIdByApiName(String apiName) {
+        if (String.isBlank(apiName)) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'API_Name__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> tpls = [
+            SELECT Id
+            FROM DocGen_Template__c
+            WHERE API_Name__c = :apiName
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (tpls.isEmpty()) {
+            throw new DocGenException(
+                'No DocGen Template found with API Name \'' +
+                    apiName +
+                    '\'. Set the API Name field on the template, or pass Template ID instead.'
+            );
+        }
+        return tpls[0].Id;
+    }
+
     public static Map<String, Object> mergeTemplateForSignature(Id templateId, String recordIdStr) {
         // Keep {@Signature_*} tags through this merge so the signature service can
         // sentinel-substitute / stamp them; restore the prior value after (normal

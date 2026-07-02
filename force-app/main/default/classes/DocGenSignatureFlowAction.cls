@@ -71,11 +71,16 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
     global class Request {
         @InvocableVariable(
-            required=true
             label='Template Id'
-            description='The Id of the DocGen Template to use. The template must have an active version with {@Signature_Role} tags. Example: Use a Get Records element to find the template, then pass its Id here.'
+            description='The Id of the DocGen Template to use. Provide this OR Template API Name. The template must have an active version with {@Signature_Role} tags.'
         )
         global Id templateId;
+
+        @InvocableVariable(
+            label='Template API Name'
+            description='The template\'s API Name field — a stable key that survives sandbox-to-production deploys, unlike a record Id. Provide this OR Template Id.'
+        )
+        global String templateApiName;
 
         @InvocableVariable(
             required=true
@@ -235,7 +240,13 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
             throw new DocGenException('Request is null');
         }
         if (req.templateId == null) {
-            throw new DocGenException('Template Id is required — pass the Id of a DocGen Template record.');
+            // PHD-9 — allow addressing the template by its stable API Name.
+            req.templateId = DocGenService.templateIdByApiName(req.templateApiName);
+        }
+        if (req.templateId == null) {
+            throw new DocGenException(
+                'Template Id is required — pass the Id of a DocGen Template record or its Template API Name.'
+            );
         }
         if (req.relatedRecordId == null) {
             throw new DocGenException('Related Record Id is required — pass the record this signature is for.');
