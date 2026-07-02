@@ -1,5 +1,28 @@
 # Changelog
 
+## v3.28.0 — Shield-safe install + Flow fixes + quick-action button + email-template completion
+
+Clears the open issue board: two customer-blocking bugs, two customer-requested Flow features, a community-contributed quick action, the email-template GA gate, and four UI polish items.
+
+### Fixed
+
+- **Install failed in Shield-encrypted orgs (#200)** — Shield-encrypted standard fields can't be filtered in SOQL, and install recompiles every packaged class. Swept all 28 inline `WHERE` filters on encryptable fields (Account/Opportunity/Contact) into Shield-safe lookups (`TestDataFactory.accountByName`/`opportunityByName` — query unfiltered, match in Apex).
+- **`sendEmails=false` on the signature Flow action now truly suppresses invites (#195)** — the input was never read and the guided/snapshot send canonicals hardcoded `true`. New 10-arg canonicals thread the flag to `createSignersAndNotify`; `null`/`true` keeps the long-standing always-send behavior so existing Flows are unaffected, explicit `false` skips the email block entirely (request + signer URLs still returned). Invocable description corrected (it claimed FALSE was the default).
+- **Generated-document images no longer pile up on the record (#202)** — v3.26's prune only matched version-keyed image titles; the LWC zip-upload flow mints template-keyed timestamped CVs (`docgen_html_img_<templateId>_<epoch>_…`) that were structurally unprunable, and a `size()<=1` early-return skipped single-version templates (the common HTML shape). Prune now removes any of this template's image links the current body no longer references; render-required links are always kept.
+- **Polish (community-reported)** — Signature Settings "all checks passed" box was white-on-pale-green (theme class dropped, dark text pinned); Learning Center "Visitportwood.dev/support" ran together (LWC strips inter-element whitespace); "My Templates" nav icon used a nonexistent SLDS icon and rendered blank (now `utility:file`); the DocGen Error Logs tab is now in the app's navigation.
+
+### Added
+
+- **Template API Name (PHD-9)** — new unique `API_Name__c` on DocGen Template (+ Command Hub editor field). Both Flow actions (`Generate Document`, `Create Signature Request`) accept a **Template API Name** input in place of a record Id — automations survive sandbox→production deploys with no Custom Labels and no Get Records. Resolver: `DocGenService.templateIdByApiName` (FLS-guard + SYSTEM_MODE).
+- **One-click quick action button (#199, community contribution)** — `docGenButton` LWC screen action + `DocGenButtonController` + `DocGen_Button__mdt` custom metadata (the package's first CMDT) + `DocGen_Quick_Action` permission set. Pin a template to an object, add the action to the page, one click generates and downloads (optionally attaching to the record). LWS-safe download split (Blob for safe MIME types, file servlet for Office formats). Follow-up commit added `WITH SYSTEM_MODE` to the CMDT reads (code-analyzer 0 High), repo prettier, API v66. Synchronous path — giant-query templates error rather than download (documented §8.6).
+- **Per-template default email message (#208, completes #193 for GA)** — new `Default_Email_Message__c` on DocGen Template: the `{Message}` token default for signature sends from that template. Pre-filled in the sender UI, used by Flow sends that leave the message blank; resolution is send-time override → template default → type default, resolved once in `DocGenSignatureEmailService.sendRequestLikeEmails` so UI sends, resends, Flow sends, and reminders all inherit it. Flow `{Message}` exposure verified end-to-end (#209).
+
+### Docs
+
+- UserGuide: §5.1.1 API Name, §8.6 quick action button, §10.14 per-template default message, §11.2/§11.6 recipes updated to prefer Template API Name, Flow troubleshooting updated, `sendEmails` semantics documented.
+
+No new restricted-picklist values on existing objects — no manual upgrade steps.
+
 ## v3.27.0 — Configurable email templates + signer verification (#193, #194, #196)
 
 Two contributor features (DuraNathOG): every signature/notification email becomes fully editable and brandable, and signer email-PIN verification becomes configurable instead of always-on. Both ship with existing behavior unchanged on upgrade. Also adds a packaged DocGen app logo (`DocGenLogo` static resource) shown in the Command Hub header.

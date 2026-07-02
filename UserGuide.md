@@ -262,6 +262,10 @@ Important notes while the feature is in testing:
 - Browser-side scanning is used only to understand and normalize the PDF. Actual generation happens server-side, including Generate Sample and bulk generation.
 - Fillable fields generally remain fillable/editable in the generated PDF. Flattening output is not the default behavior.
 
+### 5.1.1 API Name — a stable key for automation (v3.28+)
+
+Every template has an optional **API Name** (Command Hub → template editor) — a unique developer key like `Opp_Close_Summary`. Flows reference it via the **Template API Name** input on the DocGen actions instead of a record Id, so automations survive sandbox→production deploys with nothing to remap. Letters, numbers, and underscores recommended; must be unique when set; existing templates work fine with it blank.
+
 ### 5.2 Template versions
 
 Each save creates a new `DocGen_Template_Version__c` record. Only the version marked **Active** (`Is_Active__c = true`) is used by the runner.
@@ -2070,6 +2074,20 @@ When the template output is PDF and the record has PDF ContentVersions attached,
 
 A packet is multiple templates generated in one action and merged (or sent as a signature packet). Select multiple templates in the runner, hit Generate, and they're combined. For signature packets, see [§10.3](#103-packets-multi-template-signing).
 
+### 8.6 One-click quick action button (v3.28+)
+
+For the "this object always generates this one template" case, add the **DocGen Button** quick action to a record page — one click generates and downloads the document, with no Runner and no Flow wrapper. Community-contributed.
+
+**Setup (three steps):**
+
+1. **Configure a button** — Setup → Custom Metadata Types → **DocGen Button** → Manage Records → New. Set **Object API Name** (e.g. `Opportunity`), **Template Id**, and optionally **Save To Record**, **Output Format Override**, **Document Title**, and **Sort Order**. Only Active records are offered. (Put the optional fields on the CMDT layout first — only required fields auto-place.)
+2. **Grant access** — assign the **DocGen Quick Action** permission set (Apex class access + config read), or merge its two grants into your existing DocGen permission sets.
+3. **Place the action** — Object Manager → your object → Buttons, Links, and Actions → New Action → Lightning Web Component → `docGenButton`, then add it to the page layout's actions.
+
+When an object has one active configuration the click generates immediately; with several, a small picker appears. **Save To Record** additionally attaches the file to the record's Files.
+
+> **Limitation:** this is a synchronous path — templates over the giant-query threshold (~2,000 child rows) will show an error instead of downloading. Use the Runner or a Flow with the Bulk/Giant actions for those.
+
 ## 9. Bulk generation
 
 Mass-generate documents for many records in one batch.
@@ -2351,6 +2369,8 @@ For each template you can edit the **subject** and **body**, preview it live wit
 
 **Send-time customization.** When sending a single-template request (from the Signature Sender or the `DocGen: Create Signature Request` Flow action), you can type a **Custom Email Subject** and/or **Custom Email Message** that override the saved template for that one send. The subject supports merge tokens; the branded layout and signing button are always kept. Bulk/packet sends always use the saved templates.
 
+**Per-template default message (v3.28+).** Each DocGen Template has a **Default Email Message** field (Command Hub → template editor). When set, it becomes the `{Message}` text for signature requests sent from that template — pre-filled in the sender so you see exactly what will go out, and used automatically by Flow sends that leave the message blank. Resolution order: send-time custom message → template default → the email template's generic text. A quote template can say "Please see the attached proposal…" while an NDA template carries different copy, with no per-send typing.
+
 ---
 
 ## 11. Flow automation cookbook
@@ -2377,13 +2397,13 @@ The bread-and-butter "trigger automation generates a doc" recipe.
 
 **Step:** Add an **Action** element → search "DocGen" → pick **Generate Document**.
 
-| Input          | Value                                                                                                                                  |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Template ID    | `{!$Label.OpportunityCloseSummaryTemplateId}` (store template Ids in Custom Labels so you can swap templates without editing the Flow) |
-| Record ID      | `{!$Record.Id}`                                                                                                                        |
-| Save to Record | `{!$GlobalConstant.True}`                                                                                                              |
-| Output Format  | _(leave blank to use the template's default)_                                                                                          |
-| Document Title | `{!$Record.Name} — Close Summary`                                                                                                      |
+| Input             | Value                                                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Template API Name | `Opp_Close_Summary` (v3.28+ — set the API Name field on the template; identical in every environment, so nothing to remap on deploy. Or pass Template ID; older versions: store record Ids in Custom Labels.) |
+| Record ID         | `{!$Record.Id}`                                                                                                                                                                                               |
+| Save to Record    | `{!$GlobalConstant.True}`                                                                                                                                                                                     |
+| Output Format     | _(leave blank to use the template's default)_                                                                                                                                                                 |
+| Document Title    | `{!$Record.Name} — Close Summary`                                                                                                                                                                             |
 
 **Output:** `contentDocumentId` — the new file's Id, available downstream if you want to email it or pass it to another action.
 
@@ -2459,12 +2479,17 @@ Only **`name`** and **`email`** are required. Add the populated record into your
 
 **Step 3 — DocGen: Create Signature Request.**
 
-| Input             | Value                                         |
-| ----------------- | --------------------------------------------- |
-| Template ID       | `{!$Label.MasterServicesAgreementTemplateId}` |
-| Related Record ID | `{!$Record.Id}`                               |
-| Signers           | `{!signers}`                                  |
-| Signing Order     | `Sequential`                                  |
+| Input               | Value                                                                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Template API Name   | `MSA_Agreement` _(v3.28+ — see note below)_                                                                                                           |
+| Related Record ID   | `{!$Record.Id}`                                                                                                                                       |
+| Signers             | `{!signers}`                                                                                                                                          |
+| Signing Order       | `Sequential`                                                                                                                                          |
+| Send Branded Emails | leave blank / `{!$GlobalConstant.True}` to let DocGen email signers; `{!$GlobalConstant.False}` to send your own emails using the `signerUrls` output |
+
+> **Template API Name (v3.28+).** Set the **API Name** field on the template (Command Hub → template editor), then pass it here instead of a record Id — it survives sandbox→production deploys, so no Custom Label or Get Records is needed. `Template ID` still works and takes precedence when both are set.
+
+> **Send Branded Emails (fixed in v3.28).** Explicitly setting `False` now truly suppresses DocGen's invitation emails — the request and signer URLs are still created for your Flow to deliver its own message (pair it with the Email Templates system or your own send). Left blank, DocGen sends as before. Note that **PIN verification emails still require an Org-Wide Email Address** in DocGen settings even when you send your own invites.
 
 **Outputs:**
 
@@ -2588,7 +2613,7 @@ Every action returns:
 
 Always add a Decision element after the action that branches on `success`. The most common failures:
 
-- **Template Id is wrong.** Store template Ids in Custom Labels (`Setup → Custom Labels`) and reference them from Flow as `{!$Label.YourLabelName}` — easier to swap and harder to typo.
+- **Template Id is wrong.** Prefer the **Template API Name** input (v3.28+): set the API Name field on the template and pass that literal — it's identical in every environment, so nothing breaks on deploy. On older versions, store template Ids in Custom Labels (`Setup → Custom Labels`) and reference them as `{!$Label.YourLabelName}`.
 - **Record Id is null.** A scheduled trigger fired but the criteria returned nothing. Add an entry condition.
 - **Locked output format conflicts with the requested override.** Either unlock the template or stop overriding the format in the Flow.
 - **Heap limit exceeded** on a sync action. Switch to **Generate Document (Auto Giant Query)** so the engine routes to async automatically.
