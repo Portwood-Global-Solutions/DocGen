@@ -9672,6 +9672,90 @@ private class DocGenMiscTests {
         System.assertEquals(1, activeStillLinked, 'Active version image link must be preserved for rendering.');
     }
 
+    @IsTest
+    static void testStaleTemplateKeyedLwcImageLinksArePruned() {
+        // #202: the LWC zip-upload flow (saveHtmlTemplateImage) titles images
+        // docgen_html_img_<templateId>_<epochMillis>_<name> — template-keyed, new
+        // CVs on every body re-upload, and typically a SINGLE version row. The
+        // v3.26 prune matched only version-keyed titles, so these links piled up
+        // on the record forever. A no-longer-referenced template-keyed image link
+        // must be pruned; the currently-referenced one must survive.
+        Account acc = new Account(Name = 'Stale LWC Image Link Prune');
+        insert acc;
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Stale LWC Image Link Prune',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Query_Config__c = 'Name'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        // One version row for the whole test — the common HTML-template shape.
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Type__c = 'HTML',
+            Base_Object_API__c = 'Account',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        // Upload 1's image, referenced and linked by a first generation.
+        ContentVersion imgOld = new ContentVersion(
+            Title = 'docgen_html_img_' + tpl.Id + '_1000000000001_logo.png',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('PNG1')
+        );
+        insert imgOld;
+        String html1 =
+            '<html><body><img src="/sfc/servlet.shepherd/version/download/' +
+            imgOld.Id +
+            '"/></body></html>';
+        DocGenService.ensureTemplateAssetImageAccessForPdf(tpl.Id, acc.Id, html1);
+        System.assertEquals(
+            1,
+            [
+                SELECT COUNT()
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :acc.Id AND ContentDocument.Title LIKE 'docgen_html_img_%'
+            ],
+            'Upload-1 image should be linked after the first generation.'
+        );
+
+        // Body re-upload mints a new timestamped CV; the body now references it.
+        ContentVersion imgNew = new ContentVersion(
+            Title = 'docgen_html_img_' + tpl.Id + '_1000000000002_logo.png',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('PNG2')
+        );
+        insert imgNew;
+        String html2 =
+            '<html><body><img src="/sfc/servlet.shepherd/version/download/' +
+            imgNew.Id +
+            '"/></body></html>';
+
+        Test.startTest();
+        DocGenService.ensureTemplateAssetImageAccessForPdf(tpl.Id, acc.Id, html2);
+        Test.stopTest();
+
+        // Net: still 1 link (new referenced image), not 2 — the stale upload-1
+        // link is pruned even though it can't be matched to any version row.
+        List<ContentDocumentLink> remaining = [
+            SELECT ContentDocumentId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :acc.Id AND ContentDocument.Title LIKE 'docgen_html_img_%'
+        ];
+        System.assertEquals(1, remaining.size(), 'Stale template-keyed LWC image link must be pruned (#202).');
+        Id newDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :imgNew.Id].ContentDocumentId;
+        System.assertEquals(
+            newDocId,
+            remaining[0].ContentDocumentId,
+            'The surviving link must be the currently-referenced image, not the stale one.'
+        );
+    }
+
     private static void assertGiantLauncherUsesInternalLoader(String body, String className) {
         Integer idx = body.indexOf('docgen_tmpl_xml_');
         System.assert(idx >= 0, className + ' should reference pre-decomposed template XML.');

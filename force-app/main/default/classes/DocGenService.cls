@@ -2314,6 +2314,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             }
         }
         if (assetDocIds.isEmpty()) {
+            // Body no longer references any template-owned images — still prune
+            // links earlier generations left behind.
+            pruneStaleTemplateImageLinks(templateId, recordId, versionId, assetDocIds);
             return;
         }
 
@@ -2352,15 +2355,25 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
     /**
      * Removes orphaned template-image ContentDocumentLinks that earlier
-     * generations attached to this record for OLD (non-active) versions of this
-     * template. `ensureTemplateAssetImageAccessForPdf` links the active version's
-     * embedded images to the record so Blob.toPdf can read them, but every
-     * template re-save mints a new version with freshly-decomposed image CVs —
-     * the prior version's links stay behind and pile up in the record's Files
-     * (the "hundreds of images on the record" report). We never touch the active
-     * version's links (`keepDocIds`), so rendering is unaffected; we only drop
-     * links whose backing CV title is a DocGen template image (`docgen_html_img_`
-     * / `docgen_tmpl_img_`) belonging to a DIFFERENT version of THIS template.
+     * generations attached to this record. `ensureTemplateAssetImageAccessForPdf`
+     * links the body's referenced images to the record so Blob.toPdf can read
+     * them, but stale links pile up in the record's Files (the "hundreds of
+     * images on the record" report) via two naming schemes:
+     *
+     *   1. Version-keyed (`docgen_(html|tmpl)_img_<versionId>_<name>`, server-side
+     *      decomposition): every template re-save mints a new version with fresh
+     *      image CVs; links for OLD versions of THIS template are stale.
+     *   2. Template-keyed (`docgen_html_img_<templateId>_<epochMillis>_<name>`,
+     *      DocGenController.saveHtmlTemplateImage — the LWC zip-upload flow):
+     *      every body re-upload mints new timestamped CVs regardless of version
+     *      rows, so staleness can't be determined from version membership at all.
+     *      Any link with THIS template's id in the title that the current body no
+     *      longer references is stale. (#202 — v3.26 only handled scheme 1, so
+     *      LWC-uploaded images were never pruned.)
+     *
+     * Links whose docs the current body references (`keepDocIds`) are never
+     * touched, so rendering is unaffected; other templates' images and
+     * user-attached files never match either scheme's title scope.
      */
     private static void pruneStaleTemplateImageLinks(
         Id templateId,
@@ -2378,9 +2391,10 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             WITH SYSTEM_MODE
         ];
         Set<Id> templateVersionIds = new Map<Id, DocGen_Template_Version__c>(templateVersions).keySet();
-        if (templateVersionIds.size() <= 1) {
-            return; // only the active version exists — nothing stale to prune
-        }
+
+        // 15-char id prefix matches both 15- and 18-char stored title forms, and
+        // cannot collide with another record's 18-char id.
+        String templateKeyedPrefix = 'docgen_html_img_' + String.valueOf(templateId).substring(0, 15);
 
         /* code-analyzer-suppress ApexFlsViolation */
         List<ContentDocumentLink> recordImgLinks = [
@@ -2396,12 +2410,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         List<ContentDocumentLink> staleLinks = new List<ContentDocumentLink>();
         for (ContentDocumentLink link : recordImgLinks) {
             if (keepDocIds.contains(link.ContentDocumentId)) {
-                continue; // active version's image — required for rendering
+                continue; // referenced by the body being rendered — required
             }
-            // Title shape: docgen_(html|tmpl)_img_<versionId>_<...>
-            List<String> parts = (link.ContentDocument.Title == null)
-                ? new List<String>()
-                : link.ContentDocument.Title.split('_');
+            String title = link.ContentDocument.Title == null ? '' : link.ContentDocument.Title;
+            // Scheme 2: LWC-uploaded image of THIS template, no longer referenced.
+            if (title.startsWith(templateKeyedPrefix)) {
+                staleLinks.add(link);
+                continue;
+            }
+            // Scheme 1 — title shape: docgen_(html|tmpl)_img_<versionId>_<...>
+            List<String> parts = title.split('_');
             if (parts.size() < 5) {
                 continue;
             }
