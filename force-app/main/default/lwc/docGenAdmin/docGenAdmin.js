@@ -133,6 +133,11 @@ const F = {
     // #verification — template-level defaults
     SignerVerification: SIGNER_VERIFICATION_FIELD.fieldApiName,
     PrefillSignerEmail: PREFILL_SIGNER_EMAIL_FIELD.fieldApiName,
+    // PHD-9 — stable developer key for Flow lookups; namespace resolved from an
+    // already-imported field (same pattern as FormFieldsConfig).
+    ApiName:
+        QUERY_CONFIG_FIELD.fieldApiName.slice(0, QUERY_CONFIG_FIELD.fieldApiName.length - 'Query_Config__c'.length) +
+        'API_Name__c',
     // #208 — per-template default {Message} for signature emails; namespace
     // resolved from an already-imported field (same pattern as FormFieldsConfig).
     DefaultEmailMessage:
@@ -308,6 +313,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     editTemplateLockOutputFormat = false;
     // #verification — template-level defaults (tri-state: Inherit / Required|Off / Yes|No)
     @track editTemplateSignerVerification = 'Inherit';
+    // PHD-9 — stable developer key for Flow lookups
+    @track editTemplateApiName = '';
     // #208 — per-template default {Message} for signature emails
     @track editTemplateDefaultEmailMessage = '';
     @track editTemplatePrefillSignerEmail = 'Inherit';
@@ -2547,6 +2554,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.editTemplateSignerVerification = event.detail.value;
     }
 
+    handleApiNameChange(event) {
+        this.editTemplateApiName = (event.detail.value || '').trim();
+    }
+
     handleDefaultEmailMessageChange(event) {
         this.editTemplateDefaultEmailMessage = event.detail.value || '';
     }
@@ -2852,6 +2863,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.editTemplateLockOutputFormat = row[F.LockOutputFormat] || false;
             this.editTemplateSignerVerification = row[F.SignerVerification] || 'Inherit';
             this.editTemplatePrefillSignerEmail = row[F.PrefillSignerEmail] || 'Inherit';
+            this.editTemplateApiName = row[F.ApiName] || '';
             this.editTemplateDefaultEmailMessage = row[F.DefaultEmailMessage] || '';
             this.editTemplateSpecificRecordIds = row[F.SpecificRecordIds];
             this.editTemplateRequiredPermissionSets = row[F.RequiredPermSets];
@@ -3253,6 +3265,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Custom_Margins__c: this.editTemplateCustomMargins,
             Signer_Verification__c: this.editTemplateSignerVerification,
             Prefill_Signer_Email__c: this.editTemplatePrefillSignerEmail,
+            API_Name__c: this.editTemplateApiName,
             Default_Email_Message__c: this.editTemplateDefaultEmailMessage
         };
         this.editTemplateQuery = fields['Query_Config__c'];
@@ -3301,6 +3314,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             Custom_Margins__c: this.editTemplateCustomMargins,
             Signer_Verification__c: this.editTemplateSignerVerification,
             Prefill_Signer_Email__c: this.editTemplatePrefillSignerEmail,
+            API_Name__c: this.editTemplateApiName,
             Default_Email_Message__c: this.editTemplateDefaultEmailMessage
         };
         this.editTemplateQuery = fields['Query_Config__c'];

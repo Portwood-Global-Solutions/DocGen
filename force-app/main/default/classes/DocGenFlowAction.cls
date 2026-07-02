@@ -5,8 +5,17 @@
  */
 global with sharing class DocGenFlowAction { // NOPMD AvoidGlobalModifier — global required for @InvocableMethod visibility in subscriber orgs
     global class Request {
-        @InvocableVariable(label='Template ID' required=true description='The DocGen Template record ID')
+        @InvocableVariable(
+            label='Template ID'
+            description='The DocGen Template record ID. Provide this OR Template API Name.'
+        )
         global Id templateId;
+
+        @InvocableVariable(
+            label='Template API Name'
+            description='The template\'s API Name field — a stable key that survives sandbox-to-production deploys, unlike a record Id. Provide this OR Template ID.'
+        )
+        global String templateApiName;
 
         @InvocableVariable(
             label='Record ID'
@@ -68,6 +77,13 @@ global with sharing class DocGenFlowAction { // NOPMD AvoidGlobalModifier — gl
             Request req = requests[i];
             Response res = new Response();
             try {
+                // PHD-9 — allow addressing the template by its stable API Name.
+                if (req.templateId == null) {
+                    req.templateId = DocGenService.templateIdByApiName(req.templateApiName);
+                }
+                if (req.templateId == null) {
+                    throw new DocGenException('Provide Template ID or Template API Name.');
+                }
                 Boolean useDataMap = String.isNotBlank(req.jsonData);
                 if (!useDataMap && req.recordId == null) {
                     throw new DocGenException('Either Record ID or JSON Data must be supplied.');

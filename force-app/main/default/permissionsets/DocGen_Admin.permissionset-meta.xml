@@ -418,6 +418,11 @@
          documented workaround. -->
     <fieldPermissions>
         <editable>true</editable>
+        <field>DocGen_Template__c.API_Name__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Template__c.Category__c</field>
         <readable>true</readable>
     </fieldPermissions>
