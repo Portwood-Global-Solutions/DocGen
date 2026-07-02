@@ -1222,6 +1222,15 @@
                                         field-level-help="When verification is on, auto-send the code to the signer's known email and skip the 'type your email' step. Inherit uses the org default."
                                         class="slds-var-m-top_small"
                                     ></lightning-combobox>
+                                    <!-- #208 — per-template default email message -->
+                                    <lightning-textarea
+                                        label="Default Email Message (e-sign)"
+                                        value={editTemplateDefaultEmailMessage}
+                                        onchange={handleDefaultEmailMessageChange}
+                                        max-length="4000"
+                                        field-level-help="Default text for the {Message} token in signature request emails sent from this template. Pre-filled for the sender; a message typed at send time always wins. Blank uses the generic default."
+                                        class="slds-var-m-top_small"
+                                    ></lightning-textarea>
                                 </div>
                             </div>
                             <div class="slds-var-p-horizontal_small">

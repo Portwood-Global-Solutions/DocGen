@@ -247,6 +247,54 @@ private class DocGenEmailTemplateTest {
         );
     }
 
+    // ---- #208: per-template default message resolution ----
+    @IsTest
+    static void templateDefaultMessage_resolvesFromRequestTemplate() {
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Quote Template',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Default_Email_Message__c = 'Please see the attached proposal — reply with any questions.'
+        );
+        insert tpl;
+        DocGen_Signature_Request__c withTpl = new DocGen_Signature_Request__c(Status__c = 'Sent', Template__c = tpl.Id);
+        DocGen_Signature_Request__c noTpl = new DocGen_Signature_Request__c(Status__c = 'Sent');
+        insert new List<DocGen_Signature_Request__c>{ withTpl, noTpl };
+
+        Test.startTest();
+        String resolved = DocGenSignatureEmailService.templateDefaultMessage(withTpl.Id);
+        String withoutTemplate = DocGenSignatureEmailService.templateDefaultMessage(noTpl.Id);
+        String nullRequest = DocGenSignatureEmailService.templateDefaultMessage(null);
+        Test.stopTest();
+
+        System.assertEquals(
+            'Please see the attached proposal — reply with any questions.',
+            resolved,
+            'template default must resolve through the request lookup'
+        );
+        System.assertEquals(null, withoutTemplate, 'doc-based request (no template) yields null');
+        System.assertEquals(null, nullRequest, 'null requestId yields null');
+    }
+
+    // ---- #208: blank template default falls through to the type default ----
+    @IsTest
+    static void templateDefaultMessage_blankFieldYieldsNull() {
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'No Default Template',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        insert tpl;
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(Status__c = 'Sent', Template__c = tpl.Id);
+        insert req;
+        System.assert(
+            String.isBlank(DocGenSignatureEmailService.templateDefaultMessage(req.Id)),
+            'blank field must not shadow the generic type default'
+        );
+    }
+
     // ---- Service: Full HTML mode sends the admin's document with no chrome ----
     @IsTest
     static void fullHtmlMode_skipsChrome() {
