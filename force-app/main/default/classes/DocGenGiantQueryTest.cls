@@ -89,7 +89,7 @@ private class DocGenGiantQueryTest {
     static void testScoutChildCounts() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [
                 SELECT Query_Config__c
                 FROM DocGen_Template__c
@@ -214,7 +214,7 @@ private class DocGenGiantQueryTest {
     static void testGiantQueryBatchExecution() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [
                 SELECT Id, Output_Format__c
                 FROM DocGen_Template__c
@@ -281,7 +281,7 @@ private class DocGenGiantQueryTest {
     static void testGiantQuerySnapshotChromePreserved() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
             DocGen_Template_Version__c ver = [
                 SELECT Id
@@ -359,7 +359,7 @@ private class DocGenGiantQueryTest {
     static void testGiantQueryAuthoredWidthSingleColgroup() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
             DocGen_Template_Version__c ver = [
                 SELECT Id
@@ -435,7 +435,7 @@ private class DocGenGiantQueryTest {
     static void testGiantQueryRepeatHeaderCaptured() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
             DocGen_Template_Version__c ver = [
                 SELECT Id
@@ -507,7 +507,7 @@ private class DocGenGiantQueryTest {
     static void testGiantQueryRepeatHeaderWithLoopRowInsideThead() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
             DocGen_Template_Version__c ver = [
                 SELECT Id
@@ -574,7 +574,7 @@ private class DocGenGiantQueryTest {
     static void testStitchJobExecution() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
 
             // Create a Job record
@@ -631,7 +631,7 @@ private class DocGenGiantQueryTest {
     static void testStitchJobHonorsDocumentTitleFormat() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
             tpl.Document_Title_Format__c = 'XXXX-premium-{Name}';
             Database.update(tpl, AccessLevel.SYSTEM_MODE);
@@ -703,7 +703,7 @@ private class DocGenGiantQueryTest {
     static void testGenerateDocumentGiantQueryFallthrough() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
 
             Test.startTest();
@@ -790,7 +790,7 @@ private class DocGenGiantQueryTest {
     static void testGetSortedChildIds() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
 
             Test.startTest();
             List<Id> sortedIds = DocGenController.getSortedChildIds(
@@ -810,7 +810,7 @@ private class DocGenGiantQueryTest {
     static void testGetSortedChildIdsWithWhere() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             Test.startTest();
             List<Id> sortedIds = DocGenController.getSortedChildIds(
                 'Contact',
@@ -829,7 +829,7 @@ private class DocGenGiantQueryTest {
     static void testGiantQueryBatchWithWhere() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
             DocGen_Job__c job = new DocGen_Job__c(
                 Status__c = 'Draft',
@@ -948,7 +948,7 @@ private class DocGenGiantQueryTest {
     static void testV1FlatConfigGiantQueryScout() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             String v1Config = 'Name, (SELECT FirstName, LastName FROM Contacts ORDER BY LastName ASC)';
 
             Test.startTest();
@@ -1000,7 +1000,7 @@ private class DocGenGiantQueryTest {
     static void testGiantQueryBatchWithOrderBy() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [
                 SELECT Id, Output_Format__c
                 FROM DocGen_Template__c
@@ -1343,7 +1343,7 @@ private class DocGenGiantQueryTest {
     static void testGiantAggregateCountTag() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = tpl.Id,
@@ -1368,7 +1368,7 @@ private class DocGenGiantQueryTest {
     static void testGiantAggregateSumTag() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
 
             // Set numeric field on contacts so SUM has something to aggregate
@@ -1437,7 +1437,7 @@ private class DocGenGiantQueryTest {
         // assembler's constructor directly — no config re-parsing for the happy path.
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
 
             // V1 flat config (legacy format — does NOT start with '{')
@@ -1487,7 +1487,7 @@ private class DocGenGiantQueryTest {
         // as rendered columns in the query config.
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
 
             // Template config declares Contact's FirstName only as a rendered column —
@@ -1573,7 +1573,7 @@ private class DocGenGiantQueryTest {
         // format suffixes, so these rendered as unformatted raw values.
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             acc.AnnualRevenue = 1234567;
             update acc;
 
@@ -1658,7 +1658,7 @@ private class DocGenGiantQueryTest {
     static void testGiantAggregateNonMatchingRelationshipIgnored() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {
-            Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+            Account acc = TestDataFactory.accountByName('Giant Query Test Account');
             DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = tpl.Id,
@@ -1750,7 +1750,7 @@ private class DocGenGiantQueryTest {
     // helper directly (cheap, no Blob.toPdf) to lock the contract.
     @IsTest
     static void computeDocTitleHonorsDocumentTitleFormat() {
-        Account acc = [SELECT Id, Name FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+        Account acc = TestDataFactory.accountByName('Giant Query Test Account');
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
         tpl.Document_Title_Format__c = 'XXXX-premium-{Name}';
         Database.update(tpl, AccessLevel.SYSTEM_MODE);
@@ -1767,7 +1767,7 @@ private class DocGenGiantQueryTest {
 
     @IsTest
     static void computeDocTitleReturnsNullWhenFormatBlank() {
-        Account acc = [SELECT Id FROM Account WHERE Name = 'Giant Query Test Account' LIMIT 1];
+        Account acc = TestDataFactory.accountByName('Giant Query Test Account');
         DocGen_Template__c tpl = [SELECT Id FROM DocGen_Template__c WHERE Name = 'Giant Query Test' LIMIT 1];
         tpl.Document_Title_Format__c = null;
         Database.update(tpl, AccessLevel.SYSTEM_MODE);

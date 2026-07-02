@@ -116,8 +116,34 @@ public class TestDataFactory {
     // Helper getters — retrieve standard test data by known names
     // =========================================================================
 
+    /**
+     * #200 — Shield-safe Account lookup. Shield-encrypted standard fields
+     * (Account.Name, Opportunity.Name) cannot appear in a SOQL WHERE clause,
+     * and every packaged class is recompiled at install time — a `WHERE Name =`
+     * filter here failed the whole package install in a Shield org. Query
+     * without the filter and match in Apex instead (test data is tiny).
+     */
+    public static Account accountByName(String name) {
+        for (Account a : [SELECT Id, Name FROM Account ORDER BY CreatedDate DESC LIMIT 200]) {
+            if (a.Name == name) {
+                return a;
+            }
+        }
+        throw new DocGenException('Test account not found: ' + name);
+    }
+
+    /** #200 — Shield-safe Opportunity lookup (see accountByName). */
+    public static Opportunity opportunityByName(String name) {
+        for (Opportunity o : [SELECT Id, Name FROM Opportunity ORDER BY CreatedDate DESC LIMIT 200]) {
+            if (o.Name == name) {
+                return o;
+            }
+        }
+        throw new DocGenException('Test opportunity not found: ' + name);
+    }
+
     public static Account getTestAccount() {
-        return [SELECT Id, Name FROM Account WHERE Name = 'DocGen Test Account' LIMIT 1];
+        return accountByName('DocGen Test Account');
     }
 
     public static DocGen_Template__c getTestTemplate() {
@@ -141,15 +167,17 @@ public class TestDataFactory {
     }
 
     public static List<Contact> getTestContacts() {
+        // #200 — filter on the AccountId lookup (always filterable), not the
+        // Shield-encryptable Account.Name.
         return [
             SELECT Id, FirstName, LastName, Email, AccountId
             FROM Contact
-            WHERE Account.Name = 'DocGen Test Account'
+            WHERE AccountId = :getTestAccount().Id
         ];
     }
 
     public static Opportunity getTestOpportunity() {
-        return [SELECT Id, Name FROM Opportunity WHERE Name = 'DocGen Test Opp' LIMIT 1];
+        return opportunityByName('DocGen Test Opp');
     }
 
     public static DocGen_Template_Version__c getTestTemplateVersion() {
