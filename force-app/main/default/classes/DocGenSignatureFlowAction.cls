@@ -125,7 +125,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         @InvocableVariable(
             label='Send Branded Emails'
-            description='Set to TRUE to have DocGen send branded invitation emails automatically (requires Org-Wide Email Address in DocGen settings). Set to FALSE (default) if your Flow sends its own emails using the Signer URLs output.'
+            description='Set to FALSE if your Flow sends its own emails using the Signer URLs output — DocGen will create the request and URLs without emailing signers. Leave blank or TRUE (default) to have DocGen send branded invitation emails automatically (requires an Org-Wide Email Address in DocGen settings).'
         )
         global Boolean sendEmails;
 
@@ -275,7 +275,8 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
                 req.emailMessage, // #193 — optional send-time custom message
                 req.emailSubject, // #193 — optional send-time custom subject
                 req.requireEmailVerification, // #verification — null = inherit template/org
-                req.prefillSignerEmail
+                req.prefillSignerEmail,
+                req.sendEmails // #195 — false suppresses DocGen's invites (Flow sends its own)
             );
 
             // Find the request ID
