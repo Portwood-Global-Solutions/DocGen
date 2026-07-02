@@ -27,7 +27,9 @@ private class DocGenSignatureFlowActionTest {
     @isTest
     static void testGenerate_defaultSilent() {
         DocGenSignatureFlowAction.Request req = buildRequest();
-        // sendEmails left null — should default to false
+        // sendEmails left null — sends like every pre-#195 release (so existing
+        // subscriber Flows keep emailing signers); in this OWA-less test context
+        // the send path bails before Messaging.sendEmail, so invocations stay 0.
 
         Integer emailsBefore = Limits.getEmailInvocations();
 
@@ -89,6 +91,41 @@ private class DocGenSignatureFlowActionTest {
         System.assertEquals(1, results.size());
         System.assertNotEquals(null, results[0].signatureRequestId);
         System.assertEquals(2, results[0].signerUrls.size());
+    }
+
+    // =========================================================================
+    // #195 — explicit sendEmails = false suppresses the branded invites entirely
+    // =========================================================================
+
+    @isTest
+    static void testGenerate_sendEmailsFalse_suppressesInvites() {
+        DocGenSignatureFlowAction.Request req = buildRequest();
+        req.sendEmails = false;
+
+        Integer emailsBefore = Limits.getEmailInvocations();
+
+        Test.startTest();
+        List<DocGenSignatureFlowAction.Result> results = DocGenSignatureFlowAction.generate(
+            new List<DocGenSignatureFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(Limits.getEmailInvocations(), emailsBefore, 'sendEmails=false must not send');
+        System.assertEquals(1, results.size());
+        DocGenSignatureFlowAction.Result r = results[0];
+        System.assertNotEquals(null, r.signatureRequestId, 'request still created');
+        System.assertEquals(2, r.signerUrls.size(), 'signer URLs still returned for the Flow to send itself');
+
+        // The email block must be skipped ENTIRELY — not just fail on a missing
+        // OWA. A send attempt would write Email_Status__c (either 'Sent' or the
+        // no-OWA error); suppression leaves it untouched.
+        DocGen_Signature_Request__c persisted = [
+            SELECT Email_Status__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :r.signatureRequestId
+            LIMIT 1
+        ];
+        System.assertEquals(null, persisted.Email_Status__c, 'no send attempt when sendEmails=false');
     }
 
     // =========================================================================

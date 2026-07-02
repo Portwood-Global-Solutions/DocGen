@@ -2331,7 +2331,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 'Custom_Margins__c',
                 'Signer_Verification__c',
                 'Prefill_Signer_Email__c',
-                'API_Name__c'
+                'API_Name__c',
+                'Default_Email_Message__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation */
@@ -2364,6 +2365,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Signer_Verification__c,
                 Prefill_Signer_Email__c,
                 API_Name__c,
+                Default_Email_Message__c,
                 (SELECT ContentDocumentId FROM ContentDocumentLinks ORDER BY ContentDocument.CreatedDate DESC LIMIT 1)
             FROM DocGen_Template__c
             WITH SYSTEM_MODE
@@ -2461,6 +2463,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (fields.containsKey('API_Name__c')) {
                 template.API_Name__c = (String) fields.get('API_Name__c');
             }
+            // #208 — per-template default {Message} for signature emails
+            if (fields.containsKey('Default_Email_Message__c')) {
+                template.Default_Email_Message__c = (String) fields.get('Default_Email_Message__c');
+            }
             // #85 — Active flag. Default true on new records; only update when the
             // caller explicitly sends the field (so legacy save paths that omit it
             // don't accidentally toggle an existing template's active state).
@@ -2527,6 +2533,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     'Signer_Verification__c',
                     'Prefill_Signer_Email__c',
                     'API_Name__c',
+                    'Default_Email_Message__c',
                     'Is_Active__c',
                     'Is_Default__c'
                 }

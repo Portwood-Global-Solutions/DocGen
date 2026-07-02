@@ -77,6 +77,32 @@ public with sharing class DocGenSignatureEmailService {
         sendRequestLikeEmails(signers, documentTitle, requestId, null, DocGenEmailTemplateService.TYPE_REMINDER, null);
     }
 
+    /**
+     * #208 — the request's document template's Default_Email_Message__c, or null.
+     * FLS-guard + SYSTEM_MODE (internal config read; USER_MODE on a new packaged
+     * field breaks the namespaced build and guest senders lack template read).
+     */
+    @TestVisible
+    private static String templateDefaultMessage(Id requestId) {
+        if (requestId == null) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Default_Email_Message__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Signature_Request__c> reqs = [
+            SELECT Template__c, Template__r.Default_Email_Message__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (reqs.isEmpty() || reqs[0].Template__c == null) {
+            return null;
+        }
+        return reqs[0].Template__r.Default_Email_Message__c;
+    }
+
     private static void sendRequestLikeEmails(
         List<SignerEmail> signers,
         String documentTitle,
@@ -104,6 +130,15 @@ public with sharing class DocGenSignatureEmailService {
         }
 
         String defaultMessage = DocGenEmailTemplateService.defaultMessage(templateType);
+        // #208 — when the sender supplied no message, a Default_Email_Message__c on
+        // the request's document template beats the generic type default. A send-time
+        // override (handled inside render) still wins over both.
+        if (String.isBlank(messageOverride)) {
+            String tplDefault = templateDefaultMessage(requestId);
+            if (String.isNotBlank(tplDefault)) {
+                defaultMessage = tplDefault;
+            }
+        }
 
         List<Messaging.SingleEmailMessage> emails = new List<Messaging.SingleEmailMessage>();
         for (SignerEmail signer : signers) {

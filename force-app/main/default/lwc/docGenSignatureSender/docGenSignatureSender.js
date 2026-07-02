@@ -74,7 +74,9 @@ export default class DocGenSignatureSender extends LightningElement {
         if (data) {
             this.docGenTemplateOptions = data.map((t) => ({
                 label: t.Name,
-                value: t.Id
+                value: t.Id,
+                // #208 — namespace-aware read: prefixed in subscriber orgs, bare in dev.
+                defaultMessage: t.Default_Email_Message__c || t.portwoodglobal__Default_Email_Message__c || ''
             }));
         } else if (error) {
             this.docGenTemplateOptions = [];
@@ -246,6 +248,9 @@ export default class DocGenSignatureSender extends LightningElement {
     // (isSingleTemplate getter is defined above, shared with the #verification controls.)
     handleEmailMessageChange(event) {
         this.emailMessage = event.detail.value || '';
+        // #208 — once the sender types (or clears) the message, stop auto-filling
+        // template defaults for this send.
+        this._messageTouched = true;
     }
 
     handleEmailSubjectChange(event) {
@@ -281,6 +286,18 @@ export default class DocGenSignatureSender extends LightningElement {
         try {
             const opt = this.docGenTemplateOptions.find((t) => t.value === templateId);
             if (!opt) return;
+
+            // #208 — pre-fill the send-time message with the template's default so
+            // the sender sees exactly what will go out. Only when they haven't
+            // typed their own text, and only for the first selected template.
+            if (
+                !this._messageTouched &&
+                !this.emailMessage &&
+                this.selectedTemplates.length === 0 &&
+                opt.defaultMessage
+            ) {
+                this.emailMessage = opt.defaultMessage;
+            }
 
             // Scan template for placements
             let placements = [];
@@ -330,6 +347,11 @@ export default class DocGenSignatureSender extends LightningElement {
         const idx = parseInt(event.currentTarget.dataset.index, 10);
         this.selectedTemplates = this.selectedTemplates.filter((_, i) => i !== idx);
         this._refreshAggregatedPlacements();
+        // #208 — an auto-filled (never-touched) message belongs to the removed
+        // template; clear it so the next selection can pre-fill its own default.
+        if (!this._messageTouched && this.selectedTemplates.length === 0) {
+            this.emailMessage = '';
+        }
     }
 
     handleMoveTemplateUp(event) {
