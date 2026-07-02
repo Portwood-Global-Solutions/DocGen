@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Default_Email_Message__c</fullName>
+    <description
+    >Default prose for the {Message} token in signature/notification emails sent for documents generated from this template. Pre-filled for the sender and used by Flow sends when no send-time message is supplied; a send-time message always wins. Blank = the email template type's generic default.</description>
+    <label>Default Email Message</label>
+    <length>4000</length>
+    <type>LongTextArea</type>
+    <visibleLines>4</visibleLines>
+</CustomField>
