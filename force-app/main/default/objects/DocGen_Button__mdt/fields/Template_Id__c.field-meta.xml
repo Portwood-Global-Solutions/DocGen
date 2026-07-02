@@ -3,9 +3,9 @@
     <fullName>Template_Id__c</fullName>
     <label>Template Id</label>
     <description
-    >Record Id of the DocGen Template (DocGen_Template__c) to generate. Org-specific; set per subscriber org.</description>
+    >Record Id of the DocGen Template (DocGen_Template__c) to generate. Org-specific — prefer Template API Name for configs that deploy between environments. Provide this OR Template API Name.</description>
     <type>Text</type>
     <length>18</length>
-    <required>true</required>
+    <required>false</required>
     <unique>false</unique>
 </CustomField>

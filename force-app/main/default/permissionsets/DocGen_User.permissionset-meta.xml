@@ -21,6 +21,10 @@
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>
+        <apexClass>DocGenButtonController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
         <apexClass>DocGenBulkController</apexClass>
         <enabled>true</enabled>
     </classAccesses>
@@ -124,6 +128,10 @@
         <apexClass>DocGenSignatureFinalizer</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <customMetadataTypeAccesses>
+        <name>DocGen_Button__mdt</name>
+        <enabled>true</enabled>
+    </customMetadataTypeAccesses>
     <description>Standard User access to Document Generation features.</description>
     <fieldPermissions>
         <editable>false</editable>

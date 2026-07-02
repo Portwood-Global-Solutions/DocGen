@@ -2080,8 +2080,8 @@ For the "this object always generates this one template" case, add the **DocGen 
 
 **Setup (three steps):**
 
-1. **Configure a button** — Setup → Custom Metadata Types → **DocGen Button** → Manage Records → New. Set **Object API Name** (e.g. `Opportunity`), **Template Id**, and optionally **Save To Record**, **Output Format Override**, **Document Title**, and **Sort Order**. Only Active records are offered. (Put the optional fields on the CMDT layout first — only required fields auto-place.)
-2. **Grant access** — assign the **DocGen Quick Action** permission set (Apex class access + config read), or merge its two grants into your existing DocGen permission sets.
+1. **Configure a button** — Setup → Custom Metadata Types → **DocGen Button** → Manage Records → New. Set **Object API Name** (e.g. `Opportunity`) and **Template API Name** (the template's API Name field — environment-stable, deploys cleanly) or **Template Id** (org-specific; takes precedence when both are set). Optionally **Save To Record**, **Output Format Override**, **Document Title**, and **Sort Order**. Only Active records are offered. (Put the fields on the CMDT layout first — non-required fields don't auto-place.)
+2. **Grant access** — the standard **DocGen User** / **DocGen Admin** permission sets already include the button (v3.28+). The standalone **DocGen Quick Action** permission set exists for granting the button on its own.
 3. **Place the action** — Object Manager → your object → Buttons, Links, and Actions → New Action → Lightning Web Component → `docGenButton`, then add it to the page layout's actions.
 
 When an object has one active configuration the click generates immediately; with several, a small picker appears. **Save To Record** additionally attaches the file to the record's Files.

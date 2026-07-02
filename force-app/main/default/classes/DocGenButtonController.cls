@@ -151,23 +151,30 @@ public with sharing class DocGenButtonController {
                     'No active DocGen Button configuration named "' + configDeveloperName + '".'
                 );
             }
-            if (String.isBlank(cfg.Template_Id__c)) {
+            if (String.isBlank(cfg.Template_Id__c) && String.isBlank(cfg.Template_API_Name__c)) {
                 throw new DocGenButtonException(
-                    'DocGen Button "' + configDeveloperName + '" has no Template Id configured.'
+                    'DocGen Button "' +
+                        configDeveloperName +
+                        '" has no template configured. Set Template Id or Template API Name.'
                 );
             }
 
             Id templateId;
-            try {
-                templateId = (Id) cfg.Template_Id__c;
-            } catch (Exception idEx) {
-                throw new DocGenButtonException(
-                    'DocGen Button "' +
-                        configDeveloperName +
-                        '" has an invalid Template Id (' +
-                        cfg.Template_Id__c +
-                        '). Set it to a DocGen Template record Id.'
-                );
+            if (String.isNotBlank(cfg.Template_Id__c)) {
+                try {
+                    templateId = (Id) cfg.Template_Id__c;
+                } catch (Exception idEx) {
+                    throw new DocGenButtonException(
+                        'DocGen Button "' +
+                            configDeveloperName +
+                            '" has an invalid Template Id (' +
+                            cfg.Template_Id__c +
+                            '). Set it to a DocGen Template record Id, or use Template API Name.'
+                    );
+                }
+            } else {
+                // Environment-stable key (PHD-9) — same value in sandbox and production.
+                templateId = DocGenService.templateIdByApiName(cfg.Template_API_Name__c);
             }
 
             GenRequest gReq = new GenRequest();
@@ -272,6 +279,7 @@ public with sharing class DocGenButtonController {
                 MasterLabel,
                 Object_API_Name__c,
                 Template_Id__c,
+                Template_API_Name__c,
                 Save_To_Record__c,
                 Output_Format_Override__c,
                 Document_Title__c,
@@ -300,6 +308,7 @@ public with sharing class DocGenButtonController {
                 MasterLabel,
                 Object_API_Name__c,
                 Template_Id__c,
+                Template_API_Name__c,
                 Save_To_Record__c,
                 Output_Format_Override__c,
                 Document_Title__c,

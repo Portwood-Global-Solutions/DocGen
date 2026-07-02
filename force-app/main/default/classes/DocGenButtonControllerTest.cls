@@ -142,7 +142,48 @@ private class DocGenButtonControllerTest {
         Test.stopTest();
 
         System.assertEquals(false, dto.success, 'Blank template id should fail');
-        System.assert(dto.errorMessage.contains('no Template Id'), 'Expected missing-template message');
+        System.assert(
+            dto.errorMessage.contains('Set Template Id or Template API Name'),
+            'Expected missing-template message: ' + dto.errorMessage
+        );
+    }
+
+    @IsTest
+    static void generate_templateApiName_resolvesTemplate() {
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Button Key Template',
+            Base_Object_API__c = 'User',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            API_Name__c = 'Button_Key'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        DocGenButtonController.generator = new MockGenerator();
+        DocGen_Button__mdt byKey = cfg('WO_PDF', OBJ, null, true);
+        byKey.Template_API_Name__c = 'Button_Key';
+        DocGenButtonController.configOverride = new List<DocGen_Button__mdt>{ byKey };
+
+        Test.startTest();
+        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(UserInfo.getUserId(), 'WO_PDF');
+        Test.stopTest();
+
+        System.assertEquals(true, dto.success, 'API-name-addressed config should generate: ' + dto.errorMessage);
+    }
+
+    @IsTest
+    static void generate_templateApiName_unknownKeyFails() {
+        DocGenButtonController.generator = new MockGenerator();
+        DocGen_Button__mdt byKey = cfg('WO_PDF', OBJ, null, true);
+        byKey.Template_API_Name__c = 'No_Such_Button_Key';
+        DocGenButtonController.configOverride = new List<DocGen_Button__mdt>{ byKey };
+
+        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(UserInfo.getUserId(), 'WO_PDF');
+        System.assertEquals(false, dto.success);
+        System.assert(
+            dto.errorMessage.contains('No_Such_Button_Key'),
+            'Error names the missing key: ' + dto.errorMessage
+        );
     }
 
     @IsTest

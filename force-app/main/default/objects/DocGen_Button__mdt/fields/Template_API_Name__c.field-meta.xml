@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Template_API_Name__c</fullName>
+    <label>Template API Name</label>
+    <description
+    >API Name of the DocGen Template to generate (the template's API Name field). Environment-stable alternative to Template Id — the same value works in sandbox and production, so button configs deploy cleanly. Used when Template Id is blank.</description>
+    <type>Text</type>
+    <length>80</length>
+    <required>false</required>
+    <unique>false</unique>
+</CustomField>
