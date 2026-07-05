@@ -264,7 +264,14 @@ Important notes while the feature is in testing:
 
 ### 5.1.1 API Name — a stable key for automation (v3.28+)
 
-Every template has an optional **API Name** (Command Hub → template editor) — a unique developer key like `Opp_Close_Summary`. Flows reference it via the **Template API Name** input on the DocGen actions instead of a record Id, so automations survive sandbox→production deploys with nothing to remap. Letters, numbers, and underscores recommended; must be unique when set; existing templates work fine with it blank.
+Every template has an optional **API Name** — a unique developer key like `Opp_Close_Summary`. Flows reference it via the **Template API Name** input on the DocGen actions instead of a record Id, so automations survive sandbox→production deploys with nothing to remap. Letters, numbers, and underscores; must start with a letter; must be unique when set; existing templates work fine with it blank.
+
+Where you'll see it (v3.29+):
+
+- **Create wizard** — the API Name auto-fills from the Template Name as you type (`Opp Close Summary` → `Opp_Close_Summary`). Edit it to take manual control, or clear it to re-sync with the name.
+- **Template editor → Settings tab** — shown right under the Template Name, in the Template section.
+- **Template record page** — on the DocGen Template layout, next to Name.
+- **Cloning** (§5.2.1) gives the copy its own unique API Name automatically; **Export/Import** (§5.2.2) carries the API Name across orgs and only drops it if a template in the target org already claims it.
 
 ### 5.2 Template versions
 
@@ -277,6 +284,28 @@ Each save creates a new `DocGen_Template_Version__c` record. Only the version ma
 **Version-pinned render config (v1.97+).** Editing a template's Output Format / Header HTML / Footer HTML / Document Title Format / Page Size / Page Orientation / Page Margins / Custom Margins used to silently rewrite the rendering of every previously-saved version, because the runner always read live template values. From v1.97 on, those eight fields are snapshotted onto the version at save time, and the render path overlays a non-null snapshot onto the template values. Practical effect: roll back to an older active version and you get the rendering that was authored at the time of that save, not whatever you've since changed the template to. Versions saved before v1.97 have no snapshot — those still fall back to the live template, so upgrading is non-breaking; the first re-save populates the snapshot.
 
 **Deleting old versions (v1.92+).** Heavy iteration accumulates versions fast — each save creates the version record plus 5–7 ContentVersions (the body file + pre-decomposed XML parts). DocGen Admin → click into the template → **Versions** tab now exposes a **Delete** button next to each non-active version. Confirm the dialog, and the version record _plus_ its body and pre-decomposed files are cascade-deleted in one transaction. The currently active version can't be deleted — activate a different version first if you need to remove the current one.
+
+### 5.2.1 Cloning a template (v3.29+)
+
+**Your Templates → row menu → Clone** copies everything in one click: the template record (all settings, query config, signer inputs, e-signature defaults), the active version and its file, inline images, the watermark, and saved queries. Image extraction and pre-decomposition re-run automatically on the copy, so it's immediately generation-ready.
+
+The copy is deliberately conservative:
+
+- Named "`<original> (Copy)`" and opened in the editor right away so you can rename it.
+- Starts **Inactive** and never **Default**, so it stays out of every picker until you flip it on.
+- Gets its own unique API Name derived from the new name (the original's key stays untouched).
+
+Use it to iterate safely on a production template — clone, edit the copy, verify with Generate Sample, then activate the copy and deactivate the original.
+
+### 5.2.2 Exporting & importing templates
+
+**Your Templates → row menu → Export** downloads a `.docgen.json` bundle containing the template settings, the active version's file, referenced inline-image assets, the watermark, and saved queries. **Import Template** (button above the list) recreates the whole thing in any org — shepherd image URLs are rewritten to the new org's files automatically, and image extraction/pre-decomposition re-run on arrival.
+
+Notes:
+
+- Only the **active** version travels; version history stays behind.
+- The API Name is preserved on import (that's the point of a stable key) unless a template in the target org already uses it, in which case it's left blank.
+- v3.29+ bundles include the newer fields (API Name, signer verification defaults, default e-sign email message, signer form-field config). Bundles exported from older versions still import fine — those fields just start blank.
 
 ### 5.3 Test record
 
@@ -294,7 +323,7 @@ Use this for compliance-sensitive documents where only one format is allowed (e.
 
 Restrict more narrowly which users see a template in their picker:
 
-- **`Required_Permission_Sets__c`** (comma-separated permission-set names): only users with _all_ of these permission sets see the template.
+- **`Required_Permission_Sets__c`** (comma-separated permission-set names): only users with _at least one_ of these permission sets see the template.
 - **`Specific_Record_Ids__c`** (comma-separated record IDs): only show the template for these specific records.
 - **`Record_Filter__c`** (SOQL `WHERE` clause — for example, `StageName = 'Negotiation/Review' AND Amount > 10000`): dynamically show/hide based on the record's field values.
 
@@ -302,7 +331,11 @@ These can be combined. All three must match for the template to appear.
 
 ### 5.6 Template sharing
 
-Template access uses **standard Salesforce sharing** — sharing rules, manual sharing, and role hierarchy. Field-level security is enforced on the merged data too. There's no custom sharing UI; if you want to restrict who _sees_ a template in the picker, use the visibility controls in §5.5 instead.
+**v3.29+: no sharing setup needed.** The **DocGen User** permission set now includes read-only _View All_ on templates, so every DocGen user can see all active templates in the picker without manual shares, public groups, or sharing rules. Who should see which template is controlled by the visibility features built for exactly that (§5.5): the **Active** flag, **Required Permission Sets**, **Specific Record Ids**, and **Record Filter**. Write access is unchanged — only admins (DocGen Admin) can create or edit templates, and field-level security is still enforced on the merged data.
+
+On older versions (≤3.28), template records default to Private sharing, so non-owner users saw an empty picker until an admin either shared the templates (manual share, public group, or sharing rule) or set Setup → Sharing Settings → _DocGen Template_ → Default Internal Access = **Public Read Only**. That workaround is no longer necessary after upgrading, but it's harmless to leave in place.
+
+> **If you were relying on record-level sharing to hide templates from specific users:** that no longer restricts the picker. Move those rules onto **Required Permission Sets** (§5.5) — it's deploy-safe, visible on the template itself, and enforced consistently across the runner, bulk runner, signature sender, and Flow.
 
 ### 5.7 HTML templates (Google Docs, Notion, any HTML source)
 
@@ -2756,9 +2789,11 @@ The package installs in the `portwoodglobal` namespace. From subscriber code:
 
 App Launcher → **DocGen**. The Command Hub is the single entry point for admins:
 
-- **My Templates** — create, edit, version, share.
+- **My Templates** — create, edit, version, clone, export/import.
 - **Bulk Generation** — mass-generate against a SOQL filter or saved query.
-- **Signatures** — configure email branding, the public Site URL, the OWA sender.
+- **Signatures** — the public Site URL, the OWA sender, reminders, signer-verification defaults, and the setup checklist (§13.2).
+- **Assets** — central image library; reference any asset from any template with `{%asset:<key>}` (§7.7.1).
+- **Email Templates** — customize and brand the 7 signature-flow emails (§10.14).
 - **Learning Center** — links straight to [portwood.dev/guide](https://portwood.dev/guide) so docs are always current.
 
 ### 13.2 Signature Settings
@@ -2769,9 +2804,15 @@ Covers:
 
 - Site URL configuration
 - OWA (Org-Wide Email Address) selection
-- Email branding (color, logo, subject, footer)
 - Reminder enable/disable + hour threshold
+- Signer verification org defaults — **Require Email Verification** and **Pre-fill Signer Email** (templates and individual sends can override; see §10.5)
 - Setup validation checklist (pass/fail for each prerequisite)
+
+Email branding (colors, logo, subject lines, body copy) lives in **Command Hub → Email Templates** (§10.14) as of v3.27 — it's no longer on this page.
+
+### 13.2.1 Error Logs
+
+The **DocGen Error Logs** tab (in the DocGen app's navigation) lists `DocGen_Error_Log__c` records — non-sensitive exception details captured automatically when generation, bulk jobs, or signature processing hit an error. Each log records the failing context so you can troubleshoot without asking users to reproduce. Start here (alongside the bulk job history in §9.6) whenever someone reports "it didn't work"; §15 covers the common fixes.
 
 ### 13.3 Blob.toPdf Release Update
 
@@ -2941,5 +2982,7 @@ Notes:
 - If it still fails after enabling the preference, confirm the site's guest user has the **DocGen_Guest_Signature** permission set assigned (see [§10 — Assigning the guest permission set](#assigning-the-guest-permission-set)) and that a verified Org-Wide Email Address exists.
 
 ### 15.10 Still stuck?
+
+Check the **DocGen Error Logs** tab first (§13.2.1) — most generation, bulk, and signature failures leave a log record with the failing context, which beats guessing.
 
 The web guide at [portwood.dev/guide](https://portwood.dev/guide) is always current with the latest release. For implementation help or training, visit [portwood.dev/support](https://portwood.dev/support) — we'll walk you through it.

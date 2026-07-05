@@ -26,6 +26,7 @@ import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import createSampleTemplates from '@salesforce/apex/DocGenController.createSampleTemplates';
 import exportTemplate from '@salesforce/apex/DocGenController.exportTemplate';
 import importTemplate from '@salesforce/apex/DocGenController.importTemplate';
+import cloneTemplate from '@salesforce/apex/DocGenController.cloneTemplate';
 import getObjectFields from '@salesforce/apex/DocGenController.getObjectFields';
 // #161 — updateable-only field list for writeback-target dropdowns (Signer Inputs tab).
 // New Apex method (backend agent); if not yet deployed, QA deploys — import/usage is wired here.
@@ -178,6 +179,7 @@ const COLUMNS = [
             rowActions: [
                 { label: 'View', name: 'view' },
                 { label: 'Edit', name: 'edit' },
+                { label: 'Clone', name: 'clone' },
                 { label: 'Export', name: 'export' },
                 { label: 'Delete', name: 'delete' }
             ]
@@ -233,13 +235,13 @@ const VERSION_COLUMNS = [
             name: 'restore',
             title: 'Restore and Activate this version',
             variant: 'brand',
-            disabled: { fieldName: 'Is_Active__c' }
+            disabled: { fieldName: 'disableAction' }
         }
     },
     {
         // Issue #83 — Delete a non-active version + its body and pre-decomp CVs.
-        // Disabled on the active version; the row.disableDelete flag is set in
-        // loadVersions() to mirror Is_Active__c.
+        // Disabled on the active version via the namespace-safe disableAction
+        // flag set in loadVersions().
         type: 'button',
         initialWidth: 130,
         cellAttributes: { alignment: 'center' },
@@ -249,7 +251,7 @@ const VERSION_COLUMNS = [
             title: 'Delete this version and its files',
             variant: 'destructive-text',
             iconName: 'utility:delete',
-            disabled: { fieldName: 'Is_Active__c' }
+            disabled: { fieldName: 'disableAction' }
         }
     }
 ];
@@ -268,6 +270,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // Create State
     newTemplateName = '';
+    // PHD-9 — auto-derived from the name until the author edits it by hand
+    @track newTemplateApiName = '';
+    _newApiNameEdited = false;
     newTemplateCategory = '';
     @track newTemplateType = 'Word';
     @track newTemplateOutputFormat = 'PDF';
@@ -1290,6 +1295,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // --- Create Handlers ---
     handleNameChange(event) {
         this.newTemplateName = event.detail.value;
+        if (!this._newApiNameEdited) {
+            this.newTemplateApiName = this._deriveApiName(this.newTemplateName);
+        }
+    }
+    handleNewApiNameChange(event) {
+        this.newTemplateApiName = (event.detail.value || '').trim();
+        // Clearing the field hands control back to auto-derive.
+        this._newApiNameEdited = this.newTemplateApiName !== '';
+    }
+    /** Name → stable key: letters/digits/underscores, no leading digit, max 80. */
+    _deriveApiName(name) {
+        return (name || '')
+            .replace(/[^a-zA-Z0-9]+/g, '_')
+            .replace(/^[_0-9]+/, '')
+            .replace(/_+$/, '')
+            .slice(0, 80);
     }
     handleCategoryChange(event) {
         this.newTemplateCategory = event.detail.value;
@@ -2700,6 +2721,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         fields[BASE_OBJECT_FIELD.fieldApiName] = this.newTemplateObject;
         fields[QUERY_CONFIG_FIELD.fieldApiName] = this._sanitizeQueryConfig(this.newTemplateQuery);
         fields[DESC_FIELD.fieldApiName] = this.newTemplateDesc;
+        if (this.newTemplateApiName) {
+            const clash = (this.templates || []).find(
+                (t) => (t[F.ApiName] || '').toLowerCase() === this.newTemplateApiName.toLowerCase()
+            );
+            if (clash) {
+                this.showToast(
+                    'API Name already in use',
+                    `"${this.newTemplateApiName}" is already used by template "${clash.Name}". API Names must be unique.`,
+                    'error'
+                );
+                return;
+            }
+            fields[F.ApiName] = this.newTemplateApiName;
+        }
         if (this.newTemplateSampleRecordId) {
             fields[TEST_RECORD_FIELD.fieldApiName] = this.newTemplateSampleRecordId;
         }
@@ -2757,8 +2792,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.openEditModal(row, 'details');
         } else if (actionName === 'view') {
             this.openEditModal(row, 'tags');
+        } else if (actionName === 'clone') {
+            this.handleCloneTemplate(row);
         } else if (actionName === 'export') {
             this.handleExportTemplate(row);
+        }
+    }
+
+    async handleCloneTemplate(row) {
+        try {
+            this.showToast('Cloning', 'Cloning ' + row.Name + '…', 'info');
+            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
+            const newId = await cloneTemplate({ templateId: row.Id, newName: row.Name + ' (Copy)' });
+            await refreshApex(this.wiredTemplatesResult);
+            this.showToast(
+                'Template cloned',
+                'The copy starts Inactive so it stays out of pickers — rename it and flip it Active when ready.',
+                'success'
+            );
+            const newRow = this.templates.find((t) => t.Id === newId);
+            if (newRow) {
+                this.openEditModal(newRow, 'details');
+            }
+        } catch (error) {
+            this.showToast('Error cloning template', error.body ? error.body.message : error.message, 'error');
         }
     }
 
@@ -2876,6 +2933,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.pdfAcroFormSnapshotVersionId = null;
             this.isPdfAcroFormSnapshotLoaded = false;
             this.uploadedPdfAcroFormSnapshotJson = null;
+            // Clear any body uploaded for a previously-opened template but never
+            // saved — otherwise "Save as New Version" on THIS template silently
+            // adopts the other template's file as its body.
+            this.uploadedContentVersionId = null;
+            this.uploadedFileName = '';
+            this.uploadedPdfAcroFormNormalizedBase64 = null;
+            // Same staleness trap: the @page-ownership flag belongs to whatever
+            // HTML body was last uploaded, not to this template.
+            this.editHtmlBodyOwnsPageRule = false;
 
             let cdLinks = [];
             if (row.ContentDocumentLinks) {
@@ -2962,6 +3028,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         isActiveLabel: isActive ? '✓' : '',
                         activeClass: isActive ? 'slds-text-color_success slds-text-title_bold' : '',
                         activateVariant: isActive ? 'neutral' : 'brand',
+                        // Namespace-safe disable flag for the Activate/Delete buttons —
+                        // raw 'Is_Active__c' keys don't exist on subscriber-org rows
+                        // (they're portwoodglobal__-prefixed there).
+                        disableAction: !!isActive,
                         bodyCvId: v[F.VerCvId] || '',
                         bodyCvFileName: ''
                     };
@@ -4245,7 +4315,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._resetEditFileUploadWidget();
         this.currentWizardStep = '1';
         this.newTemplateName = '';
+        this.newTemplateApiName = '';
+        this._newApiNameEdited = false;
         this.newTemplateCategory = '';
+        // Excel leaves Output Format = 'Native'; without this reset the next
+        // wizard open shows Type=Excel with a forced-invalid 'PDF' format.
+        this.newTemplateType = 'Word';
         this.newTemplateDesc = '';
         this.newTemplateQuery = '';
         this.newTemplateOutputFormat = 'PDF';
