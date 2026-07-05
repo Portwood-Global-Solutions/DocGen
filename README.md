@@ -4,7 +4,7 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.28.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.29.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -371,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.28.0 — one-click document buttons for record pages, template API names so Flows deploy cleanly from sandbox to production, per-template default email messages for signature requests, fully brandable emails, configurable signer verification, and smooth installs in Shield-encrypted orgs**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.29.0 — one-click template cloning, auto-filled API Names, a cleaner template editor, templates visible to your team with zero sharing setup, identical polished signature stamps whether signers draw or type, and template updates that always take effect immediately**.
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +444,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.28.0 | **Latest (Released)**                   | `04tVx000000paUTIAY` |
+| v3.29.0 | **Latest (Released)**                   | `04tVx000000pe3RIAQ` |
+| v3.28.0 | Previous                                | `04tVx000000paUTIAY` |
 | v3.27.0 | Previous                                | `04tVx000000oiyjIAA` |
 | v3.26.0 | Previous                                | `04tVx000000ohhhIAA` |
 | v3.25.0 | Previous                                | `04tVx000000oCvdIAE` |
