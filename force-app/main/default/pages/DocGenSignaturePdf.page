@@ -1065,6 +1065,20 @@
                             }
                             if (!base64) {
                                 showMessage(containerEl, 'Document unavailable.');
+                                // Twice-seen setup gap (#206): on Experience Cloud sites the
+                                // guest can't read the document until the site preference
+                                // "Let guest users view asset files…" is enabled. Signers
+                                // can't fix that, but they CAN relay it to the sender.
+                                var hint = document.createElement('p');
+                                hint.style.cssText =
+                                    'color:#cbd5e1;text-align:center;padding:0 2rem 2rem;font-size:0.85rem;max-width:34rem;margin:0 auto;';
+                                hint.textContent =
+                                    'If you received this link by email, let the sender know the document ' +
+                                    'did not load. Note for their administrator: on Experience Cloud sites, ' +
+                                    'enable "Let guest users view asset files, library files, and CMS ' +
+                                    'content available to the site" (Workspaces → Administration → ' +
+                                    'Preferences), then send a fresh request.';
+                                containerEl.appendChild(hint);
                                 return Promise.resolve();
                             }
 

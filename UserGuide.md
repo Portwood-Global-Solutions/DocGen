@@ -2352,6 +2352,7 @@ Before signatures work in production, complete the checklist in **Signature Sett
 - ✅ Org-Wide Email Address configured + verified (green checkmark)
 - ✅ Guest permission set assigned to the Site's guest user
 - ✅ Signature VF pages deployed (`DocGenSignature`, `DocGenSignaturePdf`, `DocGenVerify`, `DocGenSign`)
+- ✅ **Experience Cloud sites only:** guest file access enabled — your site → **Workspaces → Administration → Preferences** → check **"Let guest users view asset files, library files, and CMS content available to the site."** Without it, guest signers get **"Document unavailable"** even though everything else is configured correctly (§15.9). Classic Salesforce Sites (`*.my.salesforce-sites.com`) don't need this.
 
 The Settings panel shows each check as pass/fail with a fix link.
 
