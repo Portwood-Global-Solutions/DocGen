@@ -5553,6 +5553,118 @@ private class DocGenMiscTests {
     // DocGenService — extractAndSaveTemplateImages edge cases
     // =========================================================================
 
+    // #203 — re-running decomposition for the same version must supersede, not
+    // duplicate: a second identically-titled snapshot would shadow the fresh one.
+    @IsTest
+    static void testIssue203DecomposeIdempotentNoDuplicateSnapshots() {
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry(
+            '[Content_Types].xml',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                    '<Default Extension="xml" ContentType="application/xml"/></Types>'
+            )
+        );
+        zw.addEntry(
+            '_rels/.rels',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'
+            )
+        );
+        zw.addEntry(
+            'word/document.xml',
+            Blob.valueOf(
+                '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+                '<w:body><w:p><w:r><w:t>{Name} v203</w:t></w:r></w:p></w:body></w:document>'
+            )
+        );
+        ContentVersion cv = new ContentVersion(
+            Title = 'Idem203',
+            PathOnClient = 'Idem203.docx',
+            VersionData = zw.getArchive()
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Content_Version_Id__c = cv.Id,
+            Is_Active__c = true,
+            Type__c = 'Word',
+            Base_Object_API__c = 'Account'
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        Test.startTest();
+        DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id);
+        DocGenService.extractAndSaveTemplateImages(tpl.Id, ver.Id); // re-run: retry / on-demand decompose
+        Test.stopTest();
+
+        String prefix = 'docgen_tmpl_%' + String.valueOf(ver.Id) + '%';
+        Map<String, Integer> countsByTitle = new Map<String, Integer>();
+        for (ContentVersion snap : [
+            SELECT Title
+            FROM ContentVersion
+            WHERE Title LIKE :prefix AND IsLatest = TRUE
+        ]) {
+            Integer n = countsByTitle.containsKey(snap.Title) ? countsByTitle.get(snap.Title) : 0;
+            countsByTitle.put(snap.Title, n + 1);
+        }
+        System.assert(!countsByTitle.isEmpty(), 'Decompose should have produced snapshot CVs');
+        for (String title : countsByTitle.keySet()) {
+            System.assertEquals(
+                1,
+                countsByTitle.get(title),
+                'Duplicate snapshot after re-decompose would shadow the fresh copy: ' + title
+            );
+        }
+    }
+
+    // #203 — switching a template's format WITHOUT a new body must fail loudly:
+    // the old-format body/snapshots would otherwise be served down the new
+    // format's render branch (DOCX bytes read as HTML).
+    @IsTest
+    static void testIssue203TypeSwitchBlockedWithoutNewBody() {
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate(); // factory default Type = Word
+        Map<String, Object> fields = new Map<String, Object>{
+            'Id' => tpl.Id,
+            'Name' => tpl.Name,
+            'Type__c' => 'HTML',
+            'Base_Object_API__c' => tpl.Base_Object_API__c,
+            'Query_Config__c' => tpl.Query_Config__c,
+            'Category__c' => tpl.Category__c,
+            'Description__c' => tpl.Description__c,
+            'Test_Record_Id__c' => tpl.Test_Record_Id__c,
+            'Document_Title_Format__c' => tpl.Document_Title_Format__c
+        };
+
+        Test.startTest();
+        Boolean blocked = false;
+        try {
+            DocGenController.saveTemplate(fields, false, null);
+        } catch (AuraHandledException e) {
+            blocked = true;
+        }
+        // Same switch WITH a new body version is the supported path.
+        ContentVersion htmlCv = new ContentVersion(
+            Title = 'Switch203',
+            PathOnClient = 'Switch203.html',
+            VersionData = Blob.valueOf('<html><body><p>{Name}</p></body></html>'),
+            FirstPublishLocationId = tpl.Id
+        );
+        insert htmlCv;
+        Id newVerId = DocGenController.saveTemplate(fields, true, htmlCv.Id);
+        Test.stopTest();
+
+        System.assert(blocked, 'Details-only save must not change the template format without a new body');
+        System.assertNotEquals(null, newVerId, 'Format switch with a new body version should succeed');
+        DocGen_Template__c after = [SELECT Type__c FROM DocGen_Template__c WHERE Id = :tpl.Id];
+        System.assertEquals('HTML', after.Type__c, 'Type should update when the new body ships with it');
+    }
+
     @IsTest
     static void testExtractAndSaveTemplateImagesNullTemplate() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];

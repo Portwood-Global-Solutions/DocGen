@@ -167,6 +167,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 FROM ContentVersion
                 WHERE Title LIKE :likePattern AND IsLatest = TRUE
                 WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts
+                ORDER BY CreatedDate DESC // newest snapshot wins if duplicates exist (#203)
             ];
         }
 
@@ -181,6 +182,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 FROM ContentVersion
                 WHERE Title IN :titles AND IsLatest = TRUE
                 WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts
+                ORDER BY CreatedDate DESC // newest snapshot wins if duplicates exist (#203)
             ];
         }
 
@@ -200,6 +202,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 FROM ContentVersion
                 WHERE ContentDocumentId IN :docIds AND Title LIKE :likePattern AND IsLatest = TRUE
                 WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts linked to template version
+                ORDER BY CreatedDate DESC // newest snapshot wins if duplicates exist (#203)
             ];
         }
 
@@ -218,6 +221,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 FROM ContentVersion
                 WHERE ContentDocumentId IN :docIds AND Title IN :titles AND IsLatest = TRUE
                 WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts linked to template version
+                ORDER BY CreatedDate DESC // newest snapshot wins if duplicates exist (#203)
             ];
         }
 
@@ -1837,6 +1841,52 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * @param templateId The DocGen_Template__c record ID
      * @param versionId The DocGen_Template_Version__c record ID to link images to
      */
+    /**
+     * #203 — removes a version's existing docgen_tmpl_* snapshot documents so a
+     * re-decomposition can never leave duplicate-title snapshots behind. Scoped to
+     * documents LINKED TO THIS VERSION whose titles carry this version's Id, so the
+     * body CV, watermark, and other versions' snapshots are untouchable. Best-effort:
+     * cleanup failure must never block the decomposition that follows.
+     */
+    private static void deleteSnapshotCvsForVersion(Id versionId) {
+        try {
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentDocumentLink> links = [
+                SELECT ContentDocumentId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :versionId
+                WITH SYSTEM_MODE // NOPMD — package-internal snapshot cleanup
+            ];
+            if (links.isEmpty()) {
+                return;
+            }
+            Set<Id> docIds = new Set<Id>();
+            for (ContentDocumentLink l : links) {
+                docIds.add(l.ContentDocumentId);
+            }
+            String vid = String.valueOf(versionId);
+            String htmlTitle = 'docgen_tmpl_html_' + vid;
+            String xmlPrefix = 'docgen_tmpl_xml_' + vid + '_%';
+            String imgPrefix = 'docgen_tmpl_img_' + vid + '_%';
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentDocument> stale = [
+                SELECT Id
+                FROM ContentDocument
+                WHERE Id IN :docIds AND (Title = :htmlTitle OR Title LIKE :xmlPrefix OR Title LIKE :imgPrefix)
+                WITH SYSTEM_MODE // NOPMD — package-internal snapshot cleanup
+            ];
+            if (!stale.isEmpty()) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                Database.delete(stale, false, AccessLevel.SYSTEM_MODE);
+            }
+        } catch (Exception cleanupErr) {
+            System.debug(
+                LoggingLevel.WARN,
+                'DocGen: snapshot cleanup before re-decompose failed (continuing): ' + cleanupErr.getMessage()
+            );
+        }
+    }
+
     public static void extractAndSaveTemplateImages(Id templateId, Id versionId) {
         DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
         /* code-analyzer-suppress ApexFlsViolation */
@@ -1860,6 +1910,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (templateType != 'Word' && templateType != 'PowerPoint') {
             return;
         }
+
+        // #203 — decomposition must be idempotent. A re-run for the same version
+        // (on-demand decompose, queueable retry) used to ADD a second set of
+        // identically-titled snapshot CVs; readers take the first match, so the
+        // oldest duplicate silently shadowed the fresh snapshot forever. Clear
+        // this version's prior docgen_tmpl_* artifacts before regenerating.
+        deleteSnapshotCvsForVersion(versionId);
 
         // Read the template CV's VersionData directly as a Blob — bypasses the
         // base64 round-trip in getTemplateFileContent (which would put a ~12 MB

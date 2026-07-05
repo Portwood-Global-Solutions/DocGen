@@ -4109,6 +4109,65 @@ private class DocGenControllerTests {
     }
 
     @IsTest
+    static void testCloneTemplate() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+            tpl.API_Name__c = 'Clone_Source';
+            tpl.Is_Active__c = true;
+            tpl.Default_Email_Message__c = 'Please sign.';
+            update tpl;
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'CloneTestFile',
+                PathOnClient = 'CloneTestFile.docx',
+                VersionData = Blob.valueOf('Clone file content')
+            );
+            insert cv;
+            Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+            insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+            DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+                Template__c = tpl.Id,
+                Is_Active__c = true,
+                Content_Version_Id__c = cv.Id,
+                Type__c = 'Word',
+                Base_Object_API__c = 'Account',
+                Query_Config__c = 'Name'
+            );
+            Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+            Test.startTest();
+            Id cloneId = DocGenController.cloneTemplate(tpl.Id, tpl.Name + ' (Copy)');
+            Test.stopTest();
+
+            System.assertNotEquals(null, cloneId, 'Clone should return the new template Id');
+            System.assertNotEquals(tpl.Id, cloneId, 'Clone must be a new record');
+            DocGen_Template__c copy = [
+                SELECT Name, Is_Active__c, Is_Default__c, API_Name__c, Default_Email_Message__c
+                FROM DocGen_Template__c
+                WHERE Id = :cloneId
+            ];
+            System.assertEquals(tpl.Name + ' (Copy)', copy.Name, 'Clone name should carry the (Copy) suffix');
+            System.assertEquals(false, copy.Is_Active__c, 'Clone must start Inactive');
+            System.assertEquals(false, copy.Is_Default__c, 'Clone must not steal the object default');
+            System.assertNotEquals('Clone_Source', copy.API_Name__c, 'Clone must not reuse the unique API Name');
+            System.assertEquals('Please sign.', copy.Default_Email_Message__c, 'Newer fields must survive the clone');
+            List<DocGen_Template_Version__c> cloneVers = [
+                SELECT Content_Version_Id__c, Is_Active__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :cloneId
+            ];
+            System.assertEquals(1, cloneVers.size(), 'Clone should have one version');
+            System.assertEquals(true, cloneVers[0].Is_Active__c, 'Clone version should be active');
+            System.assertNotEquals(
+                String.valueOf(cv.Id),
+                cloneVers[0].Content_Version_Id__c,
+                'Clone must copy the file, not point at the original CV'
+            );
+        }
+    }
+
+    @IsTest
     static void testExportTemplateNoVersion() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {

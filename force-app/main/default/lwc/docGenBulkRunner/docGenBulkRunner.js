@@ -14,6 +14,8 @@ import getRecentJobs from '@salesforce/apex/DocGenBulkController.getRecentJobs';
 import analyzeJob from '@salesforce/apex/DocGenBulkController.analyzeJob';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import BASE_OBJ_FIELD from '@salesforce/schema/DocGen_Template__c.Base_Object_API__c';
+import SQ_CONDITION_FIELD from '@salesforce/schema/DocGen_Saved_Query__c.Query_Condition__c';
+import SQ_DESC_FIELD from '@salesforce/schema/DocGen_Saved_Query__c.Description__c';
 import OUT_FMT_FIELD from '@salesforce/schema/DocGen_Template__c.Output_Format__c';
 import QCONFIG_FIELD from '@salesforce/schema/DocGen_Template__c.Query_Config__c';
 import JOB_LABEL_FIELD from '@salesforce/schema/DocGen_Job__c.Label__c';
@@ -328,9 +330,17 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
     }
 
     loadSavedQueries() {
-        getSavedQueries({ templateId: this.selectedTemplateId })
+        return getSavedQueries({ templateId: this.selectedTemplateId })
             .then((data) => {
-                this.savedQueries = data;
+                // Normalize to namespace-free keys — raw SObject keys are
+                // portwoodglobal__-prefixed in subscriber orgs, so reading
+                // q.Query_Condition__c directly only works unpackaged.
+                this.savedQueries = (data || []).map((q) => ({
+                    Id: q.Id,
+                    Name: q.Name,
+                    condition: q[SQ_CONDITION_FIELD.fieldApiName],
+                    description: q[SQ_DESC_FIELD.fieldApiName]
+                }));
             })
             .catch(() => {});
     }
@@ -340,7 +350,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
      * and applies it as the current condition. Auto-saves as a saved query
      * if not already present.
      */
-    applyAutoFilter() {
+    async applyAutoFilter() {
         const tmplData = this._templateDataMap[this.selectedTemplateId];
         if (!tmplData || !tmplData[QCONFIG_FIELD.fieldApiName]) return;
 
@@ -350,7 +360,10 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
         this.condition = autoFilter;
         this.showToast('Filter Applied', 'Report filter loaded.', 'info');
 
-        const existingMatch = this.savedQueries.find((q) => q.Query_Condition__c === autoFilter);
+        // Wait for THIS template's saved queries — the dedupe below otherwise
+        // races the in-flight load and re-saves 'From Report' on every select.
+        await this.loadSavedQueries();
+        const existingMatch = this.savedQueries.find((q) => q.condition === autoFilter);
         if (!existingMatch) {
             // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
             saveQuery({
@@ -368,7 +381,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
         const queryId = event.target.dataset.id;
         const query = this.savedQueries.find((q) => q.Id === queryId);
         if (query) {
-            this.condition = query.Query_Condition__c;
+            this.condition = query.condition;
             this.recordCount = null;
             this.analysis = null;
             this.filterValidated = false;
@@ -433,7 +446,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
                 this.loadSavedQueries();
             })
             .catch((error) => {
-                this.showToast('Error', error.body.message, 'error');
+                this.showToast('Error', error.body ? error.body.message : error.message, 'error');
             });
     }
 
@@ -456,7 +469,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             // Always run analysis after validation
             await this.runAnalysis();
         } catch (error) {
-            this.showToast('Validation Error', error.body.message, 'error');
+            this.showToast('Validation Error', error.body ? error.body.message : error.message, 'error');
             this.recordCount = null;
             this.filterValidated = false;
         } finally {
@@ -487,7 +500,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             this.showToast('Success', 'Job started. Status will auto-refresh every 5 seconds.', 'success');
             this.startPolling();
         } catch (error) {
-            this.showToast('Error', error.body.message, 'error');
+            this.showToast('Error', error.body ? error.body.message : error.message, 'error');
             this.isProcessing = false;
         }
     }
@@ -513,6 +526,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
         if (!this.jobId) return;
         try {
             const job = await getJobStatus({ jobId: this.jobId });
+            this._pollFailures = 0;
             this.jobStatus = job[JOB_STATUS_FIELD.fieldApiName];
             const total = job[JOB_TOTAL_FIELD.fieldApiName] || 0;
             const current = (job[JOB_SUCCESS_FIELD.fieldApiName] || 0) + (job[JOB_ERROR_FIELD.fieldApiName] || 0);
@@ -536,7 +550,19 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
                 this.loadRecentJobs();
             }
         } catch {
-            this.stopPolling();
+            // Tolerate transient poll failures (session refresh, network blip) —
+            // the batch keeps running server-side. Only give up after several in
+            // a row, and say so instead of freezing the progress card forever.
+            this._pollFailures = (this._pollFailures || 0) + 1;
+            if (this._pollFailures >= 3) {
+                this.stopPolling();
+                this.isProcessing = false;
+                this.showToast(
+                    'Status updates interrupted',
+                    'The job is still running server-side. Check DocGen Jobs (Recent Jobs below) for the final result.',
+                    'warning'
+                );
+            }
         }
     }
 

@@ -27,6 +27,16 @@
                                         required
                                     ></lightning-input>
                                     <lightning-input
+                                        label="API Name"
+                                        value={newTemplateApiName}
+                                        onchange={handleNewApiNameChange}
+                                        max-length="80"
+                                        pattern="[a-zA-Z][a-zA-Z0-9_]*"
+                                        message-when-pattern-mismatch="Letters, numbers, and underscores only; must start with a letter."
+                                        field-level-help="Stable key for referencing this template from Flows and DocGen Buttons (Template API Name input). Auto-fills from the name; survives sandbox-to-production deploys, unlike the record Id. Must be unique. Clear it to re-sync with the name."
+                                        class="slds-var-m-top_medium"
+                                    ></lightning-input>
+                                    <lightning-input
                                         label="Category"
                                         value={newTemplateCategory}
                                         onchange={handleCategoryChange}
@@ -893,6 +903,11 @@
                             <div class="slds-box slds-theme_shade" style="border-radius: 8px">
                                 <h3 class="slds-text-heading_medium slds-var-m-bottom_medium">Review Template</h3>
                                 <p class="slds-var-m-bottom_small"><strong>Name:</strong> {newTemplateName}</p>
+                                <template if:true={newTemplateApiName}>
+                                    <p class="slds-var-m-bottom_small">
+                                        <strong>API Name:</strong> <code>{newTemplateApiName}</code>
+                                    </p>
+                                </template>
                                 <template if:true={isFlowDataSource}>
                                     <p class="slds-var-m-bottom_small">
                                         <strong>Data Source:</strong> JSON Data (from Flow)
@@ -1087,168 +1102,191 @@
                     <lightning-tabset variant="scoped" active-tab-value={activeEditTab}>
                         <!-- Tab 1: Settings -->
                         <lightning-tab label="Settings" value="details">
-                            <div class="slds-grid slds-gutters_large slds-var-p-around_small">
-                                <div class="slds-col slds-size_1-of-2">
-                                    <lightning-input
-                                        label="Template Name"
-                                        value={editTemplateName}
-                                        onchange={handleEditNameChange}
-                                        required
-                                    ></lightning-input>
-                                    <lightning-input
-                                        label="Category"
-                                        value={editTemplateCategory}
-                                        onchange={handleEditCategoryChange}
-                                        class="slds-var-m-top_medium"
-                                    ></lightning-input>
+                            <!-- Grouped into balanced sections so the tab fits without heavy scrolling -->
+                            <div class="slds-var-p-around_small">
+                                <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">Template</h3>
+                                <div class="slds-grid slds-gutters_large">
+                                    <div class="slds-col slds-size_1-of-2">
+                                        <lightning-input
+                                            label="Template Name"
+                                            value={editTemplateName}
+                                            onchange={handleEditNameChange}
+                                            required
+                                        ></lightning-input>
+                                        <!-- PHD-9 — stable developer key for Flow lookups -->
+                                        <lightning-input
+                                            label="API Name"
+                                            value={editTemplateApiName}
+                                            onchange={handleApiNameChange}
+                                            max-length="80"
+                                            pattern="[a-zA-Z][a-zA-Z0-9_]*"
+                                            message-when-pattern-mismatch="Letters, numbers, and underscores only; must start with a letter."
+                                            field-level-help="Stable key for referencing this template from Flows and DocGen Buttons (Template API Name input). Survives sandbox-to-production deploys, unlike the record Id. Must be unique."
+                                            class="slds-var-m-top_medium"
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-size_1-of-2">
+                                        <lightning-input
+                                            label="Category"
+                                            value={editTemplateCategory}
+                                            onchange={handleEditCategoryChange}
+                                        ></lightning-input>
+                                        <lightning-input
+                                            label="Base Object API Name"
+                                            value={editTemplateObject}
+                                            readonly
+                                            class="slds-var-m-top_medium"
+                                        ></lightning-input>
+                                    </div>
                                 </div>
-                                <div class="slds-col slds-size_1-of-2">
-                                    <lightning-combobox
-                                        label="Type"
-                                        value={editTemplateType}
-                                        options={typeOptions}
-                                        onchange={handleEditTypeChange}
-                                        required
-                                    ></lightning-combobox>
-                                    <lightning-combobox
-                                        label="Output Format"
-                                        value={editTemplateOutputFormat}
-                                        options={outputFormatOptions}
-                                        onchange={handleEditOutputFormatChange}
-                                        class="slds-var-m-top_medium"
-                                        required
-                                    ></lightning-combobox>
-                                    <template if:true={showEditHtmlOwnsPageBanner}>
-                                        <div
-                                            class="slds-box slds-theme_shade slds-var-m-top_medium"
-                                            role="status"
-                                            aria-live="polite"
-                                        >
-                                            <p class="slds-text-body_small">
-                                                <lightning-icon
-                                                    icon-name="utility:info"
-                                                    size="x-small"
-                                                    class="slds-var-m-right_x-small"
-                                                ></lightning-icon>
-                                                Your HTML defines its own <code>@page</code> CSS, so Page Size /
-                                                Orientation / Margins are ignored on render. Edit the
-                                                <code>@page</code> rule inside your HTML to change page setup.
-                                            </p>
-                                        </div>
-                                    </template>
-                                    <template if:true={showEditPageLayoutFields}>
-                                        <lightning-combobox
-                                            label="Page Orientation"
-                                            value={editTemplatePageOrientation}
-                                            options={pageOrientationOptions}
-                                            onchange={handleEditPageOrientationChange}
-                                            class="slds-var-m-top_medium"
-                                            field-level-help="Portrait or Landscape — applies to PDF output."
-                                        ></lightning-combobox>
-                                        <lightning-combobox
-                                            label="Page Size"
-                                            value={editTemplatePageSize}
-                                            options={pageSizeOptions}
-                                            onchange={handleEditPageSizeChange}
-                                            class="slds-var-m-top_medium"
-                                            field-level-help="Letter (US default), Legal, or A4 (international)."
-                                        ></lightning-combobox>
-                                        <lightning-combobox
-                                            label="Page Margins"
-                                            value={editTemplatePageMargins}
-                                            options={pageMarginsOptions}
-                                            onchange={handleEditPageMarginsChange}
-                                            class="slds-var-m-top_medium"
-                                            field-level-help="Default uses 1in portrait / 0.5in landscape. Pick a preset or Custom."
-                                        ></lightning-combobox>
-                                        <template if:true={showEditCustomMargins}>
-                                            <lightning-input
-                                                label="Custom Margins (in)"
-                                                value={editTemplateCustomMargins}
-                                                onchange={handleEditCustomMarginsChange}
-                                                class="slds-var-m-top_medium"
-                                                placeholder="0.75 or 0.5,0.75,0.5,0.75"
-                                                field-level-help="One value applies to all sides; four values are Top,Right,Bottom,Left in inches. Range 0.1–3.0."
-                                            ></lightning-input>
-                                        </template>
-                                    </template>
-                                    <lightning-input
-                                        label="Base Object API Name"
-                                        value={editTemplateObject}
-                                        readonly
-                                        class="slds-var-m-top_medium"
-                                    ></lightning-input>
-                                    <lightning-input
-                                        type="toggle"
-                                        label="Active (visible in the document picker)"
-                                        checked={editTemplateIsActive}
-                                        onchange={handleEditActiveChange}
-                                        class="slds-var-m-top_medium"
-                                        message-toggle-active="Active"
-                                        message-toggle-inactive="Inactive (hidden from picker, still editable here)"
-                                    ></lightning-input>
-                                    <lightning-input
-                                        type="toggle"
-                                        label="Default Template for this Object"
-                                        checked={editTemplateIsDefault}
-                                        onchange={handleEditDefaultChange}
-                                        class="slds-var-m-top_medium"
-                                        message-toggle-active="Yes"
-                                        message-toggle-inactive="No"
-                                    ></lightning-input>
-
-                                    <c-doc-gen-title-editor
-                                        value={editTemplateTitleFormat}
-                                        query-config={editTemplateQuery}
-                                        onchange={handleTitleFormatChange}
-                                        class="slds-var-m-top_medium slds-show"
-                                    >
-                                    </c-doc-gen-title-editor>
-
-                                    <!-- #verification — template-level signer-verification defaults -->
-                                    <lightning-combobox
-                                        label="Signer Verification (e-sign)"
-                                        value={editTemplateSignerVerification}
-                                        options={signerVerificationOptions}
-                                        onchange={handleSignerVerificationChange}
-                                        field-level-help="Whether signers of this template must verify a one-time email code before signing. Inherit uses the org default; individual sends can still override."
-                                        class="slds-var-m-top_medium"
-                                    ></lightning-combobox>
-                                    <lightning-combobox
-                                        label="Pre-fill Signer Email"
-                                        value={editTemplatePrefillSignerEmail}
-                                        options={prefillSignerEmailOptions}
-                                        onchange={handlePrefillSignerEmailChange}
-                                        field-level-help="When verification is on, auto-send the code to the signer's known email and skip the 'type your email' step. Inherit uses the org default."
-                                        class="slds-var-m-top_small"
-                                    ></lightning-combobox>
-                                    <!-- PHD-9 — stable developer key for Flow lookups -->
-                                    <lightning-input
-                                        label="API Name"
-                                        value={editTemplateApiName}
-                                        onchange={handleApiNameChange}
-                                        max-length="80"
-                                        field-level-help="Stable key for referencing this template from Flows (Template API Name input on the DocGen actions). Survives sandbox-to-production deploys, unlike the record Id. Must be unique."
-                                        class="slds-var-m-top_small"
-                                    ></lightning-input>
-                                    <!-- #208 — per-template default email message -->
-                                    <lightning-textarea
-                                        label="Default Email Message (e-sign)"
-                                        value={editTemplateDefaultEmailMessage}
-                                        onchange={handleDefaultEmailMessageChange}
-                                        max-length="4000"
-                                        field-level-help="Default text for the {Message} token in signature request emails sent from this template. Pre-filled for the sender; a message typed at send time always wins. Blank uses the generic default."
-                                        class="slds-var-m-top_small"
-                                    ></lightning-textarea>
-                                </div>
-                            </div>
-                            <div class="slds-var-p-horizontal_small">
                                 <lightning-textarea
                                     label="Description"
                                     value={editTemplateDesc}
                                     onchange={handleEditDescChange}
                                     class="slds-var-m-top_medium"
                                 ></lightning-textarea>
+
+                                <h3 class="slds-text-heading_small slds-var-m-top_large slds-var-m-bottom_x-small">
+                                    Output &amp; Page Setup
+                                </h3>
+                                <div class="slds-grid slds-gutters_large">
+                                    <div class="slds-col slds-size_1-of-2">
+                                        <lightning-combobox
+                                            label="Type"
+                                            value={editTemplateType}
+                                            options={typeOptions}
+                                            onchange={handleEditTypeChange}
+                                            required
+                                        ></lightning-combobox>
+                                        <lightning-combobox
+                                            label="Output Format"
+                                            value={editTemplateOutputFormat}
+                                            options={outputFormatOptions}
+                                            onchange={handleEditOutputFormatChange}
+                                            class="slds-var-m-top_medium"
+                                            required
+                                        ></lightning-combobox>
+                                    </div>
+                                    <div class="slds-col slds-size_1-of-2">
+                                        <template if:true={showEditHtmlOwnsPageBanner}>
+                                            <div class="slds-box slds-theme_shade" role="status" aria-live="polite">
+                                                <p class="slds-text-body_small">
+                                                    <lightning-icon
+                                                        icon-name="utility:info"
+                                                        size="x-small"
+                                                        class="slds-var-m-right_x-small"
+                                                    ></lightning-icon>
+                                                    Your HTML defines its own <code>@page</code> CSS, so Page Size /
+                                                    Orientation / Margins are ignored on render. Edit the
+                                                    <code>@page</code> rule inside your HTML to change page setup.
+                                                </p>
+                                            </div>
+                                        </template>
+                                        <template if:true={showEditPageLayoutFields}>
+                                            <lightning-combobox
+                                                label="Page Orientation"
+                                                value={editTemplatePageOrientation}
+                                                options={pageOrientationOptions}
+                                                onchange={handleEditPageOrientationChange}
+                                                field-level-help="Portrait or Landscape — applies to PDF output."
+                                            ></lightning-combobox>
+                                            <lightning-combobox
+                                                label="Page Size"
+                                                value={editTemplatePageSize}
+                                                options={pageSizeOptions}
+                                                onchange={handleEditPageSizeChange}
+                                                class="slds-var-m-top_medium"
+                                                field-level-help="Letter (US default), Legal, or A4 (international)."
+                                            ></lightning-combobox>
+                                            <lightning-combobox
+                                                label="Page Margins"
+                                                value={editTemplatePageMargins}
+                                                options={pageMarginsOptions}
+                                                onchange={handleEditPageMarginsChange}
+                                                class="slds-var-m-top_medium"
+                                                field-level-help="Default uses 1in portrait / 0.5in landscape. Pick a preset or Custom."
+                                            ></lightning-combobox>
+                                            <template if:true={showEditCustomMargins}>
+                                                <lightning-input
+                                                    label="Custom Margins (in)"
+                                                    value={editTemplateCustomMargins}
+                                                    onchange={handleEditCustomMarginsChange}
+                                                    class="slds-var-m-top_medium"
+                                                    placeholder="0.75 or 0.5,0.75,0.5,0.75"
+                                                    field-level-help="One value applies to all sides; four values are Top,Right,Bottom,Left in inches. Range 0.1–3.0."
+                                                ></lightning-input>
+                                            </template>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <h3 class="slds-text-heading_small slds-var-m-top_large slds-var-m-bottom_x-small">
+                                    Availability &amp; Document Title
+                                </h3>
+                                <div class="slds-grid slds-gutters_large">
+                                    <div class="slds-col slds-size_1-of-2">
+                                        <lightning-input
+                                            type="toggle"
+                                            label="Active (visible in the document picker)"
+                                            checked={editTemplateIsActive}
+                                            onchange={handleEditActiveChange}
+                                            message-toggle-active="Active"
+                                            message-toggle-inactive="Inactive (hidden from picker, still editable here)"
+                                        ></lightning-input>
+                                        <lightning-input
+                                            type="toggle"
+                                            label="Default Template for this Object"
+                                            checked={editTemplateIsDefault}
+                                            onchange={handleEditDefaultChange}
+                                            class="slds-var-m-top_medium"
+                                            message-toggle-active="Yes"
+                                            message-toggle-inactive="No"
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-size_1-of-2">
+                                        <c-doc-gen-title-editor
+                                            value={editTemplateTitleFormat}
+                                            query-config={editTemplateQuery}
+                                            onchange={handleTitleFormatChange}
+                                            class="slds-show"
+                                        >
+                                        </c-doc-gen-title-editor>
+                                    </div>
+                                </div>
+
+                                <h3 class="slds-text-heading_small slds-var-m-top_large slds-var-m-bottom_x-small">
+                                    E-Signature Defaults
+                                </h3>
+                                <div class="slds-grid slds-gutters_large">
+                                    <div class="slds-col slds-size_1-of-2">
+                                        <!-- #verification — template-level signer-verification defaults -->
+                                        <lightning-combobox
+                                            label="Signer Verification (e-sign)"
+                                            value={editTemplateSignerVerification}
+                                            options={signerVerificationOptions}
+                                            onchange={handleSignerVerificationChange}
+                                            field-level-help="Whether signers of this template must verify a one-time email code before signing. Inherit uses the org default; individual sends can still override."
+                                        ></lightning-combobox>
+                                        <lightning-combobox
+                                            label="Pre-fill Signer Email"
+                                            value={editTemplatePrefillSignerEmail}
+                                            options={prefillSignerEmailOptions}
+                                            onchange={handlePrefillSignerEmailChange}
+                                            field-level-help="When verification is on, auto-send the code to the signer's known email and skip the 'type your email' step. Inherit uses the org default."
+                                            class="slds-var-m-top_medium"
+                                        ></lightning-combobox>
+                                    </div>
+                                    <div class="slds-col slds-size_1-of-2">
+                                        <!-- #208 — per-template default email message -->
+                                        <lightning-textarea
+                                            label="Default Email Message (e-sign)"
+                                            value={editTemplateDefaultEmailMessage}
+                                            onchange={handleDefaultEmailMessageChange}
+                                            max-length="4000"
+                                            field-level-help="Default text for the {Message} token in signature request emails sent from this template. Pre-filled for the sender; a message typed at send time always wins. Blank uses the generic default."
+                                        ></lightning-textarea>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- 1.47 — Visibility & sort controls -->

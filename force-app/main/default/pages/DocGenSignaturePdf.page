@@ -1065,6 +1065,20 @@
                             }
                             if (!base64) {
                                 showMessage(containerEl, 'Document unavailable.');
+                                // Twice-seen setup gap (#206): on Experience Cloud sites the
+                                // guest can't read the document until the site preference
+                                // "Let guest users view asset files…" is enabled. Signers
+                                // can't fix that, but they CAN relay it to the sender.
+                                var hint = document.createElement('p');
+                                hint.style.cssText =
+                                    'color:#cbd5e1;text-align:center;padding:0 2rem 2rem;font-size:0.85rem;max-width:34rem;margin:0 auto;';
+                                hint.textContent =
+                                    'If you received this link by email, let the sender know the document ' +
+                                    'did not load. Note for their administrator: on Experience Cloud sites, ' +
+                                    'enable "Let guest users view asset files, library files, and CMS ' +
+                                    'content available to the site" (Workspaces → Administration → ' +
+                                    'Preferences), then send a fresh request.';
+                                containerEl.appendChild(hint);
                                 return Promise.resolve();
                             }
 
@@ -2317,8 +2331,9 @@
                                             });
                                         });
                                         // Stamp signer form-field values ({?key}) at their
-                                        // @@FF-<key>@@ sentinel positions. Drawn path only — the
-                                        // typed path resolves {?key} in the server re-render.
+                                        // @@FF-<key>@@ sentinel positions. Composite path (drawn
+                                        // or typed marks); only the server-fallback path resolves
+                                        // {?key} in a re-render instead.
                                         // Mirrors Date spots: locate the (white) sentinel in the
                                         // text layer, draw the collected value on top in black.
                                         chain = chain.then(function () {
@@ -3035,19 +3050,25 @@
                         btn.textContent = 'Submitting...';
                         var userAgent = navigator.userAgent || 'Unknown';
 
-                        // If any field was drawn, the authoritative PDF is built in-browser
-                        // (pdf-lib composite) and posted to saveCompositedSignedPdf — the
-                        // server can't embed the drawn image (Flying Saucer fetch limit).
-                        var hasDrawn = false;
+                        // If the signer produced any mark this session — drawn OR typed —
+                        // the authoritative PDF is built in-browser (pdf-lib composite)
+                        // and posted to saveCompositedSignedPdf. Typed marks must take
+                        // this path too: the saveSignature server re-render regenerates
+                        // the document and flattens every prior signer's drawn ink to
+                        // text, so in a multi-signer chain a typed signer would destroy
+                        // an earlier drawn signature. The server path below is only the
+                        // fallback when the source PDF couldn't be read or a returning
+                        // signer's session marks are gone.
+                        var hasClientMarks = false;
                         if (guided && guided.spots) {
                             for (var i = 0; i < guided.spots.length; i++) {
-                                if (guided.spots[i].imageData) {
-                                    hasDrawn = true;
+                                if (guided.spots[i].imageData || guided.spots[i].value) {
+                                    hasClientMarks = true;
                                     break;
                                 }
                             }
                         }
-                        if (hasDrawn && sourcePdfBase64) {
+                        if (hasClientMarks && sourcePdfBase64) {
                             compositeAndFinalize(typedName, consentGiven, btn, formFieldJson)
                                 .then(function (result) {
                                     btn.disabled = false;

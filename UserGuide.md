@@ -176,11 +176,11 @@ Or use the install links at the top of this guide. The install bundles the merge
 
 Three permission sets ship with the package. Assign what each user needs.
 
-| Permission set           | Who gets it                                           | What they can do                                                                                                                                                                   |
-| ------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DocGen_Admin`           | Template authors, system admins                       | Full CRUD on templates, query configs, signature objects, settings. Can create/edit/delete templates. Can "Sign In Person" bypass for signatures.                                  |
-| `DocGen_User`            | End users generating docs                             | Read/edit templates (no delete). Generate single + bulk documents. Create signature requests. Can't modify templates or settings.                                                  |
-| `DocGen_Guest_Signature` | The Salesforce Site guest user (for external signers) | Read access to signature requests, signers, and placements. Create access on audit records. Access to the signing pages. Required for external signers without a Salesforce login. |
+| Permission set           | Who gets it                                           | What they can do                                                                                                                                                                                                                                  |
+| ------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DocGen_Admin`           | Template authors, system admins                       | Full CRUD on templates, query configs, signature objects, settings. Can create/edit/delete templates. Can "Sign In Person" bypass for signatures.                                                                                                 |
+| `DocGen_User`            | End users generating docs                             | Sees every active template in the picker — no sharing setup needed (v3.29+; audience narrowed by the §5.5 visibility controls). Generate single + bulk documents. Create signature requests. Can't create, edit, or delete templates or settings. |
+| `DocGen_Guest_Signature` | The Salesforce Site guest user (for external signers) | Read access to signature requests, signers, and placements. Create access on audit records. Access to the signing pages. Required for external signers without a Salesforce login.                                                                |
 
 ### Assigning a permission set
 
@@ -264,7 +264,14 @@ Important notes while the feature is in testing:
 
 ### 5.1.1 API Name — a stable key for automation (v3.28+)
 
-Every template has an optional **API Name** (Command Hub → template editor) — a unique developer key like `Opp_Close_Summary`. Flows reference it via the **Template API Name** input on the DocGen actions instead of a record Id, so automations survive sandbox→production deploys with nothing to remap. Letters, numbers, and underscores recommended; must be unique when set; existing templates work fine with it blank.
+Every template has an optional **API Name** — a unique developer key like `Opp_Close_Summary`. Flows reference it via the **Template API Name** input on the DocGen actions instead of a record Id, so automations survive sandbox→production deploys with nothing to remap. Letters, numbers, and underscores; must start with a letter; must be unique when set; existing templates work fine with it blank.
+
+Where you'll see it (v3.29+):
+
+- **Create wizard** — the API Name auto-fills from the Template Name as you type (`Opp Close Summary` → `Opp_Close_Summary`). Edit it to take manual control, or clear it to re-sync with the name.
+- **Template editor → Settings tab** — shown right under the Template Name, in the Template section.
+- **Template record page** — on the DocGen Template layout, next to Name.
+- **Cloning** (§5.2.1) gives the copy its own unique API Name automatically; **Export/Import** (§5.2.2) carries the API Name across orgs and only drops it if a template in the target org already claims it.
 
 ### 5.2 Template versions
 
@@ -276,7 +283,31 @@ Each save creates a new `DocGen_Template_Version__c` record. Only the version ma
 
 **Version-pinned render config (v1.97+).** Editing a template's Output Format / Header HTML / Footer HTML / Document Title Format / Page Size / Page Orientation / Page Margins / Custom Margins used to silently rewrite the rendering of every previously-saved version, because the runner always read live template values. From v1.97 on, those eight fields are snapshotted onto the version at save time, and the render path overlays a non-null snapshot onto the template values. Practical effect: roll back to an older active version and you get the rendering that was authored at the time of that save, not whatever you've since changed the template to. Versions saved before v1.97 have no snapshot — those still fall back to the live template, so upgrading is non-breaking; the first re-save populates the snapshot.
 
+**Changing a template's format (v3.29+).** Switching **Type** (e.g. Word → HTML) requires uploading a new body file in the new format: change the Type, upload the file on the Document tab, and click **Save as New Version** — format and body update together. A details-only save that changes the Type is **blocked with an error**, because the previous-format body and its cached artifacts would keep rendering (that's the stale-output bug fixed in v3.29). Relatedly, if you've uploaded a file but use a details-only save, DocGen warns that the upload isn't included — documents keep generating from the previous file until you Save as New Version.
+
 **Deleting old versions (v1.92+).** Heavy iteration accumulates versions fast — each save creates the version record plus 5–7 ContentVersions (the body file + pre-decomposed XML parts). DocGen Admin → click into the template → **Versions** tab now exposes a **Delete** button next to each non-active version. Confirm the dialog, and the version record _plus_ its body and pre-decomposed files are cascade-deleted in one transaction. The currently active version can't be deleted — activate a different version first if you need to remove the current one.
+
+### 5.2.1 Cloning a template (v3.29+)
+
+**Your Templates → row menu → Clone** copies everything in one click: the template record (all settings, query config, signer inputs, e-signature defaults), the active version and its file, inline images, the watermark, and saved queries. Image extraction and pre-decomposition re-run automatically on the copy, so it's immediately generation-ready.
+
+The copy is deliberately conservative:
+
+- Named "`<original> (Copy)`" and opened in the editor right away so you can rename it.
+- Starts **Inactive** and never **Default**, so it stays out of every picker until you flip it on.
+- Gets its own unique API Name derived from the new name (the original's key stays untouched).
+
+Use it to iterate safely on a production template — clone, edit the copy, verify with Generate Sample, then activate the copy and deactivate the original.
+
+### 5.2.2 Exporting & importing templates
+
+**Your Templates → row menu → Export** downloads a `.docgen.json` bundle containing the template settings, the active version's file, referenced inline-image assets, the watermark, and saved queries. **Import Template** (button above the list) recreates the whole thing in any org — shepherd image URLs are rewritten to the new org's files automatically, and image extraction/pre-decomposition re-run on arrival.
+
+Notes:
+
+- Only the **active** version travels; version history stays behind.
+- The API Name is preserved on import (that's the point of a stable key) unless a template in the target org already uses it, in which case it's left blank.
+- v3.29+ bundles include the newer fields (API Name, signer verification defaults, default e-sign email message, signer form-field config). Bundles exported from older versions still import fine — those fields just start blank.
 
 ### 5.3 Test record
 
@@ -294,7 +325,7 @@ Use this for compliance-sensitive documents where only one format is allowed (e.
 
 Restrict more narrowly which users see a template in their picker:
 
-- **`Required_Permission_Sets__c`** (comma-separated permission-set names): only users with _all_ of these permission sets see the template.
+- **`Required_Permission_Sets__c`** (comma-separated permission-set names): only users with _at least one_ of these permission sets see the template.
 - **`Specific_Record_Ids__c`** (comma-separated record IDs): only show the template for these specific records.
 - **`Record_Filter__c`** (SOQL `WHERE` clause — for example, `StageName = 'Negotiation/Review' AND Amount > 10000`): dynamically show/hide based on the record's field values.
 
@@ -302,7 +333,11 @@ These can be combined. All three must match for the template to appear.
 
 ### 5.6 Template sharing
 
-Template access uses **standard Salesforce sharing** — sharing rules, manual sharing, and role hierarchy. Field-level security is enforced on the merged data too. There's no custom sharing UI; if you want to restrict who _sees_ a template in the picker, use the visibility controls in §5.5 instead.
+**v3.29+: no sharing setup needed.** The **DocGen User** permission set now includes read-only _View All_ on templates, so every DocGen user can see all active templates in the picker without manual shares, public groups, or sharing rules. Who should see which template is controlled by the visibility features built for exactly that (§5.5): the **Active** flag, **Required Permission Sets**, **Specific Record Ids**, and **Record Filter**. Write access is unchanged — only admins (DocGen Admin) can create or edit templates, and field-level security is still enforced on the merged data.
+
+On older versions (≤3.28), template records default to Private sharing, so non-owner users saw an empty picker until an admin either shared the templates (manual share, public group, or sharing rule) or set Setup → Sharing Settings → _DocGen Template_ → Default Internal Access = **Public Read Only**. That workaround is no longer necessary after upgrading, but it's harmless to leave in place.
+
+> **If you were relying on record-level sharing to hide templates from specific users:** that no longer restricts the picker. Move those rules onto **Required Permission Sets** (§5.5) — it's deploy-safe, visible on the template itself, and enforced consistently across the runner, bulk runner, signature sender, and Flow.
 
 ### 5.7 HTML templates (Google Docs, Notion, any HTML source)
 
@@ -667,7 +702,7 @@ Pick one. If both are set, you get **two `<style>` blocks each declaring `@page`
 
 #### 5.7.4 Header / Footer fields
 
-HTML templates gain two optional fields on a dedicated **Header / Footer** tab in the template edit modal:
+Two optional fields on a dedicated **Header / Footer** tab in the template edit modal (the tab shows for HTML templates, and the fields apply to **any** template type's PDF output — a Word→PDF template with Header/Footer HTML set gets them too):
 
 - `Header_Html__c` — rendered in the top page margin of every PDF page
 - `Footer_Html__c` — rendered in the bottom page margin of every PDF page
@@ -730,6 +765,8 @@ Loop auto-expansion works the same as Word. Either pattern produces one repeated
 #### 5.7.8 Bulk generation + Giant Query
 
 HTML templates work with every generation path: single-record, bulk (individual PDFs or merged), and Giant Query (60K+ row child relationships via batched rendering). Same 12 MB Queueable heap envelope, same 50,000-row batch ceiling, same Flow action.
+
+> **Giant-query limitation (HTML templates):** outside the giant loop itself — the title block, summary text, headers — only these tag families resolve: plain field/parent tags with format suffixes, `{Today}`/`{Now}`, `{RunningUser.X}`, aggregates, `{#ChartBucket}`, `{%Image:N}`, and `{%asset:…}`. Conditionals (`{#IF}`, `{^…}`), secondary child loops, barcodes, `{%FieldName}` image-field tags, and signature/form-field tags **print as raw text at the parent level** on this path. Keep the parent shell of a 2,000+-row HTML template to the supported tags. Word templates don't have this restriction — their parent content runs the full engine.
 
 #### 5.7.9 Known limitations
 
@@ -1058,6 +1095,8 @@ Every tag DocGen recognizes. Tags are case-insensitive for functions (`{SUM:...}
 ```
 
 Null/missing fields render as empty string — no error, no placeholder.
+
+Tag names are case-sensitive, and there's **no escape or comment syntax** — any `{…}` pair is treated as a tag (an unknown name resolves to empty string, so `{like this}` silently disappears), and an unclosed `{` fails the merge with a "Malformed merge tag" error. If a document needs literal braces: in HTML templates use the entities `&#123;` and `&#125;`; in Word templates avoid brace-wrapped prose.
 
 ### 7.2 Format specifiers
 
@@ -1585,7 +1624,7 @@ Buckets sort **descending by count**, alpha by key for ties. Null/blank values c
 | `{color}`       | String  | Cycled palette color, `#hex` form (override with `colors=` modifier)             |
 | `{color_hex}`   | String  | Same color without the leading `#` — for Word `w:shd w:fill` attributes          |
 
-Empty bucket lists render the body zero times. Add `{:else}No responses yet.{/:else}` inside the tag for a fallback.
+Empty bucket lists render the body zero times. Add `{:else}No responses yet.` before the closing `{/ChartBucket}` for a fallback (`{:else}` splits the branch — it has no closing tag of its own).
 
 **Modifiers** (pass as a third colon segment using `key=value&key=value`):
 
@@ -1759,7 +1798,7 @@ So `:3inx` → `:288x`, `:x25mm` → `:x95`.
 {*URL:qr:200}                   200px QR code
 ```
 
-Barcodes render in Word **and** HTML templates (HTML support added in v3.15) across PDF and DOCX output. Types supported: `code128`, `qr`.
+Barcodes render in Word **and** HTML templates (HTML support added in v3.15) across PDF and DOCX output. Types supported: `code128`, `qr` — **only** those two. A typo'd or unsupported type (e.g. `{*SKU:code39}`) renders nothing, silently; leaving the type off defaults to Code 128.
 
 QR codes are generated natively in Salesforce with Level Q error correction and support values up to 600 characters. For printed or mailed documents, short URLs or tokens under 120 characters are recommended for 1 inch square QR codes.
 
@@ -1782,7 +1821,7 @@ See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:
 - **Type**: `Full` | `Initials` | `Date` | `DatePick` (optional, defaults to `Full`).
 - **Style** (optional): add `:inline` as a final suffix (e.g. `{@Signature_Buyer:1:Full:inline}`, `{@Signature_Buyer:1:Date:inline}`) to render a **compact in-place mark** instead of the stamp card. See [§10.7.2](#1072-stamp-card-vs-inline-how-a-signature-renders).
 
-Pre-signing, tags are preserved in the output (not replaced). Post-signing, they're stamped with the signer's typed name or signed date + a subtle "Electronically signed by X on DATE" verification line.
+Pre-signing, tags are preserved in the output (not replaced). Post-signing, each tag position carries the signer's mark as a **stamp card** — drawn ink or typed name in a signature font, with a "Signed by X · date" caption (see §10.10). Date tags stamp the signed date as text.
 
 #### Signature loop block — `{#Signatures}` (variable signer count)
 
@@ -1869,7 +1908,7 @@ Other limitations (apply to both options):
 Two special merge tags resolve to the current date/time without needing a formula field. They accept the same format suffixes as any date field:
 
 ```
-{Today}                         2026-04-20 (default ISO format)
+{Today}                         2026-04-20 00:00:00 (bare tag carries a midnight time — add a format suffix for a clean date)
 {Today:MM/dd/yyyy}              04/20/2026
 {Today:MMMM d, yyyy}            April 20, 2026
 {Today:date}                    Running user's locale default
@@ -1975,18 +2014,20 @@ These all render reliably in PDF and DOCX. Highlight + copy any of them into you
 
 #### Conditional checkbox pattern
 
-Combine the checkbox glyphs with `{Field:checkbox}` or `{#IF}` to render dynamic checked/unchecked state from a Salesforce checkbox field:
+Combine the checkbox glyphs with `{Field:checkbox}`, or use `{#IF}` with `{:else}` to render dynamic checked/unchecked state from a Salesforce checkbox field:
 
 ```
-Approved: {#IF IsApproved}☑{/IF}{#IFNOT IsApproved}☐{/IFNOT}
+Approved: {#IF IsApproved}☑{:else}☐{/IF}
 ```
 
-Or in tabular form for surveys / inspection forms:
+Or in tabular form for surveys / inspection forms (the inverse section `{^Field}` works too):
 
-| Item             | Status                                                                   |
-| ---------------- | ------------------------------------------------------------------------ |
-| Pre-flight check | {#IF Preflight_Complete**c}☑{/IF}{#IFNOT Preflight_Complete**c}☐{/IFNOT} |
-| Safety briefing  | {#IF Safety_Done**c}☑{/IF}{#IFNOT Safety_Done**c}☐{/IFNOT}               |
+| Item             | Status                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Pre-flight check | {#IF Preflight_Complete\_\_c}☑{:else}☐{/IF}                         |
+| Safety briefing  | {#IF Safety_Done\_\_c}☑{/IF}{^Safety_Done\_\_c}☐{/Safety_Done\_\_c} |
+
+> There is no `{#IFNOT}` tag — use `{:else}` inside an `{#IF}`, or the inverse section `{^Field}…{/Field}` (§7.4).
 
 #### What does NOT work
 
@@ -2054,6 +2095,10 @@ Comments: {Comments}
 5. Optional: override output format if the template isn't locked (§5.4).
 6. Click **Generate**.
 
+**Picker order & grouping.** Templates are grouped by their **Category** field, the object's **Default** template (★) floats to the top, and **Sort Order** (lower = higher) breaks ties — blank Sort Order falls back to Default-first, then name. A category dropdown filters the list when you have many templates. All three are plain fields on the template (Settings tab).
+
+**Where the runner can live.** Record pages, App Builder pages, the Command Hub, Experience Cloud pages, Flow screens, and the utility bar. In App Builder, per-placement toggles let you hide **Download**, **Save to Record**, **Document Packet**, **Combine PDFs**, or **Combine with existing PDFs** for that page. On mobile, the runner is save-to-record only (mobile browsers can't take the download hand-off); packets and combines are download-only, so they're desktop features.
+
 ### 8.2 What happens behind the scenes
 
 - The runner **scouts child record counts** before generating.
@@ -2070,9 +2115,11 @@ If the template isn't locked (`Lock_Output_Format__c = false`), users see a togg
 
 When the template output is PDF and the record has PDF ContentVersions attached, the runner shows a "Merge PDFs" option. Selected PDFs are appended to the generated doc into one final PDF. Useful for adding signed contracts, terms attachments, or exhibits.
 
+**Standalone Combine PDFs mode.** The runner also has a **Combine PDFs** segment that merges two or more of the record's _existing_ PDFs into one — no template, no generation. Pick the files, order them, combine, download.
+
 ### 8.5 Document packets
 
-A packet is multiple templates generated in one action and merged (or sent as a signature packet). Select multiple templates in the runner, hit Generate, and they're combined. For signature packets, see [§10.3](#103-packets-multi-template-signing).
+A packet is multiple templates generated in one action and merged (or sent as a signature packet). Select multiple templates in the runner, hit Generate, and they're combined. A packet can also **fold in existing record PDFs** — check "include existing PDFs" and pick which files ride along after the generated documents. For signature packets, see [§10.3](#103-packets-multi-template-signing).
 
 ### 8.6 One-click quick action button (v3.28+)
 
@@ -2087,6 +2134,19 @@ For the "this object always generates this one template" case, add the **DocGen 
 When an object has one active configuration the click generates immediately; with several, a small picker appears. **Save To Record** additionally attaches the file to the record's Files.
 
 > **Limitation:** this is a synchronous path — templates over the giant-query threshold (~2,000 child rows) will show an error instead of downloading. Use the Runner or a Flow with the Bulk/Giant actions for those.
+
+### 8.7 Document naming — Document Title Format tokens
+
+The template's **Document Title Format** field (Settings tab → Document Title editor) names every generated file — runner, bulk, Flow, quick action, and signed PDFs alike. Blank = the template name. Supported tokens, resolved against the source record:
+
+| Token                                         | Example                                                                                                               |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `{Field}` / `{Parent.Field}`                  | `Invoice - {Name}`, `{Account.Name} Summary`                                                                          |
+| `{Today}` / `{Now}` + any date pattern        | `Waiver {Today: MM/DD/YYYY}`                                                                                          |
+| `{RunningUser.X}` (allowlisted fields, §7.13) | `Prepared by {RunningUser.FirstName}`                                                                                 |
+| Format suffixes                               | `:label` (picklist label), `:date`, `:date:locale`, date patterns, number patterns — same grammar as body tags (§7.2) |
+
+Fields used in the title don't need to be in the Query Config — the title resolver loads them itself. A `documentTitle` passed at runtime (Flow input, quick-action CMDT) wins over the template's format.
 
 ## 9. Bulk generation
 
@@ -2103,12 +2163,16 @@ Mass-generate documents for many records in one batch.
     - **Combined PDF** — all records merged into one PDF (memory-efficient, compliance bundles).
     - **Individual files** — one PDF per record saved to that record.
     - **Both** — individual files + a combined bundle.
-5. Adjust batch size if needed (1–200; default 10).
+5. Adjust batch size if needed (1–200; default 1 — one record per batch execution is the safest for heap-heavy templates; raise it for small, simple templates).
 6. Submit.
+
+**Preview one record first.** Before launching a big job, use **Generate Sample** — pick a sample record and the bulk runner produces one real PDF from it so you can sanity-check the output.
 
 ### 9.2 Saved queries
 
 Save a filter as a reusable `DocGen_Saved_Query__c`. Gives non-technical users a drop-down of pre-built filters without writing SOQL. Created and managed in the Bulk Generation UI.
+
+**Report-import auto filter.** If the selected template's Query Config was built from a report import (it carries a WHERE clause), the bulk runner automatically applies that filter on selection and saves it as a **"From Report"** saved query so it's one click on every future run.
 
 ### 9.3 Job history
 
@@ -2295,12 +2359,12 @@ Audit records are read-only and appear on the signature request related list.
 
 ### 10.10 Signed PDF
 
-Once all signers complete, the system:
+Once all signers complete:
 
-1. Generates the final PDF with all signature tags stamped to "Electronically signed by X on DATE" text.
-2. Appends a **verification page** listing each signer, their typed name, IP, timestamp, and a QR code linking to the verify page.
-3. Saves the PDF to the source record as ContentDocumentLink.
-4. Emails the request creator with a link to the signed doc.
+1. **Guided PDF signing (the standard path):** each signer's marks — drawn ink or typed name — are composited onto the document as **stamp cards** ("Signed by X · date · Portwood DocGen") right where the `{@Signature_…}` tags sit; drawn and typed get identical treatment. A **Certificate of Completion** page is appended listing each signer, email, signed timestamp, IP address, consent, verification method, the document's **SHA-256 hash**, and a link to the verify page.
+2. In rare fallback cases (the signer's browser couldn't load the source PDF, or a returning signer whose in-session marks are gone), the server stamps "Electronically signed by X on DATE" text instead — functionally signed, just without the stamp-card visual.
+3. The signed PDF is saved to the source record (named per the template's Document Title Format, falling back to "<name> - Signed").
+4. The request creator is emailed a link to the signed doc.
 
 ### 10.11 Decline flow
 
@@ -2319,6 +2383,7 @@ Before signatures work in production, complete the checklist in **Signature Sett
 - ✅ Org-Wide Email Address configured + verified (green checkmark)
 - ✅ Guest permission set assigned to the Site's guest user
 - ✅ Signature VF pages deployed (`DocGenSignature`, `DocGenSignaturePdf`, `DocGenVerify`, `DocGenSign`)
+- ✅ **Experience Cloud sites only:** guest file access enabled — your site → **Workspaces → Administration → Preferences** → check **"Let guest users view asset files, library files, and CMS content available to the site."** Without it, guest signers get **"Document unavailable"** even though everything else is configured correctly (§15.9). Classic Salesforce Sites (`*.my.salesforce-sites.com`) don't need this.
 
 The Settings panel shows each check as pass/fail with a fix link.
 
@@ -2375,7 +2440,7 @@ For each template you can edit the **subject** and **body**, preview it live wit
 
 ## 11. Flow automation cookbook
 
-DocGen ships five Flow invocable actions plus three helpers for custom signing UIs. Each one fits a different job-to-be-done. Below: which to pick, plus a worked recipe for each.
+DocGen ships six Flow invocable actions plus three helpers for custom signing UIs. Each one fits a different job-to-be-done. Below: which to pick, plus a worked recipe for each. (One of the six — "DocGen: Send Existing Document for Signature" — is **deprecated**; it still works but new Flows should use "DocGen: Create Signature Request," which covers the same in-browser PDF signing. The sixth, "DocGen: Write Back Signer Form Fields," re-runs signer-input writeback for a completed request — normally automatic, exposed for retry/custom flows.)
 
 ### 11.1 Picking the right action
 
@@ -2505,6 +2570,8 @@ For multi-signer flows (parallel: legal + executive sign together; sequential: e
 
 ### 11.7 Recipe — Send a document for signature on the PDF viewer page
 
+> **Deprecated (v3.21+).** "DocGen: Send Existing Document for Signature" still works — it now routes to the same guided PDF signing as everything else — but new Flows should use **DocGen: Create Signature Request** (§11.6), which covers this scenario with more options (email message/subject, verification settings, Template API Name). This recipe stays for existing Flows.
+
 Use **DocGen: Send Existing Document for Signature** (`DocGenSignaturePdfFlowAction`) when you want the signer to review the **real, fully rendered PDF in the browser** (rather than the typed-name placement page) and have the completed document land back on the record. Pass a **Template Id**: DocGen snapshots the record's merge data at send-time and, on completion, re-renders the document from that snapshot (immune to later record edits), appends a signing-certificate page, and attaches the signed PDF to the related record's Files. This supports the [`{#Signatures}` loop block](#signature-loop-block--signatures-variable-signer-count) — one signature layout that repeats per signer. The template must have a **Base Object** and **Query Config** set.
 
 > **Removed in v3.18 — sending a pre-generated PDF (Content Version Id).** E-signature always renders from a **template** now. A finished PDF has no signature tags to detect, so it could never drive field-by-field signing or stamp signatures back into the document. Provide a Template Id; the `Content Version Id` input is ignored. (Generating a PDF normally — outside signing — is unchanged.)
@@ -2621,7 +2688,7 @@ Always add a Decision element after the action that branches on `success`. The m
 
 ## 12. Apex API reference
 
-Call DocGen from your own Apex code, triggers, scheduled jobs, or Lightning components. All classes are global in the managed package namespace `portwoodglobal`, so subscribers prefix as `portwoodglobal.DocGenService` from their own code.
+Call DocGen from your own Apex code, triggers, scheduled jobs, or Lightning components. **`DocGenService` is the `global`, subscriber-callable API** — prefix as `portwoodglobal.DocGenService` from your own code. The controller classes referenced later in this chapter (`DocGenController`, `DocGenBulkController`) are the package's own UI endpoints and are **not callable from subscriber code** — they're documented for reference; automate through `DocGenService` or the Flow actions instead.
 
 > Backwards compatibility: methods below are published as stable global entry points. New optional overloads may be added in future releases; existing signatures will not be removed without a major version bump and a deprecation notice.
 
@@ -2697,13 +2764,16 @@ import generatePdf from '@salesforce/apex/portwoodglobal.DocGenController.genera
 
 Usable from Flow Builder and from Apex via `Invocable.Action.createCustomAction(...)`:
 
-| Action                               | Class                          | Input                                                                                                                                                                                                            | Output                                                                                                      |
-| ------------------------------------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Generate Document                    | `DocGenFlowAction`             | `templateId`, `recordId`, `saveToRecord`, `documentTitle`, `outputFormatOverride`, `jsonData`                                                                                                                    | `contentDocumentId`, `contentVersionId`, `success`, `errorMessage`                                          |
-| Generate Bulk Documents              | `DocGenBulkFlowAction`         | `templateId`, `queryCondition`, `recordIds`, `jobLabel`, `combinedPdfOnly`, `keepIndividualFiles`, `batchSize`                                                                                                   | `jobId`, `success`, `errorMessage`                                                                          |
-| Generate Document (Auto Giant Query) | `DocGenGiantQueryFlowAction`   | `templateId`, `recordId`                                                                                                                                                                                         | `contentDocumentId` (small) OR `jobId` (giant)                                                              |
-| Create Signature Request             | `DocGenSignatureFlowAction`    | `templateId`, `relatedRecordId`, `signers` (List<Signer>: `name`, `email`, `role`, `contactId`), `signingOrder`                                                                                                  | `success`, `signatureRequestId`, `signerUrls`, `emailStatus`, `errorMessage`                                |
-| Send Existing Document for Signature | `DocGenSignaturePdfFlowAction` | `templateId` (required; `contentVersionId` deprecated/ignored as of v3.18), `relatedRecordId`, `signerRecords` (List<DocGenSigner>: `name`, `email`, `role`, `contactId`), `signingOrder`, `documentTitleFormat` | `success`, `signatureRequestId`, `signerUrls`, `signerNames`, `signerEmails`, `signerRoles`, `errorMessage` |
+| Action                                                                               | Class                          | Input                                                                                                                                                                                                                                                                                           | Output                                                                                                            |
+| ------------------------------------------------------------------------------------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Generate Document                                                                    | `DocGenFlowAction`             | `templateId` or `templateApiName`, `recordId`, `saveToRecord`, `documentTitle`, `outputFormatOverride`, `jsonData`                                                                                                                                                                              | `contentDocumentId`, `contentVersionId`, `success`, `errorMessage`                                                |
+| Generate Bulk Documents                                                              | `DocGenBulkFlowAction`         | `templateId`, `queryCondition`, `recordIds`, `jobLabel`, `combinedPdfOnly`, `keepIndividualFiles`, `batchSize`                                                                                                                                                                                  | `jobId`, `success`, `errorMessage`                                                                                |
+| Generate Document (Auto Giant Query)                                                 | `DocGenGiantQueryFlowAction`   | `templateId`, `recordId`, `saveToRecord`                                                                                                                                                                                                                                                        | `contentDocumentId` + `contentVersionId` (small) OR `jobId` (giant), `isGiantQuery`, `success`, `errorMessage`    |
+| Create Signature Request                                                             | `DocGenSignatureFlowAction`    | `templateId` or `templateApiName`, `relatedRecordId`, `signerRecords` (List<DocGenSigner>: `name`, `email`, `role`, `contactId`), `signingOrder`, `documentTitleFormat`, `emailMessage`, `emailSubject`, `sendEmails` ("Send Branded Emails"), `requireEmailVerification`, `prefillSignerEmail` | `success`, `signatureRequestId`, `signerUrls`, `signerNames`, `signerEmails`, `signerRoles`, `errorMessage`       |
+| Send Existing Document for Signature (**deprecated** — use Create Signature Request) | `DocGenSignaturePdfFlowAction` | `templateId` (required; `contentVersionId` deprecated/ignored as of v3.18), `relatedRecordId`, `signerRecords` (List<DocGenSigner>: `name`, `email`, `role`, `contactId`), `signingOrder`, `documentTitleFormat`                                                                                | `success`, `signatureRequestId`, `signerUrls`, `signerNames`, `signerEmails`, `signerRoles`, `errorMessage`       |
+| Write Back Signer Form Fields                                                        | `DocGenFieldWritebackService`  | `requestId` (Signature Request Id)                                                                                                                                                                                                                                                              | — (re-runs the automatic §11.7.1 signer-input writeback for a completed request; use for retries or custom flows) |
+
+> The old `signers` (List<Signer>) input on Create Signature Request is a deprecated inner type that Flow can't populate — always use **`signerRecords` (List<DocGenSigner>)**.
 
 ### 12.5 `DocGenDataProvider` interface — custom data source
 
@@ -2756,10 +2826,19 @@ The package installs in the `portwoodglobal` namespace. From subscriber code:
 
 App Launcher → **DocGen**. The Command Hub is the single entry point for admins:
 
-- **My Templates** — create, edit, version, share.
+- **My Templates** — create, edit, version, clone, export/import.
 - **Bulk Generation** — mass-generate against a SOQL filter or saved query.
-- **Signatures** — configure email branding, the public Site URL, the OWA sender.
+- **Signatures** — the public Site URL, the OWA sender, reminders, signer-verification defaults, and the setup checklist (§13.2).
+- **Assets** — central image library; reference any asset from any template with `{%asset:<key>}` (§7.7.1).
+- **Email Templates** — customize and brand the 7 signature-flow emails (§10.14).
 - **Learning Center** — links straight to [portwood.dev/guide](https://portwood.dev/guide) so docs are always current.
+
+Worth knowing inside My Templates:
+
+- **Install sample templates** (Create New tab) — one click seeds a set of working example templates to learn from and clone.
+- **Copy-Paste Tags** (template editor tab) — every field, loop, aggregate, and image tag for the template's object as ready-to-copy pills, so authors never hand-type tag syntax.
+
+**Runner languages.** The document runner's UI ships translated into 10 languages (Spanish, French, German, Italian, Japanese, Korean, Dutch, Brazilian Portuguese, Simplified + Traditional Chinese). Each user sees their own Salesforce language automatically — nothing to configure.
 
 ### 13.2 Signature Settings
 
@@ -2769,9 +2848,15 @@ Covers:
 
 - Site URL configuration
 - OWA (Org-Wide Email Address) selection
-- Email branding (color, logo, subject, footer)
 - Reminder enable/disable + hour threshold
+- Signer verification org defaults — **Require Email Verification** and **Pre-fill Signer Email** (templates and individual sends can override; see §10.5)
 - Setup validation checklist (pass/fail for each prerequisite)
+
+Email branding (colors, logo, subject lines, body copy) lives in **Command Hub → Email Templates** (§10.14) as of v3.27 — it's no longer on this page.
+
+### 13.2.1 Error Logs
+
+The **DocGen Error Logs** tab (in the DocGen app's navigation) lists `DocGen_Error_Log__c` records — non-sensitive exception details captured automatically when generation, bulk jobs, or signature processing hit an error. Each log records the failing context so you can troubleshoot without asking users to reproduce. Start here (alongside the bulk job history in §9.6) whenever someone reports "it didn't work"; §15 covers the common fixes.
 
 ### 13.3 Blob.toPdf Release Update
 
@@ -2836,19 +2921,24 @@ The signing page runs as a guest user, which the platform restricts pretty heavi
 
 ### 14.8 Template & output size guidance
 
-| Scenario                                        | Limit         | UX                                     |
-| ----------------------------------------------- | ------------- | -------------------------------------- |
-| Template upload (DOCX / PPTX)                   | 10 MB         | Rejected with a "compress images" hint |
-| Template upload (HTML)                          | n/a — text    | One-click                              |
-| PDF generate (download or save)                 | ~60 MB output | One-click                              |
-| DOCX / XLSX generate ≤ 5 MB                     | n/a           | One-click                              |
-| DOCX / XLSX generate > 5 MB, **Download**       | n/a           | One-click                              |
-| DOCX / XLSX generate > 5 MB, **Save to Record** | n/a           | 2-step (download, then drag-to-attach) |
-| Combine PDFs / Packet                           | Download only | One-click                              |
+| Scenario                                         | Limit                   | UX                                            |
+| ------------------------------------------------ | ----------------------- | --------------------------------------------- |
+| Template upload (DOCX / PPTX)                    | 10 MB                   | Rejected with a "compress images" hint        |
+| Template upload (HTML)                           | n/a — text              | One-click                                     |
+| PDF generate (download or save)                  | ~60 MB output           | One-click                                     |
+| PDF **Save to Record** with attached images      | ~30 MB of record images | Blocked with a "use Download instead" message |
+| DOCX / XLSX generate ≤ ~4 MB                     | n/a                     | One-click                                     |
+| DOCX / XLSX generate > ~4 MB, **Download**       | n/a                     | One-click                                     |
+| DOCX / XLSX generate > ~4 MB, **Save to Record** | n/a                     | 2-step (download, then drag-to-attach)        |
+| Combine PDFs / Packet                            | Download only           | One-click                                     |
 
 **Why the 10 MB template cap?** The platform unzips and pre-caches every template at save time, and async heap is bounded at 12 MB. Templates over ~10 MB don't survive that step. Almost every 20 MB+ template is uncompressed images — in Word, right-click any image → **Compress Pictures → Email (96 ppi)** drops most templates to 1–2 MB with no visible quality loss.
 
-**Why the 2-step flow for > 5 MB DOCX / XLSX?** The framework caps inbound browser-to-server payloads at 5 MB. For larger files, DocGen downloads the file to your computer, then shows a drag-to-attach uploader that uses the platform's native (2 GB) uploader. One extra click, no Apex heap involved.
+**Why the 2-step flow for > ~4 MB DOCX / XLSX?** The framework caps inbound browser-to-server payloads at roughly 4 MB. For larger files, DocGen downloads the file to your computer, then shows a drag-to-attach uploader that uses the platform's native (2 GB) uploader. One extra click, no Apex heap involved.
+
+### 14.9 Excel templates — alpha limitations
+
+Excel (`.xlsx`) templates handle plain field tags, parent lookups, basic loops, and format suffixes. Not yet supported in Excel output: **images** (`{%…}` tags are removed cleanly), **charts** (`{Chart:…}` renders a text placeholder), **shared assets** (tag removed), and **rich-text fields** (may carry Word-style formatting artifacts). Use Word or HTML templates when you need those.
 
 ---
 
@@ -2941,5 +3031,7 @@ Notes:
 - If it still fails after enabling the preference, confirm the site's guest user has the **DocGen_Guest_Signature** permission set assigned (see [§10 — Assigning the guest permission set](#assigning-the-guest-permission-set)) and that a verified Org-Wide Email Address exists.
 
 ### 15.10 Still stuck?
+
+Check the **DocGen Error Logs** tab first (§13.2.1) — most generation, bulk, and signature failures leave a log record with the failing context, which beats guessing.
 
 The web guide at [portwood.dev/guide](https://portwood.dev/guide) is always current with the latest release. For implementation help or training, visit [portwood.dev/support](https://portwood.dev/support) — we'll walk you through it.

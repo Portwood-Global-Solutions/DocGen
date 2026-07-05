@@ -2385,6 +2385,38 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         try {
             // 1. Update Template
             Id templateId = (Id) fields.get('Id');
+            // #203 — a format switch without a matching new body leaves the active
+            // version's file and snapshots in the OLD format; generation then reads
+            // (e.g.) DOCX bytes down the HTML branch and silently serves a stale or
+            // garbled body. Fail loudly at save time instead: changing the Type
+            // requires uploading a new body in that format (Save as New Version).
+            String requestedType = (String) fields.get('Type__c');
+            if (String.isNotBlank(requestedType) && createVersion != true && templateId != null) {
+                DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+                /* code-analyzer-suppress ApexFlsViolation */
+                List<DocGen_Template__c> current = [
+                    SELECT Type__c
+                    FROM DocGen_Template__c
+                    WHERE Id = :templateId
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (
+                    !current.isEmpty() &&
+                    String.isNotBlank(current[0].Type__c) &&
+                    current[0].Type__c != requestedType
+                ) {
+                    throw new DocGenException(
+                        'This template\'s format can\'t change from ' +
+                            current[0].Type__c +
+                            ' to ' +
+                            requestedType +
+                            ' without a new body file in that format. Open the Document tab, upload the ' +
+                            requestedType +
+                            ' file, and use "Save as New Version" — the format and body then update together.'
+                    );
+                }
+            }
             DocGen_Template__c template = new DocGen_Template__c(Id = templateId);
             template.Name = (String) fields.get('Name');
             template.Category__c = (String) fields.get('Category__c');
@@ -6449,7 +6481,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     'Page_Orientation__c',
                     'Page_Size__c',
                     'Page_Margins__c',
-                    'Custom_Margins__c'
+                    'Custom_Margins__c',
+                    'API_Name__c',
+                    'Signer_Verification__c',
+                    'Prefill_Signer_Email__c',
+                    'Default_Email_Message__c',
+                    'Form_Fields_Config__c'
                 }
             );
             /* code-analyzer-suppress ApexFlsViolation */
@@ -6477,6 +6514,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     Page_Size__c,
                     Page_Margins__c,
                     Custom_Margins__c,
+                    API_Name__c,
+                    Signer_Verification__c,
+                    Prefill_Signer_Email__c,
+                    Default_Email_Message__c,
+                    Form_Fields_Config__c,
                     (
                         SELECT
                             Id,
@@ -6535,6 +6577,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             tmplData.put('Page_Size__c', tmpl.Page_Size__c);
             tmplData.put('Page_Margins__c', tmpl.Page_Margins__c);
             tmplData.put('Custom_Margins__c', tmpl.Custom_Margins__c);
+            tmplData.put('API_Name__c', tmpl.API_Name__c);
+            tmplData.put('Signer_Verification__c', tmpl.Signer_Verification__c);
+            tmplData.put('Prefill_Signer_Email__c', tmpl.Prefill_Signer_Email__c);
+            tmplData.put('Default_Email_Message__c', tmpl.Default_Email_Message__c);
+            tmplData.put('Form_Fields_Config__c', tmpl.Form_Fields_Config__c);
             bundle.put('template', tmplData);
 
             // Active version's template file
@@ -6672,6 +6719,25 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             tmpl.Page_Size__c = (String) tmplData.get('Page_Size__c');
             tmpl.Page_Margins__c = (String) tmplData.get('Page_Margins__c');
             tmpl.Custom_Margins__c = (String) tmplData.get('Custom_Margins__c');
+            tmpl.Signer_Verification__c = (String) tmplData.get('Signer_Verification__c');
+            tmpl.Prefill_Signer_Email__c = (String) tmplData.get('Prefill_Signer_Email__c');
+            tmpl.Default_Email_Message__c = (String) tmplData.get('Default_Email_Message__c');
+            tmpl.Form_Fields_Config__c = (String) tmplData.get('Form_Fields_Config__c');
+            // API_Name__c is unique — keep it (the whole point is a stable key
+            // across orgs) unless another template in this org already owns it.
+            String importedApiName = (String) tmplData.get('API_Name__c');
+            if (String.isNotBlank(importedApiName)) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                Integer taken = [
+                    SELECT COUNT()
+                    FROM DocGen_Template__c
+                    WHERE API_Name__c = :importedApiName
+                    WITH SYSTEM_MODE
+                ];
+                if (taken == 0) {
+                    tmpl.API_Name__c = importedApiName;
+                }
+            }
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(tmpl, AccessLevel.USER_MODE);
 
@@ -6829,6 +6895,62 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error importing template.');
         }
+    }
+
+    /**
+     * Clones a template in-org: copies the record, active version, template
+     * file, inline-image assets, watermark, and saved queries via the
+     * export/import bundle path (which also re-runs image extraction and
+     * pre-decomposition on the copy). The copy starts Inactive and non-Default
+     * so it never appears in pickers until the admin reviews it, and gets a
+     * unique API Name derived from the new name (blank if it can't be made
+     * unique cheaply).
+     * @return The new template record ID
+     */
+    @AuraEnabled
+    public static Id cloneTemplate(Id templateId, String newName) {
+        try {
+            String bundleJson = exportTemplate(templateId);
+            Map<String, Object> bundle = (Map<String, Object>) JSON.deserializeUntyped(bundleJson);
+            Map<String, Object> tmplData = (Map<String, Object>) bundle.get('template');
+            String name = String.isNotBlank(newName) ? newName : ((String) tmplData.get('Name')) + ' (Copy)';
+            tmplData.put('Name', name.abbreviate(80));
+            tmplData.put('Is_Default__c', false);
+            tmplData.put('Is_Active__c', false);
+            tmplData.put('API_Name__c', uniqueApiNameFor(name));
+            return importTemplate(JSON.serialize(bundle));
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error cloning template.');
+        }
+    }
+
+    /** Derives an API name from a display name and suffixes _2.._9 on collision; null when exhausted. */
+    private static String uniqueApiNameFor(String displayName) {
+        String base = displayName.replaceAll('[^a-zA-Z0-9]+', '_').replaceAll('^[_0-9]+', '').replaceAll('_+$', '');
+        if (String.isBlank(base)) {
+            return null;
+        }
+        base = base.abbreviate(77); // leave room for a _N suffix under the 80 cap
+        Set<String> takenNames = new Set<String>();
+        /* code-analyzer-suppress ApexFlsViolation */
+        for (DocGen_Template__c t : [
+            SELECT API_Name__c
+            FROM DocGen_Template__c
+            WHERE API_Name__c LIKE :(base + '%')
+            WITH SYSTEM_MODE
+        ]) {
+            takenNames.add(t.API_Name__c.toLowerCase());
+        }
+        if (!takenNames.contains(base.toLowerCase())) {
+            return base;
+        }
+        for (Integer i = 2; i <= 9; i++) {
+            String candidate = base + '_' + i;
+            if (!takenNames.contains(candidate.toLowerCase())) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     // =========================================================================

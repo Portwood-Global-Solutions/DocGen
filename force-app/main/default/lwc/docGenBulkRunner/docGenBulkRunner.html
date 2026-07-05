@@ -252,7 +252,7 @@
                                 <template for:each={savedQueries} for:item="q">
                                     <li key={q.Id}>
                                         <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
-                                            <div class="slds-truncate" title={q.Description__c}>
+                                            <div class="slds-truncate" title={q.description}>
                                                 <a onclick={handleLoadQuery} data-id={q.Id} class="text-link"
                                                     >{q.Name}</a
                                                 >

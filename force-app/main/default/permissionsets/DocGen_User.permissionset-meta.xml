@@ -855,7 +855,10 @@
         <modifyAllRecords>false</modifyAllRecords>
         <object>DocGen_Template__c</object>
         <viewAllFields>false</viewAllFields>
-        <viewAllRecords>false</viewAllRecords>
+        <!-- View All (read-only) so the picker works without manual record sharing.
+             Templates are org-wide config; audience control is Required_Permission_Sets__c
+             + Record_Filter__c, not record shares. Write access stays admin-only. -->
+        <viewAllRecords>true</viewAllRecords>
     </objectPermissions>
     <objectPermissions>
         <allowCreate>true</allowCreate>

@@ -421,7 +421,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         this._rebuildTemplateOptions();
     }
 
-    @wire(getChildRelationships, { objectApiName: '$objectApiName' })
+    @wire(getChildRelationships, { objectName: '$objectApiName' })
     wiredRelationships({ data }) {
         if (data) {
             this.childRelationships = data;
@@ -1841,7 +1841,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         downloadBase64Util(base64Data, fileName, mimeType);
     }
 
-    showToast(title, message, variant) {
-        this.dispatchEvent(new ShowToastEvent({ title, message, variant }));
+    showToast(title, message, variant, mode) {
+        this.dispatchEvent(new ShowToastEvent({ title, message, variant, mode }));
     }
 }
