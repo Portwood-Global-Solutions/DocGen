@@ -2385,6 +2385,38 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         try {
             // 1. Update Template
             Id templateId = (Id) fields.get('Id');
+            // #203 — a format switch without a matching new body leaves the active
+            // version's file and snapshots in the OLD format; generation then reads
+            // (e.g.) DOCX bytes down the HTML branch and silently serves a stale or
+            // garbled body. Fail loudly at save time instead: changing the Type
+            // requires uploading a new body in that format (Save as New Version).
+            String requestedType = (String) fields.get('Type__c');
+            if (String.isNotBlank(requestedType) && createVersion != true && templateId != null) {
+                DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+                /* code-analyzer-suppress ApexFlsViolation */
+                List<DocGen_Template__c> current = [
+                    SELECT Type__c
+                    FROM DocGen_Template__c
+                    WHERE Id = :templateId
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (
+                    !current.isEmpty() &&
+                    String.isNotBlank(current[0].Type__c) &&
+                    current[0].Type__c != requestedType
+                ) {
+                    throw new DocGenException(
+                        'This template\'s format can\'t change from ' +
+                            current[0].Type__c +
+                            ' to ' +
+                            requestedType +
+                            ' without a new body file in that format. Open the Document tab, upload the ' +
+                            requestedType +
+                            ' file, and use "Save as New Version" — the format and body then update together.'
+                    );
+                }
+            }
             DocGen_Template__c template = new DocGen_Template__c(Id = templateId);
             template.Name = (String) fields.get('Name');
             template.Category__c = (String) fields.get('Category__c');

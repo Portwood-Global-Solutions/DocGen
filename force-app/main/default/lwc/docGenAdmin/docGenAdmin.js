@@ -3306,6 +3306,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.showToast('Error', 'Name and Type are required.', 'error');
             return;
         }
+        // #203 — a details-only save does NOT attach a freshly-uploaded body.
+        // Say so, loudly, instead of letting the admin believe the new file is
+        // live while generation keeps serving the previous version.
+        if (this.uploadedContentVersionId) {
+            this.showToast(
+                'Uploaded file not saved yet',
+                'Your uploaded document is not included in a details-only save. Click "Save as New Version" to make it the active body — until then, documents still generate from the previous file.',
+                'warning'
+            );
+        }
 
         const fields = {
             Id: this.editTemplateId,
