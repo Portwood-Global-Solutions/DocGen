@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.29.0 — Template management UX + unified signing path + stale-snapshot fix
+
+Template administration catches up with the engine: API Names are now a first-class workflow, templates clone in one click, sharing setup disappears, and two silent-corruption bugs die (typed signers erasing drawn ink; stale bodies after format switches). Plus an 8-bug verified sweep and the largest documentation audit to date.
+
+### Fixed
+
+- **Typed signature erased earlier drawn signatures in multi-signer requests (#205 / Jira SCRUM-5)** — the guided signing page only composited in-browser when a field was _drawn_; a typed-only signer fell to the legacy `saveSignature` server path, whose re-render flattened every prior signer's drawn ink to "Electronically signed by" text (and showed a different confirmation flow). The composite gate now fires on any session mark — drawn or typed — so both styles get identical stamp-card treatment, one confirmation flow, and correct multi-signer chaining. Server path remains only as a true fallback (unreadable source PDF / returning signer). Browser-verified both orders (draw→type and type→draw); all signers land `Signature_Data__c='Signed (composited)'`.
+- **Stale template served after format switch or re-upload (#203)** — three-part fix: (1) a details-only save that changes the template's Type is now blocked with instructions (the old-format body + snapshots would keep rendering — DOCX bytes read as HTML); (2) snapshot decomposition is idempotent (a version's prior `docgen_tmpl_*` CVs are deleted before regeneration — re-runs used to create duplicate titles and the oldest silently won in every reader); (3) all four `PreDecompXmlLoader` queries order newest-first. The Command Hub also warns when a details-only save excludes a freshly-uploaded body.
+- **Cross-template upload leak** — a body uploaded but never saved no longer becomes the next-opened template's new version (upload state now resets on modal open, along with the sticky `@page`-ownership flag).
+- **Subscriber-org-only namespace bugs** — version-table Activate/Delete buttons were never disabled on the active version in installed orgs (raw `Is_Active__c` key); bulk-runner saved queries read raw field keys, so "Load" blanked the filter and duplicate "From Report" rows accumulated (also fixed the load/dedupe race).
+- **Runner/bulk polish** — `getChildRelationships` wire passed a misnamed param (silent null); bulk polling no longer freezes at "Processing" on one transient failure (3-strike tolerance + honest warning); unguarded `error.body` crashes in catch blocks; wizard no longer reopens in an invalid Excel+PDF state; the 30 MB save-to-record warning is sticky as intended.
+
+### Added
+
+- **Template Clone** — Your Templates → row menu → Clone copies the record, active version + file, inline images, watermark, and saved queries via the export/import pipeline (image extraction + pre-decomposition re-run automatically). Copies start Inactive/non-Default with a unique derived API Name and open straight into the editor.
+- **API Name workflow (completes v3.28's PHD-9)** — auto-derives from the Template Name in the create wizard (edit to override, clear to re-sync), pattern-validated with a duplicate pre-check, shown on the Review step, placed next to Template Name in the editor and on the record layout. Export/Import now carries API Name (kept on import unless taken); Clone derives a unique one.
+- **No-setup template sharing** — the DocGen User permission set now includes read-only View All on templates: pickers work for every user with no manual shares, public groups, or sharing rules. Audience control is the purpose-built visibility stack (Active / Required Permission Sets / Specific Record Ids / Record Filter). ⚠️ If you used record-level sharing to _hide_ templates from users, move those rules to Required Permission Sets (UserGuide §5.6).
+- **Settings tab redesign** — the template editor's ~12-control single-column stack is now four balanced two-column sections (Template / Output & Page Setup / Availability & Document Title / E-Signature Defaults).
+- **Export/Import completeness** — bundles now include Signer Verification, Pre-fill Signer Email, Default Email Message, and Signer Form-Field config (previously silently dropped on transfer).
+
+### Docs
+
+- **Full 4-domain feature audit** (merge-tag engine, generation/Flow/Apex APIs, e-signatures, admin/config) — fixed documented-but-broken `{#IFNOT}` pattern (render exception!), phantom signed-PDF QR-code claim, wrong Flow input (`signers` → `signerRecords`), stale bulk batch default, unmarked deprecated Flow action, false "all classes are global" claim; added Document Title Format token reference, picker ordering, standalone Combine PDFs, Generate Sample, "From Report" auto-filter, the 9th Flow action, sample-templates installer, Copy-Paste Tags tab, runner i18n, Excel limitations, HTML giant-query parent-tag limitations, and the ~30 MB save-image ceiling.
+- Experience Cloud guest file preference added to the one-time signing setup checklist (#206) + an actionable hint on the signing page's "Document unavailable" state.
+
+No new restricted-picklist values on existing objects — no manual upgrade steps. No new fields or objects.
+
 ## v3.28.0 — Shield-safe install + Flow fixes + quick-action button + email-template completion
 
 Clears the open issue board: two customer-blocking bugs, two customer-requested Flow features, a community-contributed quick action, the email-template GA gate, and four UI polish items.
