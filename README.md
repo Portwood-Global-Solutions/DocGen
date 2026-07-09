@@ -4,11 +4,11 @@ Generate PDFs and Word docs from any Salesforce record. Merge PDFs, add barcodes
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.29.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.30.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
-[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1668_passing-brightgreen)](#code-quality)
+[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1676_passing-brightgreen)](#code-quality)
 [![Coverage](https://img.shields.io/badge/Coverage-77%25-brightgreen)](#code-quality)
 [![Security](https://img.shields.io/badge/Code_Analyzer-0%2F0%2F0-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
@@ -371,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.29.0 — one-click template cloning, auto-filled API Names, a cleaner template editor, templates visible to your team with zero sharing setup, identical polished signature stamps whether signers draw or type, and template updates that always take effect immediately**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.30.0 — generated documents no longer leave template images behind as Files on the record (single, bulk, and Flow generation — and upgrading cleans up images left by earlier versions), plus an upgraded shared-asset library with image thumbnails, instant search, and custom categories**.
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +444,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.29.0 | **Latest (Released)**                   | `04tVx000000pe3RIAQ` |
+| v3.30.0 | **Latest (Released)**                   | `04tVx000000qERtIAM` |
+| v3.29.0 | Previous                                | `04tVx000000pe3RIAQ` |
 | v3.28.0 | Previous                                | `04tVx000000paUTIAY` |
 | v3.27.0 | Previous                                | `04tVx000000oiyjIAA` |
 | v3.26.0 | Previous                                | `04tVx000000ohhhIAA` |
