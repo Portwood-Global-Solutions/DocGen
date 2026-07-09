@@ -227,6 +227,41 @@ private class DocGenAssetTest {
     }
 
     @IsTest
+    static void setAssetCategorySetsClearsAndLists() {
+        Map<String, Object> created = DocGenController.createAsset('Header Logo', 'header-logo');
+        Id assetId = (Id) created.get('id');
+
+        Test.startTest();
+        DocGenController.setAssetCategory(assetId, '  Logos  ');
+        Test.stopTest();
+
+        DocGen_Asset__c after = [SELECT Category__c FROM DocGen_Asset__c WHERE Id = :assetId];
+        System.assertEquals('Logos', after.Category__c, 'setAssetCategory trims and stores the category');
+
+        List<Map<String, Object>> assets = DocGenController.getAssets();
+        Boolean found = false;
+        for (Map<String, Object> row : assets) {
+            if (assetId == (Id) row.get('id')) {
+                found = true;
+                System.assertEquals('Logos', row.get('category'), 'getAssets exposes the category');
+            }
+        }
+        System.assert(found, 'getAssets includes the categorized asset');
+
+        // Blank clears it.
+        DocGenController.setAssetCategory(assetId, '   ');
+        after = [SELECT Category__c FROM DocGen_Asset__c WHERE Id = :assetId];
+        System.assertEquals(null, after.Category__c, 'Blank category clears the field');
+
+        try {
+            DocGenController.setAssetCategory(null, 'Logos');
+            System.assert(false, 'Null assetId must throw');
+        } catch (AuraHandledException expected) {
+            System.assertNotEquals(null, expected.getMessage(), 'Friendly error expected');
+        }
+    }
+
+    @IsTest
     static void controllerNullArgsThrow() {
         Integer thrown = 0;
         try {

@@ -1,0 +1,24 @@
+<template>
+    <template if:true={value}>
+        <!-- Inline styles: the bundle stylesheet can't reach into the datatable's
+             nested primitive-cell shadow roots, so the sizing must live here.
+             Checkerboard backdrop keeps white/transparent logos visible. -->
+        <img
+            src={value}
+            alt={typeAttributes.alt}
+            loading="lazy"
+            style="
+                height: 48px;
+                width: auto;
+                max-width: 104px;
+                object-fit: contain;
+                display: block;
+                border-radius: 4px;
+                background: repeating-conic-gradient(#f3f3f3 0% 25%, #ffffff 0% 50%) 0 0 / 12px 12px;
+            "
+        />
+    </template>
+    <template if:false={value}>
+        <lightning-icon icon-name="utility:image" size="x-small" alternative-text="No image"></lightning-icon>
+    </template>
+</template>

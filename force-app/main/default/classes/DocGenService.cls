@@ -2411,6 +2411,25 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * #202 follow-up: the links ensureTemplateAssetImageAccessForPdf creates are
+     * only needed while Blob.toPdf() fetches the shepherd URLs inside the same
+     * transaction — the rendered PDF embeds the image bytes. Once the render
+     * completes, remove EVERY template-image link on the record (the current
+     * body's set included) so generation never leaves image Files on the target
+     * record — the prune-with-keep pass alone can never remove the current set,
+     * which is why a first generation on a fresh record still stranded the full
+     * image set. Null active version + empty keep-set make the prune treat the
+     * whole title-scoped set as stale, which also sweeps links stranded on the
+     * record by earlier package versions.
+     */
+    public static void removeTemplateImageLinksAfterRender(Id templateId, Id recordId) {
+        if (templateId == null || recordId == null) {
+            return;
+        }
+        pruneStaleTemplateImageLinks(templateId, recordId, null, new Set<Id>());
+    }
+
+    /**
      * Removes orphaned template-image ContentDocumentLinks that earlier
      * generations attached to this record. `ensureTemplateAssetImageAccessForPdf`
      * links the body's referenced images to the record so Blob.toPdf can read
@@ -2548,7 +2567,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             if (mr.templateType == 'HTML') {
                 ensureTemplateAssetImageAccessForPdf(templateId, recordId, mr.documentXml);
                 lastRenderedHtml = mr.documentXml;
-                return Blob.toPdf(mr.documentXml);
+                Blob htmlPdf = Blob.toPdf(mr.documentXml);
+                removeTemplateImageLinksAfterRender(templateId, recordId);
+                return htmlPdf;
             }
 
             Map<String, String> pdfImages = buildPdfImageMap(mr, templateId);
@@ -2562,7 +2583,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             ensureTemplateAssetImageAccessForPdf(templateId, recordId, html);
             lastRenderedHtml = html;
 
-            return Blob.toPdf(html);
+            Blob docxPdf = Blob.toPdf(html);
+            removeTemplateImageLinksAfterRender(templateId, recordId);
+            return docxPdf;
         } finally {
             DocGenHtmlRenderer.orientationOverride = null;
             DocGenHtmlRenderer.pageSizeOverride = null;
