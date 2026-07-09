@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.30.0 — Record image-file cleanup + Assets tab search, categories & thumbnails
+
+Two active support threads die: generated documents no longer leave their template images behind as Files on the record (single, bulk, every path), and the Assets tab grows real thumbnails, search, and free-text categories so a growing asset library stays navigable.
+
+### Fixed
+
+- **Template images stranded as Files on the target record (#219, follow-up to #202)** — rendering a PDF links the template's images to the record so the render engine can fetch them, and the v3.28 prune could only remove sets from _superseded_ template bodies — the current set was structurally un-prunable, so the **first** generation on a fresh record always left the full image set (and bulk-via-Flow stamped it onto every record; the runner's Download-only mode leaked too). New post-render sweep (`removeTemplateImageLinksAfterRender`) runs after `Blob.toPdf` returns on every path — single, Flow, bulk batch, giant-query (success _and_ multi-part-fallback) — the PDF embeds the image bytes, so the links are removed, including sets stranded on records by earlier package versions. User-attached files are never touched (title-scoped, both naming schemes). Verified end-to-end via a real render: first generation → PDF + zero image links; repeat generation stays clean.
+- **Template API Name saved, then silently wiped (#220)** — the create wizard persisted the API Name, but the post-create edit-modal handoff dropped it and the wizard's mandatory follow-up save posted an empty value over it (which is also why the edit screen showed blank). The handoff now carries the API Name, and `saveTemplate` treats a blank `API_Name__c` as "leave unchanged" — the developer key Flows reference can no longer be cleared by accident.
+- **Assets tab Thumbnail column rendered text instead of an image** — the column was declared with a datatable type that doesn't exist, so it silently fell back to plain text. A custom datatable type now renders a real 48 px thumbnail (aspect-preserving, checkerboard backdrop so white/transparent logos stay visible, placeholder icon before the first upload).
+
+### Added
+
+- **Assets tab: search + categories** — a search box filters the list live by name, tag key, merge tag, or category; assets take an optional free-text **Category** (new `DocGen_Asset__c.Category__c`, settable in the create wizard or the row's Edit action; blank clears), and a category dropdown (with an _Uncategorized_ bucket) appears once anything is categorized. Categories are organizational only — merge-tag resolution is untouched.
+- **Assets tab: contained layout** — the asset table caps at 60% viewport height (long lists scroll inside the card) and scrolls horizontally in narrow tabs instead of expanding past its container.
+
+New field: `DocGen_Asset__c.Category__c` (free text, FLS in DocGen Admin/User permission sets). No new restricted-picklist values on existing objects — no manual upgrade steps.
+
 ## v3.29.0 — Template management UX + unified signing path + stale-snapshot fix
 
 Template administration catches up with the engine: API Names are now a first-class workflow, templates clone in one click, sharing setup disappears, and two silent-corruption bugs die (typed signers erasing drawn ink; stale bodies after format switches). Plus an 8-bug verified sweep and the largest documentation audit to date.
