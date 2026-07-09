@@ -157,6 +157,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             pdfBlob = null;
             renderMultiPartPdf(html, htmlTemplate);
             html = null;
+            // Failed render still linked its images — don't leave them as Files.
+            DocGenService.removeTemplateImageLinksAfterRender(templateId, recordId);
             return;
         }
         html = null;
