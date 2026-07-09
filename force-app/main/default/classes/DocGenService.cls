@@ -2309,6 +2309,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * image blobs into heap.
      */
     public static void ensureTemplateAssetImageAccessForPdf(Id templateId, Id recordId, String html) {
+        pendingRenderImageLinkIds.clear();
         if (templateId == null || recordId == null || String.isBlank(html) || !html.contains('/version/download/')) {
             return;
         }
@@ -2405,6 +2406,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (!links.isEmpty()) {
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(links, false, AccessLevel.SYSTEM_MODE);
+            // Remember what we linked so a repeat render of the same pair in one
+            // transaction can clean up by Id without re-querying (see
+            // removeTemplateImageLinksAfterRender).
+            for (ContentDocumentLink link : links) {
+                if (link.Id != null) {
+                    pendingRenderImageLinkIds.add(link.Id);
+                }
+            }
         }
 
         pruneStaleTemplateImageLinks(templateId, recordId, versionId, assetDocIds);
@@ -2439,14 +2448,25 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
         String pairKey = String.valueOf(templateId) + ':' + String.valueOf(recordId);
         if (sweptImageLinkPairs.contains(pairKey)) {
+            // Already fully swept this transaction — the only links that can have
+            // come back are the ones this render's ensure call just inserted;
+            // delete exactly those by Id (no queries).
+            if (!pendingRenderImageLinkIds.isEmpty()) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                Database.delete(new List<Id>(pendingRenderImageLinkIds), false, AccessLevel.SYSTEM_MODE);
+                pendingRenderImageLinkIds.clear();
+            }
             return;
         }
         sweptImageLinkPairs.add(pairKey);
+        pendingRenderImageLinkIds.clear();
         pruneStaleTemplateImageLinks(templateId, recordId, null, new Set<Id>());
     }
 
     // (template, record) pairs already swept this transaction — see above.
     private static Set<String> sweptImageLinkPairs = new Set<String>();
+    // CDL Ids the current render's ensure call inserted (cleared on each ensure).
+    private static List<Id> pendingRenderImageLinkIds = new List<Id>();
 
     /**
      * Removes orphaned template-image ContentDocumentLinks that earlier
