@@ -2661,4 +2661,52 @@ private class DocGenHtmlRendererTest {
         Integer pStart = DocGenHtmlRenderer.findEnclosingParagraphStart(xml, hereIdx);
         System.assertEquals(xml.indexOf('<w:p>'), pStart, 'Should return the real <w:p>, not <w:pPr>/<w:pStyle>');
     }
+
+    // Paragraph spacing inherited from docDefaults and/or a named style (no inline <w:spacing>)
+    // must be honored — previously it was dropped, collapsing to the hardcoded body line-height
+    // (Sarah's docx line-spacing-not-respected bug).
+    @IsTest
+    static void inheritedParagraphSpacing_fromDocDefaultsAndStyle() {
+        DocGenHtmlRenderer.stylesXml =
+            '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            // docDefaults → double line spacing for every paragraph
+            '<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:line="480" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+            // Normal style → 24pt space-after, no inline spacing on the paragraph itself
+            '<w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="480"/></w:pPr></w:style>' +
+            '</w:styles>';
+        try {
+            String xml =
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+                '<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr><w:r><w:t>Body paragraph.</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(
+                html.contains('line-height:2'),
+                'docDefaults double line spacing must be applied, got: ' + html
+            );
+            System.assert(html.contains('margin-bottom:24'), 'Style space-after (24pt) must be applied, got: ' + html);
+        } finally {
+            DocGenHtmlRenderer.stylesXml = null;
+        }
+    }
+
+    // An inline <w:spacing> value must still win over the inherited one (cascade precedence).
+    @IsTest
+    static void inlineSpacing_overridesInheritedStyleSpacing() {
+        DocGenHtmlRenderer.stylesXml =
+            '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="480"/></w:pPr></w:style>' +
+            '</w:styles>';
+        try {
+            String xml =
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+                '<w:p><w:pPr><w:pStyle w:val="Normal"/><w:spacing w:after="120"/></w:pPr><w:r><w:t>Tight.</w:t></w:r></w:p>' +
+                '</w:body></w:document>';
+            String html = DocGenHtmlRenderer.convertToHtml(xml);
+            System.assert(html.contains('margin-bottom:6'), 'Inline after=120 (6pt) must win, got: ' + html);
+            System.assert(!html.contains('margin-bottom:24'), 'Inherited 24pt must NOT apply when inline overrides');
+        } finally {
+            DocGenHtmlRenderer.stylesXml = null;
+        }
+    }
 }
