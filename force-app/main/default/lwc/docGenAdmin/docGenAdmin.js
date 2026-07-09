@@ -2757,6 +2757,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 [F.CustomMargins]: this.newTemplateCustomMargins,
                 [F.BaseObject]: this.newTemplateObject,
                 [F.Desc]: this.newTemplateDesc,
+                // Must carry the API name into the edit modal — resetForm() clears the
+                // wizard value, and an edit modal opened without it would post
+                // API_Name__c: '' on the next save, wiping what createRecord just wrote.
+                [F.ApiName]: this.newTemplateApiName || null,
                 [F.QueryConfig]: this.newTemplateQuery,
                 [F.TestRecordId]: this.newTemplateSampleRecordId || null,
                 [F.DocTitleFormat]: null,

@@ -9926,6 +9926,107 @@ private class DocGenMiscTests {
         );
     }
 
+    @IsTest
+    static void testRemoveTemplateImageLinksAfterRenderClearsCurrentSet() {
+        // #202 follow-up: the prune-with-keep pass can never remove the CURRENT
+        // body's image links, so the first generation on a fresh record stranded
+        // the full image set as Files on the record. After Blob.toPdf returns the
+        // links have served their purpose (the PDF embeds the bytes), and the
+        // post-render sweep must remove every template-image link — both naming
+        // schemes — while leaving user-attached files alone.
+        Account acc = new Account(Name = 'Post-Render Image Link Sweep');
+        insert acc;
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Post-Render Image Link Sweep',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Query_Config__c = 'Name'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Type__c = 'HTML',
+            Base_Object_API__c = 'Account',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        // Scheme 2 (template-keyed, LWC zip upload) + scheme 1 (version-keyed,
+        // active version) — both referenced by the current body.
+        ContentVersion imgTplKeyed = new ContentVersion(
+            Title = 'docgen_html_img_' + tpl.Id + '_1000000000001_logo.png',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('PNG1')
+        );
+        ContentVersion imgVerKeyed = new ContentVersion(
+            Title = 'docgen_tmpl_img_' + ver.Id + '_rIdBanner',
+            PathOnClient = 'banner.png',
+            VersionData = Blob.valueOf('PNG2')
+        );
+        insert new List<ContentVersion>{ imgTplKeyed, imgVerKeyed };
+
+        // A user's own attached file must survive the sweep untouched.
+        ContentVersion userFile = new ContentVersion(
+            Title = 'Customer Contract',
+            PathOnClient = 'contract.pdf',
+            VersionData = Blob.valueOf('PDF')
+        );
+        insert userFile;
+        Id userDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :userFile.Id].ContentDocumentId;
+        insert new ContentDocumentLink(
+            ContentDocumentId = userDocId,
+            LinkedEntityId = acc.Id,
+            ShareType = 'V',
+            Visibility = 'AllUsers'
+        );
+
+        String html =
+            '<html><body><img src="/sfc/servlet.shepherd/version/download/' +
+            imgTplKeyed.Id +
+            '"/><img src="/sfc/servlet.shepherd/version/download/' +
+            imgVerKeyed.Id +
+            '"/></body></html>';
+
+        Test.startTest();
+        // Mirrors renderPdf's sequence: link for the toPdf fetch, then sweep.
+        DocGenService.ensureTemplateAssetImageAccessForPdf(tpl.Id, acc.Id, html);
+        System.assertEquals(
+            2,
+            [
+                SELECT COUNT()
+                FROM ContentDocumentLink
+                WHERE
+                    LinkedEntityId = :acc.Id
+                    AND (ContentDocument.Title LIKE 'docgen_html_img_%'
+                    OR ContentDocument.Title LIKE 'docgen_tmpl_img_%')
+            ],
+            'Both current-body images should be linked for the Blob.toPdf fetch.'
+        );
+        DocGenService.removeTemplateImageLinksAfterRender(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(
+            0,
+            [
+                SELECT COUNT()
+                FROM ContentDocumentLink
+                WHERE
+                    LinkedEntityId = :acc.Id
+                    AND (ContentDocument.Title LIKE 'docgen_html_img_%'
+                    OR ContentDocument.Title LIKE 'docgen_tmpl_img_%')
+            ],
+            'Post-render sweep must remove every template-image link, including the current body set (#202 follow-up).'
+        );
+        System.assertEquals(
+            1,
+            [SELECT COUNT() FROM ContentDocumentLink WHERE LinkedEntityId = :acc.Id AND ContentDocumentId = :userDocId],
+            'User-attached files must never be touched by the sweep.'
+        );
+    }
+
     private static void assertGiantLauncherUsesInternalLoader(String body, String className) {
         Integer idx = body.indexOf('docgen_tmpl_xml_');
         System.assert(idx >= 0, className + ' should reference pre-decomposed template XML.');

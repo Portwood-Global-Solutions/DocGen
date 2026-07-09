@@ -183,6 +183,59 @@ private class DocGenControllerTests {
     }
 
     // -----------------------------------------------------------------------
+    // saveTemplate — blank API_Name__c must not wipe the stored value. The
+    // create wizard persists the API name via createRecord, then its follow-up
+    // "Save as New Version"/"Save Details" posts the full field map; a blank
+    // API_Name__c there means "not re-collected", not "clear the key Flows
+    // reference".
+    // -----------------------------------------------------------------------
+    @IsTest
+    static void testSaveTemplateBlankApiNameDoesNotWipeValue() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+            tpl.API_Name__c = 'Wizard_Created_Key';
+            update tpl;
+
+            Map<String, Object> fields = new Map<String, Object>{
+                'Id' => tpl.Id,
+                'Name' => 'Renamed Template',
+                'Category__c' => 'Legal',
+                'Type__c' => 'Word',
+                'Base_Object_API__c' => 'Account',
+                'Description__c' => 'Updated description',
+                'Query_Config__c' => 'Name',
+                'Test_Record_Id__c' => null,
+                'Document_Title_Format__c' => '{Name}_Doc',
+                'Output_Format__c' => 'PDF',
+                'API_Name__c' => ''
+            };
+
+            Test.startTest();
+            DocGenController.saveTemplate(fields, false, null);
+            Test.stopTest();
+
+            DocGen_Template__c updated = [SELECT Name, API_Name__c FROM DocGen_Template__c WHERE Id = :tpl.Id];
+            System.assertEquals('Renamed Template', updated.Name, 'Other fields should still save');
+            System.assertEquals(
+                'Wizard_Created_Key',
+                updated.API_Name__c,
+                'A blank API_Name__c in the save payload must leave the stored developer key unchanged'
+            );
+
+            // A real value still updates the key.
+            fields.put('API_Name__c', 'Renamed_Key');
+            DocGenController.saveTemplate(fields, false, null);
+            updated = [SELECT API_Name__c FROM DocGen_Template__c WHERE Id = :tpl.Id];
+            System.assertEquals(
+                'Renamed_Key',
+                updated.API_Name__c,
+                'A non-blank API_Name__c must still update the key'
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // saveTemplate (update with version creation)
     // -----------------------------------------------------------------------
     @IsTest

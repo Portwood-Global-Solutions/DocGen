@@ -160,6 +160,9 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             return;
         }
         html = null;
+        // #202 follow-up — the image links exist only for the toPdf fetch above;
+        // the PDF embeds the bytes, so don't leave image Files on the record.
+        DocGenService.removeTemplateImageLinksAfterRender(templateId, recordId);
 
         // v1.90 — honor template Document_Title_Format__c. Pre-fix the title was
         // hardcoded to docgen_giant_<jobId>_final, which is what users saw in

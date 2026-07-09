@@ -2491,8 +2491,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (fields.containsKey('Prefill_Signer_Email__c')) {
                 template.Prefill_Signer_Email__c = (String) fields.get('Prefill_Signer_Email__c');
             }
-            // PHD-9 — stable developer key for Flow lookups
-            if (fields.containsKey('API_Name__c')) {
+            // PHD-9 — stable developer key for Flow lookups. Blank means "leave
+            // unchanged": Flows/buttons reference this key, and the create-wizard's
+            // follow-up saves (which don't re-collect the API name) must never wipe
+            // the value the wizard just persisted.
+            if (fields.containsKey('API_Name__c') && String.isNotBlank((String) fields.get('API_Name__c'))) {
                 template.API_Name__c = (String) fields.get('API_Name__c');
             }
             // #208 — per-template default {Message} for signature emails
