@@ -6975,7 +6975,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     public static List<Map<String, Object>> getAssets() {
         DocGenFlsGuard.assertAccessible(
             DocGen_Asset__c.sObjectType,
-            new Set<String>{ 'Name', 'Asset_Key__c', 'Asset_Type__c', 'Is_Active__c' }
+            new Set<String>{ 'Name', 'Asset_Key__c', 'Asset_Type__c', 'Category__c', 'Is_Active__c' }
         );
         // Read SYSTEM_MODE behind the assertAccessible guard above — matches the asset
         // catalog's other reads (resolveAssetCvIds + the reads below) and the package's
@@ -6990,6 +6990,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Name,
                 Asset_Key__c,
                 Asset_Type__c,
+                Category__c,
                 Is_Active__c,
                 (
                     SELECT ContentDocument.LatestPublishedVersionId, ContentDocument.LastModifiedDate
@@ -7042,6 +7043,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     'name' => a.Name,
                     'assetKey' => a.Asset_Key__c,
                     'assetType' => a.Asset_Type__c,
+                    'category' => a.Category__c,
                     'isActive' => a.Is_Active__c,
                     'mergeTag' => '{%asset:' +
                     a.Asset_Key__c +
@@ -7291,6 +7293,28 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             Database.update(asset, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error renaming asset.');
+        }
+    }
+
+    /**
+     * Sets (or clears — blank is allowed) an asset's free-text Category__c, the
+     * grouping label the Assets tab filters on. A separate method rather than a
+     * createAsset/renameAsset parameter because @AuraEnabled methods can't be
+     * overloaded and the existing signatures are called throughout the tests.
+     */
+    @AuraEnabled
+    public static void setAssetCategory(Id assetId, String category) {
+        if (assetId == null) {
+            throw DocGenService.ahe('Asset Id is required.');
+        }
+        try {
+            String trimmed = String.isBlank(category) ? null : category.trim();
+            DocGen_Asset__c asset = new DocGen_Asset__c(Id = assetId, Category__c = trimmed);
+            DocGenFlsGuard.assertUpdateable(asset, new Set<String>{ 'Category__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.update(asset, AccessLevel.SYSTEM_MODE);
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error setting asset category.');
         }
     }
 

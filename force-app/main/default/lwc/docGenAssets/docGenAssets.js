@@ -9,6 +9,7 @@ import createAsset from '@salesforce/apex/DocGenController.createAsset';
 import checkAssetKey from '@salesforce/apex/DocGenController.checkAssetKey';
 import addAssetVersion from '@salesforce/apex/DocGenController.addAssetVersion';
 import renameAsset from '@salesforce/apex/DocGenController.renameAsset';
+import setAssetCategory from '@salesforce/apex/DocGenController.setAssetCategory';
 import deactivateAsset from '@salesforce/apex/DocGenController.deactivateAsset';
 import getLatestContentVersionId from '@salesforce/apex/DocGenController.getLatestContentVersionId';
 
@@ -30,6 +31,7 @@ function slugify(value) {
 
 const COLUMNS = [
     { label: 'Name', fieldName: 'name' },
+    { label: 'Category', fieldName: 'category', initialWidth: 130 },
     {
         label: 'Merge Tag',
         fieldName: 'mergeTag',
@@ -77,7 +79,7 @@ const COLUMNS = [
         typeAttributes: {
             rowActions: [
                 { label: 'Upload New Version', name: 'uploadVersion' },
-                { label: 'Rename', name: 'rename' },
+                { label: 'Edit', name: 'rename' },
                 { label: 'Preview', name: 'preview' },
                 { label: 'Deactivate', name: 'deactivate' }
             ]
@@ -98,6 +100,7 @@ export default class DocGenAssets extends LightningElement {
     @track isCreateModalOpen = false;
     @track createName = '';
     @track createKey = '';
+    @track createCategory = '';
     @track createdAssetId = null;
     @track isUploading = false;
     // Live key validation
@@ -113,10 +116,15 @@ export default class DocGenAssets extends LightningElement {
     @track versionAssetId = null;
     @track versionAssetName = '';
 
-    // Rename modal state
+    // Rename/edit modal state
     @track isRenameModalOpen = false;
     @track renameAssetId = null;
     @track renameValue = '';
+    @track renameCategory = '';
+
+    // List filtering state
+    @track searchTerm = '';
+    @track categoryFilter = '';
 
     @wire(getAssets)
     wiredAssets(result) {
@@ -145,6 +153,61 @@ export default class DocGenAssets extends LightningElement {
 
     get hasAssets() {
         return this.assets && this.assets.length > 0;
+    }
+
+    // Rows after the search box + category dropdown are applied. Client-side:
+    // asset lists are admin-scale (tens, not thousands), so no server round-trip.
+    get visibleAssets() {
+        const term = (this.searchTerm || '').trim().toLowerCase();
+        return this.assets.filter((row) => {
+            if (this.categoryFilter === '__none__') {
+                if (row.category) {
+                    return false;
+                }
+            } else if (this.categoryFilter && row.category !== this.categoryFilter) {
+                return false;
+            }
+            if (!term) {
+                return true;
+            }
+            return [row.name, row.assetKey, row.mergeTag, row.category].some(
+                (v) => v && String(v).toLowerCase().includes(term)
+            );
+        });
+    }
+
+    get hasVisibleAssets() {
+        return this.visibleAssets.length > 0;
+    }
+
+    get showNoMatches() {
+        return this.hasAssets && !this.hasVisibleAssets;
+    }
+
+    // Distinct categories present in the data, for the filter dropdown.
+    get categoryOptions() {
+        const distinct = [...new Set(this.assets.map((r) => r.category).filter(Boolean))].sort((a, b) =>
+            a.localeCompare(b)
+        );
+        const options = [{ label: 'All Categories', value: '' }];
+        distinct.forEach((c) => options.push({ label: c, value: c }));
+        if (this.assets.some((r) => !r.category)) {
+            options.push({ label: 'Uncategorized', value: '__none__' });
+        }
+        return options;
+    }
+
+    get showCategoryFilter() {
+        // Only meaningful once at least one asset is categorized.
+        return this.assets.some((r) => r.category);
+    }
+
+    handleSearchChange(event) {
+        this.searchTerm = event.target.value;
+    }
+
+    handleCategoryFilterChange(event) {
+        this.categoryFilter = event.detail.value;
     }
 
     get isCreateDisabled() {
@@ -184,6 +247,7 @@ export default class DocGenAssets extends LightningElement {
         } else if (actionName === 'rename') {
             this.renameAssetId = row.id;
             this.renameValue = row.name;
+            this.renameCategory = row.category || '';
             this.isRenameModalOpen = true;
         } else if (actionName === 'preview') {
             if (row.thumbnailUrl) {
@@ -220,6 +284,7 @@ export default class DocGenAssets extends LightningElement {
     handleOpenCreate() {
         this.createName = '';
         this.createKey = '';
+        this.createCategory = '';
         this.createdAssetId = null;
         this.isUploading = false;
         this.keyEdited = false;
@@ -247,6 +312,10 @@ export default class DocGenAssets extends LightningElement {
         this.keyEdited = true;
         this.createKey = event.target.value;
         this.scheduleKeyCheck();
+    }
+
+    handleCreateCategoryChange(event) {
+        this.createCategory = event.target.value;
     }
 
     // Debounced server check so the user sees the final slug + availability live.
@@ -294,6 +363,11 @@ export default class DocGenAssets extends LightningElement {
             const asset = await createAsset({ name: this.createName.trim(), assetKey: this.createKey });
             // createAsset returns a map { id, name, assetKey, mergeTag }.
             this.createdAssetId = asset && asset.id ? asset.id : asset;
+            if (this.createCategory && this.createCategory.trim()) {
+                // Separate call — createAsset's signature is fixed (@AuraEnabled
+                // methods can't be overloaded).
+                await setAssetCategory({ assetId: this.createdAssetId, category: this.createCategory.trim() });
+            }
             this.showToast('Asset created', 'Now upload an image for "' + this.createName.trim() + '".', 'success');
             await refreshApex(this.wiredAssetsResult);
         } catch (error) {
@@ -373,17 +447,23 @@ export default class DocGenAssets extends LightningElement {
         this.renameValue = event.target.value;
     }
 
+    handleRenameCategoryChange(event) {
+        this.renameCategory = event.target.value;
+    }
+
     async handleRenameSave() {
         if (this.isRenameDisabled) {
             return;
         }
         try {
             await renameAsset({ assetId: this.renameAssetId, newName: this.renameValue.trim() });
-            this.showToast('Renamed', 'Asset renamed to "' + this.renameValue.trim() + '".', 'success');
+            // Always sent — blank intentionally clears the category.
+            await setAssetCategory({ assetId: this.renameAssetId, category: this.renameCategory.trim() });
+            this.showToast('Saved', '"' + this.renameValue.trim() + '" updated.', 'success');
             this.isRenameModalOpen = false;
             await refreshApex(this.wiredAssetsResult);
         } catch (error) {
-            this.showToast('Error renaming asset', this.errMsg(error), 'error');
+            this.showToast('Error saving asset', this.errMsg(error), 'error');
         }
     }
 

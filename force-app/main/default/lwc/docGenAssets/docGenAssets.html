@@ -1,8 +1,8 @@
 <template>
     <div class="slds-var-p-around_small">
         <!-- Toolbar -->
-        <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_small">
-            <div class="slds-text-body_small slds-text-color_weak">
+        <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_x-small">
+            <div class="slds-text-body_small slds-text-color_weak slds-align-middle">
                 Upload a logo or footer once, then reference it in any template with its merge tag.
             </div>
             <lightning-button
@@ -12,6 +12,31 @@
                 onclick={handleOpenCreate}
             ></lightning-button>
         </div>
+        <template if:true={hasAssets}>
+            <div class="slds-grid slds-gutters_x-small slds-var-m-bottom_small">
+                <div class="slds-col slds-grow">
+                    <lightning-input
+                        type="search"
+                        label="Search"
+                        variant="label-hidden"
+                        placeholder="Search by name, tag, or category…"
+                        value={searchTerm}
+                        onchange={handleSearchChange}
+                    ></lightning-input>
+                </div>
+                <template if:true={showCategoryFilter}>
+                    <div class="slds-col slds-grow-none category-filter">
+                        <lightning-combobox
+                            label="Category"
+                            variant="label-hidden"
+                            value={categoryFilter}
+                            options={categoryOptions}
+                            onchange={handleCategoryFilterChange}
+                        ></lightning-combobox>
+                    </div>
+                </template>
+            </div>
+        </template>
 
         <!-- Empty state -->
         <template if:false={hasAssets}>
@@ -28,18 +53,23 @@
             </div>
         </template>
 
-        <!-- Asset list. The wrapper scrolls horizontally when the tab is narrow
-             so the table never bleeds past its container. -->
-        <template if:true={hasAssets}>
+        <!-- Asset list. The wrapper caps height (long lists scroll inside the
+             card) and scrolls horizontally when the tab is narrow. -->
+        <template if:true={hasVisibleAssets}>
             <div class="asset-table-container">
                 <c-doc-gen-image-datatable
                     key-field="id"
-                    data={assets}
+                    data={visibleAssets}
                     columns={columns}
                     onrowaction={handleRowAction}
                     hide-checkbox-column
                 >
                 </c-doc-gen-image-datatable>
+            </div>
+        </template>
+        <template if:true={showNoMatches}>
+            <div class="slds-box slds-theme_shade slds-text-align_center slds-var-p-around_medium">
+                <p class="slds-text-body_regular">No assets match your search.</p>
             </div>
         </template>
     </div>
@@ -64,6 +94,14 @@
                         onchange={handleCreateNameChange}
                         placeholder="e.g. Primary Footer"
                         required
+                    ></lightning-input>
+                    <lightning-input
+                        class="slds-var-m-top_x-small"
+                        label="Category"
+                        value={createCategory}
+                        onchange={handleCreateCategoryChange}
+                        placeholder="e.g. Logos"
+                        field-level-help="Optional grouping label used to filter the asset list. Type anything — categories are free text."
                     ></lightning-input>
 
                     <template if:false={createdAssetId}>
@@ -164,7 +202,7 @@
                         class="slds-modal__close"
                         onclick={handleCloseRename}
                     ></lightning-button-icon>
-                    <h2 class="slds-text-heading_medium">Rename Asset</h2>
+                    <h2 class="slds-text-heading_medium">Edit Asset</h2>
                 </header>
                 <div class="slds-modal__content slds-var-p-around_medium">
                     <lightning-input
@@ -172,6 +210,14 @@
                         value={renameValue}
                         onchange={handleRenameChange}
                         required
+                    ></lightning-input>
+                    <lightning-input
+                        class="slds-var-m-top_x-small"
+                        label="Category"
+                        value={renameCategory}
+                        onchange={handleRenameCategoryChange}
+                        placeholder="e.g. Logos"
+                        field-level-help="Optional grouping label used to filter the asset list. Leave blank to remove the category."
                     ></lightning-input>
                 </div>
                 <footer class="slds-modal__footer">

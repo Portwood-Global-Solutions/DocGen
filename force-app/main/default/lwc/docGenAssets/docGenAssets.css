@@ -7,3 +7,7 @@
     max-height: 60vh;
     overflow: auto;
 }
+
+.category-filter {
+    min-width: 12rem;
+}
