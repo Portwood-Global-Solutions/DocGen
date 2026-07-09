@@ -1,6 +1,9 @@
-/* Keep the asset table inside the tab: scroll horizontally instead of
-   pushing the page wide when merge tags / names are long. */
+/* Keep the asset table inside its card: cap the height so a long asset
+   list scrolls vertically inside the container instead of growing the tab,
+   and scroll horizontally instead of pushing the page wide when merge
+   tags / names are long. */
 .asset-table-container {
     max-width: 100%;
-    overflow-x: auto;
+    max-height: 60vh;
+    overflow: auto;
 }
