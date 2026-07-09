@@ -1,15 +1,15 @@
 {
     "packageDirectories": [
         {
-            "versionName": "v3.29.0 \u2014 API Name UX, template clone, no-setup sharing, unified signing path, stale-snapshot fix",
-            "versionNumber": "3.29.0.NEXT",
-            "ancestorId": "04tVx000000paUTIAY",
+            "versionName": "v3.30.0 \u2014 Record image-file cleanup + Assets tab search, categories & thumbnails",
+            "versionNumber": "3.30.0.NEXT",
+            "ancestorId": "04tVx000000pe3RIAQ",
             "path": "force-app",
             "default": true,
             "definitionFile": "config/build-def.json",
             "postInstallScript": "DocGenEmailTemplateInstall",
             "package": "Portwood DocGen Managed",
-            "versionDescription": "Portwood DocGen generates polished PDFs and Word documents from any Salesforce record, with built-in e-signatures. v3.29 makes templates easier to manage: clone any template in one click, auto-filled API Names for deploy-safe automation, a cleaner settings layout, and templates that are visible to your users out of the box \u2014 no sharing setup required. Signers now get the same polished signature stamp whether they draw or type, and template updates always take effect immediately. 100% native Salesforce \u2014 no external services or callouts. Free for all users."
+            "versionDescription": "Portwood DocGen generates polished PDFs and Word documents from any Salesforce record, with built-in e-signatures. v3.30 keeps your records tidy: generated documents no longer leave their template images behind as files on the record \u2014 in single, bulk, and Flow generation \u2014 and upgrading cleans up images left by earlier versions on the next generation. The shared-asset library gets image thumbnails, instant search, and custom categories so your logos and footers stay easy to find. 100% native Salesforce \u2014 no external services or callouts. Free for all users."
         }
     ],
     "name": "Portwood DocGen",
