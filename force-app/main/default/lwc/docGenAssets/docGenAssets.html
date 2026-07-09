@@ -28,16 +28,19 @@
             </div>
         </template>
 
-        <!-- Asset list -->
+        <!-- Asset list. The wrapper scrolls horizontally when the tab is narrow
+             so the table never bleeds past its container. -->
         <template if:true={hasAssets}>
-            <lightning-datatable
-                key-field="id"
-                data={assets}
-                columns={columns}
-                onrowaction={handleRowAction}
-                hide-checkbox-column
-            >
-            </lightning-datatable>
+            <div class="asset-table-container">
+                <c-doc-gen-image-datatable
+                    key-field="id"
+                    data={assets}
+                    columns={columns}
+                    onrowaction={handleRowAction}
+                    hide-checkbox-column
+                >
+                </c-doc-gen-image-datatable>
+            </div>
         </template>
     </div>
 

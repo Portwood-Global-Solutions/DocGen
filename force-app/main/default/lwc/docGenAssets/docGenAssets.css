@@ -1,0 +1,6 @@
+/* Keep the asset table inside the tab: scroll horizontally instead of
+   pushing the page wide when merge tags / names are long. */
+.asset-table-container {
+    max-width: 100%;
+    overflow-x: auto;
+}
