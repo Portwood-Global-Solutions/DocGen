@@ -2422,12 +2422,31 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * whole title-scoped set as stale, which also sweeps links stranded on the
      * record by earlier package versions.
      */
-    public static void removeTemplateImageLinksAfterRender(Id templateId, Id recordId) {
+    public static void removeTemplateImageLinksAfterRender(Id templateId, Id recordId, String renderedHtml) {
         if (templateId == null || recordId == null) {
             return;
         }
+        // SOQL budget guard (the prune costs 2 queries): skip when the rendered
+        // body references no CV images — nothing was linked this run, mirroring
+        // ensureTemplateAssetImageAccessForPdf's own early return — and sweep a
+        // given (template, record) pair at most once per transaction so bulk
+        // loops don't repay the cost per document. Callers without the html in
+        // scope (giant-query assembler frees it before this point) pass null and
+        // always sweep. Unguarded, e2e-03's many generations in one anonymous
+        // transaction blew the 101-SOQL governor.
+        if (renderedHtml != null && !renderedHtml.contains('/version/download/')) {
+            return;
+        }
+        String pairKey = String.valueOf(templateId) + ':' + String.valueOf(recordId);
+        if (sweptImageLinkPairs.contains(pairKey)) {
+            return;
+        }
+        sweptImageLinkPairs.add(pairKey);
         pruneStaleTemplateImageLinks(templateId, recordId, null, new Set<Id>());
     }
+
+    // (template, record) pairs already swept this transaction — see above.
+    private static Set<String> sweptImageLinkPairs = new Set<String>();
 
     /**
      * Removes orphaned template-image ContentDocumentLinks that earlier
@@ -2568,7 +2587,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 ensureTemplateAssetImageAccessForPdf(templateId, recordId, mr.documentXml);
                 lastRenderedHtml = mr.documentXml;
                 Blob htmlPdf = Blob.toPdf(mr.documentXml);
-                removeTemplateImageLinksAfterRender(templateId, recordId);
+                removeTemplateImageLinksAfterRender(templateId, recordId, mr.documentXml);
                 return htmlPdf;
             }
 
@@ -2584,7 +2603,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             lastRenderedHtml = html;
 
             Blob docxPdf = Blob.toPdf(html);
-            removeTemplateImageLinksAfterRender(templateId, recordId);
+            removeTemplateImageLinksAfterRender(templateId, recordId, html);
             return docxPdf;
         } finally {
             DocGenHtmlRenderer.orientationOverride = null;

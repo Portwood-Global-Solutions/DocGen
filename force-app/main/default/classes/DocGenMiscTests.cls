@@ -10005,7 +10005,7 @@ private class DocGenMiscTests {
             ],
             'Both current-body images should be linked for the Blob.toPdf fetch.'
         );
-        DocGenService.removeTemplateImageLinksAfterRender(tpl.Id, acc.Id);
+        DocGenService.removeTemplateImageLinksAfterRender(tpl.Id, acc.Id, html);
         Test.stopTest();
 
         System.assertEquals(
