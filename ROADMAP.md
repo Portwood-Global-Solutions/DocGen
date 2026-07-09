@@ -1,58 +1,54 @@
 # Roadmap
 
-DocGen is free, native, and community-driven. There are no paid tiers and no feature gates, so this roadmap isn't a sales sheet. It's an honest view of what's shipping, what's queued, and what we're still thinking about. Priorities come from real customer reports and community requests, triaged in the open on GitHub.
+DocGen is free, native, and community-driven. There are no paid tiers and no feature gates, so this roadmap isn't a sales sheet. It's an honest view of what's queued and what we're still thinking about. Priorities come from real customer reports and community requests, triaged in the open on GitHub — the issue board is the source of truth for what's in flight.
 
-**Want to shape it?** Open a request on [GitHub Issues](https://github.com/Portwood-Global-Solutions/DocGen/issues) or post in [Slack](/community). Every request gets read, labeled, and tracked. Bugs that silently corrupt output jump the queue. See what already shipped on the [changelog](/changelog).
+DocGen is [listed on the AppExchange](https://appexchange.salesforce.com/appxListingDetail?listingId=5a580bd8-2745-41e5-b62c-c495957857d3) and ships on a fast release cadence — currently v3.30. Recent releases brought guest e-signing with drawn signatures, a shared image-asset manager, brandable email templates, quick-action generation, and template management upgrades. For the full record, see the [changelog](/changelog).
 
-## In review
-
-### AppExchange security review
-
-DocGen is in the Salesforce AppExchange security review queue, re-submitted at v2.0.0 on the current managed package. Review typically takes a few months. The latest release stays available through the direct install link the entire time, so nothing blocks you from running DocGen today. Once approved, DocGen earns the AppExchange trust badge and becomes discoverable across the Salesforce ecosystem.
+**Want to shape it?** Open a request on [GitHub Issues](https://github.com/Portwood-Global-Solutions/DocGen/issues) or post in [Slack](/community). Every request gets read, labeled, and tracked. Bugs that silently corrupt output jump the queue.
 
 ## Up next
 
-Bugs and small enhancements with a clear path, planned for the next release or two.
+Enhancements with a clear path, planned for the next release or two.
+
+### Preview before you save ([#212](https://github.com/Portwood-Global-Solutions/DocGen/issues/212))
+
+The runner generates and saves in one step. This adds a preview (and print) of the generated PDF before you commit to saving it on the record or downloading it — catch a wrong template or a bad merge before it becomes a File.
+
+### Template comments ([#211](https://github.com/Portwood-Global-Solutions/DocGen/issues/211))
+
+A comment syntax for template authors: leave notes to yourself ("this table feeds from the Opportunity line items") inside the template, and the merge engine strips them from every generated document.
+
+### Custom Label merge tags ([#204](https://github.com/Portwood-Global-Solutions/DocGen/issues/204))
+
+Resolve Salesforce Custom Labels inside templates, so one template can serve a multi-language org — the label renders in each recipient's language instead of hardcoded text.
+
+## On the horizon
+
+Larger items on the list, paced by community demand.
+
+### Images in signature and notification emails ([#198](https://github.com/Portwood-Global-Solutions/DocGen/issues/198))
+
+Logos and branding images in the emails DocGen sends around signing and delivery. Weighing two designs — routing through the shared asset system versus a public-URL hook — before committing.
 
 ### Bulk runner and admin in every language
 
 The document runner already follows each user's Salesforce language across ten translations (Spanish, Japanese, Chinese, French, German, Portuguese, Italian, Korean, Dutch). The bulk-generation and template-admin screens are next, so the whole app speaks the user's language without a separate setting.
 
-### Stylesheet leaking into PDF output (#139)
-
-A reported case where template stylesheet markup can surface as text at the top of a generated PDF. Under investigation toward a scoped fix.
-
-### Right-to-left signing preview (#138)
-
-The final signed PDF renders Hebrew and Arabic correctly, but the in-page signing preview still lays them out left-to-right, so signers can't comfortably read the document before signing. Adding right-to-left direction support to the preview container.
-
-## On the horizon
-
-Larger, specced features on the list, paced by community demand.
-
-### Full template fidelity on giant-query jobs (#134)
-
-Documents above the giant-query row threshold currently skip a processing pass, so parent-level sections, conditionals, inverse tags, and secondary child loops can leak as raw text. Bringing the giant-query path to full parity with standard generation, including the "Save to Record" behavior on that path.
-
-### Charts and text boxes in every layout
-
-Two known Office edge cases on the fidelity list. Chart tags whose text Word or PowerPoint split across formatting runs still fall back to placeholder text (#130). And a text box that shares its paragraph with other content, such as an inline image, can drop that neighboring content.
-
-### Reusable template partials (#31)
-
-Define a header, footer, or signature block once and include it across many templates. Specced and ready to build.
-
 ### Right-to-left line wrapping
 
-Long right-to-left paragraphs that wrap can start their continuation lines from the wrong margin, a limitation of the PDF engine's bidirectional text support. On the list for a future release.
+Long right-to-left paragraphs that wrap can start their continuation lines from the wrong margin, a limitation of the PDF engine's bidirectional text support. (The signing preview and final PDF render RTL text correctly today.) On the list for a future release.
 
 ## Exploring
 
-Ideas with merit that still need scoping. Feedback here is especially useful.
+Ideas with merit that are iceboxed until demand moves them up. Feedback here is especially useful — a few voices asking is what promotes these.
 
-### Drag-and-drop template builder (#55)
+### Reusable template partials ([#31](https://github.com/Portwood-Global-Solutions/DocGen/issues/31))
 
-A visual, no-Word path to authoring templates. Large surface area, so we're gathering input on which pieces matter most before committing to a design.
+Define a header, footer, or signature block once and include it across many templates. A design spec is drafted; it's iceboxed until enough teams ask for it.
+
+### Drag-and-drop template builder ([#55](https://github.com/Portwood-Global-Solutions/DocGen/issues/55))
+
+A visual, no-Word path to authoring templates. Iceboxed — Word and HTML templates with merge tags remain the supported authoring path, and they cover the same ground with tools authors already know. Would revisit if demand builds.
 
 ### Native, editable Office charts
 
