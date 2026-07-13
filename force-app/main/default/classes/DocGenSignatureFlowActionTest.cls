@@ -477,4 +477,29 @@ private class DocGenSignatureFlowActionTest {
         Test.stopTest();
         System.assert(caught, 'Blank email in signerRecords must throw');
     }
+
+    @isTest
+    static void testGenerate_expirationDaysStampsWindow() {
+        DocGenSignatureFlowAction.Request req = buildRequest();
+        req.expirationDays = 7;
+
+        Test.startTest();
+        List<DocGenSignatureFlowAction.Result> results = DocGenSignatureFlowAction.generate(
+            new List<DocGenSignatureFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, results[0].success, 'Send should succeed: ' + results[0].errorMessage);
+        DocGen_Signature_Request__c created = [
+            SELECT Expires_At__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :results[0].signatureRequestId
+        ];
+        System.assertNotEquals(null, created.Expires_At__c, 'Expiration must be stamped at send');
+        Long deltaMs = created.Expires_At__c.getTime() - System.now().addDays(7).getTime();
+        System.assert(
+            Math.abs(deltaMs) < 5 * 60 * 1000,
+            'Link Expiration input must set a ~7-day window; delta ms=' + deltaMs
+        );
+    }
 }

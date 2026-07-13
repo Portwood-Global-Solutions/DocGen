@@ -264,7 +264,7 @@ public with sharing class DocGenEmailTemplateController {
             'DocumentTitle' => 'Master Services Agreement',
             'SenderName' => UserInfo.getName(),
             'SignatureUrl' => 'https://example.com/sign?token=SAMPLE-TOKEN',
-            'ExpirationHours' => '48',
+            'ExpirationHours' => String.valueOf(DocGenSignatureExpiry.defaultHours()),
             'ExpirationMinutes' => '15',
             'Pin' => '481627',
             'RequestId' => 'a0X000000000SAMPLE',

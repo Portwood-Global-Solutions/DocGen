@@ -627,6 +627,7 @@ public with sharing class DocGenSignatureSenderController {
         // post-signing verification link (?token=) printed on the certificate.
         // Distinct from signer signing tokens — this only gates audit-roster reads.
         req.Secure_Token__c = generateRequestVerificationToken();
+        req.Expires_At__c = DocGenSignatureExpiry.computeExpiry(null);
         // Package-internal object — CRUD controlled by DocGen permission sets
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.assertCreateable(
@@ -637,7 +638,8 @@ public with sharing class DocGenSignatureSenderController {
                 'Status__c',
                 'Signing_Order__c',
                 'Document_Title_Format__c',
-                'Secure_Token__c'
+                'Secure_Token__c',
+                'Expires_At__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation */
@@ -840,11 +842,12 @@ public with sharing class DocGenSignatureSenderController {
         req.Source_Document_Id__c = contentVersionId;
         req.Related_Record_Id__c = relatedRecordId;
         req.Status__c = 'Sent';
+        req.Expires_At__c = DocGenSignatureExpiry.computeExpiry(null);
         // Package-internal object — CRUD controlled by DocGen permission sets
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.assertCreateable(
             req,
-            new Set<String>{ 'Source_Document_Id__c', 'Related_Record_Id__c', 'Status__c' }
+            new Set<String>{ 'Source_Document_Id__c', 'Related_Record_Id__c', 'Status__c', 'Expires_At__c' }
         );
         /* code-analyzer-suppress ApexFlsViolation */
         Database.insert(req, AccessLevel.SYSTEM_MODE);
@@ -1003,7 +1006,7 @@ public with sharing class DocGenSignatureSenderController {
         );
     }
 
-    /** 10-arg canonical — #195: see createGuidedPdfSignatureRequest. */
+    /** 10-arg overload — pre-expirationDays callers. */
     public static List<SignerResult> createTemplateSnapshotRequest(
         Id templateId,
         String relatedRecordId,
@@ -1015,6 +1018,35 @@ public with sharing class DocGenSignatureSenderController {
         Boolean requireVerification,
         Boolean prefillSignerEmail,
         Boolean sendEmails
+    ) {
+        return createTemplateSnapshotRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            emailMessage,
+            emailSubject,
+            requireVerification,
+            prefillSignerEmail,
+            sendEmails,
+            null
+        );
+    }
+
+    /** 11-arg canonical — #195/expirationDays: see createGuidedPdfSignatureRequest. */
+    public static List<SignerResult> createTemplateSnapshotRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        String emailMessage,
+        String emailSubject,
+        Boolean requireVerification,
+        Boolean prefillSignerEmail,
+        Boolean sendEmails,
+        Integer expirationDays
     ) {
         if (templateId == null) {
             throw new AuraHandledException('A template Id is required.');
@@ -1103,6 +1135,7 @@ public with sharing class DocGenSignatureSenderController {
         if (String.isNotBlank(documentTitleFormat)) {
             req.Document_Title_Format__c = documentTitleFormat;
         }
+        req.Expires_At__c = DocGenSignatureExpiry.computeExpiry(expirationDays);
         DocGenFlsGuard.assertCreateable(
             req,
             new Set<String>{
@@ -1112,7 +1145,8 @@ public with sharing class DocGenSignatureSenderController {
                 'Related_Record_Id__c',
                 'Status__c',
                 'Signing_Order__c',
-                'Document_Title_Format__c'
+                'Document_Title_Format__c',
+                'Expires_At__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -1351,7 +1385,6 @@ public with sharing class DocGenSignatureSenderController {
         );
     }
 
-    @AuraEnabled
     public static List<SignerResult> createGuidedPdfSignatureRequest(
         Id templateId,
         String relatedRecordId,
@@ -1377,11 +1410,7 @@ public with sharing class DocGenSignatureSenderController {
         );
     }
 
-    /**
-     * 10-arg canonical — #195: sendEmails=false suppresses the branded invitation
-     * emails so a Flow can send its own using the returned signer URLs. null/true
-     * sends (the long-standing behavior; every pre-existing caller delegates null).
-     */
+    /** 10-arg overload — #195: pre-expirationDays callers. */
     public static List<SignerResult> createGuidedPdfSignatureRequest(
         Id templateId,
         String relatedRecordId,
@@ -1393,6 +1422,42 @@ public with sharing class DocGenSignatureSenderController {
         Boolean requireVerification,
         Boolean prefillSignerEmail,
         Boolean sendEmails
+    ) {
+        return createGuidedPdfSignatureRequest(
+            templateId,
+            relatedRecordId,
+            signersJson,
+            signingOrder,
+            documentTitleFormat,
+            emailMessage,
+            emailSubject,
+            requireVerification,
+            prefillSignerEmail,
+            sendEmails,
+            null
+        );
+    }
+
+    /**
+     * 11-arg canonical. sendEmails=false (#195) suppresses the branded invitation
+     * emails so a Flow can send its own using the returned signer URLs; null/true
+     * sends (the long-standing behavior; every pre-existing caller delegates null).
+     * expirationDays overrides the org-default signing window for this request
+     * (null → DocGen_Settings__c.Signature_Expiration_Days__c, fallback 2 days).
+     */
+    @AuraEnabled
+    public static List<SignerResult> createGuidedPdfSignatureRequest(
+        Id templateId,
+        String relatedRecordId,
+        String signersJson,
+        String signingOrder,
+        String documentTitleFormat,
+        String emailMessage,
+        String emailSubject,
+        Boolean requireVerification,
+        Boolean prefillSignerEmail,
+        Boolean sendEmails,
+        Integer expirationDays
     ) {
         List<DocGen_Template__c> tpls = [
             SELECT Id, Name, Document_Title_Format__c
@@ -1462,7 +1527,8 @@ public with sharing class DocGenSignatureSenderController {
                     emailSubject,
                     requireVerification,
                     prefillSignerEmail,
-                    sendEmails
+                    sendEmails,
+                    expirationDays
                 );
             }
         }
@@ -1557,6 +1623,7 @@ public with sharing class DocGenSignatureSenderController {
             req.Document_Title_Format__c = documentTitleFormat;
         }
         req.Secure_Token__c = generateRequestVerificationToken();
+        req.Expires_At__c = DocGenSignatureExpiry.computeExpiry(expirationDays);
         Set<String> reqFields = new Set<String>{
             'Template__c',
             'Related_Record_Id__c',
@@ -1564,7 +1631,8 @@ public with sharing class DocGenSignatureSenderController {
             'Status__c',
             'Signing_Order__c',
             'Document_Title_Format__c',
-            'Secure_Token__c'
+            'Secure_Token__c',
+            'Expires_At__c'
         };
         if (String.isNotBlank(frozenJson)) {
             // #156: snapshot persisted to a ContentVersion (no 131072-char cap) and referenced
@@ -1824,6 +1892,7 @@ public with sharing class DocGenSignatureSenderController {
             req.Document_Title_Format__c = documentTitleFormat;
         }
         req.Secure_Token__c = generateRequestVerificationToken();
+        req.Expires_At__c = DocGenSignatureExpiry.computeExpiry(null);
         Set<String> reqFields = new Set<String>{
             'Template__c',
             'Template_Ids__c',
@@ -1832,7 +1901,8 @@ public with sharing class DocGenSignatureSenderController {
             'Status__c',
             'Signing_Order__c',
             'Document_Title_Format__c',
-            'Secure_Token__c'
+            'Secure_Token__c',
+            'Expires_At__c'
         };
         if (String.isNotBlank(frozenJson)) {
             // #156: multi-document packet snapshot persisted to a ContentVersion (no size cap).
@@ -1956,6 +2026,7 @@ public with sharing class DocGenSignatureSenderController {
         req.Related_Record_Id__c = relatedRecordId;
         req.Secure_Token__c = token;
         req.Status__c = 'Sent';
+        req.Expires_At__c = DocGenSignatureExpiry.computeExpiry(null);
         // Package-internal object — CRUD controlled by DocGen permission sets
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create").
         DocGenFlsGuard.assertCreateable(
@@ -1966,7 +2037,8 @@ public with sharing class DocGenSignatureSenderController {
                 'Source_Document_Id__c',
                 'Related_Record_Id__c',
                 'Secure_Token__c',
-                'Status__c'
+                'Status__c',
+                'Expires_At__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation */
@@ -2847,23 +2919,25 @@ public with sharing class DocGenSignatureSenderController {
         /* code-analyzer-suppress ApexFlsViolation */
         Database.update(signers, false, AccessLevel.SYSTEM_MODE);
         req.Status__c = 'Sent';
+        // Resend opens a fresh signing window (org default) alongside the new tokens.
+        req.Expires_At__c = DocGenSignatureExpiry.computeExpiry(null);
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-        DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c' });
+        DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Status__c', 'Expires_At__c' });
         /* code-analyzer-suppress ApexFlsViolation */
         Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
-        DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle);
+        // requestId so {ExpirationHours} reflects the fresh signing window.
+        DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle, req.Id);
     }
 
     /**
      * PDF-viewer requests (snapshot re-render or send-existing-CV) set
      * Render_Data_Snapshot__c or Source_Document_Id__c; the classic typed-name
      * flow sets neither. Same predicate as the sequential-signer routing in
-     * DocGenSignaturePdfTrigger — resending with the legacy page path would
-     * email guided-PDF signers a broken link.
+     * DocGenSignaturePdfTrigger — resend and reminders with the legacy page path
+     * would email guided-PDF signers a broken link.
      */
-    @TestVisible
-    private static String resolveSigningPath(DocGen_Signature_Request__c req) {
+    public static String resolveSigningPath(DocGen_Signature_Request__c req) {
         Boolean isPdfViewer = req.Render_Data_Snapshot__c != null || req.Source_Document_Id__c != null;
         return isPdfViewer ? getSigningPdfPagePath() : getSigningPagePath();
     }

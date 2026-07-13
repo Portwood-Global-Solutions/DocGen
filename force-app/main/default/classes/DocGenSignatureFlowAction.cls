@@ -163,6 +163,12 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
             description='Optional. TRUE auto-sends the verification code to the known signer email (skips the type-your-email step); FALSE makes the signer type it. Leave blank to inherit the template/org default.'
         )
         global Boolean prefillSignerEmail;
+
+        @InvocableVariable(
+            label='Link Expiration (Days)'
+            description='Optional. Signing links for this request expire this many days after send (1-365). Leave blank to use the org default from DocGen Settings.'
+        )
+        global Integer expirationDays;
     }
 
     global class Result {
@@ -174,7 +180,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         @InvocableVariable(
             label='Signer URLs'
-            description='A collection of unique signing URLs — one per signer, in the same order as the Signers input. Each URL is valid for 48 hours. Use these in Send Email actions, Slack posts, or custom notifications.'
+            description='A collection of unique signing URLs — one per signer, in the same order as the Signers input. Each URL is valid until the request expires (org default or the Link Expiration input). Use these in Send Email actions, Slack posts, or custom notifications.'
         )
         global List<String> signerUrls;
 
@@ -287,7 +293,8 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
                 req.emailSubject, // #193 — optional send-time custom subject
                 req.requireEmailVerification, // #verification — null = inherit template/org
                 req.prefillSignerEmail,
-                req.sendEmails // #195 — false suppresses DocGen's invites (Flow sends its own)
+                req.sendEmails, // #195 — false suppresses DocGen's invites (Flow sends its own)
+                req.expirationDays // null = org-default signing window
             );
 
             // Find the request ID

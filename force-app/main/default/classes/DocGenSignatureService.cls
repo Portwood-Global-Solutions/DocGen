@@ -1107,7 +1107,8 @@ public without sharing class DocGenSignatureService {
                 'Source_Document_Id__c',
                 'Related_Record_Id__c',
                 'CreatedDate',
-                'Secure_Token__c'
+                'Secure_Token__c',
+                'Expires_At__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -1119,7 +1120,8 @@ public without sharing class DocGenSignatureService {
                 Signer_Email__c,
                 Source_Document_Id__c,
                 Related_Record_Id__c,
-                CreatedDate
+                CreatedDate,
+                Expires_At__c
             FROM DocGen_Signature_Request__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -1130,7 +1132,7 @@ public without sharing class DocGenSignatureService {
             return;
         }
 
-        if (requests[0].CreatedDate.addHours(48) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(requests[0].Expires_At__c, requests[0].CreatedDate)) {
             throw new SignatureException('This signature link has expired.');
         }
 

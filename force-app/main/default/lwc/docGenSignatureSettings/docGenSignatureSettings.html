@@ -150,6 +150,25 @@
                      subject/body/branding + live preview). Org-wide fallback values are
                      preserved on save below but no longer edited here. -->
 
+                <!-- ===== SIGNING LINKS ===== -->
+                <div class="slds-section slds-is-open slds-m-top_medium">
+                    <h3 class="slds-section__title slds-theme_shade slds-p-around_x-small">
+                        <span class="slds-text-title_caps">Signing Links</span>
+                    </h3>
+                    <div class="slds-section__content slds-p-top_small">
+                        <lightning-input
+                            type="number"
+                            label="Link expiration (days)"
+                            value={expirationDays}
+                            min="1"
+                            max="365"
+                            onchange={handleExpirationDaysChange}
+                            field-level-help="Signing links expire this many days after send. Individual sends and the Flow action can override this per request."
+                        >
+                        </lightning-input>
+                    </div>
+                </div>
+
                 <!-- ===== REMINDERS ===== -->
                 <div class="slds-section slds-is-open slds-m-top_medium">
                     <h3 class="slds-section__title slds-theme_shade slds-p-around_x-small">
@@ -167,13 +186,13 @@
                         </lightning-input>
                         <template if:true={reminderEnabled}>
                             <lightning-input
-                                type="number"
-                                label="Send reminder after (hours)"
-                                value={reminderHours}
-                                min="1"
-                                max="168"
-                                onchange={handleReminderHoursChange}
-                                field-level-help="Signers who haven't responded within this many hours will receive a reminder email. Each signer gets at most one reminder."
+                                type="text"
+                                label="Send reminders after (hours, comma-separated)"
+                                value={reminderSchedule}
+                                pattern="^\s*\d+\s*(,\s*\d+\s*)*$"
+                                message-when-pattern-mismatch="Enter hour offsets separated by commas, e.g. 24, 72, 168"
+                                onchange={handleReminderScheduleChange}
+                                field-level-help="Each entry is hours after send: 24, 72, 168 reminds pending signers after 1, 3 and 7 days. A single entry sends at most one reminder. Reminders stop once the link expires."
                                 class="slds-m-top_small"
                             >
                             </lightning-input>

@@ -23,9 +23,11 @@ export default class DocGenSignatureSettings extends LightningElement {
     @track owaId = '';
     @track owaOptions = [];
 
-    // Reminders
+    // Reminders + link expiration
     @track reminderEnabled = false;
     @track reminderHours = 24;
+    @track reminderSchedule = '24';
+    @track expirationDays = 2;
 
     // #verification — org defaults
     @track requireVerification = true;
@@ -53,6 +55,8 @@ export default class DocGenSignatureSettings extends LightningElement {
             this.owaId = data.Signature_OWA_Id__c || '';
             this.reminderEnabled = data.Signature_Reminder_Enabled__c === true;
             this.reminderHours = data.Signature_Reminder_Hours__c || 24;
+            this.reminderSchedule = data.Signature_Reminder_Schedule__c || String(this.reminderHours);
+            this.expirationDays = data.Signature_Expiration_Days__c || 2;
             // null → required (upgrade-safe default)
             this.requireVerification = data.Signature_Require_Email_Verification__c !== false;
             this.prefillEmail = data.Signature_Prefill_Signer_Email__c === true;
@@ -91,6 +95,12 @@ export default class DocGenSignatureSettings extends LightningElement {
     handleReminderHoursChange(e) {
         this.reminderHours = e.target.value;
     }
+    handleReminderScheduleChange(e) {
+        this.reminderSchedule = e.target.value;
+    }
+    handleExpirationDaysChange(e) {
+        this.expirationDays = e.target.value;
+    }
     handleRequireVerificationChange(e) {
         this.requireVerification = e.target.checked;
     }
@@ -118,6 +128,16 @@ export default class DocGenSignatureSettings extends LightningElement {
     }
 
     async handleSave() {
+        // Surface pattern/min/max violations on the inputs before calling Apex.
+        const inputsValid = [...this.template.querySelectorAll('lightning-input')].reduce(
+            (valid, input) => input.reportValidity() && valid,
+            true
+        );
+        if (!inputsValid) {
+            this.saveSuccess = false;
+            this.saveMessage = 'Fix the highlighted fields and try again.';
+            return;
+        }
         this.isSaving = true;
         this.saveMessage = '';
         try {
@@ -134,9 +154,13 @@ export default class DocGenSignatureSettings extends LightningElement {
                 owaId: this.owaId
             });
             // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
+            const schedule = (this.reminderSchedule || '').trim();
+            const firstOffset = parseInt(schedule.split(',')[0], 10);
             await saveReminderSettings({
                 enabled: this.reminderEnabled,
-                hours: parseInt(this.reminderHours, 10) || 24
+                hours: firstOffset > 0 ? firstOffset : parseInt(this.reminderHours, 10) || 24,
+                schedule,
+                expirationDays: parseInt(this.expirationDays, 10) || null
             });
             // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
             await saveVerificationSettings({

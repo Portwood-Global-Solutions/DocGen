@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Reminders_Sent__c</fullName>
+    <defaultValue>0</defaultValue>
+    <description
+    >How many reminder-schedule entries have been consumed for this signer. Missed offsets (e.g. the reminder job was paused) collapse into a single catch-up reminder rather than a burst.</description>
+    <externalId>false</externalId>
+    <label>Reminders Sent</label>
+    <precision>3</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>

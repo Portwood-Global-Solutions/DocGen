@@ -164,6 +164,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>DocGen_Signature_Request__c.Expires_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>DocGen_Signature_Request__c.Signer_Email__c</field>
         <readable>true</readable>
     </fieldPermissions>

@@ -85,6 +85,29 @@ private class DocGenGuidedSigningTest {
     }
 
     @IsTest
+    static void guidedRequest_stampsDefaultExpiry() {
+        Id tplId = createTaggedTemplate();
+        Account a = [SELECT Id FROM Account LIMIT 1];
+
+        Test.startTest();
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(tplId, a.Id, signersJson(), 'Parallel', null);
+        Test.stopTest();
+
+        DocGen_Signature_Request__c req = [
+            SELECT Expires_At__c
+            FROM DocGen_Signature_Request__c
+            WHERE Template__c = :tplId
+            LIMIT 1
+        ];
+        System.assertNotEquals(null, req.Expires_At__c, 'Every new request stamps its signing window');
+        Long deltaMs = req.Expires_At__c.getTime() - System.now().addDays(2).getTime();
+        System.assert(
+            Math.abs(deltaMs) < 5 * 60 * 1000,
+            'Org default (unset setting) = 2 days, matching the historical 48h; delta ms=' + deltaMs
+        );
+    }
+
+    @IsTest
     static void synthesizesPlacementsForTaglessTemplate() {
         // #170 option (b): a tag-less legacy template is no longer rejected — the guided
         // path auto-appends a "Signatures" block (Full + Date per signer) so it signs

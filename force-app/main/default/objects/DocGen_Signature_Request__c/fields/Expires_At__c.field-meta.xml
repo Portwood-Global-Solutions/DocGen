@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Expires_At__c</fullName>
+    <description
+    >When the signing links for this request stop working. Stamped at send (org default or per-send override) and re-stamped on resend. Null on requests created before v3.31 — those keep the legacy 48-hour lifetime from CreatedDate.</description>
+    <externalId>false</externalId>
+    <label>Link Expires At</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>
