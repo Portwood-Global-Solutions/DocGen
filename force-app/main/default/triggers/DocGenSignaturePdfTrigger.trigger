@@ -110,29 +110,14 @@ trigger DocGenSignaturePdfTrigger on DocGen_Signature_PDF__e(after insert) {
             }
 
             if (remaining == 0 && req.Status__c != 'Signed') {
-                // All signers complete — generate PDF
+                // All signers complete — generate PDF. The all-signed (sender) and
+                // completion (signer) emails are sent by the queueables AFTER the
+                // final CV insert, so the finalized PDF can ride along as an email
+                // attachment — at this point in the trigger it doesn't exist yet.
                 if (req.Template__c != null) {
                     System.enqueueJob(new DocGenSignatureService.TemplateSignaturePdfQueueable(requestId));
                 } else {
                     System.enqueueJob(new DocGenSignatureService.SignaturePdfQueueable(requestId));
-                }
-
-                // Send "all signed" notification to sender
-                try {
-                    DocGenSignatureEmailService.sendAllSignedNotification(requestId);
-                } catch (Exception notifEx) {
-                    System.debug(LoggingLevel.WARN, 'DocGen: All-signed notification failed: ' + notifEx.getMessage());
-                }
-
-                // Send a completion confirmation to the SIGNERS themselves (Sarah's #3 —
-                // previously only the sender was notified, so signers never got a "done").
-                try {
-                    DocGenSignatureEmailService.sendSignerCompletionEmails(requestId);
-                } catch (Exception signerNotifEx) {
-                    System.debug(
-                        LoggingLevel.WARN,
-                        'DocGen: Signer completion email failed: ' + signerNotifEx.getMessage()
-                    );
                 }
             } else if (remaining > 0) {
                 // Not all done — send "signer completed" notification
