@@ -1,4 +1,5 @@
 import { LightningElement, api, wire, track } from 'lwc';
+import { NavigationMixin } from 'lightning/navigation';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getSignerRolePicklistValues from '@salesforce/apex/DocGenSignatureSenderController.getSignerRolePicklistValues';
 import createGuidedPdfSignatureRequest from '@salesforce/apex/DocGenSignatureSenderController.createGuidedPdfSignatureRequest';
@@ -9,11 +10,13 @@ import getPendingSignatureRequests from '@salesforce/apex/DocGenSignatureSenderC
 import getDocGenTemplates from '@salesforce/apex/DocGenSignatureSenderController.getDocGenTemplatesForRecord';
 import getTemplateSignaturePlacements from '@salesforce/apex/DocGenSignatureSenderController.getTemplateSignaturePlacements';
 import getDocumentPreviewPdfBase64 from '@salesforce/apex/DocGenSignatureSenderController.getDocumentPreviewPdfBase64';
+import resendSignatureRequest from '@salesforce/apex/DocGenSignatureSenderController.resendSignatureRequest';
+import cancelSignatureRequest from '@salesforce/apex/DocGenSignatureSenderController.cancelSignatureRequest';
 
 let signerIdCounter = 0;
 let templateIdCounter = 0;
 
-export default class DocGenSignatureSender extends LightningElement {
+export default class DocGenSignatureSender extends NavigationMixin(LightningElement) {
     @api recordId;
 
     @track isLoading = true;
@@ -680,6 +683,7 @@ export default class DocGenSignatureSender extends LightningElement {
             const data = await getPendingSignatureRequests({ relatedRecordId: this.recordId });
             this.previousRequests = data.map((req) => ({
                 ...req,
+                actionsDisabled: req.status === 'Signed' || req.status === 'Cancelled',
                 statusBadgeClass:
                     req.status === 'Signed'
                         ? 'slds-badge slds-theme_success'
@@ -709,6 +713,48 @@ export default class DocGenSignatureSender extends LightningElement {
     handleCopyPreviousUrl(event) {
         this._copyToClipboard(event.currentTarget.dataset.url);
         this.showToast('Copied', 'Link copied to clipboard.', 'success');
+    }
+
+    handleViewRequest(event) {
+        this[NavigationMixin.Navigate]({
+            type: 'standard__recordPage',
+            attributes: {
+                recordId: event.currentTarget.dataset.requestId,
+                actionName: 'view'
+            }
+        });
+    }
+
+    async handleResendRequest(event) {
+        const requestId = event.currentTarget.dataset.requestId;
+        const confirmed = window.confirm(
+            'Resend this signature request to all unsigned signers?\n\n' +
+                'New signing links will be emailed and the previous links will stop working.'
+        );
+        if (!confirmed) return;
+        try {
+            await resendSignatureRequest({ requestId });
+            this.showToast('Resent', 'New signing links were emailed to all unsigned signers.', 'success');
+            await this.loadPreviousRequests();
+        } catch (err) {
+            this.showToast('Unable to resend', err.body && err.body.message ? err.body.message : err.message, 'error');
+        }
+    }
+
+    async handleRevokeRequest(event) {
+        const requestId = event.currentTarget.dataset.requestId;
+        const confirmed = window.confirm(
+            'Revoke this signature request?\n\n' +
+                'All unsigned signing links become invalid and signers can no longer sign. This cannot be undone.'
+        );
+        if (!confirmed) return;
+        try {
+            await cancelSignatureRequest({ requestId });
+            this.showToast('Revoked', 'The signature request was revoked.', 'success');
+            await this.loadPreviousRequests();
+        } catch (err) {
+            this.showToast('Unable to revoke', err.body && err.body.message ? err.body.message : err.message, 'error');
+        }
     }
 
     handleCopyUrl(event) {

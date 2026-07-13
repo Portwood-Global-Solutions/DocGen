@@ -3017,6 +3017,36 @@ private class DocGenSignatureTests {
     }
 
     @isTest
+    static void testResolveSigningPath_routesGuidedRequestsToPdfPage() {
+        // Guided-PDF requests (snapshot or source-doc) must resend links to the
+        // PDF signing page; only the classic typed-name flow uses the legacy page.
+        DocGen_Signature_Request__c classic = new DocGen_Signature_Request__c();
+        System.assertEquals(
+            DocGenSignatureSenderController.getSigningPagePath(),
+            DocGenSignatureSenderController.resolveSigningPath(classic),
+            'Typed-name request (no snapshot, no source doc) resends to the legacy page'
+        );
+
+        DocGen_Signature_Request__c snapshotReq = new DocGen_Signature_Request__c(
+            Render_Data_Snapshot__c = '{"fields":{}}'
+        );
+        System.assertEquals(
+            DocGenSignatureSenderController.getSigningPdfPagePath(),
+            DocGenSignatureSenderController.resolveSigningPath(snapshotReq),
+            'Snapshot-backed request resends to the PDF signing page'
+        );
+
+        DocGen_Signature_Request__c sourceDocReq = new DocGen_Signature_Request__c(
+            Source_Document_Id__c = '068000000000001AAA'
+        );
+        System.assertEquals(
+            DocGenSignatureSenderController.getSigningPdfPagePath(),
+            DocGenSignatureSenderController.resolveSigningPath(sourceDocReq),
+            'Send-existing-document request resends to the PDF signing page'
+        );
+    }
+
+    @isTest
     static void testCreateTemplateSignerRequest_notFound() {
         Test.startTest();
         try {

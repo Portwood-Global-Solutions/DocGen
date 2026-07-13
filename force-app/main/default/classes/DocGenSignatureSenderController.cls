@@ -2755,11 +2755,11 @@ public with sharing class DocGenSignatureSenderController {
     public static void resendSignatureRequest(Id requestId) {
         DocGenFlsGuard.assertAccessible(
             DocGen_Signature_Request__c.sObjectType,
-            new Set<String>{ 'Status__c', 'Template__c', 'Source_Document_Id__c' }
+            new Set<String>{ 'Status__c', 'Template__c', 'Source_Document_Id__c', 'Render_Data_Snapshot__c' }
         );
         /* code-analyzer-suppress ApexFlsViolation */
         DocGen_Signature_Request__c req = [
-            SELECT Id, Status__c, Template__r.Name, Source_Document_Id__c
+            SELECT Id, Status__c, Template__r.Name, Source_Document_Id__c, Render_Data_Snapshot__c
             FROM DocGen_Signature_Request__c
             WHERE Id = :requestId
             WITH SYSTEM_MODE
@@ -2803,6 +2803,8 @@ public with sharing class DocGenSignatureSenderController {
 
         List<DocGenSignatureEmailService.SignerEmail> emailList = new List<DocGenSignatureEmailService.SignerEmail>();
 
+        String signingPath = resolveSigningPath(req);
+
         for (DocGen_Signer__c s : signers) {
             // Generate new token
             Blob randomBytes = Crypto.generateAesKey(256);
@@ -2818,7 +2820,7 @@ public with sharing class DocGenSignatureSenderController {
             s.PIN_Attempts__c = 0;
             s.PIN_Verified_At__c = null;
 
-            String sigUrl = siteUrl + getSigningPagePath() + '?token=' + newToken;
+            String sigUrl = siteUrl + signingPath + '?token=' + newToken;
             emailList.add(
                 new DocGenSignatureEmailService.SignerEmail(
                     s.Signer_Name__c,
@@ -2851,6 +2853,19 @@ public with sharing class DocGenSignatureSenderController {
         Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
         DocGenSignatureEmailService.sendSignatureRequestEmails(emailList, documentTitle);
+    }
+
+    /**
+     * PDF-viewer requests (snapshot re-render or send-existing-CV) set
+     * Render_Data_Snapshot__c or Source_Document_Id__c; the classic typed-name
+     * flow sets neither. Same predicate as the sequential-signer routing in
+     * DocGenSignaturePdfTrigger — resending with the legacy page path would
+     * email guided-PDF signers a broken link.
+     */
+    @TestVisible
+    private static String resolveSigningPath(DocGen_Signature_Request__c req) {
+        Boolean isPdfViewer = req.Render_Data_Snapshot__c != null || req.Source_Document_Id__c != null;
+        return isPdfViewer ? getSigningPdfPagePath() : getSigningPagePath();
     }
 
     /**

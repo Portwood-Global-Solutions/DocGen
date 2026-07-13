@@ -409,6 +409,33 @@
                                     </p>
                                     <p class="slds-text-body_small slds-text-color_weak">{req.documentTitle}</p>
                                 </div>
+                                <div class="slds-col slds-no-flex">
+                                    <lightning-button-group>
+                                        <lightning-button
+                                            label="View"
+                                            icon-name="utility:open"
+                                            data-request-id={req.id}
+                                            onclick={handleViewRequest}
+                                        >
+                                        </lightning-button>
+                                        <lightning-button
+                                            label="Resend"
+                                            icon-name="utility:send"
+                                            data-request-id={req.id}
+                                            disabled={req.actionsDisabled}
+                                            onclick={handleResendRequest}
+                                        >
+                                        </lightning-button>
+                                        <lightning-button
+                                            label="Revoke"
+                                            variant="destructive-text"
+                                            data-request-id={req.id}
+                                            disabled={req.actionsDisabled}
+                                            onclick={handleRevokeRequest}
+                                        >
+                                        </lightning-button>
+                                    </lightning-button-group>
+                                </div>
                             </div>
                             <template for:each={req.signers} for:item="signer">
                                 <div
