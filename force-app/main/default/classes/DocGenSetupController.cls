@@ -73,8 +73,12 @@ public with sharing class DocGenSetupController {
         // custom settings record already exists.
         DocGenFlsGuard.assertCreateable(settings, new Set<String>{ 'Experience_Site_Url__c' });
         DocGenFlsGuard.assertUpdateable(settings, new Set<String>{ 'Experience_Site_Url__c' });
-        /* code-analyzer-suppress ApexFlsViolation */
-        Database.upsert(settings, AccessLevel.SYSTEM_MODE);
+        try {
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.upsert(settings, AccessLevel.SYSTEM_MODE);
+        } catch (DmlException e) {
+            throw DocGenService.dmlAhe(e, DocGen_Settings__c.sObjectType);
+        }
     }
 
     /**
@@ -318,8 +322,12 @@ public with sharing class DocGenSetupController {
         };
         DocGenFlsGuard.assertCreateable(settings, sigSettingsFields);
         DocGenFlsGuard.assertUpdateable(settings, sigSettingsFields);
-        /* code-analyzer-suppress ApexFlsViolation */
-        Database.upsert(settings, AccessLevel.SYSTEM_MODE);
+        try {
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.upsert(settings, AccessLevel.SYSTEM_MODE);
+        } catch (DmlException e) {
+            throw DocGenService.dmlAhe(e, DocGen_Settings__c.sObjectType);
+        }
     }
 
     /**
@@ -342,8 +350,12 @@ public with sharing class DocGenSetupController {
         Set<String> reminderFields = new Set<String>{ 'Signature_Reminder_Enabled__c', 'Signature_Reminder_Hours__c' };
         DocGenFlsGuard.assertCreateable(settings, reminderFields);
         DocGenFlsGuard.assertUpdateable(settings, reminderFields);
-        /* code-analyzer-suppress ApexFlsViolation */
-        Database.upsert(settings, AccessLevel.SYSTEM_MODE);
+        try {
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.upsert(settings, AccessLevel.SYSTEM_MODE);
+        } catch (DmlException e) {
+            throw DocGenService.dmlAhe(e, DocGen_Settings__c.sObjectType);
+        }
 
         // Auto-schedule or abort the reminder job
         String jobName = 'DocGen Signature Reminders';

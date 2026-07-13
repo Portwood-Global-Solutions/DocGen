@@ -378,6 +378,47 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * Converts a DmlException from a settings/config save into a user-friendly
+     * AuraHandledException. STRING_TOO_LONG gets a field-specific "too long, max N
+     * characters" message (the raw DmlException surfaces as "[object Object]" in LWC).
+     */
+    public static AuraHandledException dmlAhe(DmlException e, Schema.SObjectType sObjType) {
+        if (e.getNumDml() > 0 && e.getDmlType(0) == StatusCode.STRING_TOO_LONG) {
+            List<String> fieldNames = e.getDmlFieldNames(0);
+            Schema.DescribeFieldResult dfr = describeDmlField(sObjType, fieldNames);
+            if (dfr != null) {
+                return ahe(
+                    dfr.getLabel() + ' is too long (max ' + dfr.getLength() + ' characters) — use a shorter value.'
+                );
+            }
+            return ahe('A value is too long: ' + e.getDmlMessage(0));
+        }
+        return ahe('Could not save: ' + (e.getNumDml() > 0 ? e.getDmlMessage(0) : e.getMessage()));
+    }
+
+    /**
+     * Resolves a field name from DmlException.getDmlFieldNames against the object's
+     * field map. Falls back to an endsWith match because DML field names may or may
+     * not carry the namespace prefix depending on context.
+     */
+    private static Schema.DescribeFieldResult describeDmlField(Schema.SObjectType sObjType, List<String> fieldNames) {
+        if (fieldNames == null || fieldNames.isEmpty() || sObjType == null) {
+            return null;
+        }
+        Map<String, Schema.SObjectField> fieldMap = sObjType.getDescribe().fields.getMap();
+        String wanted = fieldNames[0].toLowerCase();
+        if (fieldMap.containsKey(wanted)) {
+            return fieldMap.get(wanted).getDescribe();
+        }
+        for (String key : fieldMap.keySet()) {
+            if (key.endsWith(wanted)) {
+                return fieldMap.get(key).getDescribe();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Public wrapper for processXml — used by e2e tests to validate tag processing.
      * @param xml The XML string containing merge tags
      * @param data The record data map to resolve tags against

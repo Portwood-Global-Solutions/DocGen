@@ -150,9 +150,38 @@ export default class DocGenSignatureSettings extends LightningElement {
             this._loadSetupChecks();
         } catch (err) {
             this.saveSuccess = false;
-            this.saveMessage = err.body ? err.body.message : 'Failed to save settings.';
+            this.saveMessage = this.errMsg(err);
         } finally {
             this.isSaving = false;
         }
+    }
+
+    // Normalizes the LWC error shapes (AuraHandledException, DML page/field errors,
+    // array bodies) into a display string — err.body.message can be a non-string,
+    // which otherwise renders as "[object Object]".
+    errMsg(err) {
+        const body = err && err.body;
+        if (Array.isArray(body) && body[0] && typeof body[0].message === 'string') {
+            return body[0].message;
+        }
+        if (body) {
+            if (typeof body.message === 'string' && body.message) {
+                return body.message;
+            }
+            if (body.pageErrors && body.pageErrors[0] && body.pageErrors[0].message) {
+                return String(body.pageErrors[0].message);
+            }
+            if (body.fieldErrors) {
+                const fieldKey = Object.keys(body.fieldErrors)[0];
+                const fieldErr = fieldKey && body.fieldErrors[fieldKey][0];
+                if (fieldErr && fieldErr.message) {
+                    return String(fieldErr.message);
+                }
+            }
+        }
+        if (err && typeof err.message === 'string' && err.message) {
+            return err.message;
+        }
+        return 'Failed to save settings.';
     }
 }

@@ -128,4 +128,60 @@ private class DocGenSetupControllerTest {
         System.assert(fresh.containsKey('Experience_Site_Url__c'), 'Fresh map must expose unqualified field names');
         System.assertNotEquals(null, orgUrl, 'getOrgUrl must return a non-null URL');
     }
+
+    // =========================================================================
+    // Oversized values — DmlException must surface as a friendly
+    // AuraHandledException naming the field and the max length, not the raw
+    // DML error (which renders as "[object Object]" in the LWC).
+    // =========================================================================
+
+    @IsTest
+    static void testSaveSignatureSettingsOversizedLogoUrlFriendlyError() {
+        String longUrl = 'https://example.com/' + 'a'.repeat(300);
+        Boolean caught = false;
+        String message;
+        Test.startTest();
+        try {
+            DocGenSetupController.saveSignatureSettings(
+                '#0176D3',
+                longUrl,
+                'Subject',
+                'Message',
+                'Footer',
+                'Company',
+                null
+            );
+        } catch (AuraHandledException e) {
+            caught = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Oversized logo URL must throw AuraHandledException, not raw DmlException');
+        System.assert(
+            message.contains('255') && message.containsIgnoreCase('too long'),
+            'Message must say the field is too long with the 255 max; got: ' + message
+        );
+    }
+
+    @IsTest
+    static void testSaveSettingsOversizedSiteUrlFriendlyError() {
+        String longUrl = 'https://example.com/' + 'a'.repeat(300);
+        Boolean caught = false;
+        String message;
+        Test.startTest();
+        try {
+            DocGenSetupController.saveSettings(longUrl);
+        } catch (AuraHandledException e) {
+            caught = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assert(caught, 'Oversized site URL must throw AuraHandledException, not raw DmlException');
+        System.assert(
+            message.contains('255') && message.containsIgnoreCase('too long'),
+            'Message must say the field is too long with the 255 max; got: ' + message
+        );
+    }
 }

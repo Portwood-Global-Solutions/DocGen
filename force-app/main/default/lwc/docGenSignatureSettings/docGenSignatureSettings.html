@@ -128,6 +128,7 @@
                         <lightning-input
                             label="Signature Site URL"
                             value={siteUrl}
+                            max-length="255"
                             placeholder="https://yourorg.my.salesforce-sites.com/DocGenSignatures"
                             onchange={handleSiteUrlChange}
                             field-level-help="The public Salesforce Site URL where signers access the signing page. Copy from Setup > Sites > your site's URL."

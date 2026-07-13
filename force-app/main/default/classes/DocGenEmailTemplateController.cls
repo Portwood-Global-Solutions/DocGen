@@ -177,8 +177,12 @@ public with sharing class DocGenEmailTemplateController {
         } else {
             DocGenFlsGuard.assertUpdateable(rec, fields);
         }
-        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-        Database.upsert(rec, AccessLevel.SYSTEM_MODE);
+        try {
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            Database.upsert(rec, AccessLevel.SYSTEM_MODE);
+        } catch (DmlException e) {
+            throw DocGenService.dmlAhe(e, DocGen_Email_Template__c.sObjectType);
+        }
         return rec.Id;
     }
 
