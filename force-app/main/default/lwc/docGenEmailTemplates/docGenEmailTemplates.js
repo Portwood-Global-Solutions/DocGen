@@ -231,10 +231,20 @@ export default class DocGenEmailTemplates extends LightningElement {
 
     // ===== Helpers =====
     errMsg(error) {
-        if (error && error.body && error.body.message) {
-            return error.body.message;
+        const body = error && error.body;
+        if (Array.isArray(body) && body[0] && typeof body[0].message === 'string') {
+            return body[0].message;
         }
-        return (error && error.message) || String(error);
+        if (body && typeof body.message === 'string' && body.message) {
+            return body.message;
+        }
+        if (body && body.pageErrors && body.pageErrors[0] && body.pageErrors[0].message) {
+            return String(body.pageErrors[0].message);
+        }
+        if (error && typeof error.message === 'string' && error.message) {
+            return error.message;
+        }
+        return 'An unexpected error occurred.';
     }
 
     toast(title, message, variant) {

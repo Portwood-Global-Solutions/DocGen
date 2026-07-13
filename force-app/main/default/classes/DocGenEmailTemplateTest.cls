@@ -168,6 +168,33 @@ private class DocGenEmailTemplateTest {
         System.assertEquals('Updated subject', rec.Subject__c);
     }
 
+    // Oversized Logo URL Override must surface a friendly "too long" message,
+    // not the raw DmlException (which renders as "[object Object]" in the LWC).
+    @IsTest
+    static void controller_save_oversized_logo_url_friendly_error() {
+        Map<String, Object> data = new Map<String, Object>{
+            'type' => DocGenEmailTemplateService.TYPE_REQUEST,
+            'subject' => 'Hi',
+            'bodyHtml' => '<p>x</p>',
+            'logoUrl' => 'https://example.com/' + 'a'.repeat(300)
+        };
+        Boolean caught = false;
+        String message;
+        Test.startTest();
+        try {
+            DocGenEmailTemplateController.saveTemplate(data);
+        } catch (AuraHandledException e) {
+            caught = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+        System.assert(caught, 'Oversized logo URL must throw AuraHandledException');
+        System.assert(
+            message.contains('255') && message.containsIgnoreCase('too long'),
+            'Message must name the max length; got: ' + message
+        );
+    }
+
     // ---- Controller: getDefault + renderPreview ----
     @IsTest
     static void controller_default_and_preview() {
