@@ -259,12 +259,21 @@ public with sharing class DocGenSignatureEmailService {
         );
     }
 
-    /** Notifies the sender that all signers have completed — signed PDF is attached. */
+    /** Notifies the sender that all signers have completed. */
     public static void sendAllSignedNotification(Id requestId) {
+        sendAllSignedNotification(requestId, null, null);
+    }
+
+    /**
+     * All-signed sender notification with the finalized PDF attached. signedPdf
+     * null (or over the attachment cap) sends the plain notification.
+     */
+    public static void sendAllSignedNotification(Id requestId, Blob signedPdf, String fileName) {
         sendSenderNotification(
             requestId,
             DocGenEmailTemplateService.TYPE_ALL_SIGNED,
-            new Map<String, String>{ 'RequestId' => String.valueOf(requestId) }
+            new Map<String, String>{ 'RequestId' => String.valueOf(requestId) },
+            buildPdfAttachment(signedPdf, fileName)
         );
     }
 
@@ -287,6 +296,15 @@ public with sharing class DocGenSignatureEmailService {
      * rendered from the template for the given type.
      */
     private static void sendSenderNotification(Id requestId, String templateType, Map<String, String> tokens) {
+        sendSenderNotification(requestId, templateType, tokens, null);
+    }
+
+    private static void sendSenderNotification(
+        Id requestId,
+        String templateType,
+        Map<String, String> tokens,
+        Messaging.EmailFileAttachment attachment
+    ) {
         try {
             DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'CreatedById' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -315,6 +333,9 @@ public with sharing class DocGenSignatureEmailService {
                 email.setPlainTextBody(rendered.plainBody);
             }
             email.setSaveAsActivity(false);
+            if (attachment != null) {
+                email.setFileAttachments(new List<Messaging.EmailFileAttachment>{ attachment });
+            }
 
             DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
             String owaId = settings == null ? null : settings.Signature_OWA_Id__c;
@@ -340,6 +361,17 @@ public with sharing class DocGenSignatureEmailService {
      * can't block the finalize that calls it.
      */
     public static void sendSignerCompletionEmails(Id requestId) {
+        sendSignerCompletionEmails(requestId, null, null);
+    }
+
+    /**
+     * Completion confirmation with the finalized PDF attached. One attachment
+     * instance is reused across every signer's message (the Blob rides along by
+     * reference — no per-recipient heap copies). signedPdf null (or over the
+     * attachment cap) sends the plain confirmation.
+     */
+    public static void sendSignerCompletionEmails(Id requestId, Blob signedPdf, String fileName) {
+        Messaging.EmailFileAttachment attachment = buildPdfAttachment(signedPdf, fileName);
         try {
             DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -406,6 +438,9 @@ public with sharing class DocGenSignatureEmailService {
                 }
                 email.setSaveAsActivity(false);
                 email.setOrgWideEmailAddressId(owaId);
+                if (attachment != null) {
+                    email.setFileAttachments(new List<Messaging.EmailFileAttachment>{ attachment });
+                }
                 emails.add(email);
             }
             if (!emails.isEmpty()) {
@@ -415,6 +450,32 @@ public with sharing class DocGenSignatureEmailService {
             System.debug(LoggingLevel.WARN, 'DocGen: Signer completion emails failed: ' + e.getMessage());
             logSignatureEmailFailure('sendSignerCompletionEmails', requestId, e);
         }
+    }
+
+    /**
+     * Shared PDF attachment for completion emails. Returns null when there is no
+     * PDF or it exceeds the email attachment cap (the notification still goes out
+     * plain — the signed document is always on the related record regardless).
+     */
+    private static final Integer MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+    private static Messaging.EmailFileAttachment buildPdfAttachment(Blob pdf, String fileName) {
+        if (pdf == null) {
+            return null;
+        }
+        if (pdf.size() > MAX_ATTACHMENT_BYTES) {
+            System.debug(
+                LoggingLevel.WARN,
+                'DocGen: signed PDF (' + pdf.size() + ' bytes) exceeds the email attachment cap — sending without it.'
+            );
+            return null;
+        }
+        Messaging.EmailFileAttachment att = new Messaging.EmailFileAttachment();
+        String name = String.isNotBlank(fileName) ? fileName : 'Signed Document';
+        att.setFileName(name.endsWith('.pdf') ? name : name + '.pdf');
+        att.setContentType('application/pdf');
+        att.setBody(pdf);
+        return att;
     }
 
     // =========================================================================

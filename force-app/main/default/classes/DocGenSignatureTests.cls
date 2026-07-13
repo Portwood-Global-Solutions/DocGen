@@ -3022,6 +3022,27 @@ private class DocGenSignatureTests {
     // =========================================================================
 
     @isTest
+    static void testCompletionEmails_attachmentOverloads_neverThrow() {
+        // The attachment overloads are best-effort like their 1-arg forms: a missing
+        // OWA, a null blob, or a send failure logs and returns — an email problem
+        // must never break the finalize that calls these from the queueables.
+        DocGen_Signer__c signer = getTestSigner();
+        signer.Status__c = 'Signed';
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
+        Blob pdf = Blob.valueOf('%PDF-1.4 fake signed document');
+
+        Test.startTest();
+        DocGenSignatureEmailService.sendAllSignedNotification(signer.Signature_Request__c, pdf, 'Waiver - Signed');
+        DocGenSignatureEmailService.sendSignerCompletionEmails(signer.Signature_Request__c, pdf, 'Waiver - Signed');
+        // Null blob = plain notification, same contract.
+        DocGenSignatureEmailService.sendAllSignedNotification(signer.Signature_Request__c, null, null);
+        DocGenSignatureEmailService.sendSignerCompletionEmails(signer.Signature_Request__c, null, null);
+        Test.stopTest();
+
+        System.assert(true, 'attachment overloads completed without throwing');
+    }
+
+    @isTest
     static void testSignatureExpiry_isExpiredMatrix() {
         System.assert(
             !DocGenSignatureExpiry.isExpired(System.now().addDays(1), System.now().addDays(-30)),

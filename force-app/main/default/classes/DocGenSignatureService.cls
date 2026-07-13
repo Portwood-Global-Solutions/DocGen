@@ -1366,6 +1366,21 @@ public without sharing class DocGenSignatureService {
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.update(req, false, AccessLevel.SYSTEM_MODE);
 
+                // Completion emails (moved here from DocGenSignaturePdfTrigger so the
+                // finalized PDF can be attached — it doesn't exist yet in the trigger).
+                // Each send is individually guarded: an email failure must never reach
+                // the outer catch, which would reset a signed request back to Viewed.
+                try {
+                    DocGenSignatureEmailService.sendAllSignedNotification(requestId, pdfBlob, fileName);
+                } catch (Exception notifEx) {
+                    System.debug(LoggingLevel.WARN, 'DocGen: All-signed notification failed: ' + notifEx.getMessage());
+                }
+                try {
+                    DocGenSignatureEmailService.sendSignerCompletionEmails(requestId, pdfBlob, fileName);
+                } catch (Exception notifEx) {
+                    System.debug(LoggingLevel.WARN, 'DocGen: Signer completion email failed: ' + notifEx.getMessage());
+                }
+
                 // Clean up temp images
                 cleanupTempImages(requestId);
             } catch (Exception e) {
@@ -1644,6 +1659,21 @@ public without sharing class DocGenSignatureService {
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 Database.update(req, false, AccessLevel.SYSTEM_MODE);
                 purgeFrozenSnapshotCv(frozenCvToPurge);
+
+                // Completion emails (moved here from DocGenSignaturePdfTrigger so the
+                // finalized PDF can be attached — it doesn't exist yet in the trigger).
+                // Each send is individually guarded: an email failure must never reach
+                // the outer catch, which would reset a signed request back to Viewed.
+                try {
+                    DocGenSignatureEmailService.sendAllSignedNotification(requestId, pdfBlob, fileName);
+                } catch (Exception notifEx) {
+                    System.debug(LoggingLevel.WARN, 'DocGen: All-signed notification failed: ' + notifEx.getMessage());
+                }
+                try {
+                    DocGenSignatureEmailService.sendSignerCompletionEmails(requestId, pdfBlob, fileName);
+                } catch (Exception notifEx) {
+                    System.debug(LoggingLevel.WARN, 'DocGen: Signer completion email failed: ' + notifEx.getMessage());
+                }
             } catch (Exception e) {
                 String errMsg = e.getTypeName() + ': ' + e.getMessage() + '\n' + e.getStackTraceString();
                 System.debug(LoggingLevel.ERROR, 'DocGen: Template signature PDF failed for ' + req.Id + ': ' + errMsg);

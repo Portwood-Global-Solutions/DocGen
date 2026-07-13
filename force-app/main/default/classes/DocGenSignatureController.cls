@@ -2769,7 +2769,10 @@ public without sharing class DocGenSignatureController {
             : null;
 
         ContentVersion cv = new ContentVersion();
-        cv.VersionData = EncodingUtil.base64Decode(base64Pdf);
+        // Held in a local so the completion emails below can attach the final PDF
+        // without a second base64 decode (Blob is by-reference — no heap copy).
+        Blob compositedPdf = EncodingUtil.base64Decode(base64Pdf);
+        cv.VersionData = compositedPdf;
         if (result.isComplete) {
             // Final signed document — attach to the related record. Honor the template's
             // document-naming pattern (Document_Title_Format__c, e.g. "Waiver - {Name}
@@ -2891,7 +2894,11 @@ public without sharing class DocGenSignatureController {
             // single-signer Flow path). Mirror the trigger here. Same OWA-required, log-and-swallow
             // contract so a missing Org-Wide Email Address can never block the signer's success.
             try {
-                DocGenSignatureEmailService.sendAllSignedNotification(signer.Signature_Request__c);
+                DocGenSignatureEmailService.sendAllSignedNotification(
+                    signer.Signature_Request__c,
+                    compositedPdf,
+                    cv.Title
+                );
             } catch (Exception notifEx) {
                 System.debug(
                     LoggingLevel.WARN,
@@ -2899,7 +2906,11 @@ public without sharing class DocGenSignatureController {
                 );
             }
             try {
-                DocGenSignatureEmailService.sendSignerCompletionEmails(signer.Signature_Request__c);
+                DocGenSignatureEmailService.sendSignerCompletionEmails(
+                    signer.Signature_Request__c,
+                    compositedPdf,
+                    cv.Title
+                );
             } catch (Exception signerNotifEx) {
                 System.debug(
                     LoggingLevel.WARN,
