@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Signature_Expiration_Days__c</fullName>
+    <defaultValue>2</defaultValue>
+    <description
+    >Org-wide default: signing links expire this many days after send. Individual sends and the Flow action can override per request. Requests created before this setting existed keep the legacy 48-hour lifetime.</description>
+    <externalId>false</externalId>
+    <label>Signature Link Expiration (Days)</label>
+    <precision>3</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>

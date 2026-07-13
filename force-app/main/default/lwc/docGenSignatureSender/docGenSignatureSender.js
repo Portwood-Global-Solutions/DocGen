@@ -42,6 +42,7 @@ export default class DocGenSignatureSender extends NavigationMixin(LightningElem
     // #verification — per-send overrides ('Inherit' falls back to template/org default)
     @track verificationOverride = 'Inherit';
     @track prefillOverride = 'Inherit';
+    @track expirationDays = null; // per-send signing-window override (blank = org default)
 
     // Signers
     @track signers = [];
@@ -258,6 +259,10 @@ export default class DocGenSignatureSender extends NavigationMixin(LightningElem
 
     handleEmailSubjectChange(event) {
         this.emailSubject = event.detail.value || '';
+    }
+
+    handleExpirationDaysChange(event) {
+        this.expirationDays = event.detail.value;
     }
 
     // --- Template Selection ---
@@ -642,7 +647,8 @@ export default class DocGenSignatureSender extends NavigationMixin(LightningElem
                     emailMessage: (this.emailMessage || '').trim() || null,
                     emailSubject: (this.emailSubject || '').trim() || null,
                     requireVerification: this.requireVerificationValue,
-                    prefillSignerEmail: this.prefillValue
+                    prefillSignerEmail: this.prefillValue,
+                    expirationDays: parseInt(this.expirationDays, 10) || null
                 });
             } else {
                 const templateIds = this.selectedTemplates.map((t) => t.templateId);

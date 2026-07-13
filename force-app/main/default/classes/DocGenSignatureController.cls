@@ -1,5 +1,6 @@
 public without sharing class DocGenSignatureController {
-    // Signature links expire after this many hours from creation
+    // Legacy signing-window: requests created before Expires_At__c existed live this
+    // long from creation. New requests stamp Expires_At__c (DocGenSignatureExpiry).
     private static final Integer TOKEN_EXPIRATION_HOURS = 48;
     // PIN verification settings
     private static final Integer PIN_EXPIRATION_MINUTES = 10;
@@ -311,6 +312,7 @@ public without sharing class DocGenSignatureController {
                 Signature_Request__r.Prefill_Signer_Email__c,
                 Signature_Request__r.Source_Document_Id__c,
                 Signature_Request__r.Related_Record_Id__c,
+                Signature_Request__r.Expires_At__c,
                 Signature_Request__r.Template__c,
                 Signature_Request__r.Template__r.Name,
                 Signature_Request__r.Template__r.Form_Fields_Config__c
@@ -321,8 +323,9 @@ public without sharing class DocGenSignatureController {
         ];
 
         if (!signers.isEmpty()) {
-            // Token expiration: 30 days from creation
-            if (signers[0].CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+            if (
+                DocGenSignatureExpiry.isExpired(signers[0].Signature_Request__r.Expires_At__c, signers[0].CreatedDate)
+            ) {
                 res.errorMessage = 'This signature link has expired. Please request a new one.';
                 return res;
             }
@@ -338,12 +341,20 @@ public without sharing class DocGenSignatureController {
                 'Source_Document_Id__c',
                 'Related_Record_Id__c',
                 'CreatedDate',
-                'Secure_Token__c'
+                'Secure_Token__c',
+                'Expires_At__c'
             }
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signature_Request__c> requests = [
-            SELECT Id, Status__c, Signer_Name__c, Source_Document_Id__c, Related_Record_Id__c, CreatedDate
+            SELECT
+                Id,
+                Status__c,
+                Signer_Name__c,
+                Source_Document_Id__c,
+                Related_Record_Id__c,
+                CreatedDate,
+                Expires_At__c
             FROM DocGen_Signature_Request__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -355,8 +366,7 @@ public without sharing class DocGenSignatureController {
             return res;
         }
 
-        // Token expiration: 30 days from creation
-        if (requests[0].CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(requests[0].Expires_At__c, requests[0].CreatedDate)) {
             res.errorMessage = 'This signature link has expired. Please request a new one.';
             return res;
         }
@@ -390,7 +400,7 @@ public without sharing class DocGenSignatureController {
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
-            SELECT Id, Signer_Email__c, PIN_Attempts__c, Status__c, CreatedDate
+            SELECT Id, Signer_Email__c, PIN_Attempts__c, Status__c, CreatedDate, Signature_Request__r.Expires_At__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -413,7 +423,7 @@ public without sharing class DocGenSignatureController {
         }
 
         // Check if token is expired
-        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(signer.Signature_Request__r.Expires_At__c, signer.CreatedDate)) {
             result.put('success', false);
             result.put('message', 'This signature link has expired.');
             return result;
@@ -711,7 +721,7 @@ public without sharing class DocGenSignatureController {
                 // public preview link is optional. ContentDistribution creation is not permitted
                 // in guest context, so never let it break token validation.
                 try {
-                    res.documentUrl = getOrCreatePublicLink(cvs[0]);
+                    res.documentUrl = getOrCreatePublicLink(cvs[0], parentReq.Expires_At__c);
                 } catch (Exception e) {
                     System.debug(LoggingLevel.WARN, 'DocGen: public preview link unavailable — ' + e.getMessage());
                 }
@@ -770,7 +780,7 @@ public without sharing class DocGenSignatureController {
         ];
         if (!cvs.isEmpty()) {
             res.documentTitle = cvs[0].Title;
-            res.documentUrl = getOrCreatePublicLink(cvs[0]);
+            res.documentUrl = getOrCreatePublicLink(cvs[0], req.Expires_At__c);
         } else {
             res.documentTitle = 'Confidential Document';
         }
@@ -779,7 +789,7 @@ public without sharing class DocGenSignatureController {
     }
 
     // CxSAST: Apex_CRUD_ContentDistribution — SYSTEM_MODE required for guest user context; ContentDistribution created for signature document preview
-    private static String getOrCreatePublicLink(ContentVersion cv) {
+    private static String getOrCreatePublicLink(ContentVersion cv, Datetime requestExpiresAt) {
         DocGenFlsGuard.guestAssertAccessible(
             ContentDistribution.sObjectType,
             new Set<String>{ 'DistributionPublicUrl', 'ContentVersionId' }
@@ -800,10 +810,11 @@ public without sharing class DocGenSignatureController {
         cd.ContentVersionId = cv.Id;
         cd.PreferencesAllowViewInBrowser = true;
         cd.PreferencesLinkLatestVersion = true;
-        // Expire the public link in line with the signing token lifetime so a signed
-        // (or cancelled) request can't be re-fetched anonymously after the signing window.
+        // Expire the public link in line with the signing window so a signed
+        // (or cancelled) request can't be re-fetched anonymously afterwards.
+        // Legacy requests (no stamped expiry) keep the historical 48 hours.
         cd.PreferencesExpires = true;
-        cd.ExpiryDate = System.now().addHours(TOKEN_EXPIRATION_HOURS);
+        cd.ExpiryDate = requestExpiresAt != null ? requestExpiresAt : System.now().addHours(TOKEN_EXPIRATION_HOURS);
         cd.PreferencesNotifyOnVisit = false;
         cd.PreferencesAllowOriginalDownload = false;
         cd.PreferencesAllowPDFDownload = false;
@@ -1142,6 +1153,7 @@ public without sharing class DocGenSignatureController {
                 Signer_Name__c,
                 Signer_Email__c,
                 Signature_Request__c,
+                Signature_Request__r.Expires_At__c,
                 Role_Name__c,
                 Contact__c,
                 CreatedDate,
@@ -1158,7 +1170,7 @@ public without sharing class DocGenSignatureController {
         }
 
         DocGen_Signer__c signer = signers[0];
-        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(signer.Signature_Request__r.Expires_At__c, signer.CreatedDate)) {
             throw new AuraHandledException('This signature link has expired.');
         }
         if (signer.Status__c == 'Signed') {
@@ -1795,6 +1807,7 @@ public without sharing class DocGenSignatureController {
                 Signer_Name__c,
                 Signer_Email__c,
                 Signature_Request__c,
+                Signature_Request__r.Expires_At__c,
                 Role_Name__c,
                 Contact__c,
                 CreatedDate
@@ -1811,7 +1824,7 @@ public without sharing class DocGenSignatureController {
         }
 
         DocGen_Signer__c signer = signers[0];
-        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(signer.Signature_Request__r.Expires_At__c, signer.CreatedDate)) {
             result.put('success', false);
             result.put('message', 'This signature link has expired.');
             return result;
@@ -1945,7 +1958,7 @@ public without sharing class DocGenSignatureController {
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
-            SELECT Id, Signature_Request__c, CreatedDate, PIN_Verified_At__c
+            SELECT Id, Signature_Request__c, CreatedDate, PIN_Verified_At__c, Signature_Request__r.Expires_At__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -1957,7 +1970,7 @@ public without sharing class DocGenSignatureController {
         }
 
         DocGen_Signer__c signer = signers[0];
-        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(signer.Signature_Request__r.Expires_At__c, signer.CreatedDate)) {
             throw new AuraHandledException('This signature link has expired.');
         }
 
@@ -2034,7 +2047,13 @@ public without sharing class DocGenSignatureController {
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
-            SELECT Id, CreatedDate, PIN_Verified_At__c, Status__c, Signature_Request__c
+            SELECT
+                Id,
+                CreatedDate,
+                PIN_Verified_At__c,
+                Status__c,
+                Signature_Request__c,
+                Signature_Request__r.Expires_At__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
@@ -2046,7 +2065,7 @@ public without sharing class DocGenSignatureController {
         }
 
         DocGen_Signer__c signer = signers[0];
-        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(signer.Signature_Request__r.Expires_At__c, signer.CreatedDate)) {
             throw new AuraHandledException('This signature link has expired.');
         }
         if (requestRequiresVerification(signer.Signature_Request__c) && signer.PIN_Verified_At__c == null) {
@@ -2136,14 +2155,18 @@ public without sharing class DocGenSignatureController {
                 CreatedDate,
                 Signature_Request__c,
                 Signature_Request__r.Source_Document_Id__c,
-                Signature_Request__r.Template__c
+                Signature_Request__r.Template__c,
+                Signature_Request__r.Expires_At__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
             LIMIT 1
         ];
 
-        if (signers.isEmpty() || signers[0].CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (
+            signers.isEmpty() ||
+            DocGenSignatureExpiry.isExpired(signers[0].Signature_Request__r.Expires_At__c, signers[0].CreatedDate)
+        ) {
             result.put('error', 'Invalid or expired token');
             return result;
         }
@@ -2312,14 +2335,17 @@ public without sharing class DocGenSignatureController {
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<DocGen_Signer__c> signers = [
-            SELECT Id, CreatedDate, Signature_Request__r.Source_Document_Id__c
+            SELECT Id, CreatedDate, Signature_Request__r.Source_Document_Id__c, Signature_Request__r.Expires_At__c
             FROM DocGen_Signer__c
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
             LIMIT 1
         ];
 
-        if (signers.isEmpty() || signers[0].CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (
+            signers.isEmpty() ||
+            DocGenSignatureExpiry.isExpired(signers[0].Signature_Request__r.Expires_At__c, signers[0].CreatedDate)
+        ) {
             result.put('error', 'Invalid or expired token');
             return result;
         }
@@ -2420,6 +2446,7 @@ public without sharing class DocGenSignatureController {
                 Signer_Name__c,
                 Signer_Email__c,
                 Signature_Request__c,
+                Signature_Request__r.Expires_At__c,
                 Role_Name__c,
                 Contact__c,
                 CreatedDate,
@@ -2436,7 +2463,7 @@ public without sharing class DocGenSignatureController {
         }
 
         DocGen_Signer__c signer = signers[0];
-        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(signer.Signature_Request__r.Expires_At__c, signer.CreatedDate)) {
             throw new AuraHandledException('This signature link has expired.');
         }
         if (signer.Status__c == 'Signed') {
@@ -2631,6 +2658,7 @@ public without sharing class DocGenSignatureController {
                 Signature_Request__r.Related_Record_Id__c,
                 Signature_Request__r.Template__r.Name,
                 Signature_Request__r.Document_Title_Format__c,
+                Signature_Request__r.Expires_At__c,
                 Role_Name__c,
                 Contact__c,
                 CreatedDate,
@@ -2646,7 +2674,7 @@ public without sharing class DocGenSignatureController {
         }
 
         DocGen_Signer__c signer = signers[0];
-        if (signer.CreatedDate.addHours(TOKEN_EXPIRATION_HOURS) < System.now()) {
+        if (DocGenSignatureExpiry.isExpired(signer.Signature_Request__r.Expires_At__c, signer.CreatedDate)) {
             throw new AuraHandledException('This signature link has expired.');
         }
         if (signer.Status__c == 'Signed') {

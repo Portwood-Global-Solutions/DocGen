@@ -130,6 +130,52 @@ private class DocGenSetupControllerTest {
     }
 
     // =========================================================================
+    // saveReminderSettings — schedule + expiration (4-arg canonical)
+    // =========================================================================
+
+    @IsTest
+    static void testSaveReminderSettings_scheduleAndExpiration() {
+        Test.startTest();
+        DocGenSetupController.saveReminderSettings(true, 24, ' 168, 24 , 72 ', 14);
+        Test.stopTest();
+
+        DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+        System.assertEquals('24,72,168', s.Signature_Reminder_Schedule__c, 'Schedule normalized and sorted');
+        System.assertEquals(14, s.Signature_Expiration_Days__c);
+        System.assertEquals(true, s.Signature_Reminder_Enabled__c);
+    }
+
+    @IsTest
+    static void testSaveReminderSettings_invalidScheduleRejected() {
+        Boolean caught = false;
+        String message;
+        Test.startTest();
+        try {
+            DocGenSetupController.saveReminderSettings(true, 24, '24,banana,72', 2);
+        } catch (AuraHandledException e) {
+            caught = true;
+            message = e.getMessage();
+        }
+        Test.stopTest();
+        System.assert(caught, 'Non-numeric schedule entry must be rejected');
+        System.assert(message.contains('hour offsets'), 'Friendly guidance expected; got: ' + message);
+    }
+
+    @IsTest
+    static void testSaveReminderSettings_expirationOutOfRangeRejected() {
+        Boolean caught = false;
+        Test.startTest();
+        try {
+            DocGenSetupController.saveReminderSettings(false, 24, null, 9999);
+        } catch (AuraHandledException e) {
+            caught = true;
+            System.assert(e.getMessage().contains('365'), 'Range named in message; got: ' + e.getMessage());
+        }
+        Test.stopTest();
+        System.assert(caught, 'Out-of-range expiration must be rejected');
+    }
+
+    // =========================================================================
     // Oversized values — DmlException must surface as a friendly
     // AuraHandledException naming the field and the max length, not the raw
     // DML error (which renders as "[object Object]" in the LWC).

@@ -140,6 +140,19 @@
             <template if:true={isSingleTemplate}>
                 <div class="slds-var-m-bottom_medium">
                     <lightning-input
+                        type="number"
+                        name="expirationDays"
+                        label="Link Expiration in Days (optional)"
+                        field-level-help="How many days the signing links stay valid for this request. Leave blank to use the org default from DocGen Signature Settings."
+                        placeholder="Org default"
+                        value={expirationDays}
+                        min="1"
+                        max="365"
+                        onchange={handleExpirationDaysChange}
+                    ></lightning-input>
+                </div>
+                <div class="slds-var-m-bottom_medium">
+                    <lightning-input
                         type="text"
                         name="emailSubject"
                         label="Custom Email Subject (optional)"

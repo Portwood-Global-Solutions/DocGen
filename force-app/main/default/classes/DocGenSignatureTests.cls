@@ -3016,6 +3016,221 @@ private class DocGenSignatureTests {
         System.assertEquals('Pending', signer.Status__c);
     }
 
+    // =========================================================================
+    // DocGenSignatureExpiry — configurable signing window (stamped Expires_At__c,
+    // legacy 48h fallback for pre-upgrade requests)
+    // =========================================================================
+
+    @isTest
+    static void testSignatureExpiry_isExpiredMatrix() {
+        System.assert(
+            !DocGenSignatureExpiry.isExpired(System.now().addDays(1), System.now().addDays(-30)),
+            'Future stamp is not expired even when created long ago'
+        );
+        System.assert(
+            DocGenSignatureExpiry.isExpired(System.now().addMinutes(-1), System.now()),
+            'Past stamp is expired even when freshly created'
+        );
+        System.assert(
+            !DocGenSignatureExpiry.isExpired(null, System.now().addHours(-47)),
+            'Legacy request 47h old is still valid'
+        );
+        System.assert(
+            DocGenSignatureExpiry.isExpired(null, System.now().addHours(-49)),
+            'Legacy request 49h old is expired (48h window must NOT follow the new setting)'
+        );
+        System.assertEquals(48, DocGenSignatureExpiry.effectiveHours(null), 'Legacy email token stays 48');
+        System.assertEquals(
+            1,
+            DocGenSignatureExpiry.effectiveHours(System.now().addMinutes(30)),
+            'Nearly-expired link floors at 1 hour'
+        );
+    }
+
+    @isTest
+    static void testSignatureExpiry_defaultsAndOverride() {
+        System.assertEquals(2, DocGenSignatureExpiry.defaultDays(), 'Unset setting falls back to 2 days');
+
+        DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+        s.Signature_Expiration_Days__c = 30;
+        upsert s;
+        System.assertEquals(30, DocGenSignatureExpiry.defaultDays());
+        System.assertEquals(720, DocGenSignatureExpiry.defaultHours());
+
+        Datetime fromOverride = DocGenSignatureExpiry.computeExpiry(7);
+        Long deltaMs = fromOverride.getTime() - System.now().addDays(7).getTime();
+        System.assert(Math.abs(deltaMs) < 60000, 'Override wins over the 30-day org default; delta=' + deltaMs);
+
+        Datetime fromDefault = DocGenSignatureExpiry.computeExpiry(null);
+        deltaMs = fromDefault.getTime() - System.now().addDays(30).getTime();
+        System.assert(Math.abs(deltaMs) < 60000, 'Null override uses the org default; delta=' + deltaMs);
+    }
+
+    @isTest
+    static void testValidateToken_expiredStampRejectsFreshRequest() {
+        // Past Expires_At__c on a freshly-created request must reject the link —
+        // proves the stamped field is authoritative over CreatedDate+48h.
+        DocGen_Signer__c signer = getTestSigner();
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Id = signer.Signature_Request__c,
+            Expires_At__c = System.now().addMinutes(-5)
+        );
+        Database.update(req, AccessLevel.SYSTEM_MODE);
+
+        Test.startTest();
+        DocGenSignatureController.SignatureInitResponse res = DocGenSignatureController.validateToken(
+            signer.Secure_Token__c
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, res.isValid, 'Expired stamp must invalidate the link');
+        System.assert(
+            res.errorMessage != null && res.errorMessage.containsIgnoreCase('expired'),
+            'Error should say expired; got: ' + res.errorMessage
+        );
+    }
+
+    @isTest
+    static void testReminderSchedulable_multiSchedule_sendsOncePerDueOffset() {
+        DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+        s.Signature_Reminder_Enabled__c = true;
+        s.Signature_Reminder_Hours__c = 24;
+        s.Signature_Reminder_Schedule__c = '24,72';
+        s.Experience_Site_Url__c = 'https://test.salesforce-sites.com';
+        upsert s;
+
+        DocGen_Signer__c signer = getTestSigner();
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Id = signer.Signature_Request__c,
+            Status__c = 'Sent'
+        );
+        Database.update(req, AccessLevel.SYSTEM_MODE);
+        DocGenSignatureReminderSchedulable.testThresholdOverride = System.now().addDays(1);
+
+        Test.startTest();
+        new DocGenSignatureReminderSchedulable().execute(null);
+        Test.stopTest();
+
+        DocGen_Signer__c updated = [
+            SELECT Reminders_Sent__c, Reminder_Sent_At__c
+            FROM DocGen_Signer__c
+            WHERE Id = :signer.Id
+        ];
+        System.assertEquals(1, updated.Reminders_Sent__c, 'First due offset consumed');
+        System.assertNotEquals(null, updated.Reminder_Sent_At__c);
+
+        // Immediate second run: no additional offset has elapsed → no re-send.
+        new DocGenSignatureReminderSchedulable().execute(null);
+        updated = [SELECT Reminders_Sent__c FROM DocGen_Signer__c WHERE Id = :signer.Id];
+        System.assertEquals(1, updated.Reminders_Sent__c, 'No repeat send until the next offset elapses');
+    }
+
+    @isTest
+    static void testReminderSchedulable_legacySeedPreventsDoubleReminder() {
+        // A signer reminded before Reminders_Sent__c existed (Reminder_Sent_At__c set,
+        // count null) must NOT be re-reminded under the legacy single-entry schedule.
+        DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+        s.Signature_Reminder_Enabled__c = true;
+        s.Signature_Reminder_Hours__c = 24;
+        s.Signature_Reminder_Schedule__c = null;
+        s.Experience_Site_Url__c = 'https://test.salesforce-sites.com';
+        upsert s;
+
+        DocGen_Signer__c signer = getTestSigner();
+        signer.Reminder_Sent_At__c = System.now().addHours(-1);
+        signer.Reminders_Sent__c = null;
+        Database.update(signer, AccessLevel.SYSTEM_MODE);
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Id = signer.Signature_Request__c,
+            Status__c = 'Sent'
+        );
+        Database.update(req, AccessLevel.SYSTEM_MODE);
+        DocGenSignatureReminderSchedulable.testThresholdOverride = System.now().addDays(1);
+
+        Test.startTest();
+        new DocGenSignatureReminderSchedulable().execute(null);
+        Test.stopTest();
+
+        DocGen_Signer__c updated = [
+            SELECT Reminders_Sent__c
+            FROM DocGen_Signer__c
+            WHERE Id = :signer.Id
+        ];
+        System.assertEquals(null, updated.Reminders_Sent__c, 'Seeded legacy signer is not re-reminded');
+    }
+
+    @isTest
+    static void testReminderSchedulable_skipsExpiredRequests() {
+        DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+        s.Signature_Reminder_Enabled__c = true;
+        s.Signature_Reminder_Hours__c = 24;
+        s.Experience_Site_Url__c = 'https://test.salesforce-sites.com';
+        upsert s;
+
+        DocGen_Signer__c signer = getTestSigner();
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Id = signer.Signature_Request__c,
+            Status__c = 'Sent',
+            Expires_At__c = System.now().addMinutes(-5)
+        );
+        Database.update(req, AccessLevel.SYSTEM_MODE);
+        DocGenSignatureReminderSchedulable.testThresholdOverride = System.now().addDays(1);
+
+        Test.startTest();
+        new DocGenSignatureReminderSchedulable().execute(null);
+        Test.stopTest();
+
+        DocGen_Signer__c updated = [SELECT Reminder_Sent_At__c FROM DocGen_Signer__c WHERE Id = :signer.Id];
+        System.assertEquals(null, updated.Reminder_Sent_At__c, 'No reminders past the signing window');
+    }
+
+    @isTest
+    static void testReminderSchedule_parsing() {
+        DocGen_Settings__c s = new DocGen_Settings__c(
+            Signature_Reminder_Schedule__c = ' 72, 24, 9999999,junk ',
+            Signature_Reminder_Hours__c = 12
+        );
+        List<Integer> offsets = DocGenSignatureReminderSchedulable.parseSchedule(s);
+        System.assertEquals(new List<Integer>{ 24, 72 }, offsets, 'Sorted; out-of-range and junk dropped');
+
+        s.Signature_Reminder_Schedule__c = null;
+        System.assertEquals(
+            new List<Integer>{ 12 },
+            DocGenSignatureReminderSchedulable.parseSchedule(s),
+            'Blank schedule falls back to the legacy single reminder'
+        );
+    }
+
+    @isTest
+    static void testResendSignatureRequest_restampsExpiry() {
+        Account acc = [SELECT Id FROM Account LIMIT 1];
+        DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(
+            Related_Record_Id__c = acc.Id,
+            Status__c = 'Sent',
+            Expires_At__c = System.now().addMinutes(-10)
+        );
+        Database.insert(req, AccessLevel.SYSTEM_MODE);
+        DocGen_Signer__c signer = new DocGen_Signer__c(
+            Signature_Request__c = req.Id,
+            Signer_Name__c = 'Restamp Signer',
+            Signer_Email__c = 'restamp@test.com',
+            Secure_Token__c = 'ddaa333333333333333333333333333333333333333333333333333333333333',
+            Status__c = 'Pending',
+            Sort_Order__c = 1
+        );
+        Database.insert(signer, AccessLevel.SYSTEM_MODE);
+
+        Test.startTest();
+        DocGenSignatureSenderController.resendSignatureRequest(req.Id);
+        Test.stopTest();
+
+        req = [SELECT Expires_At__c FROM DocGen_Signature_Request__c WHERE Id = :req.Id];
+        System.assert(
+            req.Expires_At__c != null && req.Expires_At__c > System.now(),
+            'Resend must open a fresh signing window; got ' + req.Expires_At__c
+        );
+    }
+
     @isTest
     static void testResolveSigningPath_routesGuidedRequestsToPdfPage() {
         // Guided-PDF requests (snapshot or source-doc) must resend links to the

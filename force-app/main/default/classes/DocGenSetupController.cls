@@ -41,6 +41,8 @@ public with sharing class DocGenSetupController {
         result.put('Signature_OWA_Id__c', s.Signature_OWA_Id__c);
         result.put('Signature_Reminder_Enabled__c', s.Signature_Reminder_Enabled__c);
         result.put('Signature_Reminder_Hours__c', s.Signature_Reminder_Hours__c);
+        result.put('Signature_Reminder_Schedule__c', s.Signature_Reminder_Schedule__c);
+        result.put('Signature_Expiration_Days__c', s.Signature_Expiration_Days__c);
         // #verification — stored as inverted "skip" so the safe default (required) survives
         // upgrades. Report require = NOT skip; key kept stable for the LWC.
         result.put(
@@ -335,19 +337,41 @@ public with sharing class DocGenSetupController {
      * When enabled, schedules DocGenSignatureReminderSchedulable to run hourly.
      * When disabled, aborts the scheduled job.
      */
-    @AuraEnabled
     public static void saveReminderSettings(Boolean enabled, Integer hours) {
+        saveReminderSettings(enabled, hours, null, null);
+    }
+
+    /**
+     * 4-arg canonical. schedule = CSV of reminder hour offsets ("24,72,168");
+     * blank keeps the legacy single reminder from hours. expirationDays = org-wide
+     * default signing-window (1-365); null leaves the stored value untouched.
+     */
+    @AuraEnabled
+    public static void saveReminderSettings(Boolean enabled, Integer hours, String schedule, Integer expirationDays) {
         if (
             !FeatureManagement.checkPermission('DocGen_Admin_Access') &&
             !Schema.sObjectType.DocGen_Settings__c.isUpdateable()
         ) {
             throw DocGenService.ahe('Insufficient privileges to modify DocGen settings.');
         }
+        String normalizedSchedule = normalizeReminderSchedule(schedule);
+        if (expirationDays != null && (expirationDays < 1 || expirationDays > 365)) {
+            throw DocGenService.ahe('Link expiration must be between 1 and 365 days.');
+        }
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Signature_Reminder_Enabled__c = enabled;
         settings.Signature_Reminder_Hours__c = hours != null && hours > 0 ? hours : 24;
+        settings.Signature_Reminder_Schedule__c = normalizedSchedule;
+        if (expirationDays != null) {
+            settings.Signature_Expiration_Days__c = expirationDays;
+        }
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create"/"FLS Update").
-        Set<String> reminderFields = new Set<String>{ 'Signature_Reminder_Enabled__c', 'Signature_Reminder_Hours__c' };
+        Set<String> reminderFields = new Set<String>{
+            'Signature_Reminder_Enabled__c',
+            'Signature_Reminder_Hours__c',
+            'Signature_Reminder_Schedule__c',
+            'Signature_Expiration_Days__c'
+        };
         DocGenFlsGuard.assertCreateable(settings, reminderFields);
         DocGenFlsGuard.assertUpdateable(settings, reminderFields);
         try {
@@ -380,6 +404,36 @@ public with sharing class DocGenSetupController {
         } catch (Exception e) {
             System.debug(LoggingLevel.WARN, 'DocGen: Failed to schedule/abort reminder job: ' + e.getMessage());
         }
+    }
+
+    /**
+     * Validates + normalizes the reminder-schedule CSV: digits separated by
+     * commas, each entry 1-8760 hours, max 10 entries, returned sorted and
+     * whitespace-free. Blank in → null out (legacy single-reminder mode).
+     */
+    private static String normalizeReminderSchedule(String schedule) {
+        if (String.isBlank(schedule)) {
+            return null;
+        }
+        List<Integer> offsets = new List<Integer>();
+        for (String part : schedule.split(',')) {
+            String trimmed = part.trim();
+            if (!trimmed.isNumeric()) {
+                throw DocGenService.ahe(
+                    'Reminder schedule must be hour offsets separated by commas, e.g. 24, 72, 168.'
+                );
+            }
+            Integer hours = Integer.valueOf(trimmed);
+            if (hours < 1 || hours > 8760) {
+                throw DocGenService.ahe('Each reminder offset must be between 1 and 8760 hours (1 year).');
+            }
+            offsets.add(hours);
+        }
+        if (offsets.size() > 10) {
+            throw DocGenService.ahe('At most 10 reminders are allowed per schedule.');
+        }
+        offsets.sort();
+        return String.join(offsets, ',');
     }
 
     /**

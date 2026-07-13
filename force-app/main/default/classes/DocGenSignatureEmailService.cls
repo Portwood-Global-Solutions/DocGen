@@ -103,6 +103,27 @@ public with sharing class DocGenSignatureEmailService {
         return reqs[0].Template__r.Default_Email_Message__c;
     }
 
+    /**
+     * The request's stamped Expires_At__c, or null (legacy request / no requestId).
+     * FLS-guard + SYSTEM_MODE (internal config read; USER_MODE on a new packaged
+     * field breaks the namespaced build and guest senders lack request read).
+     */
+    private static Datetime requestExpiresAt(Id requestId) {
+        if (requestId == null) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Expires_At__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Signature_Request__c> reqs = [
+            SELECT Expires_At__c
+            FROM DocGen_Signature_Request__c
+            WHERE Id = :requestId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        return reqs.isEmpty() ? null : reqs[0].Expires_At__c;
+    }
+
     private static void sendRequestLikeEmails(
         List<SignerEmail> signers,
         String documentTitle,
@@ -129,6 +150,10 @@ public with sharing class DocGenSignatureEmailService {
             return;
         }
 
+        // {ExpirationHours} reflects the request's actual signing window (stamped
+        // Expires_At__c, or the legacy 48h when no requestId / no stamp).
+        String expirationHours = String.valueOf(DocGenSignatureExpiry.effectiveHours(requestExpiresAt(requestId)));
+
         String defaultMessage = DocGenEmailTemplateService.defaultMessage(templateType);
         // #208 — when the sender supplied no message, a Default_Email_Message__c on
         // the request's document template beats the generic type default. A send-time
@@ -149,7 +174,7 @@ public with sharing class DocGenSignatureEmailService {
                 'DocumentTitle' => documentTitle,
                 'SenderName' => senderName,
                 'SignatureUrl' => signer.signatureUrl,
-                'ExpirationHours' => '48',
+                'ExpirationHours' => expirationHours,
                 'Message' => defaultMessage
             };
             DocGenEmailTemplateService.RenderedEmail rendered = DocGenEmailTemplateService.render(

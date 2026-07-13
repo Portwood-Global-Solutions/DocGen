@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Signature_Reminder_Schedule__c</fullName>
+    <description
+    >Comma-separated hour offsets after send at which pending signers are reminded, e.g. "24,72,168" = after 1, 3 and 7 days. Blank falls back to the single-reminder behavior driven by Signature Reminder After (Hours).</description>
+    <externalId>false</externalId>
+    <label>Signature Reminder Schedule (Hours)</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

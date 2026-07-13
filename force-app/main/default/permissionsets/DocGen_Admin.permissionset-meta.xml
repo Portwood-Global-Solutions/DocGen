@@ -340,6 +340,16 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>DocGen_Settings__c.Signature_Reminder_Schedule__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Settings__c.Signature_Expiration_Days__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Template_Version__c.Base_Object_API__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -553,6 +563,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>DocGen_Signature_Request__c.Expires_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>DocGen_Signature_Request__c.Secure_Token__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -676,6 +691,11 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Signer__c.Reminder_Sent_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Signer__c.Reminders_Sent__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
