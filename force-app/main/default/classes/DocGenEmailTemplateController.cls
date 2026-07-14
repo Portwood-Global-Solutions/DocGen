@@ -28,7 +28,8 @@ public with sharing class DocGenEmailTemplateController {
             'DocumentInfo',
             'SecurityNote',
             'SignatureUrl',
-            'ExpirationHours'
+            'ExpirationHours',
+            'LogoUrl'
         },
         DocGenEmailTemplateService.TYPE_REMINDER => new List<String>{
             'SignerName',
@@ -41,29 +42,38 @@ public with sharing class DocGenEmailTemplateController {
             'DocumentInfo',
             'SecurityNote',
             'SignatureUrl',
-            'ExpirationHours'
+            'ExpirationHours',
+            'LogoUrl'
         },
         DocGenEmailTemplateService.TYPE_PIN => new List<String>{
             'VerificationCode',
             'Pin',
             'ExpirationMinutes',
-            'CompanyName'
+            'CompanyName',
+            'LogoUrl'
         },
         DocGenEmailTemplateService.TYPE_SIGNER_COMPLETED => new List<String>{
             'SignerName',
             'RoleName',
             'RequestId',
-            'CompanyName'
+            'CompanyName',
+            'LogoUrl'
         },
-        DocGenEmailTemplateService.TYPE_ALL_SIGNED => new List<String>{ 'RequestId', 'CompanyName' },
+        DocGenEmailTemplateService.TYPE_ALL_SIGNED => new List<String>{ 'RequestId', 'CompanyName', 'LogoUrl' },
         DocGenEmailTemplateService.TYPE_DECLINED => new List<String>{
             'SignerName',
             'RoleName',
             'Message',
             'RequestId',
-            'CompanyName'
+            'CompanyName',
+            'LogoUrl'
         },
-        DocGenEmailTemplateService.TYPE_COMPLETION => new List<String>{ 'SignerName', 'DocumentTitle', 'CompanyName' }
+        DocGenEmailTemplateService.TYPE_COMPLETION => new List<String>{
+            'SignerName',
+            'DocumentTitle',
+            'CompanyName',
+            'LogoUrl'
+        }
     };
 
     /** One editable row per type — the stored record's values or the built-in default. */
@@ -80,6 +90,8 @@ public with sharing class DocGenEmailTemplateController {
                 'Brand_Color__c',
                 'Logo_Url__c',
                 'Logo_Url_Extended__c',
+                'Logo_Asset_Key__c',
+                'Logo_Height__c',
                 'Footer_Text__c',
                 'Layout_Mode__c',
                 'Is_Active__c'
@@ -97,6 +109,8 @@ public with sharing class DocGenEmailTemplateController {
                 Brand_Color__c,
                 Logo_Url__c,
                 Logo_Url_Extended__c,
+                Logo_Asset_Key__c,
+                Logo_Height__c,
                 Footer_Text__c,
                 Layout_Mode__c,
                 Is_Active__c
@@ -126,6 +140,8 @@ public with sharing class DocGenEmailTemplateController {
                     'logoUrl' => r == null
                         ? ''
                         : (String.isNotBlank(r.Logo_Url_Extended__c) ? r.Logo_Url_Extended__c.trim() : r.Logo_Url__c),
+                    'logoAssetKey' => r == null ? '' : r.Logo_Asset_Key__c,
+                    'logoHeight' => r == null ? null : r.Logo_Height__c,
                     'footerText' => r == null ? '' : r.Footer_Text__c,
                     'layoutMode' => (r == null ||
                         r.Layout_Mode__c == null)
@@ -164,6 +180,9 @@ public with sharing class DocGenEmailTemplateController {
         String logoUrl = (String) data.get('logoUrl');
         rec.Logo_Url_Extended__c = logoUrl;
         rec.Logo_Url__c = (logoUrl != null && logoUrl.length() <= 255) ? logoUrl : null;
+        rec.Logo_Asset_Key__c = (String) data.get('logoAssetKey');
+        Object logoHeight = data.get('logoHeight');
+        rec.Logo_Height__c = logoHeight == null ? null : Decimal.valueOf(String.valueOf(logoHeight));
         rec.Footer_Text__c = (String) data.get('footerText');
         rec.Layout_Mode__c = (data.get('layoutMode') == DocGenEmailTemplateService.MODE_FULL_HTML)
             ? DocGenEmailTemplateService.MODE_FULL_HTML
@@ -178,6 +197,8 @@ public with sharing class DocGenEmailTemplateController {
             'Brand_Color__c',
             'Logo_Url__c',
             'Logo_Url_Extended__c',
+            'Logo_Asset_Key__c',
+            'Logo_Height__c',
             'Footer_Text__c',
             'Layout_Mode__c',
             'Is_Active__c'
@@ -376,6 +397,9 @@ public with sharing class DocGenEmailTemplateController {
         def.bodyPlain = (String) data.get('bodyPlain');
         def.brandColorOverride = (String) data.get('brandColor');
         def.logoUrlOverride = (String) data.get('logoUrl');
+        def.logoAssetKey = (String) data.get('logoAssetKey');
+        Object previewLogoHeight = data.get('logoHeight');
+        def.logoHeight = previewLogoHeight == null ? null : Integer.valueOf(String.valueOf(previewLogoHeight));
         def.footerTextOverride = (String) data.get('footerText');
         def.layoutMode = (data.get('layoutMode') == DocGenEmailTemplateService.MODE_FULL_HTML)
             ? DocGenEmailTemplateService.MODE_FULL_HTML

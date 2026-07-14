@@ -7270,9 +7270,84 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 WITH SYSTEM_MODE
                 LIMIT 1
             ];
+
+            // Email-logo continuity: if any earlier file of this asset was published
+            // as a public delivery (the Email Templates "Override with Asset File"
+            // flow), publish the replacement the same way so send-time logo
+            // resolution (DocGenEmailTemplateService.resolveLogoAssetUrl) finds a
+            // link for the NEW file. This runs in the admin's upload transaction —
+            // the send contexts (guest / Automated Process) can't create
+            // distributions. Best-effort: never blocks the upload.
+            carryForwardAssetDistribution(assetId, doc.LatestPublishedVersionId);
+
             return doc.LatestPublishedVersionId;
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error adding asset version.');
+        }
+    }
+
+    @TestVisible
+    private static void carryForwardAssetDistribution(Id assetId, Id newLatestCvId) {
+        try {
+            if (newLatestCvId == null) {
+                return;
+            }
+            // Every file ever linked to this asset → their latest version Ids.
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentDocumentLink> links = [
+                SELECT ContentDocument.LatestPublishedVersionId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :assetId
+                WITH SYSTEM_MODE
+            ]; // NOPMD ApexCRUDViolation - internal plumbing behind the addAssetVersion guards
+            Set<Id> allCvIds = new Set<Id>();
+            for (ContentDocumentLink l : links) {
+                if (l.ContentDocument.LatestPublishedVersionId != null) {
+                    allCvIds.add(l.ContentDocument.LatestPublishedVersionId);
+                }
+            }
+            if (allCvIds.isEmpty()) {
+                return;
+            }
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<ContentDistribution> dists = [
+                SELECT Id, ContentVersionId
+                FROM ContentDistribution
+                WHERE ContentVersionId IN :allCvIds
+                WITH SYSTEM_MODE
+            ]; // NOPMD ApexCRUDViolation - internal plumbing behind the addAssetVersion guards
+            Boolean anyPublished = false;
+            for (ContentDistribution d : dists) {
+                if (d.ContentVersionId == newLatestCvId) {
+                    return; // new file already has its delivery
+                }
+                anyPublished = true;
+            }
+            if (!anyPublished) {
+                return; // asset was never used as a public logo — nothing to carry forward
+            }
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Asset__c> named = [
+                SELECT Name
+                FROM DocGen_Asset__c
+                WHERE Id = :assetId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD ApexCRUDViolation - internal plumbing behind the addAssetVersion guards
+            ContentDistribution cd = new ContentDistribution(
+                Name = 'DocGen Asset - ' + (named.isEmpty() ? 'Logo' : named[0].Name),
+                ContentVersionId = newLatestCvId,
+                PreferencesAllowViewInBrowser = true,
+                PreferencesLinkLatestVersion = true,
+                PreferencesAllowOriginalDownload = true,
+                PreferencesExpires = false,
+                PreferencesNotifyOnVisit = false,
+                PreferencesAllowPDFDownload = false
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(cd, AccessLevel.SYSTEM_MODE);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: asset delivery carry-forward skipped: ' + e.getMessage());
         }
     }
 
