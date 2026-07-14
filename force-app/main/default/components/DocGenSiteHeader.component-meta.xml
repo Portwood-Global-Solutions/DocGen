@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ApexComponent xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>66.0</apiVersion>
+    <description
+    >Inert packaging stub — site chrome lives in the Portwood Website repo. Kept only because 2GP cannot remove packaged metadata.</description>
+    <label>DocGen Site Header</label>
+</ApexComponent>

@@ -1,0 +1,11 @@
+<apex:component>
+    <!--
+      INERT PACKAGING STUB — renders nothing.
+      This component shipped in early package versions and 2GP cannot remove
+      packaged metadata without the Partner Community "Remove Metadata
+      Components" feature (see project notes / v1.98 precedent). The live site
+      chrome is owned by the Portwood Website repo — do NOT put markup here,
+      and never deploy this repo's source to the website org expecting it to
+      preserve the live header.
+    -->
+</apex:component>
