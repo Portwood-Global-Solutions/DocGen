@@ -172,6 +172,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>DocGen_Email_Template__c.Logo_Url_Extended__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>DocGen_Email_Template__c.Footer_Text__c</field>
         <readable>true</readable>
     </fieldPermissions>
