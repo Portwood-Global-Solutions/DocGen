@@ -138,7 +138,7 @@ global with sharing class DocGenEmailTemplateService {
         // no template edit) -> stored URL override -> org default.
         String logo = null;
         if (String.isNotBlank(def.logoAssetKey)) {
-            logo = resolveLogoAssetUrl(def.logoAssetKey);
+            logo = resolveAssetPublicUrlByKey(def.logoAssetKey);
         }
         if (String.isBlank(logo)) {
             logo = String.isNotBlank(def.logoUrlOverride) ? def.logoUrlOverride : settings.Signature_Email_Logo_Url__c;
@@ -164,7 +164,12 @@ global with sharing class DocGenEmailTemplateService {
         RenderedEmail out = new RenderedEmail();
         out.subject = resolveValueTokens(def.subject, v, false);
 
-        String bodyInner = expandBody(def.bodyHtml, v, brand, true);
+        // {%asset:<key>} — resolve Shared Asset tags to their public delivery
+        // URLs BEFORE token expansion so nothing else consumes the tag. Emails
+        // get the URL (authors write + size their own <img>); documents embed
+        // the image bytes — the one documented difference in tag behavior.
+        String assetResolvedHtml = resolveAssetTags(def.bodyHtml);
+        String bodyInner = expandBody(assetResolvedHtml, v, brand, true);
         if (def.layoutMode == MODE_FULL_HTML) {
             // Full custom HTML: the body IS the whole document — send it as authored,
             // tokens/widgets resolved, no DocGen header/footer chrome.
@@ -177,7 +182,7 @@ global with sharing class DocGenEmailTemplateService {
         if (String.isNotBlank(def.bodyPlain)) {
             out.plainBody = stripTags(expandBody(def.bodyPlain, v, brand, false));
         } else {
-            out.plainBody = stripTags(expandBody(def.bodyHtml, v, brand, false));
+            out.plainBody = stripTags(expandBody(assetResolvedHtml, v, brand, false));
         }
         return out;
     }
@@ -286,10 +291,16 @@ global with sharing class DocGenEmailTemplateService {
         return settingsCache;
     }
 
+    // Per-transaction asset-URL cache (includes negative results) so a bulk
+    // reminder run rendering hundreds of emails resolves each asset tag with at
+    // most one query pair per key, not per recipient.
+    private static Map<String, String> assetUrlCache = new Map<String, String>();
+
     @TestVisible
     private static void clearCache() {
         defCache = null;
         settingsCache = null;
+        assetUrlCache = new Map<String, String>();
     }
 
     // =====================================================================
@@ -472,7 +483,7 @@ global with sharing class DocGenEmailTemplateService {
      * anything is missing so the caller falls back to the stored URL.
      */
     @TestVisible
-    private static String resolveLogoAssetUrl(String assetKey) {
+    private static String resolveAssetPublicUrlByKey(String assetKey) {
         try {
             // Stored keys are canonical slugs (underscores → hyphens, lowercased);
             // normalize the lookup the same way the {%asset:} tag resolver does.
@@ -480,6 +491,53 @@ global with sharing class DocGenEmailTemplateService {
             if (String.isBlank(assetKey)) {
                 return null;
             }
+            if (assetUrlCache.containsKey(assetKey)) {
+                String cached = assetUrlCache.get(assetKey);
+                return String.isBlank(cached) ? null : cached;
+            }
+            String resolved = queryAssetPublicUrl(assetKey);
+            assetUrlCache.put(assetKey, resolved == null ? '' : resolved);
+            return resolved;
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: asset tag resolution fell back: ' + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Replaces every {%asset:<key>} tag in an email body with the asset's public
+     * delivery URL — so custom-HTML authors can reference ANY Shared Asset image
+     * (<img src="{%asset:footer-banner}" style="height:40px"/>), not just the
+     * logo. Unresolvable tags (unknown key / never-published asset) blank out —
+     * consistent with how document templates drop unsupported asset tags cleanly.
+     * Deliveries are ensured at editor save/preview time (admin session); this
+     * pass only reads, so guest/Automated Process sends stay safe.
+     */
+    @TestVisible
+    private static String resolveAssetTags(String body) {
+        if (String.isBlank(body) || !body.contains('{%asset:')) {
+            return body;
+        }
+        Pattern tagPattern = Pattern.compile('\\{%asset:([^}]+)\\}');
+        Matcher m = tagPattern.matcher(body);
+        String result = '';
+        Integer cursor = 0;
+        while (m.find()) {
+            result += body.substring(cursor, m.start());
+            String url = resolveAssetPublicUrlByKey(m.group(1));
+            if (String.isBlank(url)) {
+                System.debug(LoggingLevel.WARN, 'DocGen: email asset tag unresolved (key=' + m.group(1) + ')');
+            } else {
+                result += escapeHtml(url);
+            }
+            cursor = m.end();
+        }
+        result += body.substring(cursor);
+        return result;
+    }
+
+    private static String queryAssetPublicUrl(String assetKey) {
+        try {
             DocGenFlsGuard.guestAssertAccessible(DocGen_Asset__c.sObjectType, new Set<String>{ 'Asset_Key__c' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<DocGen_Asset__c> assets = [

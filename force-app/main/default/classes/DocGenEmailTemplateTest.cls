@@ -323,6 +323,60 @@ private class DocGenEmailTemplateTest {
         );
     }
 
+    // ---- {%asset:key} tags in email bodies resolve to public delivery URLs ----
+    @IsTest
+    static void assetTags_resolveInEmailBody() {
+        DocGen_Asset__c asset = new DocGen_Asset__c(Name = 'Footer Banner', Asset_Key__c = 'footer-banner');
+        insert asset;
+        insert new ContentVersion(
+            Title = 'banner',
+            PathOnClient = 'banner.png',
+            VersionData = Blob.valueOf('banner bytes'),
+            FirstPublishLocationId = asset.Id
+        );
+
+        Map<String, Object> data = new Map<String, Object>{
+            'type' => DocGenEmailTemplateService.TYPE_REQUEST,
+            'subject' => 'Hi',
+            'bodyHtml' => '<html><body>' +
+            '<img src="{%asset:footer-banner}" style="height:40px"/>' +
+            '<img src="{%asset:no-such-asset}"/>' +
+            '{ActionButton}</body></html>',
+            'layoutMode' => DocGenEmailTemplateService.MODE_FULL_HTML,
+            'isActive' => true
+        };
+        Test.startTest();
+        // saveTemplate publishes the referenced asset (admin session) so send-time
+        // resolution — read-only — finds the delivery.
+        DocGenEmailTemplateController.saveTemplate(data);
+        Test.stopTest();
+
+        List<ContentDistribution> dists = [
+            SELECT ContentDownloadUrl
+            FROM ContentDistribution
+            WHERE Name LIKE 'DocGen Asset - Footer Banner%'
+        ];
+        if (dists.isEmpty()) {
+            return; // org without Content Deliveries — publish path covered elsewhere
+        }
+
+        DocGenEmailTemplateService.clearCache();
+        DocGenEmailTemplateService.RenderedEmail r = DocGenEmailTemplateService.render(
+            DocGenEmailTemplateService.TYPE_REQUEST,
+            sampleTokens(DocGenEmailTemplateService.TYPE_REQUEST)
+        );
+        System.assert(
+            !r.htmlBody.contains('{%asset:'),
+            'Every asset tag must resolve or blank — none may leak: ' + r.htmlBody
+        );
+        String expected = dists[0].ContentDownloadUrl.escapeHtml4();
+        System.assert(
+            r.htmlBody.contains(expected) || r.htmlBody.contains(dists[0].ContentDownloadUrl),
+            'Known asset tag resolves to its public delivery URL: ' + r.htmlBody
+        );
+        System.assert(r.htmlBody.contains('src=""'), 'Unknown asset key blanks cleanly');
+    }
+
     // ---- Service: invalid brand color falls back to the safe default ----
     @IsTest
     static void invalidBrandColor_fallsBackSafe() {
