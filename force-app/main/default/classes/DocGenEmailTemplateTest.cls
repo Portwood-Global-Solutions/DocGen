@@ -87,6 +87,122 @@ private class DocGenEmailTemplateTest {
         System.assert(r.htmlBody.contains('#FF0000'), 'brand override applied');
     }
 
+    // ---- Long logo URLs (Logo_Url_Extended__c beats the 255-capped Url field) ----
+    @IsTest
+    static void controller_save_longLogoUrl_roundTripsAndRenders() {
+        String longUrl = 'https://files.example.com/sfc/dist/version/download/' + 'x'.repeat(400) + '/logo.png';
+        Map<String, Object> data = new Map<String, Object>{
+            'type' => DocGenEmailTemplateService.TYPE_REQUEST,
+            'subject' => 'Hi',
+            'bodyHtml' => '<p>x {ActionButton}</p>',
+            'logoUrl' => longUrl,
+            'isActive' => true
+        };
+        Test.startTest();
+        Id recId = DocGenEmailTemplateController.saveTemplate(data);
+        Test.stopTest();
+
+        DocGen_Email_Template__c saved = [
+            SELECT Logo_Url__c, Logo_Url_Extended__c
+            FROM DocGen_Email_Template__c
+            WHERE Id = :recId
+        ];
+        System.assertEquals(longUrl, saved.Logo_Url_Extended__c, 'Long URL stored in the extended field');
+        System.assertEquals(null, saved.Logo_Url__c, 'Over-255 URL must not touch the capped legacy field');
+
+        for (Map<String, Object> row : DocGenEmailTemplateController.getTemplates()) {
+            if (row.get('type') == DocGenEmailTemplateService.TYPE_REQUEST) {
+                System.assertEquals(longUrl, row.get('logoUrl'), 'Editor round-trips the long URL');
+            }
+        }
+
+        DocGenEmailTemplateService.clearCache();
+        DocGenEmailTemplateService.RenderedEmail r = DocGenEmailTemplateService.render(
+            DocGenEmailTemplateService.TYPE_REQUEST,
+            sampleTokens(DocGenEmailTemplateService.TYPE_REQUEST)
+        );
+        System.assert(r.htmlBody.contains('logo.png'), 'Renderer uses the long logo URL: ' + r.htmlBody.left(300));
+    }
+
+    @IsTest
+    static void controller_save_shortLogoUrl_mirrorsLegacyField() {
+        Map<String, Object> data = new Map<String, Object>{
+            'type' => DocGenEmailTemplateService.TYPE_PIN,
+            'subject' => 'Hi',
+            'bodyHtml' => '<p>{VerificationCode}</p>',
+            'logoUrl' => 'https://example.com/logo.png'
+        };
+        Id recId = DocGenEmailTemplateController.saveTemplate(data);
+        DocGen_Email_Template__c saved = [
+            SELECT Logo_Url__c, Logo_Url_Extended__c
+            FROM DocGen_Email_Template__c
+            WHERE Id = :recId
+        ];
+        System.assertEquals('https://example.com/logo.png', saved.Logo_Url_Extended__c);
+        System.assertEquals(
+            'https://example.com/logo.png',
+            saved.Logo_Url__c,
+            'Short URLs mirror into the legacy field for anything still reading it'
+        );
+    }
+
+    // ---- "Override with Asset File": asset → public delivery URL ----
+    @IsTest
+    static void controller_resolveAssetPublicUrl() {
+        DocGen_Asset__c asset = new DocGen_Asset__c(Name = 'Logo Test Asset', Asset_Key__c = 'logo_test');
+        insert asset;
+        ContentVersion cv = new ContentVersion(
+            Title = 'logo',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('fake png bytes'),
+            FirstPublishLocationId = asset.Id
+        );
+        insert cv;
+
+        Test.startTest();
+        String url;
+        String failureMsg;
+        try {
+            url = DocGenEmailTemplateController.resolveAssetPublicUrl(asset.Id);
+            // Second call must reuse the same distribution, not mint another.
+            String again = DocGenEmailTemplateController.resolveAssetPublicUrl(asset.Id);
+            System.assertEquals(url, again, 'Repeat resolution reuses the existing public link');
+        } catch (AuraHandledException e) {
+            // Orgs without Content Deliveries enabled can't create distributions —
+            // the contract then is a friendly, actionable message (never raw DML).
+            failureMsg = e.getMessage();
+        }
+        Test.stopTest();
+
+        if (url != null) {
+            System.assert(url.startsWith('http'), 'Public download URL returned: ' + url);
+            System.assertEquals(
+                1,
+                [SELECT COUNT() FROM ContentDistribution WHERE ContentVersionId = :cv.Id],
+                'Exactly one distribution per asset version'
+            );
+        } else {
+            System.assert(
+                failureMsg != null && failureMsg.contains('Content Deliveries'),
+                'Friendly guidance expected when deliveries are unavailable; got: ' + failureMsg
+            );
+        }
+    }
+
+    @IsTest
+    static void controller_resolveAssetPublicUrl_noFileIsFriendly() {
+        DocGen_Asset__c bare = new DocGen_Asset__c(Name = 'Empty Asset', Asset_Key__c = 'empty_asset');
+        insert bare;
+        Boolean caught = false;
+        try {
+            DocGenEmailTemplateController.resolveAssetPublicUrl(bare.Id);
+        } catch (AuraHandledException e) {
+            caught = true;
+            System.assert(e.getMessage().contains('upload an image'), 'Actionable message; got: ' + e.getMessage());
+        }
+        System.assert(caught, 'Asset without a file must be rejected with guidance');
+    }
+
     // ---- Service: invalid brand color falls back to the safe default ----
     @IsTest
     static void invalidBrandColor_fallsBackSafe() {
@@ -172,11 +288,15 @@ private class DocGenEmailTemplateTest {
     // not the raw DmlException (which renders as "[object Object]" in the LWC).
     @IsTest
     static void controller_save_oversized_logo_url_friendly_error() {
+        // URLs past the extended field's 32,768-char cap still get the friendly
+        // "too long" treatment instead of a raw DmlException / [object Object].
+        // (URLs between 256 and 32,768 chars are a supported feature now — see
+        // controller_save_longLogoUrl_roundTripsAndRenders.)
         Map<String, Object> data = new Map<String, Object>{
             'type' => DocGenEmailTemplateService.TYPE_REQUEST,
             'subject' => 'Hi',
             'bodyHtml' => '<p>x</p>',
-            'logoUrl' => 'https://example.com/' + 'a'.repeat(300)
+            'logoUrl' => 'https://example.com/' + 'a'.repeat(33000)
         };
         Boolean caught = false;
         String message;
@@ -190,7 +310,7 @@ private class DocGenEmailTemplateTest {
         Test.stopTest();
         System.assert(caught, 'Oversized logo URL must throw AuraHandledException');
         System.assert(
-            message.contains('255') && message.containsIgnoreCase('too long'),
+            message.contains('32768') && message.containsIgnoreCase('too long'),
             'Message must name the max length; got: ' + message
         );
     }

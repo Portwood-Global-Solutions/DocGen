@@ -2431,6 +2431,9 @@ For each template you can edit the **subject** and **body**, preview it live wit
 **Two layout modes** (per template):
 
 - **DocGen layout** (default) — edit just the body in a rich-text editor; DocGen wraps the branded header (logo + brand color) and footer around it. You can override **brand color / logo / footer** per template here. Best when you want consistent branding with minimal effort.
+
+    **Logo options (v3.32+):** the **Logo URL Override** accepts URLs of any length (long CDN or Salesforce Files delivery links included). Or skip URLs entirely with **"…or override with an Asset file"** — pick a Shared Asset image (Command Hub → Assets) and DocGen creates a permanent public file link for it and fills the URL for you. The link always serves the asset's **latest** image, so replacing the asset's file updates your email logo everywhere with no re-save. (Requires Content Deliveries enabled — Setup → Content Deliveries and Public Links.)
+
 - **Full custom HTML** — paste your **entire** HTML email document (your own table layout, inline styles, and `<img src="https://…">` images). DocGen sends it exactly as authored, resolving only merge tokens and widgets — no added header/footer. Use this for pixel-perfect, fully on-brand emails. **Images must use absolute, publicly reachable URLs** (your website/CDN); Salesforce file links won't load in a recipient's inbox. You can still reference org values with `{CompanyName}` and `{BrandColor}`, and drop in `{ActionButton}`/`{VerificationCode}` so the signing button/code keep working.
 
 **Merge tokens** resolve at send time and are HTML-escaped: `{SignerName}`, `{SenderName}`, `{CompanyName}`, `{DocumentTitle}`, `{RoleName}`, `{ExpirationHours}`, `{RequestId}`, and `{Message}`. Four **widget tokens** render branded blocks — place them anywhere in the body:

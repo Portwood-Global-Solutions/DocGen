@@ -79,6 +79,7 @@ public with sharing class DocGenEmailTemplateController {
                 'Body_Plain__c',
                 'Brand_Color__c',
                 'Logo_Url__c',
+                'Logo_Url_Extended__c',
                 'Footer_Text__c',
                 'Layout_Mode__c',
                 'Is_Active__c'
@@ -95,6 +96,7 @@ public with sharing class DocGenEmailTemplateController {
                 Body_Plain__c,
                 Brand_Color__c,
                 Logo_Url__c,
+                Logo_Url_Extended__c,
                 Footer_Text__c,
                 Layout_Mode__c,
                 Is_Active__c
@@ -121,7 +123,9 @@ public with sharing class DocGenEmailTemplateController {
                     'bodyHtml' => r == null ? def.bodyHtml : r.Body_Html__c,
                     'bodyPlain' => r == null ? '' : r.Body_Plain__c,
                     'brandColor' => r == null ? '' : r.Brand_Color__c,
-                    'logoUrl' => r == null ? '' : r.Logo_Url__c,
+                    'logoUrl' => r == null
+                        ? ''
+                        : (String.isNotBlank(r.Logo_Url_Extended__c) ? r.Logo_Url_Extended__c.trim() : r.Logo_Url__c),
                     'footerText' => r == null ? '' : r.Footer_Text__c,
                     'layoutMode' => (r == null ||
                         r.Layout_Mode__c == null)
@@ -154,7 +158,12 @@ public with sharing class DocGenEmailTemplateController {
         rec.Body_Html__c = (String) data.get('bodyHtml');
         rec.Body_Plain__c = (String) data.get('bodyPlain');
         rec.Brand_Color__c = (String) data.get('brandColor');
-        rec.Logo_Url__c = (String) data.get('logoUrl');
+        // Logo_Url__c (platform Url field) is capped at 255 and type-locked in the
+        // managed package; the long companion field is authoritative. Mirror short
+        // values into the legacy field for anything still reading it.
+        String logoUrl = (String) data.get('logoUrl');
+        rec.Logo_Url_Extended__c = logoUrl;
+        rec.Logo_Url__c = (logoUrl != null && logoUrl.length() <= 255) ? logoUrl : null;
         rec.Footer_Text__c = (String) data.get('footerText');
         rec.Layout_Mode__c = (data.get('layoutMode') == DocGenEmailTemplateService.MODE_FULL_HTML)
             ? DocGenEmailTemplateService.MODE_FULL_HTML
@@ -168,6 +177,7 @@ public with sharing class DocGenEmailTemplateController {
             'Body_Plain__c',
             'Brand_Color__c',
             'Logo_Url__c',
+            'Logo_Url_Extended__c',
             'Footer_Text__c',
             'Layout_Mode__c',
             'Is_Active__c'
@@ -184,6 +194,124 @@ public with sharing class DocGenEmailTemplateController {
             throw DocGenService.dmlAhe(e, DocGen_Email_Template__c.sObjectType);
         }
         return rec.Id;
+    }
+
+    /**
+     * "Override with Asset File": resolves a DocGen Shared Asset (its latest file
+     * version) to a public content-delivery URL that email clients can fetch
+     * anonymously, for use as the branded-header logo. Creates a ContentDistribution
+     * on first use and reuses it afterwards; PreferencesLinkLatestVersion keeps the
+     * URL serving the newest upload when the asset file is replaced. Resolution
+     * happens here — at editor-save time, in an admin session — because guest and
+     * Automated Process contexts (which SEND the emails) cannot create
+     * ContentDistributions.
+     */
+    @AuraEnabled
+    public static String resolveAssetPublicUrl(Id assetId) {
+        if (assetId == null) {
+            throw DocGenService.ahe('An asset Id is required.');
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Asset__c.sObjectType, new Set<String>{ 'Name' });
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<DocGen_Asset__c> assets = [
+            SELECT
+                Id,
+                Name,
+                (
+                    SELECT ContentDocument.LatestPublishedVersionId
+                    FROM ContentDocumentLinks
+                    ORDER BY ContentDocument.CreatedDate DESC, ContentDocument.Id DESC
+                    LIMIT 1
+                )
+            FROM DocGen_Asset__c
+            WHERE Id = :assetId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        if (assets.isEmpty() || assets[0].ContentDocumentLinks == null || assets[0].ContentDocumentLinks.isEmpty()) {
+            throw DocGenService.ahe('This asset has no file yet — upload an image to it first.');
+        }
+        Id cvId = assets[0].ContentDocumentLinks[0].ContentDocument.LatestPublishedVersionId;
+        if (cvId == null) {
+            throw DocGenService.ahe('This asset has no published file version.');
+        }
+
+        DocGenFlsGuard.assertAccessible(
+            ContentDistribution.sObjectType,
+            new Set<String>{ 'ContentDownloadUrl', 'ContentVersionId', 'PreferencesExpires' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+        List<ContentDistribution> existing = [
+            SELECT Id, ContentDownloadUrl, PreferencesExpires
+            FROM ContentDistribution
+            WHERE ContentVersionId = :cvId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        try {
+            if (!existing.isEmpty()) {
+                if (existing[0].PreferencesExpires == true) {
+                    // A delivery created elsewhere (e.g. the signing flow) may carry an
+                    // expiry — a logo link must not go dark, so clear it.
+                    ContentDistribution fix = new ContentDistribution(
+                        Id = existing[0].Id,
+                        PreferencesExpires = false,
+                        ExpiryDate = null
+                    );
+                    DocGenFlsGuard.assertUpdateable(fix, new Set<String>{ 'PreferencesExpires', 'ExpiryDate' });
+                    /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                    Database.update(fix, AccessLevel.SYSTEM_MODE);
+                }
+                return existing[0].ContentDownloadUrl;
+            }
+
+            ContentDistribution cd = new ContentDistribution();
+            cd.Name = 'DocGen Asset - ' + assets[0].Name;
+            cd.ContentVersionId = cvId;
+            cd.PreferencesAllowViewInBrowser = true;
+            cd.PreferencesLinkLatestVersion = true;
+            cd.PreferencesAllowOriginalDownload = true;
+            cd.PreferencesExpires = false;
+            cd.PreferencesNotifyOnVisit = false;
+            cd.PreferencesAllowPDFDownload = false;
+            DocGenFlsGuard.assertCreateable(
+                cd,
+                new Set<String>{
+                    'Name',
+                    'ContentVersionId',
+                    'PreferencesAllowViewInBrowser',
+                    'PreferencesLinkLatestVersion',
+                    'PreferencesAllowOriginalDownload',
+                    'PreferencesExpires',
+                    'PreferencesNotifyOnVisit',
+                    'PreferencesAllowPDFDownload'
+                }
+            );
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            Database.insert(cd, AccessLevel.SYSTEM_MODE);
+            // ContentDownloadUrl is generated server-side — re-query for it.
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            ContentDistribution created = [
+                SELECT ContentDownloadUrl
+                FROM ContentDistribution
+                WHERE Id = :cd.Id
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (String.isBlank(created.ContentDownloadUrl)) {
+                throw DocGenService.ahe(
+                    'The public file link was created but has no download URL yet — try again in a moment.'
+                );
+            }
+            return created.ContentDownloadUrl;
+        } catch (AuraHandledException ahe) {
+            throw ahe;
+        } catch (Exception e) {
+            throw DocGenService.ahe(
+                e,
+                'Could not create a public link for this asset. Check that Content Deliveries are enabled (Setup → Content Deliveries and Public Links).'
+            );
+        }
     }
 
     /** The built-in default subject + body for a type (for the editor "Reset" action; not persisted). */

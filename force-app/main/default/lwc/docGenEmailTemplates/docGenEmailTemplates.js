@@ -5,6 +5,8 @@ import saveTemplate from '@salesforce/apex/DocGenEmailTemplateController.saveTem
 import getDefault from '@salesforce/apex/DocGenEmailTemplateController.getDefault';
 import renderPreview from '@salesforce/apex/DocGenEmailTemplateController.renderPreview';
 import sendTest from '@salesforce/apex/DocGenEmailTemplateController.sendTest';
+import resolveAssetPublicUrl from '@salesforce/apex/DocGenEmailTemplateController.resolveAssetPublicUrl';
+import getAssets from '@salesforce/apex/DocGenController.getAssets';
 
 export default class DocGenEmailTemplates extends LightningElement {
     @track rows = [];
@@ -29,10 +31,55 @@ export default class DocGenEmailTemplates extends LightningElement {
     @track isSaving = false;
     @track isTesting = false;
 
+    // "Override with Asset File" — Shared Asset images selectable as the logo.
+    @track logoAssets = [];
+    @track selectedLogoAssetId = '';
+
     _previewDirty = false;
 
     connectedCallback() {
         this.loadTemplates();
+        this.loadLogoAssets();
+    }
+
+    async loadLogoAssets() {
+        try {
+            const assets = await getAssets();
+            this.logoAssets = (assets || []).filter((a) => a.isActive && a.latestVersionCvId);
+        } catch (_e) {
+            this.logoAssets = []; // Assets tab optional — picker just disables
+        }
+    }
+
+    get logoAssetOptions() {
+        return this.logoAssets.map((a) => ({
+            label: a.name + (a.category ? ' (' + a.category + ')' : ''),
+            value: a.id
+        }));
+    }
+
+    get logoAssetsUnavailable() {
+        return this.logoAssets.length === 0;
+    }
+
+    async handleLogoAssetChange(event) {
+        const assetId = event.detail.value;
+        this.selectedLogoAssetId = assetId;
+        if (!assetId) return;
+        try {
+            const url = await resolveAssetPublicUrl({ assetId });
+            this.logoUrl = url;
+            this._previewDirty = true;
+            this.toast(
+                'Logo set from Asset',
+                'A public file link was created and filled into Logo URL Override. Save to apply.',
+                'success'
+            );
+            this.refreshPreview();
+        } catch (error) {
+            this.selectedLogoAssetId = '';
+            this.toast('Could not use this asset', this.errMsg(error), 'error');
+        }
     }
 
     async loadTemplates() {
@@ -63,6 +110,7 @@ export default class DocGenEmailTemplates extends LightningElement {
         this.layoutMode = row.layoutMode || 'Managed';
         this.isActive = row.isActive !== false;
         this.tokens = (row.tokens || []).map((t) => '{' + t + '}');
+        this.selectedLogoAssetId = ''; // picker is a one-shot fill, not stored state
         this.refreshPreview();
     }
 
@@ -128,6 +176,7 @@ export default class DocGenEmailTemplates extends LightningElement {
     }
     handleLogoChange(event) {
         this.logoUrl = event.target.value;
+        this.selectedLogoAssetId = ''; // manual edit supersedes the asset pick
     }
     handleFooterChange(event) {
         this.footerText = event.target.value;

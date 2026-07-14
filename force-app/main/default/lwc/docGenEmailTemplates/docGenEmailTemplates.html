@@ -108,10 +108,20 @@
                                     type="text"
                                     label="Logo URL Override"
                                     value={logoUrl}
-                                    max-length="255"
                                     onchange={handleLogoChange}
                                     placeholder="https://…/logo.png"
+                                    field-level-help="Any public image URL — no length limit. Or pick a DocGen Asset below to host the logo in Salesforce Files."
                                 ></lightning-input>
+                                <lightning-combobox
+                                    label="…or override with an Asset file"
+                                    value={selectedLogoAssetId}
+                                    options={logoAssetOptions}
+                                    onchange={handleLogoAssetChange}
+                                    placeholder="Pick a Shared Asset image…"
+                                    disabled={logoAssetsUnavailable}
+                                    field-level-help="Uses a Shared Asset (Command Hub → Assets) as the logo: DocGen creates a public file link and fills the URL above. Replacing the asset's image updates the logo everywhere automatically."
+                                    class="slds-p-top_xx-small"
+                                ></lightning-combobox>
                             </div>
                             <div class="slds-col slds-size_1-of-1 slds-p-top_xx-small">
                                 <lightning-input

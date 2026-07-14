@@ -209,6 +209,7 @@ global with sharing class DocGenEmailTemplateService {
                     'Body_Plain__c',
                     'Brand_Color__c',
                     'Logo_Url__c',
+                    'Logo_Url_Extended__c',
                     'Footer_Text__c',
                     'Layout_Mode__c',
                     'Is_Active__c'
@@ -223,6 +224,7 @@ global with sharing class DocGenEmailTemplateService {
                     Body_Plain__c,
                     Brand_Color__c,
                     Logo_Url__c,
+                    Logo_Url_Extended__c,
                     Footer_Text__c,
                     Layout_Mode__c
                 FROM DocGen_Email_Template__c
@@ -240,7 +242,12 @@ global with sharing class DocGenEmailTemplateService {
                 d.bodyHtml = r.Body_Html__c;
                 d.bodyPlain = r.Body_Plain__c;
                 d.brandColorOverride = r.Brand_Color__c;
-                d.logoUrlOverride = r.Logo_Url__c;
+                // Long field wins — Logo_Url__c is a platform Url field capped at 255
+                // chars and type-locked in the managed package; Files delivery URLs
+                // and other long links live in Logo_Url_Extended__c.
+                d.logoUrlOverride = String.isNotBlank(r.Logo_Url_Extended__c)
+                    ? r.Logo_Url_Extended__c.trim()
+                    : r.Logo_Url__c;
                 d.footerTextOverride = r.Footer_Text__c;
                 d.layoutMode = r.Layout_Mode__c == MODE_FULL_HTML ? MODE_FULL_HTML : MODE_MANAGED;
                 defCache.put(r.Type__c, d);
