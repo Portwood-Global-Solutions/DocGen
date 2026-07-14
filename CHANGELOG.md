@@ -1,5 +1,25 @@
 # Changelog
 
+## v3.31.0 — Signature lifecycle controls + completed-document delivery + Excel tables
+
+E-signature grows the controls customers kept asking for: pick how long signing links live (a week, two months — not a fixed 48 hours), schedule as many reminders as you want, manage sent requests (view / resend / revoke) right from the record, and every party automatically receives the finalized, signed PDF attached to their completion email. Excel templates graduate to real child-record tables.
+
+### Added
+
+- **Configurable signing-link expiration (#224)** — new org-wide default **Link expiration (days)** in Signature Settings (default 2 days = the historical 48 hours), plus a per-send override on the send screen and a **Link Expiration (Days)** input on the `DocGen: Create Signature Request` Flow action (1–365 days). Each request stamps `Expires_At__c` at send — changing the org default later never moves links already in flight, and requests created before this release keep their original 48-hour window. The document preview link and the `{ExpirationHours}` email token now reflect the request's real signing window. Resending opens a fresh window.
+- **Multi-reminder schedule (#224)** — Signature Settings now takes a comma-separated list of reminder offsets in hours (e.g. `24, 72, 168` = nudge after 1, 3, and 7 days) instead of a single one-shot reminder. Per-signer progress is tracked in the new `Reminders_Sent__c`; if the hourly job was paused, missed offsets collapse into one catch-up reminder rather than a burst. A blank schedule keeps the exact legacy single-reminder behavior, in-flight signers are never double-reminded, and reminders stop once the link expires.
+- **Manage previous signature requests (#223)** — the sender component's Previous Signature Requests list gains **View** (opens the request record), **Resend** (rotates tokens, clears PINs, re-emails all unsigned signers, opens a fresh expiration window), and **Revoke** (invalidates every unsigned link) — with confirmation dialogs and status-aware disabling on Signed/Cancelled requests.
+- **Finalized PDF attached to completion emails (#225)** — when the last signer completes, the signers' completion confirmation and the sender's all-signed notification both carry the signed PDF as an attachment. One shared attachment instance serves every recipient; documents over 20 MB fall back to the plain notification (the signed PDF is always on the record regardless).
+- **Excel child-record tables (#228)** — a loop spanning cells in a single worksheet row (`{#Contacts}{FirstName}` in A2, `{LastName}` in B2, `{Email}{/Contacts}` in C2) now clones the whole row per record and shifts the rows below down — matching Word table behavior. Row indices, cell references, and the sheet dimension are renumbered so Excel opens the result cleanly, and `sharedStrings.xml` references stay valid for strict readers (openpyxl, POI).
+
+### Fixed
+
+- **`[object Object]` on oversized settings values (#222)** — saving a logo/site URL longer than the platform's 255-character cap now reports exactly which field is too long and its limit, at both the Signature Settings page and the Email Templates editor (client-side max-length + friendly server messages).
+- **Resent and reminded guided requests got the wrong signing page (#223/#224)** — resend and reminder emails built links to the legacy signing page; guided-PDF requests now route to the PDF signing page via the same rule the sequential-signer path uses.
+- **Completion emails silently failing for guest signers (#227)** — the guided drawn-signature flow finishes in the guest signer's session, where the email service couldn't see the request (sharing) or read its fields (FLS): the all-signed and completion emails were logged-and-dropped, never delivered. The service now uses the guest-safe guard pattern — completion emails (with the attached PDF) reliably reach all parties from every signing style.
+
+New fields: `DocGen_Settings__c.Signature_Expiration_Days__c`, `DocGen_Settings__c.Signature_Reminder_Schedule__c`, `DocGen_Signature_Request__c.Expires_At__c`, `DocGen_Signer__c.Reminders_Sent__c` (FLS in DocGen Admin/User permission sets; guest gets read on `Expires_At__c`). No new restricted-picklist values on existing objects — no manual upgrade steps.
+
 ## v3.30.0 — Record image-file cleanup + Assets tab search, categories & thumbnails
 
 Two active support threads die: generated documents no longer leave their template images behind as Files on the record (single, bulk, every path), and the Assets tab grows real thumbnails, search, and free-text categories so a growing asset library stays navigable.
