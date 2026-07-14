@@ -120,6 +120,53 @@ private class DocGenSignaturePdfTests {
     }
 
     // =========================================================================
+    // Guest-context regression — completion emails.
+    // The guided drawn-signature path sends the all-signed + signer-completion
+    // emails inside the GUEST transaction (saveCompositedSignedPdf). With the
+    // service "with sharing" + admin FLS guards, the guest could not see the
+    // request row ("List has no rows") / read Template__c ("Insufficient FLS"),
+    // and both emails silently failed into DocGen_Error_Log__c. Assert no such
+    // failure rows are written. Strongest where a real guest user exists.
+    // =========================================================================
+    @isTest
+    static void testGuestContext_completionEmails_noSilentFailures() {
+        User guest = getGuestUser();
+        Id reqId = [SELECT Id FROM DocGen_Signature_Request__c LIMIT 1].Id;
+        Blob pdf = Blob.valueOf('%PDF-1.4 guest test');
+
+        Test.startTest();
+        if (guest != null) {
+            System.runAs(guest) {
+                DocGenSignatureEmailService.sendAllSignedNotification(reqId, pdf, 'Guest Completion Test');
+                DocGenSignatureEmailService.sendSignerCompletionEmails(reqId, pdf, 'Guest Completion Test');
+            }
+        } else {
+            DocGenSignatureEmailService.sendAllSignedNotification(reqId, pdf, 'Guest Completion Test');
+            DocGenSignatureEmailService.sendSignerCompletionEmails(reqId, pdf, 'Guest Completion Test');
+        }
+        Test.stopTest();
+
+        // Message__c is a long text area (not filterable in SOQL) — filter in Apex.
+        List<String> regressions = new List<String>();
+        for (DocGen_Error_Log__c log : [
+            SELECT Message__c
+            FROM DocGen_Error_Log__c
+            WHERE Operation__c IN ('sendSenderNotification', 'sendSignerCompletionEmails')
+        ]) {
+            String msg = log.Message__c == null ? '' : log.Message__c;
+            if (msg.contains('Insufficient FLS') || msg.contains('no rows')) {
+                regressions.add(msg);
+            }
+        }
+        System.assertEquals(
+            0,
+            regressions.size(),
+            'Completion emails must not silently fail in guest context; got: ' +
+            (regressions.isEmpty() ? '' : regressions[0])
+        );
+    }
+
+    // =========================================================================
     // A1 — getSourcePdfBase64
     // =========================================================================
 

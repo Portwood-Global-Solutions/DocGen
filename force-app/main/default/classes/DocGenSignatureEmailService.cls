@@ -5,7 +5,15 @@
  * recipient/OWA/reply-to wiring, sequential-signing logic, delivery-status
  * write-back, and best-effort error logging.
  */
-public with sharing class DocGenSignatureEmailService {
+// "without sharing" + guest FLS-guard variants are load-bearing: the guided
+// drawn-signature path finishes inside the GUEST signer's transaction
+// (saveCompositedSignedPdf), and every read here is an internal, requestId-scoped
+// config lookup — the guest has no sharing on DocGen_Signature_Request__c, so a
+// "with sharing" SYSTEM_MODE query returns no rows and the completion emails
+// silently fail (logged as "List has no rows" / "Insufficient FLS ...Template__c").
+// Same security model as DocGenSignatureController (also without sharing): the
+// capability is the validated signing token upstream, not record sharing.
+public without sharing class DocGenSignatureEmailService {
     /**
      * Data wrapper for each signer email to send.
      */
@@ -87,8 +95,11 @@ public with sharing class DocGenSignatureEmailService {
         if (requestId == null) {
             return null;
         }
-        DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
-        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Default_Email_Message__c' });
+        DocGenFlsGuard.guestAssertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Default_Email_Message__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Signature_Request__c> reqs = [
             SELECT Template__c, Template__r.Default_Email_Message__c
@@ -112,7 +123,10 @@ public with sharing class DocGenSignatureEmailService {
         if (requestId == null) {
             return null;
         }
-        DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Expires_At__c' });
+        DocGenFlsGuard.guestAssertAccessible(
+            DocGen_Signature_Request__c.sObjectType,
+            new Set<String>{ 'Expires_At__c' }
+        );
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Signature_Request__c> reqs = [
             SELECT Expires_At__c
@@ -306,7 +320,10 @@ public with sharing class DocGenSignatureEmailService {
         Messaging.EmailFileAttachment attachment
     ) {
         try {
-            DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'CreatedById' });
+            DocGenFlsGuard.guestAssertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'CreatedById' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             DocGen_Signature_Request__c req = [
                 SELECT CreatedById
@@ -316,7 +333,7 @@ public with sharing class DocGenSignatureEmailService {
                 LIMIT 1
             ]; // NOPMD
 
-            DocGenFlsGuard.assertAccessible(User.sObjectType, new Set<String>{ 'Email' });
+            DocGenFlsGuard.guestAssertAccessible(User.sObjectType, new Set<String>{ 'Email' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             User sender = [SELECT Email FROM User WHERE Id = :req.CreatedById WITH SYSTEM_MODE LIMIT 1]; // NOPMD
             if (String.isBlank(sender.Email)) {
@@ -373,7 +390,10 @@ public with sharing class DocGenSignatureEmailService {
     public static void sendSignerCompletionEmails(Id requestId, Blob signedPdf, String fileName) {
         Messaging.EmailFileAttachment attachment = buildPdfAttachment(signedPdf, fileName);
         try {
-            DocGenFlsGuard.assertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
+            DocGenFlsGuard.guestAssertAccessible(
+                DocGen_Signature_Request__c.sObjectType,
+                new Set<String>{ 'Template__c' }
+            );
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             DocGen_Signature_Request__c req = [
                 SELECT
@@ -406,7 +426,7 @@ public with sharing class DocGenSignatureEmailService {
             // Resolve a friendly document name (best-effort, guarded).
             String docTitle = 'your document';
             if (req.Template__c != null) {
-                DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
+                DocGenFlsGuard.guestAssertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
                 List<DocGen_Template__c> tpls = [
                     SELECT Name
@@ -508,7 +528,7 @@ public with sharing class DocGenSignatureEmailService {
             DocGen_Signature_Request__c req = new DocGen_Signature_Request__c(Id = requestId);
             req.Email_Status__c = status.left(1000);
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
-            DocGenFlsGuard.assertUpdateable(req, new Set<String>{ 'Email_Status__c' });
+            DocGenFlsGuard.guestAssertUpdateable(req, new Set<String>{ 'Email_Status__c' });
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(req, false, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
