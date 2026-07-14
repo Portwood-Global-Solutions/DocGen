@@ -91,7 +91,7 @@
                         </div>
 
                         <!-- Branding overrides (Managed mode only — Full HTML owns the whole document) -->
-                        <div if:true={isManaged} class="slds-grid slds-wrap slds-gutters_xx-small slds-p-top_small">
+                        <div class="slds-grid slds-wrap slds-gutters_xx-small slds-p-top_small">
                             <div class="slds-col slds-size_1-of-2">
                                 <lightning-input
                                     type="text"
@@ -110,7 +110,7 @@
                                     value={logoUrl}
                                     onchange={handleLogoChange}
                                     placeholder="https://…/logo.png"
-                                    field-level-help="Any public image URL — no length limit. Or pick a DocGen Asset below to host the logo in Salesforce Files."
+                                    field-level-help="Any public image URL — no length limit. Or pick a DocGen Asset below to host the logo in Salesforce Files. In Full custom HTML this value renders wherever you place {LogoUrl}."
                                 ></lightning-input>
                                 <lightning-combobox
                                     label="…or override with an Asset file"
@@ -123,6 +123,7 @@
                                     class="slds-p-top_xx-small"
                                 ></lightning-combobox>
                                 <lightning-input
+                                    if:true={isManaged}
                                     type="number"
                                     label="Logo height (px)"
                                     value={logoHeight}
@@ -134,7 +135,7 @@
                                     class="slds-p-top_xx-small"
                                 ></lightning-input>
                             </div>
-                            <div class="slds-col slds-size_1-of-1 slds-p-top_xx-small">
+                            <div if:true={isManaged} class="slds-col slds-size_1-of-1 slds-p-top_xx-small">
                                 <lightning-input
                                     type="text"
                                     label="Footer Text Override"

@@ -214,7 +214,52 @@ public with sharing class DocGenEmailTemplateController {
         } catch (DmlException e) {
             throw DocGenService.dmlAhe(e, DocGen_Email_Template__c.sObjectType);
         }
+        // Publish every {%asset:<key>} the body references while we're in the
+        // admin's session — send-time resolution (guest/Automated Process) can
+        // only READ deliveries. Best-effort: an unresolvable key never blocks
+        // the save (the tag blanks at send and warns in the debug log).
+        ensureAssetDeliveriesForBody(rec.Body_Html__c);
         return rec.Id;
+    }
+
+    /** Extracts {%asset:<key>} keys from a body and ensures each referenced
+     *  asset's latest file has a public delivery. Admin-session only. */
+    private static void ensureAssetDeliveriesForBody(String bodyHtml) {
+        if (String.isBlank(bodyHtml) || !bodyHtml.contains('{%asset:')) {
+            return;
+        }
+        Set<String> keys = new Set<String>();
+        Matcher m = Pattern.compile('\\{%asset:([^}]+)\\}').matcher(bodyHtml);
+        while (m.find()) {
+            String key = DocGenAssetKeyHandler.normalizeKey(m.group(1));
+            if (String.isNotBlank(key)) {
+                keys.add(key);
+            }
+        }
+        if (keys.isEmpty()) {
+            return;
+        }
+        try {
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            for (DocGen_Asset__c a : [
+                SELECT Id
+                FROM DocGen_Asset__c
+                WHERE Asset_Key__c IN :keys
+                WITH SYSTEM_MODE
+            ]) {
+                // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+                try {
+                    resolveAssetPublicUrl(a.Id);
+                } catch (Exception perAsset) {
+                    System.debug(
+                        LoggingLevel.WARN,
+                        'DocGen: could not publish asset ' + a.Id + ' for email use: ' + perAsset.getMessage()
+                    );
+                }
+            }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: asset delivery ensure skipped: ' + e.getMessage());
+        }
     }
 
     /**
@@ -345,6 +390,9 @@ public with sharing class DocGenEmailTemplateController {
     /** Renders a preview from unsaved editor values using realistic sample tokens. */
     @AuraEnabled
     public static DocGenEmailTemplateService.RenderedEmail renderPreview(Map<String, Object> data) {
+        // Editor session is admin — publish any newly-typed {%asset:} references
+        // so the preview (and the eventual sends) can resolve them.
+        ensureAssetDeliveriesForBody((String) data.get('bodyHtml'));
         DocGenEmailTemplateService.RenderedEmail r = DocGenEmailTemplateService.renderWith(
             buildDef(data),
             sampleTokens((String) data.get('type')),
