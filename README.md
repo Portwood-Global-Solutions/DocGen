@@ -4,7 +4,7 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.32.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.33.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -21,7 +21,7 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 sf package install --package 04tVx000000qERtIAM --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000qZxlIAE) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000qZxlIAE)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000qjDxIAI) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000qjDxIAI)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -371,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.32.0 — host your email logo (and any email image) in Salesforce Files via Shared Assets: `{%asset:<key>}` tags now work in email templates, resolve to public image links, and stay current when you swap the image; plus logo size control and unlimited-length image URLs. v3.31.0 added configurable signing-link expiration, multi-reminder schedules, request Resend/Revoke, the finalized signed PDF attached to completion emails, and Excel child-record tables**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.33.0 — Excel generation fixes: generated workbooks with empty styled cells no longer open with Excel’s repair prompt, and long-text values with line breaks render correctly inside spreadsheet cells**. Latest release: **v3.32.0 — host your email logo (and any email image) in Salesforce Files via Shared Assets: `{%asset:<key>}` tags now work in email templates, resolve to public image links, and stay current when you swap the image; plus logo size control and unlimited-length image URLs. v3.31.0 added configurable signing-link expiration, multi-reminder schedules, request Resend/Revoke, the finalized signed PDF attached to completion emails, and Excel child-record tables**.
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +444,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.32.0 | **Latest (Released)**                   | `04tVx000000qZxlIAE` |
+| v3.33.0 | **Latest (Released)**                   | `04tVx000000qjDxIAI` |
+| v3.32.0 | Released                                | `04tVx000000qZxlIAE` |
 | v3.31.0 | Released                                | `04tVx000000qZuXIAU` |
 | v3.30.0 | Released                                | `04tVx000000qERtIAM` |
 | v3.29.0 | Previous                                | `04tVx000000pe3RIAQ` |
