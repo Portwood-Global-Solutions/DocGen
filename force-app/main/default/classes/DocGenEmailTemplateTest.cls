@@ -149,7 +149,7 @@ private class DocGenEmailTemplateTest {
     // ---- "Override with Asset File": asset → public delivery URL ----
     @IsTest
     static void controller_resolveAssetPublicUrl() {
-        DocGen_Asset__c asset = new DocGen_Asset__c(Name = 'Logo Test Asset', Asset_Key__c = 'logo_test');
+        DocGen_Asset__c asset = new DocGen_Asset__c(Name = 'Logo Test Asset', Asset_Key__c = 'logo-test');
         insert asset;
         ContentVersion cv = new ContentVersion(
             Title = 'logo',
@@ -191,7 +191,7 @@ private class DocGenEmailTemplateTest {
 
     @IsTest
     static void controller_resolveAssetPublicUrl_noFileIsFriendly() {
-        DocGen_Asset__c bare = new DocGen_Asset__c(Name = 'Empty Asset', Asset_Key__c = 'empty_asset');
+        DocGen_Asset__c bare = new DocGen_Asset__c(Name = 'Empty Asset', Asset_Key__c = 'empty-asset');
         insert bare;
         Boolean caught = false;
         try {
@@ -201,6 +201,126 @@ private class DocGenEmailTemplateTest {
             System.assert(e.getMessage().contains('upload an image'), 'Actionable message; got: ' + e.getMessage());
         }
         System.assert(caught, 'Asset without a file must be rejected with guidance');
+    }
+
+    // ---- {LogoUrl} token + asset-linked logo + logo height ----
+    @IsTest
+    static void logoUrlToken_resolvesInCustomHtml() {
+        insert new DocGen_Email_Template__c(
+            Name = 'Custom HTML w/ logo token',
+            Type__c = DocGenEmailTemplateService.TYPE_REQUEST,
+            Subject__c = 'Hi',
+            Body_Html__c = '<html><body><img src="{LogoUrl}" style="height:60px"/>{ActionButton}</body></html>',
+            Layout_Mode__c = DocGenEmailTemplateService.MODE_FULL_HTML,
+            Logo_Url_Extended__c = 'https://cdn.example.com/brand/logo-v2.png',
+            Is_Active__c = true
+        );
+        DocGenEmailTemplateService.clearCache();
+        DocGenEmailTemplateService.RenderedEmail r = DocGenEmailTemplateService.render(
+            DocGenEmailTemplateService.TYPE_REQUEST,
+            sampleTokens(DocGenEmailTemplateService.TYPE_REQUEST)
+        );
+        System.assert(
+            r.htmlBody.contains('src="https://cdn.example.com/brand/logo-v2.png"'),
+            '{LogoUrl} resolves to the effective logo in full custom HTML: ' + r.htmlBody.left(300)
+        );
+    }
+
+    @IsTest
+    static void logoHeight_scalesChrome() {
+        insert new DocGen_Email_Template__c(
+            Name = 'Tall logo',
+            Type__c = DocGenEmailTemplateService.TYPE_REQUEST,
+            Subject__c = 'Hi',
+            Body_Html__c = '<p>x {ActionButton}</p>',
+            Logo_Url_Extended__c = 'https://cdn.example.com/logo.png',
+            Logo_Height__c = 96,
+            Is_Active__c = true
+        );
+        DocGenEmailTemplateService.clearCache();
+        DocGenEmailTemplateService.RenderedEmail r = DocGenEmailTemplateService.render(
+            DocGenEmailTemplateService.TYPE_REQUEST,
+            sampleTokens(DocGenEmailTemplateService.TYPE_REQUEST)
+        );
+        System.assert(
+            r.htmlBody.contains('max-height:96px') && r.htmlBody.contains('max-width:400px'),
+            'Logo height honored with proportional width cap: ' + r.htmlBody.left(600)
+        );
+    }
+
+    @IsTest
+    static void logoAssetKey_resolvesLatestFileAtSendTime() {
+        DocGen_Asset__c asset = new DocGen_Asset__c(Name = 'Brand Logo', Asset_Key__c = 'brand-logo');
+        insert asset;
+        ContentVersion cv = new ContentVersion(
+            Title = 'logo-v1',
+            PathOnClient = 'logo-v1.png',
+            VersionData = Blob.valueOf('v1 bytes'),
+            FirstPublishLocationId = asset.Id
+        );
+        insert cv;
+
+        String publicUrl;
+        try {
+            publicUrl = DocGenEmailTemplateController.resolveAssetPublicUrl(asset.Id);
+        } catch (AuraHandledException e) {
+            return; // org without Content Deliveries — resolution path covered elsewhere
+        }
+
+        insert new DocGen_Email_Template__c(
+            Name = 'Asset-linked logo',
+            Type__c = DocGenEmailTemplateService.TYPE_REQUEST,
+            Subject__c = 'Hi',
+            Body_Html__c = '<p>x {ActionButton}</p>',
+            Logo_Asset_Key__c = 'brand-logo',
+            Logo_Url_Extended__c = 'https://stale.example.com/old-logo.png',
+            Is_Active__c = true
+        );
+        DocGenEmailTemplateService.clearCache();
+        DocGenEmailTemplateService.RenderedEmail r = DocGenEmailTemplateService.render(
+            DocGenEmailTemplateService.TYPE_REQUEST,
+            sampleTokens(DocGenEmailTemplateService.TYPE_REQUEST)
+        );
+        System.assert(
+            r.htmlBody.contains(publicUrl.escapeHtml4()) || r.htmlBody.contains(publicUrl),
+            'Asset link beats the stored URL at send time: ' + r.htmlBody.left(600)
+        );
+        System.assert(
+            !r.htmlBody.contains('stale.example.com'),
+            'Stored URL is only the fallback when an asset is linked'
+        );
+    }
+
+    @IsTest
+    static void addAssetVersion_carriesDeliveryForwardToReplacementFile() {
+        DocGen_Asset__c asset = new DocGen_Asset__c(Name = 'CF Logo', Asset_Key__c = 'cf-logo');
+        insert asset;
+        ContentVersion v1 = new ContentVersion(
+            Title = 'v1',
+            PathOnClient = 'v1.png',
+            VersionData = Blob.valueOf('v1'),
+            FirstPublishLocationId = asset.Id
+        );
+        insert v1;
+        try {
+            DocGenEmailTemplateController.resolveAssetPublicUrl(asset.Id);
+        } catch (AuraHandledException e) {
+            return; // org without Content Deliveries
+        }
+
+        // Replace the asset image the way the Assets tab does: a NEW document.
+        ContentVersion v2 = new ContentVersion(Title = 'v2', PathOnClient = 'v2.png', VersionData = Blob.valueOf('v2'));
+        insert v2;
+        Test.startTest();
+        Id newLatestCvId = DocGenController.addAssetVersion(asset.Id, v2.Id);
+        Test.stopTest();
+
+        System.assertEquals(
+            1,
+            [SELECT COUNT() FROM ContentDistribution WHERE ContentVersionId = :newLatestCvId],
+            'Replacing a published asset image must publish the NEW file too, so ' +
+            'send-time logo resolution keeps working (guest senders cannot create deliveries)'
+        );
     }
 
     // ---- Service: invalid brand color falls back to the safe default ----

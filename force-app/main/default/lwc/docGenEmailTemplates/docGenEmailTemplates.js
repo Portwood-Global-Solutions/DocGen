@@ -32,8 +32,12 @@ export default class DocGenEmailTemplates extends LightningElement {
     @track isTesting = false;
 
     // "Override with Asset File" — Shared Asset images selectable as the logo.
+    // logoAssetKey is PERSISTED on the template: the renderer resolves the asset's
+    // latest file to its public link at send time, so replacing the asset image
+    // updates the logo without re-saving any template.
     @track logoAssets = [];
-    @track selectedLogoAssetId = '';
+    @track logoAssetKey = '';
+    @track logoHeight = null;
 
     _previewDirty = false;
 
@@ -52,10 +56,12 @@ export default class DocGenEmailTemplates extends LightningElement {
     }
 
     get logoAssetOptions() {
-        return this.logoAssets.map((a) => ({
+        const opts = this.logoAssets.map((a) => ({
             label: a.name + (a.category ? ' (' + a.category + ')' : ''),
-            value: a.id
+            value: a.assetKey
         }));
+        opts.unshift({ label: '— None (use the URL above) —', value: '' });
+        return opts;
     }
 
     get logoAssetsUnavailable() {
@@ -63,23 +69,35 @@ export default class DocGenEmailTemplates extends LightningElement {
     }
 
     async handleLogoAssetChange(event) {
-        const assetId = event.detail.value;
-        this.selectedLogoAssetId = assetId;
-        if (!assetId) return;
+        const assetKey = event.detail.value;
+        if (!assetKey) {
+            this.logoAssetKey = '';
+            this._previewDirty = true;
+            this.refreshPreview();
+            return;
+        }
+        const asset = this.logoAssets.find((a) => a.assetKey === assetKey);
         try {
-            const url = await resolveAssetPublicUrl({ assetId });
+            // Publish the asset's current file now (admin session) — send-time
+            // resolution only reads. The URL also lands in the field as a fallback.
+            const url = await resolveAssetPublicUrl({ assetId: asset.id });
+            this.logoAssetKey = assetKey;
             this.logoUrl = url;
             this._previewDirty = true;
             this.toast(
-                'Logo set from Asset',
-                'A public file link was created and filled into Logo URL Override. Save to apply.',
+                'Logo linked to Asset',
+                'Emails now use this asset\u2019s latest image automatically. Save to apply.',
                 'success'
             );
             this.refreshPreview();
         } catch (error) {
-            this.selectedLogoAssetId = '';
             this.toast('Could not use this asset', this.errMsg(error), 'error');
         }
+    }
+
+    handleLogoHeightChange(event) {
+        this.logoHeight = event.detail.value ? parseInt(event.detail.value, 10) : null;
+        this._previewDirty = true;
     }
 
     async loadTemplates() {
@@ -110,7 +128,8 @@ export default class DocGenEmailTemplates extends LightningElement {
         this.layoutMode = row.layoutMode || 'Managed';
         this.isActive = row.isActive !== false;
         this.tokens = (row.tokens || []).map((t) => '{' + t + '}');
-        this.selectedLogoAssetId = ''; // picker is a one-shot fill, not stored state
+        this.logoAssetKey = row.logoAssetKey || '';
+        this.logoHeight = row.logoHeight || null;
         this.refreshPreview();
     }
 
@@ -128,6 +147,8 @@ export default class DocGenEmailTemplates extends LightningElement {
             bodyPlain: this.bodyPlain,
             brandColor: this.brandColor,
             logoUrl: this.logoUrl,
+            logoAssetKey: this.logoAssetKey,
+            logoHeight: this.logoHeight,
             footerText: this.footerText,
             layoutMode: this.layoutMode,
             isActive: this.isActive
@@ -176,7 +197,7 @@ export default class DocGenEmailTemplates extends LightningElement {
     }
     handleLogoChange(event) {
         this.logoUrl = event.target.value;
-        this.selectedLogoAssetId = ''; // manual edit supersedes the asset pick
+        this.logoAssetKey = ''; // manual URL supersedes the asset link (which would otherwise win)
     }
     handleFooterChange(event) {
         this.footerText = event.target.value;

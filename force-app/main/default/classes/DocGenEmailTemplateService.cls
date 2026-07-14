@@ -67,6 +67,8 @@ global with sharing class DocGenEmailTemplateService {
         public String bodyPlain;
         public String brandColorOverride;
         public String logoUrlOverride;
+        public String logoAssetKey;
+        public Integer logoHeight;
         public String footerTextOverride;
         public String layoutMode; // MODE_MANAGED (default) or MODE_FULL_HTML
     }
@@ -131,9 +133,16 @@ global with sharing class DocGenEmailTemplateService {
         String brand = safeBrandColor(
             String.isNotBlank(def.brandColorOverride) ? def.brandColorOverride : settings.Signature_Email_Brand_Color__c
         );
-        String logo = String.isNotBlank(def.logoUrlOverride)
-            ? def.logoUrlOverride
-            : settings.Signature_Email_Logo_Url__c;
+        // Logo precedence: linked Shared Asset (resolved to its LATEST file's public
+        // link at send time, so replacing the asset image updates every email with
+        // no template edit) -> stored URL override -> org default.
+        String logo = null;
+        if (String.isNotBlank(def.logoAssetKey)) {
+            logo = resolveLogoAssetUrl(def.logoAssetKey);
+        }
+        if (String.isBlank(logo)) {
+            logo = String.isNotBlank(def.logoUrlOverride) ? def.logoUrlOverride : settings.Signature_Email_Logo_Url__c;
+        }
         String footer = String.isNotBlank(def.footerTextOverride)
             ? def.footerTextOverride
             : settings.Signature_Email_Footer_Text__c;
@@ -145,6 +154,9 @@ global with sharing class DocGenEmailTemplateService {
             v.put('CompanyName', company);
         }
         v.put('BrandColor', brand);
+        // {LogoUrl} — the effective logo, so Full-custom-HTML templates can place
+        // and size it themselves: <img src="{LogoUrl}" style="height:60px"/>.
+        v.put('LogoUrl', logo == null ? '' : logo);
         // {Message} value: send-time override wins, else whatever the caller/template default supplied.
         String message = String.isNotBlank(messageOverride) ? messageOverride : v.get('Message');
         v.put('Message', message);
@@ -158,7 +170,7 @@ global with sharing class DocGenEmailTemplateService {
             // tokens/widgets resolved, no DocGen header/footer chrome.
             out.htmlBody = bodyInner;
         } else {
-            out.htmlBody = wrapChrome(bodyInner, brand, logo, company, footer);
+            out.htmlBody = wrapChrome(bodyInner, brand, logo, company, footer, def.logoHeight);
         }
 
         // Plain part: explicit override if provided, else derive from the body.
@@ -210,6 +222,8 @@ global with sharing class DocGenEmailTemplateService {
                     'Brand_Color__c',
                     'Logo_Url__c',
                     'Logo_Url_Extended__c',
+                    'Logo_Asset_Key__c',
+                    'Logo_Height__c',
                     'Footer_Text__c',
                     'Layout_Mode__c',
                     'Is_Active__c'
@@ -225,6 +239,8 @@ global with sharing class DocGenEmailTemplateService {
                     Brand_Color__c,
                     Logo_Url__c,
                     Logo_Url_Extended__c,
+                    Logo_Asset_Key__c,
+                    Logo_Height__c,
                     Footer_Text__c,
                     Layout_Mode__c
                 FROM DocGen_Email_Template__c
@@ -248,6 +264,8 @@ global with sharing class DocGenEmailTemplateService {
                 d.logoUrlOverride = String.isNotBlank(r.Logo_Url_Extended__c)
                     ? r.Logo_Url_Extended__c.trim()
                     : r.Logo_Url__c;
+                d.logoAssetKey = r.Logo_Asset_Key__c;
+                d.logoHeight = r.Logo_Height__c == null ? null : Integer.valueOf(r.Logo_Height__c);
                 d.footerTextOverride = r.Footer_Text__c;
                 d.layoutMode = r.Layout_Mode__c == MODE_FULL_HTML ? MODE_FULL_HTML : MODE_MANAGED;
                 defCache.put(r.Type__c, d);
@@ -445,8 +463,78 @@ global with sharing class DocGenEmailTemplateService {
     // Chrome + helpers
     // =====================================================================
 
-    private static String wrapChrome(String bodyInner, String brand, String logoUrl, String company, String footer) {
+    /**
+     * Send-time resolution of a Shared Asset logo (guest-safe: read-only,
+     * SYSTEM_MODE behind guest FLS guards — guest/Automated Process senders can
+     * QUERY ContentDistributions, they just can't create them; creation happens
+     * in the editor and on asset-image replacement, both admin sessions).
+     * Returns the public download URL of the asset's latest file, or null when
+     * anything is missing so the caller falls back to the stored URL.
+     */
+    @TestVisible
+    private static String resolveLogoAssetUrl(String assetKey) {
+        try {
+            // Stored keys are canonical slugs (underscores → hyphens, lowercased);
+            // normalize the lookup the same way the {%asset:} tag resolver does.
+            assetKey = DocGenAssetKeyHandler.normalizeKey(assetKey);
+            if (String.isBlank(assetKey)) {
+                return null;
+            }
+            DocGenFlsGuard.guestAssertAccessible(DocGen_Asset__c.sObjectType, new Set<String>{ 'Asset_Key__c' });
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            List<DocGen_Asset__c> assets = [
+                SELECT
+                    Id,
+                    (
+                        SELECT ContentDocument.LatestPublishedVersionId
+                        FROM ContentDocumentLinks
+                        ORDER BY ContentDocument.CreatedDate DESC, ContentDocument.Id DESC
+                        LIMIT 1
+                    )
+                FROM DocGen_Asset__c
+                WHERE Asset_Key__c = :assetKey
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            if (assets.isEmpty() || assets[0].ContentDocumentLinks.isEmpty()) {
+                return null;
+            }
+            Id cvId = assets[0].ContentDocumentLinks[0].ContentDocument.LatestPublishedVersionId;
+            if (cvId == null) {
+                return null;
+            }
+            DocGenFlsGuard.guestAssertAccessible(
+                ContentDistribution.sObjectType,
+                new Set<String>{ 'ContentDownloadUrl', 'ContentVersionId' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+            List<ContentDistribution> dists = [
+                SELECT ContentDownloadUrl
+                FROM ContentDistribution
+                WHERE ContentVersionId = :cvId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            return dists.isEmpty() ? null : dists[0].ContentDownloadUrl;
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'DocGen: logo asset resolution fell back to URL: ' + e.getMessage());
+            return null;
+        }
+    }
+
+    private static String wrapChrome(
+        String bodyInner,
+        String brand,
+        String logoUrl,
+        String company,
+        String footer,
+        Integer logoHeight
+    ) {
         String safeCompany = escapeHtml(company);
+        // Default 48px tall / 200px wide (the long-standing chrome); a per-template
+        // Logo Height scales both proportionally, clamped to email-sane bounds.
+        Integer h = (logoHeight != null && logoHeight >= 16 && logoHeight <= 200) ? logoHeight : 48;
+        Integer maxW = (h * 200) / 48;
         String html = '<!DOCTYPE html>';
         html += '<html lang="en"><head><meta charset="utf-8"/>';
         html += '<meta name="viewport" content="width=device-width, initial-scale=1.0"/></head>';
@@ -463,7 +551,11 @@ global with sharing class DocGenEmailTemplateService {
                 escapeHtml(logoUrl) +
                 '" alt="' +
                 safeCompany +
-                '" style="max-height:48px;max-width:200px;display:inline-block;" />';
+                '" style="max-height:' +
+                h +
+                'px;max-width:' +
+                maxW +
+                'px;display:inline-block;" />';
         } else if (String.isNotBlank(company)) {
             html += '<span style="color:#ffffff;font-size:20px;font-weight:bold;">' + safeCompany + '</span>';
         }
