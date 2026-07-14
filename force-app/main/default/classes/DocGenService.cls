@@ -4304,8 +4304,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                             strVal.containsIgnoreCase('<ol') ||
                             strVal.containsIgnoreCase('<li'))
                         ) {
-                            if (currentTemplateType == 'PowerPoint') {
-                                // Strip HTML tags for plain text in PPTX
+                            if (currentTemplateType == 'PowerPoint' || currentTemplateType == 'Excel') {
+                                // Strip HTML tags for plain text in PPTX/XLSX — DrawingML/
+                                // WordprocessingML rich-text runs don't exist in these parts
                                 output += strVal.replaceAll('<[^>]+>', ' ').replaceAll('\\s+', ' ').trim().escapeXml();
                             } else if (currentTemplateType == 'HTML') {
                                 // HTML templates: rich-text is already HTML — pass through and
@@ -4317,6 +4318,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         } else {
                             if (currentTemplateType == 'PowerPoint') {
                                 output += strVal.escapeXml();
+                            } else if (currentTemplateType == 'Excel') {
+                                // Excel: literal newlines are valid inside <is><t> — never route
+                                // through convertMultilineToXml, whose <w:r>/<w:br/> Word runs
+                                // corrupt spreadsheetml (mismatched-tag repair on open).
+                                output += strVal.replace('\r\n', '\n').replace('\r', '\n').escapeXml();
                             } else if (currentTemplateType == 'HTML') {
                                 // HTML templates: escape XML, convert newlines to <br/> so
                                 // textarea/long-text fields preserve line breaks in the PDF.
@@ -5054,18 +5060,27 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // Output everything before this cell
             result += xml.substring(cursor, cStart);
 
+            // Self-closing cell (<c r="B1" s="24"/> — empty styled cell): detect from the
+            // cell's OWN tag close, not by the absence of a later </c>. Searching for the
+            // next </c> anywhere in the sheet made the "cell" span swallow the following
+            // row boundary and the next cell's opening tag whenever an empty cell preceded
+            // a shared-string cell — corrupting every generated sheet (mismatched tags).
+            Integer tagClose = xml.indexOf('>', cStart);
+            if (tagClose == -1) {
+                result += xml.substring(cStart);
+                break;
+            }
+            if (xml.substring(tagClose - 1, tagClose) == '/') {
+                result += xml.substring(cStart, tagClose + 1);
+                cursor = tagClose + 1;
+                continue;
+            }
+
             // Find cell end
             Integer cEnd = xml.indexOf('</c>', cStart);
             if (cEnd == -1) {
-                // Self-closing cell
-                Integer selfClose = xml.indexOf('/>', cStart);
-                if (selfClose == -1) {
-                    result += xml.substring(cStart);
-                    break;
-                }
-                result += xml.substring(cStart, selfClose + 2);
-                cursor = selfClose + 2;
-                continue;
+                result += xml.substring(cStart);
+                break;
             }
 
             String cellXml = xml.substring(cStart, cEnd + 4);

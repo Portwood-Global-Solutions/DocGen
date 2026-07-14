@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.33.0 — Excel generation fixes: empty-cell corruption & multiline values
+
+Two Excel merge-engine fixes, both found and verified on a real customer fund-report workbook (4 sheets, loops on every sheet) that opened with Excel's "repaired or removed unreadable content" dialog on every generation.
+
+### Fixed
+
+- **Generated workbooks corrupted by empty styled cells** — `inlineSharedStrings` detected self-closing cells (`<c r="B1" s="24"/>` — an empty cell carrying only a style) by the absence of any later `</c>` in the sheet. With any shared-string cell after the empty cell, the "cell" span swallowed the intervening `</row><row><c>` boundary, producing mismatched-tag XML that Excel repairs by discarding the sheet. Self-closing is now detected from the cell's own tag close. Empty styled cells are ubiquitous (merged title rows, borders, fills), so effectively every real-world Excel template was affected.
+- **Multiline field values injected Word markup into worksheets** — a value containing a line break (long-text areas, descriptions) routed through the Word run builder (`<w:r>`/`<w:br/>`) even in Excel context, corrupting the sheet. Excel cells now keep literal newlines (valid in `<is><t>`; enable Wrap Text on the cell to display them). Rich-text (HTML) values are tag-stripped to plain text in Excel, matching PowerPoint behavior.
+
+Regression coverage: two new `DocGenMiscTests` methods unzip the generated workbook and assert the worksheet XML parses clean (the previous Excel test only asserted a blob was returned — these bugs shipped inside "passing" output).
+
 ## v3.32.0 — Email branding: Salesforce Files images, asset tags, logo controls
 
 Email branding breaks free of the 255-character URL cap and external hosting: host your logo — or any email image — in Salesforce Files via Shared Assets, reference it with the same `{%asset:<key>}` tag templates already use, and control the logo's rendered size.

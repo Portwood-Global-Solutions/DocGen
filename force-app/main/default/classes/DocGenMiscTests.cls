@@ -4581,6 +4581,168 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, result.get('blob'), 'Excel document should be generated');
     }
 
+    /**
+     * @description Empty styled cells are self-closing (<c r="B1" s="24"/>). inlineSharedStrings
+     * used to detect self-closing by "no </c> anywhere later in the sheet", so an
+     * empty cell BEFORE a shared-string cell swallowed the row boundary between
+     * them and every generated sheet opened with Excel's repair dialog.
+     */
+    @IsTest
+    static void testExcelSelfClosingCellBeforeSharedString() {
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        tpl.Type__c = 'Excel';
+        tpl.Query_Config__c = 'Name, AccountSource';
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+        String sharedStringsXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2">' +
+            '<si><t>Title</t></si>' +
+            '<si><t>{Name}</t></si>' +
+            '</sst>';
+
+        // Row 1 ends with an EMPTY STYLED (self-closing) cell; row 2 starts with a
+        // shared-string cell — the exact shape that used to corrupt the sheet.
+        String sheetXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+            '<sheetData>' +
+            '<row r="1">' +
+            '<c r="A1" t="s"><v>0</v></c>' +
+            '<c r="B1" s="24"/>' +
+            '</row>' +
+            '<row r="2">' +
+            '<c r="A2" t="s"><v>1</v></c>' +
+            '</row>' +
+            '</sheetData></worksheet>';
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'ExcelSelfClose',
+            PathOnClient = 'ExcelSelfClose.xlsx',
+            VersionData = buildTestXlsx(sharedStringsXml, sheetXml)
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+        Account acc = TestDataFactory.getTestAccount();
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        String outSheet = new Compression.ZipReader((Blob) result.get('blob'))
+            .extract('xl/worksheets/sheet1.xml')
+            .toString();
+        System.assertEquals(
+            null,
+            parseXmlError(outSheet),
+            'Generated sheet must be well-formed XML, got: ' + parseXmlError(outSheet) + ' in ' + outSheet
+        );
+        System.assert(!outSheet.contains('/><is>'), 'Self-closed cell must not grow an orphan <is> block: ' + outSheet);
+        System.assert(
+            outSheet.contains('<c r="B1" s="24"/>'),
+            'Empty styled cell must pass through intact: ' + outSheet
+        );
+        System.assert(outSheet.contains('<row r="2">'), 'Row 2 boundary must survive inlining: ' + outSheet);
+    }
+
+    /**
+     * @description Multiline field values in Excel used to route through convertMultilineToXml,
+     * splicing WordprocessingML (<w:r>/<w:br/>) into spreadsheetml. Excel cells
+     * keep literal newlines instead.
+     */
+    @IsTest
+    static void testExcelMultilineValueStaysSpreadsheetml() {
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        tpl.Type__c = 'Excel';
+        tpl.Query_Config__c = 'Name, Description';
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+        String sharedStringsXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1">' +
+            '<si><t>{Description}</t></si>' +
+            '</sst>';
+        String sheetXml =
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+            '<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>';
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'ExcelMultiline',
+            PathOnClient = 'ExcelMultiline.xlsx',
+            VersionData = buildTestXlsx(sharedStringsXml, sheetXml)
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
+
+        Account acc = TestDataFactory.getTestAccount();
+        acc.Description = 'Line one\nLine two';
+        Database.update(acc, AccessLevel.SYSTEM_MODE);
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.processDocument(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        String outSheet = new Compression.ZipReader((Blob) result.get('blob'))
+            .extract('xl/worksheets/sheet1.xml')
+            .toString();
+        System.assertEquals(
+            null,
+            parseXmlError(outSheet),
+            'Generated sheet must be well-formed XML, got: ' + parseXmlError(outSheet) + ' in ' + outSheet
+        );
+        System.assert(!outSheet.contains('<w:'), 'No WordprocessingML may leak into a worksheet: ' + outSheet);
+        System.assert(
+            outSheet.contains('Line one\nLine two'),
+            'Multiline value keeps its literal newline in the cell: ' + outSheet
+        );
+    }
+
+    /** @description Minimal XLSX container shared by the Excel corruption regression tests. */
+    private static Blob buildTestXlsx(String sharedStringsXml, String sheetXml) {
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry(
+            '[Content_Types].xml',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                    '<Default Extension="xml" ContentType="application/xml"/></Types>'
+            )
+        );
+        zw.addEntry(
+            '_rels/.rels',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+            )
+        );
+        zw.addEntry(
+            'xl/_rels/workbook.xml.rels',
+            Blob.valueOf(
+                '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+            )
+        );
+        zw.addEntry('xl/sharedStrings.xml', Blob.valueOf(sharedStringsXml));
+        zw.addEntry('xl/worksheets/sheet1.xml', Blob.valueOf(sheetXml));
+        return zw.getArchive();
+    }
+
+    /** @description Returns the parser error message for malformed XML, or null when well-formed. */
+    private static String parseXmlError(String xml) {
+        try {
+            new XmlStreamReader(xml).nextTag();
+            XmlStreamReader r = new XmlStreamReader(xml);
+            while (r.hasNext()) {
+                r.next();
+            }
+            return null;
+        } catch (Exception e) {
+            return e.getMessage();
+        }
+    }
+
     // =========================================================================
     // DocGenService — findBalancedEnd: nested loop tags
     // =========================================================================

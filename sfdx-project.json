@@ -1,15 +1,15 @@
 {
     "packageDirectories": [
         {
-            "versionName": "v3.32.0 \u2014 Email branding: Salesforce Files images, asset tags, logo size control",
-            "versionNumber": "3.32.0.NEXT",
-            "ancestorId": "04tVx000000qZuXIAU",
+            "versionName": "v3.33.0 \u2014 Excel generation fixes: empty-cell corruption & multiline values",
+            "versionNumber": "3.33.0.NEXT",
+            "ancestorId": "04tVx000000qZxlIAE",
             "path": "force-app",
             "default": true,
             "definitionFile": "config/build-def.json",
             "postInstallScript": "DocGenEmailTemplateInstall",
             "package": "Portwood DocGen Managed",
-            "versionDescription": "Portwood DocGen generates polished PDFs and Word documents from any Salesforce record, with built-in e-signatures. v3.32 lets you host your email logo \u2014 and any email image \u2014 right in Salesforce Files: link a Shared Asset once and every email stays current when you swap the image, no external hosting needed. Plus logo size control and unlimited-length image URLs. 100% native Salesforce \u2014 no external services or callouts. Free for all users."
+            "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.33 fixes Excel generation: workbooks with empty styled cells no longer open with a repair prompt, and long-text values with line breaks now render correctly inside spreadsheet cells. 100% native Salesforce — no external services or callouts. Free for all users."
         }
     ],
     "name": "Portwood DocGen",
