@@ -1,5 +1,23 @@
 # Changelog
 
+## v3.32.0 — Email branding: Salesforce Files images, asset tags, logo controls
+
+Email branding breaks free of the 255-character URL cap and external hosting: host your logo — or any email image — in Salesforce Files via Shared Assets, reference it with the same `{%asset:<key>}` tag templates already use, and control the logo's rendered size.
+
+### Added
+
+- **Host email images in Salesforce Files (#230/#231)** — the Email Templates editor gains **"…or override with an Asset file"**: link the logo to a Shared Asset (Command Hub → Assets) and DocGen publishes a permanent public file link for it. The link resolves to the asset's **latest** image at send time, so replacing the asset's file — even with a brand-new upload — updates every email with no template edits. Uploading a replacement automatically publishes it too. (Requires Content Deliveries enabled.)
+- **`{%asset:<key>}` in email bodies (#232)** — reference **any** Shared Asset image anywhere in an email template; the tag resolves to the asset's public URL so you write and size your own markup: `<img src="{%asset:footer-banner}" style="height:40px"/>`. Any number of assets per email; unknown keys blank cleanly; document-style size suffixes are ignored (use CSS). Referenced assets are published when you save or preview the template.
+- **`{LogoUrl}` merge token (#231)** — the effective logo (linked asset → template override → org default) for Full-custom-HTML templates: `<img src="{LogoUrl}" style="height:60px"/>`.
+- **Logo height control (#231)** — per-template **Logo height (px)** (16–200, default 48) sizes the branded-header logo; the width cap scales proportionally.
+- **Long logo URLs (#230)** — the Logo URL Override now accepts URLs of any length (new long-text storage supersedes the platform Url field's hard 255-character cap). Long CDN and Salesforce Files delivery links fit.
+
+### Fixed
+
+- **Logo controls disappeared in Full custom HTML mode (#232)** — Brand Color, Logo URL Override, and the asset picker now stay visible in both layout modes (they feed `{BrandColor}`/`{LogoUrl}`); footer text and logo height remain layout-mode-specific.
+
+New fields: `Logo_Url_Extended__c`, `Logo_Asset_Key__c`, `Logo_Height__c` on `DocGen_Email_Template__c` (FLS in DocGen permission sets). No new restricted-picklist values on existing objects — no manual upgrade steps.
+
 ## v3.31.0 — Signature lifecycle controls + completed-document delivery + Excel tables
 
 E-signature grows the controls customers kept asking for: pick how long signing links live (a week, two months — not a fixed 48 hours), schedule as many reminders as you want, manage sent requests (view / resend / revoke) right from the record, and every party automatically receives the finalized, signed PDF attached to their completion email. Excel templates graduate to real child-record tables.

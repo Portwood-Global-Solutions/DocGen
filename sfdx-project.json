@@ -1,15 +1,15 @@
 {
     "packageDirectories": [
         {
-            "versionName": "v3.31.0 \u2014 Signature lifecycle (expiration, reminders, request actions, attached signed PDF) + Excel tables",
-            "versionNumber": "3.31.0.NEXT",
-            "ancestorId": "04tVx000000qERtIAM",
+            "versionName": "v3.32.0 \u2014 Email branding: Salesforce Files images, asset tags, logo size control",
+            "versionNumber": "3.32.0.NEXT",
+            "ancestorId": "04tVx000000qZuXIAU",
             "path": "force-app",
             "default": true,
             "definitionFile": "config/build-def.json",
             "postInstallScript": "DocGenEmailTemplateInstall",
             "package": "Portwood DocGen Managed",
-            "versionDescription": "Portwood DocGen generates polished PDFs and Word documents from any Salesforce record, with built-in e-signatures. v3.31 puts you in control of the signing lifecycle: choose how long signing links stay valid, schedule multiple automatic reminders, and resend or revoke sent requests in one click. When everyone has signed, all parties automatically receive the finalized signed PDF attached to their completion email. Excel templates now build real child-record tables. 100% native Salesforce \u2014 no external services or callouts. Free for all users."
+            "versionDescription": "Portwood DocGen generates polished PDFs and Word documents from any Salesforce record, with built-in e-signatures. v3.32 lets you host your email logo \u2014 and any email image \u2014 right in Salesforce Files: link a Shared Asset once and every email stays current when you swap the image, no external hosting needed. Plus logo size control and unlimited-length image URLs. 100% native Salesforce \u2014 no external services or callouts. Free for all users."
         }
     ],
     "name": "Portwood DocGen",

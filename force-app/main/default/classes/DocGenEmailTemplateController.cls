@@ -231,7 +231,8 @@ public with sharing class DocGenEmailTemplateController {
         Set<String> keys = new Set<String>();
         Matcher m = Pattern.compile('\\{%asset:([^}]+)\\}').matcher(bodyHtml);
         while (m.find()) {
-            String key = DocGenAssetKeyHandler.normalizeKey(m.group(1));
+            String rawKey = m.group(1).contains(':') ? m.group(1).substringBefore(':') : m.group(1);
+            String key = DocGenAssetKeyHandler.normalizeKey(rawKey);
             if (String.isNotBlank(key)) {
                 keys.add(key);
             }

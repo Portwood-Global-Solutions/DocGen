@@ -524,7 +524,10 @@ global with sharing class DocGenEmailTemplateService {
         Integer cursor = 0;
         while (m.find()) {
             result += body.substring(cursor, m.start());
-            String url = resolveAssetPublicUrlByKey(m.group(1));
+            // Tolerate the document-template size suffix ({%asset:logo:200x100}) —
+            // emails size via the author's own CSS, so only the key matters.
+            String rawKey = m.group(1).contains(':') ? m.group(1).substringBefore(':') : m.group(1);
+            String url = resolveAssetPublicUrlByKey(rawKey);
             if (String.isBlank(url)) {
                 System.debug(LoggingLevel.WARN, 'DocGen: email asset tag unresolved (key=' + m.group(1) + ')');
             } else {
