@@ -10089,4 +10089,105 @@ private class DocGenMiscTests {
             'Date field must render the same calendar day, not shift back one (timezone off-by-one bug)'
         );
     }
+
+    /**
+     * Builds the child-loop data map shape the retriever produces:
+     * relationship name → {records: [...], totalSize: n}.
+     */
+    private static Map<String, Object> excelLoopData(List<Map<String, Object>> contacts) {
+        return new Map<String, Object>{
+            'Name' => 'Acme Corp',
+            'Contacts' => new Map<String, Object>{ 'records' => contacts, 'totalSize' => contacts.size() }
+        };
+    }
+
+    @IsTest
+    static void testExcelRowLoopExpandsVertically() {
+        // A child loop spanning cells in one worksheet row ({#Contacts}{FirstName}
+        // in A2, {LastName}{/Contacts} in B2) must clone the whole <row> per record
+        // and renumber rows/cell refs so Excel doesn't flag duplicates as corruption.
+        String xml =
+            '<worksheet><dimension ref="A1:B2"/><sheetData>' +
+            '<row r="1"><c r="A1" t="inlineStr"><is><t>{Name}</t></is></c></row>' +
+            '<row r="2"><c r="A2" t="inlineStr"><is><t>{#Contacts}{FirstName}</t></is></c>' +
+            '<c r="B2" t="inlineStr"><is><t>{LastName}{/Contacts}</t></is></c></row>' +
+            '</sheetData></worksheet>';
+        Map<String, Object> data = excelLoopData(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{ 'FirstName' => 'Alice', 'LastName' => 'Adams' },
+                new Map<String, Object>{ 'FirstName' => 'Bob', 'LastName' => 'Brown' },
+                new Map<String, Object>{ 'FirstName' => 'Cara', 'LastName' => 'Clark' }
+            }
+        );
+
+        String result = DocGenService.renumberExcelRows(DocGenService.processXmlForTest(xml, data, 'Excel'));
+
+        System.assertEquals(4, result.countMatches('<row '), 'Header row + one row per contact');
+        System.assert(
+            result.contains(
+                '<row r="2"><c r="A2" t="inlineStr"><is><t>Alice</t></is></c>' +
+                '<c r="B2" t="inlineStr"><is><t>Adams</t></is></c></row>'
+            ),
+            'First clone keeps the authored row position: ' + result
+        );
+        System.assert(
+            result.contains('<row r="3"><c r="A3"') && result.contains('<is><t>Bob</t>'),
+            'Second clone renumbered to row 3: ' + result
+        );
+        System.assert(
+            result.contains('<row r="4"><c r="A4"') && result.contains('<is><t>Cara</t>'),
+            'Third clone renumbered to row 4: ' + result
+        );
+        System.assert(result.contains('<dimension ref="A1:B4"/>'), 'Dimension extended to last row: ' + result);
+        System.assert(!result.contains('{#') && !result.contains('{/'), 'No leaked loop tags: ' + result);
+    }
+
+    @IsTest
+    static void testExcelRowLoopRenumberPreservesAuthoredGaps() {
+        // Rows after the loop shift down by the inserted count, but authored blank
+        // gaps between rows must survive (a footer at row 5 with rows 3-4 blank
+        // stays 2 blank rows below the table).
+        String xml =
+            '<worksheet><sheetData>' +
+            '<row r="1"><c r="A1" t="inlineStr"><is><t>Hdr</t></is></c></row>' +
+            '<row r="2"><c r="A2" t="inlineStr"><is><t>{#Contacts}{FirstName}{/Contacts}</t></is></c></row>' +
+            '<row r="5"><c r="A5" t="inlineStr"><is><t>Footer</t></is></c></row>' +
+            '</sheetData></worksheet>';
+        Map<String, Object> data = excelLoopData(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{ 'FirstName' => 'Alice' },
+                new Map<String, Object>{ 'FirstName' => 'Bob' }
+            }
+        );
+
+        String result = DocGenService.renumberExcelRows(DocGenService.processXmlForTest(xml, data, 'Excel'));
+
+        System.assert(result.contains('<row r="2"><c r="A2"') && result.contains('<is><t>Alice</t>'), result);
+        System.assert(result.contains('<row r="3"><c r="A3"') && result.contains('<is><t>Bob</t>'), result);
+        System.assert(
+            result.contains('<row r="6"><c r="A6" t="inlineStr"><is><t>Footer</t></is></c></row>'),
+            'Footer shifted down by 1 inserted row, keeping its 2-row authored gap: ' + result
+        );
+    }
+
+    @IsTest
+    static void testExcelRowLoopEmptyListDropsRow() {
+        // Zero child records: the loop row disappears entirely and later rows
+        // keep their authored positions (no upward shift).
+        String xml =
+            '<worksheet><sheetData>' +
+            '<row r="1"><c r="A1" t="inlineStr"><is><t>Hdr</t></is></c></row>' +
+            '<row r="2"><c r="A2" t="inlineStr"><is><t>{#Contacts}{FirstName}{/Contacts}</t></is></c></row>' +
+            '<row r="3"><c r="A3" t="inlineStr"><is><t>Footer</t></is></c></row>' +
+            '</sheetData></worksheet>';
+        Map<String, Object> data = excelLoopData(new List<Map<String, Object>>());
+
+        String result = DocGenService.renumberExcelRows(DocGenService.processXmlForTest(xml, data, 'Excel'));
+
+        System.assertEquals(2, result.countMatches('<row '), 'Loop row dropped: ' + result);
+        System.assert(
+            result.contains('<row r="3"><c r="A3" t="inlineStr"><is><t>Footer</t></is></c></row>'),
+            'Footer keeps its authored position: ' + result
+        );
+    }
 }

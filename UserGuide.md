@@ -2942,7 +2942,19 @@ The signing page runs as a guest user, which the platform restricts pretty heavi
 
 ### 14.9 Excel templates — alpha limitations
 
-Excel (`.xlsx`) templates handle plain field tags, parent lookups, basic loops, and format suffixes. Not yet supported in Excel output: **images** (`{%…}` tags are removed cleanly), **charts** (`{Chart:…}` renders a text placeholder), **shared assets** (tag removed), and **rich-text fields** (may carry Word-style formatting artifacts). Use Word or HTML templates when you need those.
+Excel (`.xlsx`) templates handle plain field tags, parent lookups, child-record loops, and format suffixes.
+
+**Child-record tables.** A loop that spans cells in a single worksheet row expands **down** — the row is cloned once per child record, and rows below the table shift down automatically. Put the opening tag (with the first column's field) in the leftmost cell and close the loop in the last column's cell:
+
+| Cell | Contents                 |
+| ---- | ------------------------ |
+| `A2` | `{#Contacts}{FirstName}` |
+| `B2` | `{LastName}`             |
+| `C2` | `{Email}{/Contacts}`     |
+
+With 3 contacts, rows 2–4 each carry one contact's `FirstName` / `LastName` / `Email` across columns A–C. Keep the loop as the only tagged region in its row — a second loop in the same row falls back to in-cell repetition. If the relationship returns no records, the row is removed.
+
+Not yet supported in Excel output: **images** (`{%…}` tags are removed cleanly), **charts** (`{Chart:…}` renders a text placeholder), **shared assets** (tag removed), and **rich-text fields** (may carry Word-style formatting artifacts). Use Word or HTML templates when you need those.
 
 ---
 
