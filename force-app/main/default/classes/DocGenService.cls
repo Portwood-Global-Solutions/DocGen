@@ -761,10 +761,22 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 xml = inlineSharedStrings(xml, sharedStrings);
                 currentEntryName = sheetName;
                 xml = processXml(xml, recordDataMap);
+                // Loop expansion clones <row> elements with duplicate indices/refs;
+                // reassign them so Excel doesn't flag the sheet as corrupt.
+                xml = renumberExcelRows(xml);
                 mr.processedXmlEntries.put(sheetName, xml);
             }
-            // Remove sharedStrings.xml from passthrough — cells are now inline
-            mr.passthroughEntries.remove('xl/sharedStrings.xml');
+            // Cells are now inline, but workbook.xml.rels and [Content_Types].xml
+            // still reference the sharedStrings part — removing it outright leaves a
+            // dangling reference that strict readers (openpyxl, POI) reject and Excel
+            // silently repairs. Ship an empty table instead so every reference stays valid.
+            mr.passthroughEntries.put(
+                'xl/sharedStrings.xml',
+                Blob.valueOf(
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"/>'
+                )
+            );
         }
 
         // PowerPoint post-process: convert {%}-emitted DGPIC markers into real
@@ -3857,6 +3869,41 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                             }
                         }
 
+                        // Excel worksheet <row> container: mirror the DOCX <w:tr> auto-expand
+                        // for spreadsheet rows so a loop spanning cells in one row
+                        // ({#Contacts}{FirstName} in A1, {LastName}{/Contacts} in B1) clones
+                        // the whole row per record. Gated on Excel — <row> only exists in
+                        // spreadsheetml. Cloned rows carry duplicate r indices and cell refs
+                        // (Excel treats duplicates as corruption); renumberExcelRows() rewrites
+                        // them after the merge pass.
+                        if (currentTemplateType == 'Excel' && !isIfConditional) {
+                            Integer xlRowStart = lastIndexOfTagStart(xml, 'row', cursor);
+                            if (xlRowStart != -1) {
+                                Integer xlRowEnd = xml.indexOf('</row>', xlRowStart);
+                                Boolean xlRowClosedBeforeCursor = xml.substring(xlRowStart, cursor).contains('</row>');
+                                if (!xlRowClosedBeforeCursor && xlRowEnd != -1 && xlRowEnd > closeTagEnd) {
+                                    Integer xlRowFullEnd = xlRowEnd + 6; // </row>
+                                    // Same sibling guard as <w:tr>: only expand when this section
+                                    // is the row's sole tagged region.
+                                    String xlBefore = xml.substring(xlRowStart, cursor);
+                                    String xlAfter = xml.substring(closeTagEnd + 1, xlRowFullEnd);
+                                    Boolean xlHasSibling =
+                                        xlBefore.contains('{#') ||
+                                        xlBefore.contains('{^') ||
+                                        xlBefore.contains('{/') ||
+                                        xlAfter.contains('{#') ||
+                                        xlAfter.contains('{^') ||
+                                        xlAfter.contains('{/');
+                                    if (!xlHasSibling) {
+                                        if (chosenContainerStart == -1 || xlRowStart > chosenContainerStart) {
+                                            chosenContainerStart = xlRowStart;
+                                            chosenContainerEnd = xlRowFullEnd;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         if (chosenContainerStart != -1 && chosenContainerEnd != -1) {
                             contentStart = chosenContainerStart;
                             contentEnd = chosenContainerEnd;
@@ -5048,6 +5095,103 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // Not a shared string cell — pass through
             result += cellXml;
             cursor = cEnd + 4;
+        }
+
+        return result;
+    }
+
+    /**
+     * Post-merge row renumbering for Excel worksheets. Loop expansion clones
+     * <row> elements verbatim, so an expanded sheet carries duplicate row
+     * indices (three rows all declaring r="2") and duplicate cell refs
+     * (r="A2" in each clone) — Excel flags duplicate refs as corruption.
+     * Walks sheetData in document order reassigning row numbers: original
+     * rows keep their position (authored gaps preserved), clones push every
+     * subsequent row down. Cell refs inside each row are rewritten to
+     * <column letters><new row number>, and the <dimension> end row is
+     * extended to the last assigned row.
+     */
+    @TestVisible
+    private static String renumberExcelRows(String xml) {
+        Integer sheetDataStart = xml.indexOf('<sheetData');
+        if (sheetDataStart == -1) {
+            return xml;
+        }
+        String result = xml.substring(0, sheetDataStart);
+        Integer cursor = sheetDataStart;
+        Integer lastAssigned = 0;
+        Integer delta = 0;
+        Pattern rowRefPattern = Pattern.compile('(<row[^>]*\\br=")(\\d+)(")');
+        Pattern cellRefPattern = Pattern.compile('(<c[^>]*\\br=")([A-Z]+)(\\d+)(")');
+
+        while (cursor < xml.length()) {
+            Integer rowStart = xml.indexOf('<row', cursor);
+            if (rowStart == -1) {
+                result += xml.substring(cursor);
+                break;
+            }
+            Integer rowEnd = xml.indexOf('</row>', rowStart);
+            Integer rowSelfClose = xml.indexOf('/>', rowStart);
+            Integer rowOpenEnd = xml.indexOf('>', rowStart);
+            Boolean isSelfClosing = rowSelfClose != -1 && rowSelfClose + 1 == rowOpenEnd;
+            Integer rowFullEnd = isSelfClosing ? rowOpenEnd + 1 : (rowEnd == -1 ? -1 : rowEnd + 6);
+            if (rowFullEnd == -1) {
+                result += xml.substring(cursor);
+                break;
+            }
+            result += xml.substring(cursor, rowStart);
+            String rowXml = xml.substring(rowStart, rowFullEnd);
+
+            // Declared row index (r attribute is optional per OOXML spec)
+            Matcher rowMatcher = rowRefPattern.matcher(rowXml);
+            Integer newRow;
+            if (rowMatcher.find()) {
+                Integer declaredRow = Integer.valueOf(rowMatcher.group(2));
+                newRow = declaredRow + delta;
+                if (newRow <= lastAssigned) {
+                    // Duplicate/overlap from loop expansion — shift down
+                    newRow = lastAssigned + 1;
+                    delta = newRow - declaredRow;
+                }
+                rowXml =
+                    rowXml.substring(0, rowMatcher.start()) +
+                    rowMatcher.group(1) +
+                    newRow +
+                    rowMatcher.group(3) +
+                    rowXml.substring(rowMatcher.end());
+            } else {
+                newRow = lastAssigned + 1;
+            }
+            lastAssigned = newRow;
+
+            // Rewrite cell refs to the assigned row, preserving column letters
+            Matcher cellMatcher = cellRefPattern.matcher(rowXml);
+            String rebuilt = '';
+            Integer rowCursor = 0;
+            while (cellMatcher.find()) {
+                rebuilt += rowXml.substring(rowCursor, cellMatcher.start());
+                rebuilt += cellMatcher.group(1) + cellMatcher.group(2) + newRow + cellMatcher.group(4);
+                rowCursor = cellMatcher.end();
+            }
+            rebuilt += rowXml.substring(rowCursor);
+
+            result += rebuilt;
+            cursor = rowFullEnd;
+        }
+
+        // Extend the <dimension> end row to the last assigned row so readers
+        // that trust the hint see the expanded extent.
+        if (lastAssigned > 0) {
+            Pattern dimPattern = Pattern.compile('(<dimension ref="[A-Z]+\\d+:[A-Z]+)(\\d+)(")');
+            Matcher dimMatcher = dimPattern.matcher(result);
+            if (dimMatcher.find() && Integer.valueOf(dimMatcher.group(2)) < lastAssigned) {
+                result =
+                    result.substring(0, dimMatcher.start()) +
+                    dimMatcher.group(1) +
+                    lastAssigned +
+                    dimMatcher.group(3) +
+                    result.substring(dimMatcher.end());
+            }
         }
 
         return result;
