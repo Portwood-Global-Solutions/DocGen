@@ -2390,11 +2390,11 @@ Any signer can decline with an optional reason. On decline:
 
 Before signatures work in production, complete the checklist in **Signature Settings**:
 
-- ✅ Site URL configured (Experience Cloud Site or Salesforce Site)
+- ✅ Site URL configured (Experience Cloud Site or Salesforce Site) — paste the site's **base URL only, with no trailing `/s`**. Copying an Experience Cloud URL from the browser or from Digital Experiences setup often includes a trailing `/s` (e.g. `https://yourdomain.my.site.com/signing/s`); with it, every signing link opens to an **"Invalid page"** error (§15.10). Custom (branded) domains work fine once the `/s` is removed.
 - ✅ Active Salesforce Site exists
 - ✅ Org-Wide Email Address configured + verified (green checkmark)
 - ✅ Guest permission set assigned to the Site's guest user
-- ✅ Signature VF pages deployed (`DocGenSignature`, `DocGenSignaturePdf`, `DocGenVerify`, `DocGenSign`)
+- ✅ Signature VF pages deployed (`DocGenSignature`, `DocGenSignaturePdf`, `DocGenVerify`, `DocGenSign`) — and **added to the site itself**. If you switch which site serves signing (e.g. migrating from a classic Salesforce Site to an Experience Cloud site), re-add the pages to the new site; they don't carry over.
 - ✅ **Experience Cloud sites only:** guest file access enabled — your site → **Workspaces → Administration → Preferences** → check **"Let guest users view asset files, library files, and CMS content available to the site."** Without it, guest signers get **"Document unavailable"** even though everything else is configured correctly (§15.9). Classic Salesforce Sites (`*.my.salesforce-sites.com`) don't need this.
 
 The Settings panel shows each check as pass/fail with a fix link.
@@ -3059,7 +3059,23 @@ Notes:
 - It's not a content problem: the signing document is shared with the guest correctly (on the Signature Request you'll see it with **"customer access" enabled**), but the Experience Cloud site itself won't deliver the file to the guest until this preference is on.
 - If it still fails after enabling the preference, confirm the site's guest user has the **DocGen_Guest_Signature** permission set assigned (see [§10 — Assigning the guest permission set](#assigning-the-guest-permission-set)) and that a verified Org-Wide Email Address exists.
 
-### 15.10 Still stuck?
+### 15.10 Signing link opens to "Invalid page" on an Experience Cloud site
+
+The signing email sends and the request is created, but clicking the signing link shows Salesforce's **"Invalid page"** error instead of the signing page. Seen most often when migrating signing from a classic Salesforce Site to an **Experience Cloud** site.
+
+Check these in order:
+
+1. **Trailing `/s` on the Site URL** — the most common cause. Open **Signature Settings** and look at the Site URL. Copying an Experience Cloud site URL from the browser or from Digital Experiences setup usually appends `/s` (e.g. `https://yourdomain.my.site.com/signing/s`). DocGen appends the page path itself, so the `/s` breaks every generated link. Remove it, save, and send a **fresh** request. This applies to custom (branded) domains too — they work fine once the `/s` is gone.
+2. **VF pages not on the new site** — the signature Visualforce pages (`DocGenSignature`, `DocGenSignaturePdf`, `DocGenVerify`, `DocGenSign`) must be added to the site currently serving signing. If you previously removed them (or added them to a different site), re-add them.
+3. **Guest permission set** — confirm the new site's guest user has **DocGen Guest Signature** assigned (§10.12). Each site has its own guest user; assignments don't carry over between sites.
+
+Notes:
+
+- Both Aura and LWR Experience Cloud sites are supported.
+- You do **not** need to add domains under **Setup → Trusted Domains for Inline Frames** for signing to work (tested; not required when standard clickjack protection settings are in place).
+- If the page loads but the document preview is blank, that's a different problem — see §15.9.
+
+### 15.11 Still stuck?
 
 Check the **DocGen Error Logs** tab first (§13.2.1) — most generation, bulk, and signature failures leave a log record with the failing context, which beats guessing.
 
