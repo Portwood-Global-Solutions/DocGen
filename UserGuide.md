@@ -297,6 +297,8 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 6. Choose the default **output format** (PDF or the native format).
 7. Save.
 
+![The + New Template modal with template type, base object, and output format selections visible](assets/media/05-templates/create-template-modal.png)
+
 > ✅ **Checkpoint:** You'll know it worked when the new template appears in the My Templates list and Generate Sample produces a document from your test record. If not → [§15](#15-troubleshooting).
 
 **Output formats by template type:**
@@ -482,6 +484,8 @@ For single-file uploads (`.html` / `.htm`), DocGen scans for inline `<img src="d
 #### 5.7.3 CSS rules — what works, what doesn't, and an LLM prompt
 
 PDF rendering goes through Salesforce's `Blob.toPdf()`, which is a Flying Saucer engine under the hood. **Flying Saucer is essentially a CSS 2.1 renderer with a small CSS 3 subset.** Modern layout primitives are silently ignored — the page still renders, but your layout collapses to default block flow. The result is a PDF that "looks wrong" without any error message.
+
+![Composite: the same flex-based header rendered side by side in Chrome (logo left, date right) and in the DocGen PDF (both stacked vertically, layout collapsed)](assets/media/05-templates/flex-browser-vs-pdf.png)
 
 This section gives you the rules and a paste-ready prompt for ChatGPT / Claude / Gemini so you can have an LLM produce templates that render correctly the first time.
 
@@ -898,6 +902,8 @@ HTML templates work with every generation path: single-record, bulk (individual 
 - **"Your company doesn't support the following file types: .zip"** — DocGen's LWC extracts the zip client-side and never uploads the zip itself, so this org-level File Upload Security error shouldn't appear in normal use. If you see it, hard-refresh the page (Cmd+Shift+R / Ctrl+Shift+R) to clear any cached LWC bundle.
 - **Images show as broken squares in the PDF** — `Blob.toPdf` can only fetch images via relative `/sfc/` URLs; it can't reach arbitrary HTTPS URLs (no session ID). Make sure the image source is in the zip, a data URI in the HTML, a `{%Image:N}` tag, or a `{%FieldName}` pointing at a real ContentVersion.
 
+![Generated PDF page where each image renders as an empty broken-image square instead of the picture](assets/media/05-templates/pdf-broken-image-squares.png)
+
 - **Page numbers appearing without a configured header/footer** — your template's source HTML already has `@page { @bottom-center { content: counter(page) ... } }`. Google Docs' Web Page export sometimes includes this automatically. Either remove the `@page` block from the HTML body before upload, or accept it (many users actually want page numbers).
 - **Merge tag shows up literally in the PDF (e.g. the text "{Name}")** — the tag didn't resolve. Check the field name is correct and in your Query Config, and that the WYSIWYG editor didn't HTML-encode the braces (DocGen decodes `&#123;` and `&#125;` automatically, but non-standard editors could still trip this).
 
@@ -1198,6 +1204,8 @@ In the DocGen app → New Template:
 4. **Step 2** lands directly on the connected-provider view. Compose your template body using the merge tags as you would for any other template.
 5. **Step 3** — review and save.
 
+![New Template wizard Step 1 with Apex Class (Data Provider) selected and the provider class picker showing MyAccountBriefProvider](assets/media/06-query-builder/apex-provider-picker.png)
+
 > ✅ **Checkpoint:** You'll know it worked when the wizard validates the class and shows the merge tags returned by `getFieldNames()` as pills. If not → [§15](#15-troubleshooting).
 
 Behind the scenes the template's `Query_Config__c` becomes `{"v":4,"provider":"MyAccountBriefProvider"}`. You can also flip an existing SOQL-backed template to v4 from the **Edit modal → Query Configuration → Use Apex data provider** link.
@@ -1249,6 +1257,8 @@ Every tag DocGen recognizes. Tags are case-insensitive for functions (`{SUM:...}
 {Account.Name}            Parent lookup
 {Owner.Profile.Name}      Multi-level lookup (any depth)
 ```
+
+![Side-by-side: a Word template paragraph containing field merge tags, and the rendered PDF with real Account values in their place](assets/media/07-merge-tags/field-merge-template-vs-output.png)
 
 Null/missing fields render as empty string — no error, no placeholder.
 
@@ -1349,6 +1359,8 @@ Repeat a block for each child record.
 {/Contacts}
 ```
 
+![Side-by-side: a one-row Word table containing loop tags, and the rendered PDF where the row has expanded to one row per line item](assets/media/07-merge-tags/loop-table-template-vs-output.png)
+
 **Container auto-expansion.** If the loop tags sit inside a table row or a bulleted/numbered list paragraph, DocGen detects it and repeats the **entire row/paragraph** instead of just the inner content. This is how invoice line-item tables work — drop `{#OpportunityLineItems}` and `{/OpportunityLineItems}` anywhere inside the row and every line item gets its own row automatically.
 
 **Repeating the column header (`{RepeatHeader}`).** Add the text `{RepeatHeader}` anywhere inside the header row (the row with your column labels) to mark it as a repeating header. DocGen strips the marker and groups that row as the table's `<thead>`, which reprints at the top of the table and at each section break in very large (giant-query) documents. Place it once, in the header row only:
@@ -1430,6 +1442,8 @@ Supports `>`, `<`, `>=`, `<=`, `=` (or `==`), `!=`. Values can be field refs, qu
 ```
 
 String comparisons are case-sensitive.
+
+![Side-by-side: a template with an IF/else block, and two rendered PDFs showing each branch against different records](assets/media/07-merge-tags/conditional-template-vs-output.png)
 
 #### AND / OR / NOT
 
@@ -1530,6 +1544,8 @@ Grand totals across a child relationship. Works in sync and giant-query paths.
 {SUM:Lines.Amount:currency:auto=CustomerCurrency__c}  uses the parent record's currency
 ```
 
+![Side-by-side: a template totals row using COUNT and SUM tags, and the rendered PDF invoice footer with formatted totals](assets/media/07-merge-tags/aggregate-template-vs-output.png)
+
 All five functions support any format suffix (`currency`, `number`, `percent`, custom patterns), including `currency:auto` (see [Auto-detecting the currency from the record](#auto-detecting-the-currency-from-the-record)).
 
 **Aggregate fields don't need to be rendered columns** — you can aggregate `UnitPrice` even if your loop table only shows `Product2.Name` and `Quantity`. The resolver validates field names against the child object's schema.
@@ -1598,6 +1614,14 @@ A single tag that expands into a complete chart image at render time. **Tag synt
 ```
 
 Each of the nine worked-example tags above renders as follows (all captured from the same Commute Survey Demo PDF so bucket values match across styles):
+
+![Rendered bar chart: horizontal bars per commute mode with count and percent on the right](assets/media/07-merge-tags/chart-style-bar.png)
+
+![Rendered stacked horizontal bar chart: one row per commute mode, segments per location](assets/media/07-merge-tags/chart-style-stacked.png)
+
+![Rendered clustered column chart: one cluster per commute mode with a mini-bar per location](assets/media/07-merge-tags/chart-style-clustered.png)
+
+![Rendered pivot cross-tab table: commute-mode rows, location columns, and a Total column](assets/media/07-merge-tags/chart-style-pivot.png)
 
 #### 7.6.1 Complete modifier reference
 
@@ -1873,6 +1897,8 @@ Reference Word template: `docs/ChartEngineShowcase.docx` (all 8 chart styles, on
 
 Inside a `{#Relationship}` loop, `{%Image:N}` scopes to the iterating record's images — ideal for inspection reports, real estate listings, product catalogs. Out-of-range indexes render empty silently.
 
+![Generated inspection-report PDF page showing two record-attached photos rendered at different size tokens, next to the record's Files list they came from](assets/media/07-merge-tags/image-tags-rendered-pdf.png)
+
 **Option 2 — image field (advanced).** When you need to pick a specific image that isn't the Nth attachment, store the ContentVersion ID (starts with `068`) in a text field and reference it:
 
 ```
@@ -1985,6 +2011,8 @@ Barcodes render in Word **and** HTML templates (HTML support added in v3.15) acr
 
 QR codes are generated natively in Salesforce with Level Q error correction and support values up to 600 characters. For printed or mailed documents, short URLs or tokens under 120 characters are recommended for 1 inch square QR codes.
 
+![Generated PDF showing a Code 128 barcode rendered from an order number and a square QR code rendered from a URL](assets/media/07-merge-tags/barcode-qr-rendered-pdf.png)
+
 ### 7.9 Signatures
 
 See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:
@@ -2072,6 +2100,8 @@ Two ways to add a full-page watermark or background image to your PDF output:
 - **No rotation.** Word's 315° diagonal default isn't honored. If you need a rotated watermark, save the image pre-rotated as a PNG.
 
 Both options use the same rendering pipeline — `@page { background-image: url(...) }` extending edge-to-edge across the full page bleed.
+
+![Generated PDF page with a faded diagonal DRAFT watermark image extending edge-to-edge behind the document text](assets/media/07-merge-tags/watermark-rendered-pdf.png)
 
 **Pre-resize your watermark image to the page dimensions at 96 DPI** (the resolution Flying Saucer renders at — NOT the standard 72 DPI you might assume from PDF specs):
 
@@ -3211,6 +3241,10 @@ Workaround: if you need custom fonts (branded typefaces, barcode fonts, decorati
 
 Here's what the substitution looks like in practice:
 
+![Word template using a custom branded typeface, before PDF generation](assets/media/14-limits/custom-font-docx-before.png)
+
+![The same content generated as PDF, with the custom font silently substituted by Helvetica](assets/media/14-limits/custom-font-pdf-after.png)
+
 ### 14.3 PowerPoint → PDF not supported
 
 Salesforce's PDF engine can't render PPTX. PowerPoint templates can only output PPTX.
@@ -3307,6 +3341,8 @@ You should almost never see this — DocGen estimates dataset size up front and 
 
 ### 15.4 Merge tags render as literal text (e.g., `{Name}` appears in the output)
 
+![Generated PDF where the merge tag {Name} appears verbatim in the output instead of the record's value](assets/media/15-troubleshooting/literal-merge-tags-output.png)
+
 Usually:
 
 - The field isn't in the query config — add it.
@@ -3328,6 +3364,8 @@ Check in this order:
 8. **`Email_Status__c` field** on the signature request — shows the exact per-signer error.
 
 ### 15.6 PDF image is broken / doesn't render
+
+![Generated PDF showing empty broken-image squares where record images should appear](assets/media/15-troubleshooting/broken-image-squares-pdf.png)
 
 For ContentVersion-backed images:
 
