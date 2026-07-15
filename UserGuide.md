@@ -6,6 +6,9 @@ PowerPoint and Excel templates are also supported as **alpha-stage** formats —
 
 [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Support](https://portwood.dev/support)
 
+> **How to use this guide**
+> Icons mark the interactive layer added throughout: ✅ a checkpoint — an observable result that confirms you're on track before moving on · 🧪 a short try-it exercise to run in your own org or sandbox · ⏱️ an estimated time for the section. Collapsed `<details>` folds hide advanced or edge-case material — expand them only when you need it; nothing a first-time reader must see is ever folded.
+
 ---
 
 ## Table of contents
@@ -30,11 +33,15 @@ PowerPoint and Excel templates are also supported as **alpha-stage** formats —
 
 ## 1. Five-minute quick start
 
+> ⏱️ **~5 min** · 🎯 **After this section you can:** generate a merged PDF from any Account record in your org.
+
 The fastest path from a fresh install to your first generated PDF. Every step takes < 1 minute.
 
 ### Step 1 — Install
 
 Pick the install link above for your environment. Production for live orgs, Sandbox for sandboxes/scratch orgs. Click **Install for Admins Only**, accept third-party access, and wait for the green checkmark.
+
+![Salesforce package install confirmation screen with the green checkmark and "Installation Complete" message](assets/media/01-quickstart/install-confirm.png)
 
 ### Step 2 — Assign yourself the admin permission set
 
@@ -42,7 +49,11 @@ Pick the install link above for your environment. Production for live orgs, Sand
 2. Click **DocGen Admin** → **Manage Assignments** → **Add Assignments**
 3. Check the box next to your user → **Next** → **Assign**
 
+![Animated walkthrough of assigning the DocGen Admin permission set from Setup](assets/media/01-quickstart/assign-admin-permset.gif)
+
 You can now create templates and generate documents.
+
+> ✅ **Checkpoint:** You'll know it worked when your name appears in the **Manage Assignments** list for **DocGen Admin**. If not → [§15](#15-troubleshooting).
 
 ### Step 3 — Enable the PDF rendering release update
 
@@ -55,6 +66,8 @@ DocGen renders PDFs through Salesforce's Visualforce PDF service, which sits beh
 One-time. Applies to the whole org.
 
 If the release update page looks like it might already be enabled but the button is grayed out and says **Enable Test Run**, it is **not enabled** in that org. When the update is active, Salesforce shows **Disable Test Run**. If you cannot enable it yourself, open a Salesforce Support case and ask Salesforce to enable the Visualforce PDF Rendering Service for `Blob.toPdf()` invocations in the affected org. A common symptom is raw CSS appearing at the top of generated PDFs.
+
+> ✅ **Checkpoint:** You'll know it worked when the release update page shows **Disable Test Run** (not a grayed-out **Enable Test Run**). If not → [§15](#15-troubleshooting).
 
 ### Step 4 — Make your first template
 
@@ -80,6 +93,12 @@ If the release update page looks like it might already be enabled but the button
 5. In the query builder, add `Industry`, `AnnualRevenue`, and `Owner.Name` to the selected fields.
 6. Click **Save**.
 
+![The + New Template modal in the Command Hub filled in for the Account example](assets/media/01-quickstart/new-template-modal.png)
+
+![The query builder with Industry, AnnualRevenue, and Owner.Name in the selected fields list](assets/media/01-quickstart/query-builder-selected-fields.png)
+
+> ✅ **Checkpoint:** You'll know it worked when the Save success toast appears and **My First Account Brief** shows in the Command Hub template list. If not → [§15](#15-troubleshooting).
+
 ### Step 5 — Generate
 
 1. Open any Account record.
@@ -87,7 +106,18 @@ If the release update page looks like it might already be enabled but the button
 3. Pick **My First Account Brief** → click **Generate**.
 4. The PDF appears in the record's **Files** related list, and downloads to your browser.
 
+![Animated demo of picking the template in DocGen Runner and generating the PDF on an Account record](assets/media/01-quickstart/generate-from-record.gif)
+
+> ✅ **Checkpoint:** You'll know it worked when the PDF appears in the record's **Files** related list and downloads to your browser. If not → [§15](#15-troubleshooting).
+
 🎉 **You've now done the full lifecycle.** Real templates layer on richer content — child loops for tables (e.g., line items), images, conditional sections, e-signatures — all using the same merge-tag patterns. The rest of this guide covers each capability with worked examples.
+
+> 🧪 **Try it:** Extend your first template.
+>
+> 1. In the Command Hub, open **My First Account Brief**.
+> 2. Add the line `Phone: {Phone}` to `account-brief.docx` and re-upload it.
+> 3. In the query builder, add `Phone` to the selected fields and click **Save**.
+> 4. Regenerate on the same Account — the phone number now appears in the PDF.
 
 > **Stuck?** The most common first-time issue is the runner not showing on the page layout. Edit the page → drag in the **DocGen Runner** component → save. If you see "Insufficient privileges," confirm Step 2 — the perm set assignment.
 
@@ -95,7 +125,46 @@ If the release update page looks like it might already be enabled but the button
 
 ## 2. What DocGen does
 
+> ⏱️ **~3 min** · 🎯 **After this section you can:** name which template sources, output formats, and launch points fit your use case — and which formats are still alpha.
+
 A native Salesforce document generation engine that turns merge-tag templates into rendered files.
+
+```mermaid
+flowchart LR
+    subgraph SRC["Template sources"]
+        W["Word .docx"]
+        H["HTML / Google Docs / Notion / ChatGPT"]
+        P["PowerPoint .pptx — alpha"]
+        X["Excel .xlsx — alpha"]
+    end
+    ENG["Merge engine — 100% native, honors sharing and FLS"]
+    subgraph OUT["Output formats"]
+        PDF["PDF"]
+        DOCX["DOCX"]
+        PPTX["PPTX — alpha"]
+        XLSX["XLSX — alpha"]
+    end
+    subgraph DEL["Delivery channels"]
+        R["Record page"]
+        B["Bulk Generation tab"]
+        F["Salesforce Flow"]
+        A["Apex"]
+        S["E-signature Sites"]
+    end
+    W --> ENG
+    H --> ENG
+    P --> ENG
+    X --> ENG
+    ENG --> PDF
+    ENG --> DOCX
+    ENG --> PPTX
+    ENG --> XLSX
+    OUT --> R
+    OUT --> B
+    OUT --> F
+    OUT --> A
+    OUT --> S
+```
 
 **Build with:**
 
@@ -139,6 +208,8 @@ A native Salesforce document generation engine that turns merge-tag templates in
 
 ## 3. Install & post-install setup
 
+> ⏱️ **~10 min** · 🎯 **After this section you can:** complete every post-install step — including the one-time picklist fix that unblocks HTML and Excel templates.
+
 ### Install the package
 
 ```bash
@@ -170,9 +241,13 @@ Or use the install links at the top of this guide. The install bundles the merge
 >
 > No data migration needed — existing rows aren't touched. Once both picklists list all four values (Word, PowerPoint, Excel, HTML), the Save flow in the Command Hub works normally for every template type. A future package release will move these picklists to a Global Value Set so this step goes away.
 
+![Object Manager Type picklist detail on DocGen Template showing all four values: Word, PowerPoint, Excel, HTML](assets/media/03-install/type-picklist-values.png)
+
 ---
 
 ## 4. Permission sets
+
+> ⏱️ **~5 min** · 🎯 **After this section you can:** assign the right permission set to admins, end users, and the e-signature site's guest user.
 
 Three permission sets ship with the package. Assign what each user needs.
 
@@ -189,6 +264,8 @@ Three permission sets ship with the package. Assign what each user needs.
 3. Click **Manage Assignments → Add Assignments**
 4. Check the box next to each user → **Next** → **Assign**
 
+![Add Assignments screen for the DocGen Admin permission set with a user row checked](assets/media/04-permissions/manage-assignments.png)
+
 ### Assigning DocGen_Guest_Signature to a Site guest user
 
 Salesforce hides guest users behind several clicks. Full path:
@@ -198,6 +275,8 @@ Salesforce hides guest users behind several clicks. Full path:
 3. From the profile, click **View Users**, then select the e-signature site guest user.
 4. On the user record, scroll to **Permission Set Assignments** and add **DocGen Guest Signature**.
 
+> ✅ **Checkpoint:** You'll know it worked when **DocGen Guest Signature** appears under the guest user's **Permission Set Assignments**. If not → [§15](#15-troubleshooting).
+
 ### Adding custom fields to DocGen objects?
 
 Update all three permission sets in the same change. Missed FLS grants silently break field access for the affected role (signer can't read it, generator can't populate it).
@@ -205,6 +284,8 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 ---
 
 ## 5. Templates
+
+> ⏱️ **~25 min** · 🎯 **After this section you can:** create a template, manage its versions (clone, export, delete), and control exactly who sees it in the picker.
 
 ### 5.1 Creating a template
 
@@ -215,6 +296,8 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 5. Configure the query — which fields, which child relationships (see [§6](#6-query-builder)).
 6. Choose the default **output format** (PDF or the native format).
 7. Save.
+
+> ✅ **Checkpoint:** You'll know it worked when the new template appears in the My Templates list and Generate Sample produces a document from your test record. If not → [§15](#15-troubleshooting).
 
 **Output formats by template type:**
 
@@ -255,12 +338,14 @@ Basic workflow:
 7. Click **Save as New Version**. DocGen saves the field mapping snapshot and prepares a server-ready PDF body for generation.
 8. Later edits to labels, mappings, or checked values can be made directly on the **Fillable Fields** tab with **Save Mapping**.
 
-Important notes while the feature is in testing:
+<details><summary><b>Important notes while the feature is in testing</b> — mapping-vs-body mismatches, browser vs. server roles, and output flattening behavior</summary>
 
 - The mapped field list is based on the PDF structure, not visual text recognition. Use the page, position, and friendly label to make large forms navigable.
 - If DocGen says the mapping does not match the active PDF body, save the PDF as a new template version so the mapping and server-ready body are regenerated together.
 - Browser-side scanning is used only to understand and normalize the PDF. Actual generation happens server-side, including Generate Sample and bulk generation.
 - Fillable fields generally remain fillable/editable in the generated PDF. Flattening output is not the default behavior.
+
+</details>
 
 ### 5.1.1 API Name — a stable key for automation (v3.28+)
 
@@ -287,7 +372,11 @@ Each save creates a new `DocGen_Template_Version__c` record. Only the version ma
 
 **Deleting old versions (v1.92+).** Heavy iteration accumulates versions fast — each save creates the version record plus 5–7 ContentVersions (the body file + pre-decomposed XML parts). DocGen Admin → click into the template → **Versions** tab now exposes a **Delete** button next to each non-active version. Confirm the dialog, and the version record _plus_ its body and pre-decomposed files are cascade-deleted in one transaction. The currently active version can't be deleted — activate a different version first if you need to remove the current one.
 
+![The Versions tab showing a list of template versions with a Delete button next to each non-active version](assets/media/05-templates/versions-tab-delete.png)
+
 ### 5.2.1 Cloning a template (v3.29+)
+
+![The Your Templates row menu open, showing the Clone and Export actions](assets/media/05-templates/template-row-menu.png)
 
 **Your Templates → row menu → Clone** copies everything in one click: the template record (all settings, query config, signer inputs, e-signature defaults), the active version and its file, inline images, the watermark, and saved queries. Image extraction and pre-decomposition re-run automatically on the copy, so it's immediately generation-ready.
 
@@ -297,7 +386,16 @@ The copy is deliberately conservative:
 - Starts **Inactive** and never **Default**, so it stays out of every picker until you flip it on.
 - Gets its own unique API Name derived from the new name (the original's key stays untouched).
 
+![Micro-demo: cloning a template from the row menu and renaming the copy in the editor](assets/media/05-templates/clone-then-rename.gif)
+
 Use it to iterate safely on a production template — clone, edit the copy, verify with Generate Sample, then activate the copy and deactivate the original.
+
+> 🧪 **Try it:** Safe iteration on a live template.
+>
+> 1. In Your Templates, open the row menu on any active template and click **Clone**.
+> 2. Rename the copy and make one small edit (e.g. tweak a heading in the body file).
+> 3. Run **Generate Sample** on the copy and confirm the change.
+> 4. Activate the copy and deactivate the original — the picker now serves your new version, with the old one intact for rollback.
 
 ### 5.2.2 Exporting & importing templates
 
@@ -323,6 +421,8 @@ Use this for compliance-sensitive documents where only one format is allowed (e.
 
 **Active / Inactive (v1.92+).** The simplest visibility control: each template has an **Active** checkbox (defaults to checked on new templates). When unchecked, the template is hidden from the document picker on every record page _while remaining fully editable_ in DocGen Admin. Use this to keep time-locked, seasonal, or work-in-progress templates from cluttering the daily picker without deleting them — the template list view in Admin shows an **Inactive** badge in the Status column so admins can find and re-activate them easily.
 
+![The Admin template list showing the Inactive badge in the Status column next to an unchecked template](assets/media/05-templates/inactive-badge-template-list.png)
+
 Restrict more narrowly which users see a template in their picker:
 
 - **`Required_Permission_Sets__c`** (comma-separated permission-set names): only users with _at least one_ of these permission sets see the template.
@@ -335,11 +435,19 @@ These can be combined. All three must match for the template to appear.
 
 **v3.29+: no sharing setup needed.** The **DocGen User** permission set now includes read-only _View All_ on templates, so every DocGen user can see all active templates in the picker without manual shares, public groups, or sharing rules. Who should see which template is controlled by the visibility features built for exactly that (§5.5): the **Active** flag, **Required Permission Sets**, **Specific Record Ids**, and **Record Filter**. Write access is unchanged — only admins (DocGen Admin) can create or edit templates, and field-level security is still enforced on the merged data.
 
+<details><summary><b>On older versions (≤3.28)</b> — the Private-sharing default and the old workarounds</summary>
+
 On older versions (≤3.28), template records default to Private sharing, so non-owner users saw an empty picker until an admin either shared the templates (manual share, public group, or sharing rule) or set Setup → Sharing Settings → _DocGen Template_ → Default Internal Access = **Public Read Only**. That workaround is no longer necessary after upgrading, but it's harmless to leave in place.
+
+</details>
 
 > **If you were relying on record-level sharing to hide templates from specific users:** that no longer restricts the picker. Move those rules onto **Required Permission Sets** (§5.5) — it's deploy-safe, visible on the template itself, and enforced consistently across the runner, bulk runner, signature sender, and Flow. Tip: the permission set doesn't need to grant anything — an empty "shell" permission set works as a pure membership token (create one per audience, list it on the template, assign it to the group).
 
+<details><summary><b>Keeping templates truly private (record-level sharing)</b> — opt out of the packaged View All when template definitions themselves are sensitive</summary>
+
 **Keeping templates truly private (record-level sharing).** The sharing-based gate still exists — the packaged _View All_ is what bypasses it. If your org requires share-controlled template visibility, don't assign the packaged **DocGen User** permission set; clone its grants into your own permission set _without_ View All on DocGen Template. Those users get the pre-v3.29 behavior: sharing rules, manual shares, and role hierarchy govern their picker. Also note Required Permission Sets hides templates from _pickers_, not from the DocGen Templates object tab — a user with View All can still see that template records exist (names, descriptions, query configs). Use the custom-permset approach if template definitions themselves are sensitive.
+
+</details>
 
 ### 5.7 HTML templates (Google Docs, Notion, any HTML source)
 
@@ -352,9 +460,13 @@ HTML templates let you author in any tool that produces HTML — Google Docs is 
 1. Design the document in Google Docs. Normal formatting — headings, tables, images, colors, fonts.
 2. Add merge tags as plain text: `{Name}`, `{Account.Name}`, `{Amount:currency}`, loops like `{#Contacts}...{/Contacts}`. Full syntax reference in [§7](#7-merge-tag-reference).
 3. **File → Download → Web Page (.html, zipped)**. Google Docs produces a `.zip` with your HTML plus an `images/` folder.
+
 4. In the Command Hub, create a template with **Type = HTML** (Output Format is forced to PDF). Upload the `.zip`.
 5. DocGen unzips the file in your browser, saves each image as a ContentVersion linked to the template, and rewrites the HTML's `<img src="images/...">` references to `/sfc/servlet.shepherd/version/download/<cvId>` URLs that `Blob.toPdf` resolves natively.
+
 6. Click **Save as New Version** — the template is live.
+
+> ✅ **Checkpoint:** You'll know it worked when the upload panel lists every image from your Google Doc and **Save as New Version** completes without errors — then a test generation produces a PDF matching your doc. If not → [§5.7.10](#5710-troubleshooting).
 
 **Why unzip in the browser?** Salesforce's default File Upload Security blocks `.zip` uploads. DocGen's LWC reads zip bytes with a pure-JavaScript reader (native `DecompressionStream` + manual central-directory parse, zero dependencies), extracts just the HTML + images, and uploads those via Apex. The zip itself never becomes a ContentVersion, so the org setting never sees it. Bonus: unzipping client-side keeps Apex heap flat regardless of template size.
 
@@ -627,6 +739,8 @@ A minimal CSS 2.1-clean starting point. Side-by-side header, two-column "for/fro
 
 When an LLM (or a designer) hands you a template using modern CSS, here are the mechanical rewrites:
 
+<details><summary><b>The four mechanical rewrites</b> — flex → table, grid → table, gradient → solid, gap → margin, each as a BEFORE/AFTER pair</summary>
+
 **Flex header → table header**
 
 ```html
@@ -692,6 +806,8 @@ When an LLM (or a designer) hands you a template using modern CSS, here are the 
     margin-bottom: 12px;
 }
 ```
+
+</details>
 
 ##### `@page` rules — don't double-declare
 
@@ -781,6 +897,7 @@ HTML templates work with every generation path: single-record, bulk (individual 
 
 - **"Your company doesn't support the following file types: .zip"** — DocGen's LWC extracts the zip client-side and never uploads the zip itself, so this org-level File Upload Security error shouldn't appear in normal use. If you see it, hard-refresh the page (Cmd+Shift+R / Ctrl+Shift+R) to clear any cached LWC bundle.
 - **Images show as broken squares in the PDF** — `Blob.toPdf` can only fetch images via relative `/sfc/` URLs; it can't reach arbitrary HTTPS URLs (no session ID). Make sure the image source is in the zip, a data URI in the HTML, a `{%Image:N}` tag, or a `{%FieldName}` pointing at a real ContentVersion.
+
 - **Page numbers appearing without a configured header/footer** — your template's source HTML already has `@page { @bottom-center { content: counter(page) ... } }`. Google Docs' Web Page export sometimes includes this automatically. Either remove the `@page` block from the HTML body before upload, or accept it (many users actually want page numbers).
 - **Merge tag shows up literally in the PDF (e.g. the text "{Name}")** — the tag didn't resolve. Check the field name is correct and in your Query Config, and that the WYSIWYG editor didn't HTML-encode the braces (DocGen decodes `&#123;` and `&#125;` automatically, but non-standard editors could still trip this).
 
@@ -806,6 +923,7 @@ Word's display engine reconciles disagreements at render time and shows you a cl
 **Fix — in priority order.**
 
 1. **Click in the table → Table Layout → AutoFit → Fixed Column Width.** This stops Word from recalculating widths on every save. Do this for _every_ table that needs to line up, not just the first one.
+
 2. **Table Properties → Table tab → Preferred width = exact inches (or cm).** Not "Auto", not percentage. A literal measurement.
 3. **Select each column → Table Properties → Column tab → Preferred width = exact inches.** Repeat for every column in every table.
 4. **Build one table first, copy it to make the others.** After step 1–3 on Table 1, delete Tables 2 and 3 entirely, then paste-copy Table 1 below itself to create them. Edit only the cell _contents_ — never the column boundaries.
@@ -863,17 +981,23 @@ For tables to align across the document, the `<w:tblGrid>` blocks of those table
 
 ## 6. Query builder
 
+> ⏱️ **~12 min** · 🎯 **After this section you can:** assemble a multi-object query tree — visually or in JSON — and back a template with an Apex data provider when SOQL can't reach your data.
+
 DocGen supports three query config formats. All three work — pick based on complexity.
 
 ### 6.1 V1 — Legacy flat string
 
 Plain SOQL-like string. Single child relationship only.
 
+<details><summary><b>V1 legacy format details</b> — syntax and how DocGen detects it</summary>
+
 ```
 Name, Industry, (SELECT FirstName, LastName FROM Contacts)
 ```
 
 Detected when the config does NOT start with `{`.
+
+</details>
 
 ### 6.2 V2 — JSON flat (junction support)
 
@@ -900,6 +1024,19 @@ Adds junction-object support for many-to-many (e.g., Account ↔ Contact via Acc
 ### 6.3 V3 — Query tree (multi-object, any depth)
 
 Preferred. Tree of nodes — each node is one SOQL query, stitched into the parent's data map via `lookupField`.
+
+The example below is a three-level tree: an Account root with two children (Contacts and Opportunities), and a grandchild (OpportunityLineItems) hanging off the Opportunity node:
+
+```mermaid
+graph TD
+    n0["n0 · Account<br/>fields: Name<br/>parentFields: Owner.Name"]
+    n1["n1 · Contact<br/>fields: FirstName"]
+    n2["n2 · Opportunity<br/>fields: Name, Amount"]
+    n3["n3 · OpportunityLineItem<br/>fields: Quantity<br/>parentFields: Product2.Name"]
+    n0 -->|"Contacts<br/>lookupField: AccountId"| n1
+    n0 -->|"Opportunities<br/>lookupField: AccountId"| n2
+    n2 -->|"OpportunityLineItems<br/>lookupField: OpportunityId"| n3
+```
 
 ```json
 {
@@ -949,6 +1086,12 @@ Preferred. Tree of nodes — each node is one SOQL query, stitched into the pare
 ### 6.4 Using the visual builder
 
 The Command Hub template wizard uses the **`docGenColumnBuilder`** LWC — tab-per-object layout with a tree visualization. Newer templates are V3 by default.
+
+![Field picker panel on the Account tab with Name and Industry checked and shown as selected-field pills](assets/media/06-query-builder/field-picker.png)
+
+![Child-relationship tree visualization showing Account at the root with Contacts and Opportunities children and OpportunityLineItems as a grandchild](assets/media/06-query-builder/child-relationship-tree.png)
+
+> ✅ **Checkpoint:** You'll know it worked when the tree visualization shows one node per object you added, and each object's tab lists its selected fields as pills. If not → [§15](#15-troubleshooting).
 
 **Multi-hop parent traversal (v1.97+).** On any object's `parentFields` panel, expand a lookup and the builder now recurses into the parent's lookup tree — for example, on an Opportunity tab, expand `Account` → `Parent` → `Owner` → pick `Name`, and the resulting merge tag is `{Account.Parent.Owner.Name}`. The recursion is capped at 5 hops to keep schema-load latency bounded. Each hop loads its target object's fields lazily on expand. Use this when the data you need lives more than one lookup away from the base object and you don't want to compose `parentFields` paths by hand.
 
@@ -1055,6 +1198,8 @@ In the DocGen app → New Template:
 4. **Step 2** lands directly on the connected-provider view. Compose your template body using the merge tags as you would for any other template.
 5. **Step 3** — review and save.
 
+> ✅ **Checkpoint:** You'll know it worked when the wizard validates the class and shows the merge tags returned by `getFieldNames()` as pills. If not → [§15](#15-troubleshooting).
+
 Behind the scenes the template's `Query_Config__c` becomes `{"v":4,"provider":"MyAccountBriefProvider"}`. You can also flip an existing SOQL-backed template to v4 from the **Edit modal → Query Configuration → Use Apex data provider** link.
 
 #### Step 3 — generate
@@ -1065,6 +1210,13 @@ Same as any template. The DocGen app's Generate button, the **Generate Document*
 // From Apex — exactly the same call shape as a SOQL-backed template
 Id contentDocId = portwoodglobal.DocGenService.generateDocument(templateId, accountId, null);
 ```
+
+> 🧪 **Try it — write a minimal provider class**
+>
+> 1. In your sandbox, create an Apex class `HelloProvider implements portwoodglobal.DocGenDataProvider` with the two required `global` methods: have `getData` return `new Map<String, Object>{ 'Greeting' => 'Hello from Apex' }` and `getFieldNames` return `new List<String>{ 'Greeting' }`.
+> 2. Create a new template, pick **Apex Class (Data Provider)** as the Data Source, and select `HelloProvider` — the wizard should show a single `Greeting` merge-tag pill.
+> 3. Put `{Greeting}` in the template body and save.
+> 4. Generate against any record and confirm the output reads "Hello from Apex".
 
 #### Common patterns
 
@@ -1084,6 +1236,8 @@ Behind the scenes the template stores `Base_Object_API__c = 'FlowJsonData'` (a s
 ---
 
 ## 7. Merge tag reference
+
+> ⏱️ **~25 min** (skim; dip in as needed — this is a reference section) · 🎯 **After this section you can:** write or look up the exact syntax for any DocGen tag — fields, formats, loops, conditionals, aggregates, and charts.
 
 Every tag DocGen recognizes. Tags are case-insensitive for functions (`{SUM:...}` == `{sum:...}` in processXml; the giant-query assembler's aggregate regex is case-sensitive — use uppercase to be safe).
 
@@ -1303,6 +1457,8 @@ Default precedence (highest first): `NOT` → comparisons → `AND` → `OR`. Us
 {/IF}
 ```
 
+<details><summary><b>Longer chains and grouping</b> — arbitrarily long AND/OR expressions with parens</summary>
+
 Arbitrarily long chains and grouping work:
 
 ```
@@ -1310,6 +1466,8 @@ Arbitrarily long chains and grouping work:
   Eligible for premium support.
 {/IF}
 ```
+
+</details>
 
 Quoted strings are opaque — `AND` / `OR` inside quotes is treated as part of the string, not as an operator.
 
@@ -1348,6 +1506,13 @@ The script logs a Salesforce URL where the rendered PDF is attached. Open it to 
 ```
 
 `Rel.totalSize` returns 0 (not null) when the child relationship is empty, so `{#IF Rel.totalSize != 0}` is the canonical "render this section if there are rows" check.
+
+> 🧪 **Try it:** Add a loop and a conditional to your quick-start template.
+>
+> 1. Open the account-brief template you built in the quick start and add a contact list: `{#Contacts}{FirstName} {LastName} — {Email}{/Contacts}`.
+> 2. Add the `Contacts` relationship (with `FirstName`, `LastName`, `Email`) to the template's Query Config.
+> 3. Below the loop, add `{#IF AnnualRevenue > 1000000}Key account — annual revenue over $1M.{/IF}`.
+> 4. Re-save the template and generate against an Account that has contacts. Each contact renders on its own line, and the "Key account" sentence appears only when the Account's annual revenue exceeds $1M — try a second Account below the threshold to see the block suppress.
 
 ### 7.5 Aggregates
 
@@ -1432,6 +1597,8 @@ A single tag that expands into a complete chart image at render time. **Tag synt
 {Chart:Survey_Responses__r:Selected_Answer__c:pivot:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Mode by Location (Table)}
 ```
 
+Each of the nine worked-example tags above renders as follows (all captured from the same Commute Survey Demo PDF so bucket values match across styles):
+
 #### 7.6.1 Complete modifier reference
 
 Modifiers come after the style, joined with `&`. **Order doesn't matter.** Values containing `&` or `=` are not supported (use `where=` for SOQL with operators — see below).
@@ -1488,6 +1655,8 @@ The chart engine emits PNG (universal) with one opt-in alternative (inline SVG f
 
 Paste the block below into Claude / GPT / Gemini with one substitution: `${MY_DATA_DESCRIPTION}` should describe your child relationship name, the dimension field you want bucketed, and (optionally) the cross-tab field plus its expected values. The LLM will produce a complete HTML template you can upload.
 
+<details><summary><b>The full authoring prompt</b> — complete copy-paste block (~45 lines)</summary>
+
 ```text
 You are writing a Salesforce DocGen HTML template that renders 8 chart styles using DocGen's
 {Chart:...} tag syntax. DocGen is a native Salesforce 2GP package; the template is a single
@@ -1536,6 +1705,8 @@ in groupBy for stacked/clustered/line/area/pivot. ColSort must match the cross-t
 
 Return the complete HTML file, ready to upload as a DocGen HTML template. No commentary.
 ```
+
+</details>
 
 #### 7.6.4 Reference templates
 
@@ -1727,6 +1898,8 @@ Use a **shared asset** when the same image — a logo, a footer band, a letterhe
 
 **Set one up** from the **Command Hub → Assets** tab: give the asset a friendly name (e.g. "Primary Footer"), choose its **tag key** (a short, human-readable handle such as `footer`, suggested from the name and checked for availability as you type), upload an image, and copy its merge tag. The key is **permanent** — renaming the asset later never changes the key, so templates keep working — and it is case-insensitive (`{%asset:Footer}` and `{%asset:footer}` are the same asset).
 
+> ✅ **Checkpoint:** You'll know it worked when the Assets tab shows your asset with a thumbnail preview and a merge tag like `{%asset:footer}`, and a generated document that contains that tag renders the image where you placed it. If a `[missing asset: <key>]` placeholder appears instead, re-check the key spelling; if the image is broken in PDF → [§15.6](#156-pdf-image-is-broken--doesnt-render).
+
 **Finding assets in a growing library (v3.30+).** The Assets tab shows a **thumbnail preview** of each asset's current image, and a **search box** filters the list live by name, tag key, merge tag, or category. Assets can carry an optional free-text **Category** ("Logos", "Footers", "Backgrounds" — any label you like, set when creating the asset or later via the row's **Edit** action); once at least one asset is categorized, a **category dropdown** appears next to the search box, including an _Uncategorized_ bucket. Categories are purely organizational — they never affect how the merge tag resolves.
 
 ```
@@ -1789,10 +1962,14 @@ So `:3inx` → `:288x`, `:x25mm` → `:x95`.
 
 - **Fitting a row of mismatched logos** (partner firms upload very different dimensions): give them all a **uniform width**, `{%Firm__r.Logo__c:200x}`. Each renders 200 px wide with proportional height — small logos scale up, large scale down, none distorted. (Avoid a fixed `:200x80` box for logos — it stretches them off-aspect.)
 
+<details><summary><b>Hand-authored <code>&lt;img&gt;</code> tags (advanced)</b> — writing raw markup instead of a <code>{%}</code> tag, and the two engine caveats that come with it</summary>
+
 **Hand-authored `<img>` tags (advanced).** If you write your own `<img src="/sfc/servlet.shepherd/version/download/068…">` instead of a `{%}` tag, you control the CSS directly, but two caveats apply:
 
 1. Only `width`/`height` take effect — `max-width` does not (same engine limit as above).
 2. The renderer computes one rendered size **per image URL** and reuses it. If you reference the **same** file at two different sizes, both come out the same. Add a throwaway query parameter to make each distinct (`…/068…?n=1`, `…/068…?n=2`). DocGen's `{%}` tags do this automatically, so prefer the tag unless you specifically need raw markup. (A grid of _different_ logos — different files — isn't affected.)
+
+</details>
 
 ### 7.8 Barcodes & QR codes
 
@@ -1825,7 +2002,7 @@ See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:
 - **Role**: any string (Buyer, Seller, Witness, Loan_Officer, etc.). Underscores become spaces in the UI.
 - **Order**: sequence number per-role (optional, defaults to 1). Used for sequential signing and multi-placement per signer.
 - **Type**: `Full` | `Initials` | `Date` | `DatePick` (optional, defaults to `Full`).
-- **Style** (optional): add `:inline` as a final suffix (e.g. `{@Signature_Buyer:1:Full:inline}`, `{@Signature_Buyer:1:Date:inline}`) to render a **compact in-place mark** instead of the stamp card. See [§10.7.2](#1072-stamp-card-vs-inline-how-a-signature-renders).
+- **Style** (optional): add `:inline` as a final suffix (e.g. `{@Signature_Buyer:1:Full:inline}`, `{@Signature_Buyer:1:Date:inline}`) to render a **compact in-place mark** instead of the stamp card. See [§10.7.2](#1072-stamp-card-vs-inline--how-a-signature-renders).
 
 Pre-signing, tags are preserved in the output (not replaced). Post-signing, each tag position carries the signer's mark as a **stamp card** — drawn ink or typed name in a signature font, with a "Signed by X · date" caption (see §10.10). Date tags stamp the signed date as text.
 
@@ -2092,7 +2269,11 @@ Comments: {Comments}
 
 ## 8. Document generation
 
+> ⏱️ **~12 min** · 🎯 **After this section you can:** generate a document from any record page — single doc, packet, or merged PDF — and control its filename with title tokens.
+
 ### 8.1 From a record page (single doc)
+
+![The DocGen Runner component on an Opportunity record page, showing the template picker, Save to Record / Download choice, and the Generate button](assets/media/08-generation/docgen-runner-record-page.png)
 
 1. Open any record (Account, Opportunity, Case, etc.).
 2. The **DocGen Runner** LWC appears (placed via Lightning App Builder or via the Command Hub's "Generate from Record" flow).
@@ -2101,11 +2282,41 @@ Comments: {Comments}
 5. Optional: override output format if the template isn't locked (§5.4).
 6. Click **Generate**.
 
+![Animated demo: clicking Generate in the runner and the finished PDF appearing in the record's Files list moments later](assets/media/08-generation/generate-click-to-file.gif)
+
+> ✅ **Checkpoint:** You'll know it worked when the success toast appears and the new file shows in the record's Files related list (Save to Record) or lands in your browser's downloads (Download). If not → [§15](#15-troubleshooting).
+
 **Picker order & grouping.** Templates are grouped by their **Category** field, the object's **Default** template (★) floats to the top, and **Sort Order** (lower = higher) breaks ties — blank Sort Order falls back to Default-first, then name. A category dropdown filters the list when you have many templates. All three are plain fields on the template (Settings tab).
 
 **Where the runner can live.** Record pages, App Builder pages, the Command Hub, Experience Cloud pages, Flow screens, and the utility bar. In App Builder, per-placement toggles let you hide **Download**, **Save to Record**, **Document Packet**, **Combine PDFs**, or **Combine with existing PDFs** for that page. On mobile, the runner is save-to-record only (mobile browsers can't take the download hand-off); packets and combines are download-only, so they're desktop features.
 
+> 🧪 **Try it:** In your sandbox, open any Account that has a template configured. (1) Pick the template in the runner, (2) choose Download, (3) click Generate, (4) open the downloaded file and confirm the record's field values merged in.
+
 ### 8.2 What happens behind the scenes
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant R as DocGen Runner (LWC)
+    participant S as Apex server
+
+    U->>R: Click Generate
+    R->>S: Scout child record counts
+    alt Dataset fits sync heap
+        S->>S: Full in-memory merge
+        S-->>R: base64 blob (sub-second)
+    else Dataset too big
+        S->>S: Giant-query batch path (automatic)
+        S-->>R: Async result — no "sync vs async" choice needed
+    end
+    alt Word output
+        R->>R: Assemble DOCX in-browser (bypasses 4MB Aura limit)
+    else PDF output
+        S->>S: Render via Blob.toPdf()
+        S-->>R: base64 (or async fragments for huge datasets)
+    end
+    R-->>U: File saved to record or downloaded
+```
 
 - The runner **scouts child record counts** before generating.
 - If the dataset is small enough for sync heap, it runs the full in-memory merge and returns a base64 blob (sub-second response for most templates).
@@ -2156,9 +2367,13 @@ Fields used in the title don't need to be in the Query Config — the title reso
 
 ## 9. Bulk generation
 
+> ⏱️ **~10 min** · 🎯 **After this section you can:** run a filtered bulk job against hundreds of records and read its results in Job History.
+
 Mass-generate documents for many records in one batch.
 
 ### 9.1 Running a bulk job
+
+![The Bulk Generation tab in the Command Hub with a template selected, a SOQL WHERE filter entered, and the output-mode choices visible](assets/media/09-bulk/bulk-generation-tab.png)
 
 1. Command Hub → **Bulk Generation** tab.
 2. Pick a template.
@@ -2174,6 +2389,10 @@ Mass-generate documents for many records in one batch.
 
 **Preview one record first.** Before launching a big job, use **Generate Sample** — pick a sample record and the bulk runner produces one real PDF from it so you can sanity-check the output.
 
+> ✅ **Checkpoint:** You'll know it worked when the job appears in Job History and reaches **Completed** with matching record and success counts. If not → [§15](#15-troubleshooting).
+
+> 🧪 **Try it:** In your sandbox, (1) pick any template on the Bulk Generation tab, (2) enter a filter that matches fewer than 10 records, (3) run **Generate Sample** on one record and check the output, (4) submit the job and watch it complete in Job History.
+
 ### 9.2 Saved queries
 
 Save a filter as a reusable `DocGen_Saved_Query__c`. Gives non-technical users a drop-down of pre-built filters without writing SOQL. Created and managed in the Bulk Generation UI.
@@ -2181,6 +2400,8 @@ Save a filter as a reusable `DocGen_Saved_Query__c`. Gives non-technical users a
 **Report-import auto filter.** If the selected template's Query Config was built from a report import (it carries a WHERE clause), the bulk runner automatically applies that filter on selection and saves it as a **"From Report"** saved query so it's one click on every future run.
 
 ### 9.3 Job history
+
+![The Job History tab showing bulk jobs with statuses, record counts, generated PDF links, and timestamps](assets/media/09-bulk/job-history-tab.png)
 
 Command Hub → **Job History** tab. Every bulk job shows:
 
@@ -2220,6 +2441,8 @@ No setup is required; this happens on its own. **Combined-PDF (merge) mode is th
 
 ## 10. E-signatures (v3)
 
+> ⏱️ **~25 min** · 🎯 **After this section you can:** send a multi-signer signature request, guide signers through the public signing page, and retrieve the signed, certified PDF.
+
 Typed-name electronic signatures with PIN verification, audit trail, packets, and sequential signing.
 
 ### 10.1 Sending a signature request
@@ -2236,7 +2459,9 @@ Typed-name electronic signatures with PIN verification, audit trail, packets, an
 6. Pick signing order: **Parallel** (all get emails simultaneously), **Sequential** (each signer emailed only after the previous completes), or **Single** (an explicit one-signer document — behaves like Parallel for delivery).
 7. Click **Send**. Each signer receives a branded invitation email.
 
-> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern. If your layout is tight and you'd rather skip the card entirely, append `:inline` to the tag — see [§10.7.2](#1072-stamp-card-vs-inline-how-a-signature-renders).
+> ✅ **Checkpoint:** You'll know it worked when the request appears in the sender's Previous Signature Requests list and the first signer receives the branded invitation email. If the email doesn't arrive, check the request's **Email Status** field, then → [§15](#15-troubleshooting).
+
+> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern. If your layout is tight and you'd rather skip the card entirely, append `:inline` to the tag — see [§10.7.2](#1072-stamp-card-vs-inline--how-a-signature-renders).
 
 > **Triggering from Flow.** The **DocGen: Create Signature Request** invocable action gives you the exact same guided signing experience as the Send-for-Signature UI — pass a Template Id, Related Record Id, and a collection of signers. As long as the template has `{@Signature_…}` tags, signers walk the guided field-to-field flow and the signed PDF is stamped and named from your template's **Document Title Format**.
 
@@ -2325,7 +2550,7 @@ For templates that use `{@Signature_Role:Order:Type}` placement tags, the PDF-vi
 
 Created via `createGuidedPdfSignatureRequest` (HTML templates).
 
-> **Authoring tip — give signature fields room.** A mark stamps exactly where its tag sits, so place `{@Signature_Role:Order:Type}` tags **on their own line or in a right-hand cell** with whitespace around them — not inline mid-paragraph — or the mark will overlap nearby text. For initials, use a dedicated line like `Initials: {@Signature_Buyer:1:Initials}`. This mirrors how every e-sign tool reserves space for a signature block. If your layout is tight and you don't want a card at all, use the [`:inline` style](#1072-stamp-card-vs-inline-how-a-signature-renders).
+> **Authoring tip — give signature fields room.** A mark stamps exactly where its tag sits, so place `{@Signature_Role:Order:Type}` tags **on their own line or in a right-hand cell** with whitespace around them — not inline mid-paragraph — or the mark will overlap nearby text. For initials, use a dedicated line like `Initials: {@Signature_Buyer:1:Initials}`. This mirrors how every e-sign tool reserves space for a signature block. If your layout is tight and you don't want a card at all, use the [`:inline` style](#1072-stamp-card-vs-inline--how-a-signature-renders).
 
 ### 10.7.2 Stamp card vs. inline — how a signature renders
 
@@ -2388,6 +2613,8 @@ Any signer can decline with an optional reason. On decline:
 
 ### 10.12 Admin setup (one-time)
 
+![The Signature Settings checklist showing pass/fail status for Site URL, active Site, Org-Wide Email Address, guest permission set, and VF pages](assets/media/10-esignatures/signature-settings-checklist.png)
+
 Before signatures work in production, complete the checklist in **Signature Settings**:
 
 - ✅ Site URL configured (Experience Cloud Site or Salesforce Site) — paste the site's **base URL only, with no trailing `/s`**. Copying an Experience Cloud URL from the browser or from Digital Experiences setup often includes a trailing `/s` (e.g. `https://yourdomain.my.site.com/signing/s`); with it, every signing link opens to an **"Invalid page"** error (§15.10). Custom (branded) domains work fine once the `/s` is removed.
@@ -2407,6 +2634,8 @@ Salesforce hides the guest user behind a few clicks. The full path:
 2. Click **Public Access Settings**. This opens the site profile.
 3. From the profile, click **View Users**, then select the e-signature site guest user.
 4. On the user record, scroll to **Permission Set Assignments** and add **DocGen Guest Signature**.
+
+> ✅ **Checkpoint:** You'll know setup worked when every row in the Signature Settings checklist shows a pass, and a test signing link opens the signing page without an "Invalid page" (§15.10) or "Document unavailable" (§15.9) error. If not → [§15](#15-troubleshooting).
 
 ### 10.13 Email branding
 
@@ -2455,9 +2684,21 @@ For each template you can edit the **subject** and **body**, preview it live wit
 
 ## 11. Flow automation cookbook
 
+> ⏱️ **~3 min per recipe — grab the recipe you need, skip the rest** · 🎯 **After this section you can:** automate document generation and e-signatures from any Flow — record-triggered, scheduled, or screen.
+
 DocGen ships six Flow invocable actions plus three helpers for custom signing UIs. Each one fits a different job-to-be-done. Below: which to pick, plus a worked recipe for each. (One of the six — "DocGen: Send Existing Document for Signature" — is **deprecated**; it still works but new Flows should use "DocGen: Create Signature Request," which covers the same in-browser PDF signing. The sixth, "DocGen: Write Back Signer Form Fields," re-runs signer-input writeback for a completed request — normally automatic, exposed for retry/custom flows.)
 
 ### 11.1 Picking the right action
+
+```mermaid
+flowchart TD
+    Q{What are you trying to do?}
+    Q -->|Generate a single document for one record| A1["DocGen — Generate Document<br/>(the workhorse — most common)"]
+    Q -->|Dataset size unknown at design time| A2["DocGen — Generate Document<br/>(Auto Giant Query)"]
+    Q -->|Run a template against many records in one batch| A3["DocGen — Generate Bulk Documents"]
+    Q -->|Email a document for typed-name signature| A4["DocGen: Create Signature Request"]
+    Q -->|Signature on the in-browser PDF viewer| A5["DocGen: Send Existing Document<br/>for Signature (deprecated — prefer<br/>Create Signature Request)"]
+```
 
 | You want to…                                                                  | Use this action                                   |
 | ----------------------------------------------------------------------------- | ------------------------------------------------- |
@@ -2487,7 +2728,11 @@ The bread-and-butter "trigger automation generates a doc" recipe.
 
 **Output:** `contentDocumentId` — the new file's Id, available downstream if you want to email it or pass it to another action.
 
+![Finished record-triggered Flow canvas: Opportunity trigger into a single Generate Document action](assets/media/11-flows/close-won-flow-canvas.png)
+
 **Result:** every closed-won Opportunity gets a generated PDF in its Files related list, automatically.
+
+> ✅ **Checkpoint:** Activate the Flow, open a test Opportunity, and set it to Closed Won. You'll know it worked when a PDF named "_Opportunity Name_ — Close Summary" appears in the Opportunity's Files related list within a few seconds. If not → [§15](#15-troubleshooting).
 
 ### 11.3 Recipe — Email a generated PDF without keeping a copy
 
@@ -2659,6 +2904,8 @@ The **Generate Document** action accepts an optional **JSON Data** input. When p
 
 Wire this to a Flow Text Variable populated upstream — typically by an Apex action that calls an external API and returns a JSON string. The merge tags in your template (`{Name}`, `{Amount:currency}`, `{#Items}…{/Items}`) resolve against the JSON instead of a Salesforce record.
 
+> 🧪 **Try it:** In a sandbox, create a Text Variable in any Flow and paste the sample JSON above as its default value. Wire it into the **JSON Data** input of a Generate Document action pointed at a template containing `{Name}`, `{Amount:currency}`, and a `{#Items}…{/Items}` table. Run the Flow — the output document should show "Acme Corp", a formatted 50,000, and two line-item rows, with no SOQL query run at all.
+
 ### 11.9 Recipe — Custom signing UI (advanced)
 
 Three helper actions exist for orgs that want to build their own signing experience instead of using the bundled Visualforce pages — for example, an embedded signature pad inside an existing customer portal. **These require package v2.6.0 or later** (earlier versions shipped them but they weren't exposed to subscriber Flows). In Flow Builder, search "DocGen" and pick the action by its label:
@@ -2704,9 +2951,38 @@ Always add a Decision element after the action that branches on `success`. The m
 
 ## 12. Apex API reference
 
+> ⏱️ **~12 min** · 🎯 **After this section you can:** call DocGen generation and e-signature actions from your own Apex, LWC, or Flow code — and know exactly which classes are safe to call from a subscriber org.
+
 Call DocGen from your own Apex code, triggers, scheduled jobs, or Lightning components. **`DocGenService` is the `global`, subscriber-callable API** — prefix as `portwoodglobal.DocGenService` from your own code. The controller classes referenced later in this chapter (`DocGenController`, `DocGenBulkController`) are the package's own UI endpoints and are **not callable from subscriber code** — they're documented for reference; automate through `DocGenService` or the Flow actions instead.
 
 > Backwards compatibility: methods below are published as stable global entry points. New optional overloads may be added in future releases; existing signatures will not be removed without a major version bump and a deprecation notice.
+
+How the pieces fit together:
+
+```mermaid
+flowchart LR
+    subgraph yours["Your code (subscriber org)"]
+        apex["Apex — triggers,<br/>scheduled jobs, services"]
+        lwc["Your LWC / Aura<br/>components"]
+        flow["Flow Builder"]
+        provider["MyCustomProvider<br/><i>implements DocGenDataProvider</i>"]
+    end
+    subgraph pkg["portwoodglobal — managed package"]
+        svc["DocGenService<br/><b>global — subscriber-callable</b>"]
+        ctrl["DocGenController<br/>@AuraEnabled UI endpoints"]
+        bulk["DocGenBulkController<br/>bulk UI endpoints"]
+        actions["Flow invocable actions<br/>DocGenFlowAction, DocGenBulkFlowAction,<br/>DocGenGiantQueryFlowAction,<br/>DocGenSignatureFlowAction, …"]
+        engine["Merge engine"]
+    end
+    apex -->|"portwoodglobal.DocGenService.…"| svc
+    lwc -->|"@salesforce/apex/portwoodglobal.… import"| ctrl
+    flow -->|"actions in the Flow palette"| actions
+    svc --> engine
+    ctrl --> engine
+    bulk --> engine
+    actions --> engine
+    engine -.->|"Query Type = Apex Provider<br/>calls getData(recordId)"| provider
+```
 
 ### 12.1 `DocGenService` — synchronous generation
 
@@ -2745,6 +3021,13 @@ String title = (String) result.get('title');
 > **Catching exceptions.** All API methods throw `portwoodglobal.DocGenException` on validation failures (locked output format, missing template, PowerPoint→PDF, null `dataMap`, etc.). Subscriber code can catch by name: `catch (portwoodglobal.DocGenException e) { ... }`.
 
 > **Sharing & FLS.** `DocGenService` runs `with sharing` — record-level access is enforced for the calling user. Field-level security is **not** explicitly checked inside the merge engine; if a user has row access but restricted FLS on a referenced field, that field's value will still appear in the rendered document. The `…FromData` overloads (`generatePdfBlobFromData`, `generateAndSaveFromData`) accept a caller-supplied data map and bypass DocGen's SOQL boundary entirely — the calling code is responsible for any FLS/CRUD enforcement on the values it places in the map. Treat these like any privileged service: gate them in your own code if you expose them to lower-privilege actors.
+
+> 🧪 **Try it:** Prove out the API in 2 minutes — in a sandbox:
+>
+> 1. Open **My Templates** in the Command Hub and copy any template's record Id from the URL.
+> 2. Open Developer Console → **Execute Anonymous**.
+> 3. Run `portwoodglobal.DocGenService.generateDocument('<templateId>', '<recordId>');` using a record of the template's base object.
+> 4. Open that record's **Files** related list — the generated document is there.
 
 ### 12.2 `DocGenController` — LWC / Aura endpoints
 
@@ -2838,9 +3121,13 @@ The package installs in the `portwoodglobal` namespace. From subscriber code:
 
 ## 13. Admin & settings
 
+> ⏱️ **~7 min** · 🎯 **After this section you can:** navigate the Command Hub, configure signature settings, read the Error Logs tab, and verify the mandatory Blob.toPdf release update is enabled.
+
 ### 13.1 The Command Hub
 
 App Launcher → **DocGen**. The Command Hub is the single entry point for admins:
+
+![DocGen Command Hub home page with tiles for My Templates, Bulk Generation, Signatures, Assets, Email Templates, and Learning Center](assets/media/13-admin/command-hub-home.png)
 
 - **My Templates** — create, edit, version, clone, export/import.
 - **Bulk Generation** — mass-generate against a SOQL filter or saved query.
@@ -2859,6 +3146,8 @@ Worth knowing inside My Templates:
 ### 13.2 Signature Settings
 
 Location: DocGen app → Command Hub → Signature Settings.
+
+![Signature Settings tab showing Site URL, Org-Wide Email Address picker, expiration and reminder settings, and the setup validation checklist](assets/media/13-admin/signature-settings-tab.png)
 
 Covers:
 
@@ -2883,6 +3172,10 @@ The release-update UI is easy to misread. If the button is grayed out and says *
 
 ![Salesforce release update screen showing a grayed-out Enable Test Run button](https://raw.githubusercontent.com/Portwood-Global-Solutions/DocGen/refs/heads/main/docs/images/blob-to-pdf-enable-test-run.jpg)
 
+For contrast, this is what the page looks like when the update **is** enabled — the button reads **Disable Test Run**:
+
+> ✅ **Checkpoint:** You'll know the update is enabled when the button on the release-update page reads **Disable Test Run**. If it still says **Enable Test Run** and is grayed out → [§15.2](#152-raw-css-appears-at-the-top-of-generated-pdfs).
+
 Suggested case language:
 
 > Please enable the "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations" release update in this org. We generate PDFs using a managed package that calls `Blob.toPdf()`. The Release Updates page still shows "Enable Test Run", and generated PDFs are rendering raw CSS at the top of the document.
@@ -2894,6 +3187,8 @@ You can extend `DocGen_Template__c`, `DocGen_Signature_Request__c`, `DocGen_Sign
 ---
 
 ## 14. Limits & known constraints
+
+> ⏱️ **~6 min** · 🎯 **After this section you can:** predict which platform limits apply to your templates and outputs — and pick the right format or workaround before hitting them.
 
 ### 14.1 Apex heap limits
 
@@ -2913,6 +3208,8 @@ Salesforce's `Blob.toPdf()` uses Flying Saucer with only four built-in fonts:
 **Custom fonts cannot be loaded into the PDF engine.** CSS `@font-face` is not supported — not via data URIs, static resource URLs, or ContentVersion URLs. Exhaustively tested, confirmed impossible on the Salesforce platform.
 
 Workaround: if you need custom fonts (branded typefaces, barcode fonts, decorative scripts), generate as **DOCX**. DOCX preserves whatever fonts are in the template — they render correctly in Word or any compatible viewer.
+
+Here's what the substitution looks like in practice:
 
 ### 14.3 PowerPoint → PDF not supported
 
@@ -2949,13 +3246,19 @@ The signing page runs as a guest user, which the platform restricts pretty heavi
 | DOCX / XLSX generate > ~4 MB, **Save to Record** | n/a                     | 2-step (download, then drag-to-attach)        |
 | Combine PDFs / Packet                            | Download only           | One-click                                     |
 
+<details><summary><b>Why these caps exist</b> — the platform mechanics behind the 10 MB template limit and the 2-step large-file flow, plus the one-click Word fix for oversized templates</summary>
+
 **Why the 10 MB template cap?** The platform unzips and pre-caches every template at save time, and async heap is bounded at 12 MB. Templates over ~10 MB don't survive that step. Almost every 20 MB+ template is uncompressed images — in Word, right-click any image → **Compress Pictures → Email (96 ppi)** drops most templates to 1–2 MB with no visible quality loss.
 
 **Why the 2-step flow for > ~4 MB DOCX / XLSX?** The framework caps inbound browser-to-server payloads at roughly 4 MB. For larger files, DocGen downloads the file to your computer, then shows a drag-to-attach uploader that uses the platform's native (2 GB) uploader. One extra click, no Apex heap involved.
 
+</details>
+
 ### 14.9 Excel templates — alpha limitations
 
 Excel (`.xlsx`) templates handle plain field tags, parent lookups, child-record loops, and format suffixes.
+
+<details><summary><b>Child-record tables in Excel</b> — how row-spanning loops expand, cell by cell</summary>
 
 **Child-record tables.** A loop that spans cells in a single worksheet row expands **down** — the row is cloned once per child record, and rows below the table shift down automatically. Put the opening tag (with the first column's field) in the leftmost cell and close the loop in the last column's cell:
 
@@ -2967,11 +3270,15 @@ Excel (`.xlsx`) templates handle plain field tags, parent lookups, child-record 
 
 With 3 contacts, rows 2–4 each carry one contact's `FirstName` / `LastName` / `Email` across columns A–C. Keep the loop as the only tagged region in its row — a second loop in the same row falls back to in-cell repetition. If the relationship returns no records, the row is removed.
 
+</details>
+
 Not yet supported in Excel output: **images** (`{%…}` tags are removed cleanly), **charts** (`{Chart:…}` renders a text placeholder), **shared assets** (tag removed), and **rich-text fields** (may carry Word-style formatting artifacts). Use Word or HTML templates when you need those.
 
 ---
 
 ## 15. Troubleshooting
+
+> ⏱️ **~5 min** · 🎯 **Find your symptom:** scan the headings below for the error or behavior you're seeing — each entry gives the fix steps in the order to try them.
 
 ### 15.1 Generation fails with "Error generating document"
 
