@@ -2775,6 +2775,24 @@
                                                                 <span class="dg-html-editor-status"
                                                                     >{docxViewerStatusText}</span
                                                                 >
+                                                                <lightning-button
+                                                                    label="Format Code"
+                                                                    icon-name="utility:magicwand"
+                                                                    variant="base"
+                                                                    data-target="docx"
+                                                                    onclick={handleFormatHtml}
+                                                                    title="Pretty-print the converted HTML — the converter emits it as one long line."
+                                                                    class="slds-var-m-left_small"
+                                                                ></lightning-button>
+                                                                <lightning-button
+                                                                    label={docxHtmlPreviewToggleLabel}
+                                                                    icon-name="utility:preview"
+                                                                    variant="base"
+                                                                    data-target="docx"
+                                                                    onclick={handleToggleHtmlPreview}
+                                                                    title="Render the converted HTML inline. Merge tags show as-is."
+                                                                    class="slds-var-m-left_small"
+                                                                ></lightning-button>
                                                             </div>
                                                             <template if:true={isLoadingDocxHtml}>
                                                                 <div class="slds-is-relative" style="height: 40px">
@@ -2785,11 +2803,18 @@
                                                                 </div>
                                                             </template>
                                                             <textarea
-                                                                class="dg-html-body-editor dg-docx-html-editor"
+                                                                class={docxHtmlEditorClass}
                                                                 spellcheck="false"
                                                                 aria-label="Converted HTML (what the PDF engine renders)"
                                                                 placeholder="No conversion snapshot yet — upload a Word file and Save as New Version, then reopen this viewer."
                                                             ></textarea>
+                                                            <template if:true={showDocxHtmlPreview}>
+                                                                <div
+                                                                    class="dg-html-preview-frame dg-docx-preview"
+                                                                    lwc:dom="manual"
+                                                                    title="Rendered preview of the converted HTML"
+                                                                ></div>
+                                                            </template>
                                                             <div class="slds-var-m-top_x-small">
                                                                 <lightning-button
                                                                     variant="brand"
@@ -2874,6 +2899,24 @@
                                                             >{htmlEditorStatusText}</span
                                                         >
                                                         <lightning-button
+                                                            label="Format Code"
+                                                            icon-name="utility:magicwand"
+                                                            variant="base"
+                                                            data-target="body"
+                                                            onclick={handleFormatHtml}
+                                                            title="Pretty-print the HTML: indent nested tags without touching text or merge tags."
+                                                            class="slds-var-m-left_small"
+                                                        ></lightning-button>
+                                                        <lightning-button
+                                                            label={htmlBodyPreviewToggleLabel}
+                                                            icon-name="utility:preview"
+                                                            variant="base"
+                                                            data-target="body"
+                                                            onclick={handleToggleHtmlPreview}
+                                                            title="Render the HTML inline. Merge tags show as-is — use Generate Sample for real data."
+                                                            class="slds-var-m-left_small"
+                                                        ></lightning-button>
+                                                        <lightning-button
                                                             label="Reload"
                                                             icon-name="utility:refresh"
                                                             variant="base"
@@ -2891,12 +2934,19 @@
                                                         </div>
                                                     </template>
                                                     <textarea
-                                                        class="dg-html-body-editor"
+                                                        class={htmlBodyEditorClass}
                                                         spellcheck="false"
                                                         aria-label="Template HTML body"
                                                         oninput={handleHtmlBodyEditorInput}
                                                         placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
                                                     ></textarea>
+                                                    <template if:true={showHtmlBodyPreview}>
+                                                        <div
+                                                            class="dg-html-preview-frame dg-body-preview"
+                                                            lwc:dom="manual"
+                                                            title="Rendered preview — merge tags shown as-is"
+                                                        ></div>
+                                                    </template>
                                                     <div class="slds-var-m-top_x-small">
                                                         <lightning-button
                                                             variant="brand"

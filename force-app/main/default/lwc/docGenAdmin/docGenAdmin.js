@@ -6,7 +6,14 @@ import { NavigationMixin } from 'lightning/navigation';
 import { refreshApex } from '@salesforce/apex';
 import { downloadBase64 as downloadBase64Util, parseSOQLFields, stripOuterSelectFrom } from 'c/docGenUtils';
 // HTML-first authoring: starter designs, AI prompt builder, query-shape extractor
-import { STARTERS, extractQueryShape, buildStarterHtml, buildAiPrompt } from './docGenAuthoringKit';
+import {
+    STARTERS,
+    extractQueryShape,
+    buildStarterHtml,
+    buildAiPrompt,
+    prettyPrintHtml,
+    scopeHtmlForInlinePreview
+} from './docGenAuthoringKit';
 
 // Apex
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
@@ -364,6 +371,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isLoadingDocxHtml = false;
     @track isSwitchingToHtml = false;
     @track docxSnapshotInfo = null;
+    // Code ⇄ Preview toggles (textarea stays mounted-but-hidden so its value survives)
+    @track showHtmlBodyPreview = false;
+    @track showDocxHtmlPreview = false;
     // Last HTML body text this session touched (upload, starter, or Apply) so
     // reopening the editor doesn't need a server round-trip.
     _lastUploadedHtmlText = null;
@@ -1221,6 +1231,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const ta = this.template.querySelector('.edit-query-textarea');
             if (ta && ta.value !== this.editTemplateQuery) {
                 ta.value = this.editTemplateQuery;
+            }
+        }
+        // Inline HTML preview: the lwc:dom="manual" host only exists after the
+        // re-render that the Preview toggle triggers, so the content write has
+        // to happen here rather than in the click handler.
+        if (this._pendingPreviewWrite) {
+            const host = this.template.querySelector(this._pendingPreviewWrite.selector);
+            if (host) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html
+                host.innerHTML = this._pendingPreviewWrite.html;
+                this._pendingPreviewWrite = null;
             }
         }
     }
@@ -3184,6 +3205,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.docxSnapshotInfo = null;
             this.isLoadingDocxHtml = false;
             this.isSwitchingToHtml = false;
+            this.showHtmlBodyPreview = false;
+            this.showDocxHtmlPreview = false;
 
             let cdLinks = [];
             if (row.ContentDocumentLinks) {
@@ -4597,6 +4620,76 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     handleHtmlBodyEditorInput() {
         this.htmlEditorDirty = true;
+    }
+
+    // --- Format Code + Code ⇄ Preview (shared by the HTML editor and the DOCX viewer) ---
+    get htmlBodyPreviewToggleLabel() {
+        return this.showHtmlBodyPreview ? 'Show Code' : 'Preview';
+    }
+
+    get docxHtmlPreviewToggleLabel() {
+        return this.showDocxHtmlPreview ? 'Show Code' : 'Preview';
+    }
+
+    get htmlBodyEditorClass() {
+        return this.showHtmlBodyPreview ? 'dg-html-body-editor slds-hide' : 'dg-html-body-editor';
+    }
+
+    get docxHtmlEditorClass() {
+        return this.showDocxHtmlPreview
+            ? 'dg-html-body-editor dg-docx-html-editor slds-hide'
+            : 'dg-html-body-editor dg-docx-html-editor';
+    }
+
+    handleFormatHtml(event) {
+        const isDocx = event.currentTarget.dataset.target === 'docx';
+        const ta = this.template.querySelector(isDocx ? '.dg-docx-html-editor' : '.dg-html-body-editor');
+        if (!ta || !ta.value || !ta.value.trim()) {
+            this.showToast('Nothing to format', 'The editor is empty.', 'warning');
+            return;
+        }
+        ta.value = prettyPrintHtml(ta.value);
+        if (!isDocx) {
+            // Formatting changes the text that Apply would stage — surface it.
+            this.htmlEditorDirty = true;
+        }
+    }
+
+    handleToggleHtmlPreview(event) {
+        const isDocx = event.currentTarget.dataset.target === 'docx';
+        if (isDocx) {
+            this.showDocxHtmlPreview = !this.showDocxHtmlPreview;
+            if (this.showDocxHtmlPreview) {
+                this._renderHtmlPreview('.dg-docx-preview', '.dg-docx-html-editor');
+            }
+        } else {
+            this.showHtmlBodyPreview = !this.showHtmlBodyPreview;
+            if (this.showHtmlBodyPreview) {
+                this._renderHtmlPreview('.dg-body-preview', '.dg-html-body-editor');
+            }
+        }
+    }
+
+    /**
+     * Render the textarea's HTML into the inline preview div. LWS blocks
+     * iframe srcdoc/document.write, so the markup goes in via innerHTML with
+     * its CSS scoped to the preview container (see scopeHtmlForInlinePreview).
+     * Merge tags show literally — Generate Sample remains the real-data path.
+     */
+    _renderHtmlPreview(hostSelector, taSelector) {
+        const ta = this.template.querySelector(taSelector);
+        const scoped = scopeHtmlForInlinePreview((ta && ta.value) || '');
+        // The host div mounts on the NEXT render cycle (it's behind an
+        // if:true the caller just flipped) — renderedCallback completes the
+        // write once the node exists.
+        this._pendingPreviewWrite = { selector: hostSelector, html: scoped };
+        const host = this.template.querySelector(hostSelector);
+        if (host) {
+            // Already mounted (e.g. re-render of an open preview) — write now.
+            // eslint-disable-next-line @lwc/lwc/no-inner-html
+            host.innerHTML = scoped;
+            this._pendingPreviewWrite = null;
+        }
     }
 
     async toggleHtmlBodyEditor() {

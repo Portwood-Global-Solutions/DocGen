@@ -466,3 +466,114 @@ export function buildAiPrompt(shape, options) {
     lines.push('3. Use only the merge tags listed in DATA SHAPE (plus {Today}/{RunningUser.*} built-ins).');
     return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// HTML pretty-printer (Format Code button)
+// ---------------------------------------------------------------------------
+
+const VOID_TAGS = /^(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/i;
+
+/**
+ * Conservative HTML formatter for the template editors. Only inserts
+ * whitespace BETWEEN adjacent tags (never inside text runs), so merge tags
+ * and inline text spacing are untouched. <style>/<script>/<pre>/<textarea>
+ * blocks pass through verbatim.
+ */
+export function prettyPrintHtml(html) {
+    if (!html || typeof html !== 'string') {
+        return html;
+    }
+    const protectedBlocks = [];
+    let work = html.replace(/<(style|script|pre|textarea)\b[\s\S]*?<\/\1\s*>/gi, (m) => {
+        protectedBlocks.push(m);
+        return '@@DGBLK' + (protectedBlocks.length - 1) + '@@';
+    });
+    // Break only where two tags touch (optionally separated by pure whitespace),
+    // and around protected-block placeholders so they land on their own line.
+    work = work
+        .replace(/>\s*</g, '>\n<')
+        .replace(/(@@DGBLK\d+@@)\s*</g, '$1\n<')
+        .replace(/>\s*(@@DGBLK\d+@@)/g, '>\n$1');
+    const lines = work.split('\n');
+    const out = [];
+    let depth = 0;
+    for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) {
+            continue;
+        }
+        const isClosing = /^<\//.test(line);
+        if (isClosing) {
+            depth = Math.max(0, depth - 1);
+        }
+        out.push('    '.repeat(depth) + line);
+        const openMatch = line.match(/^<([a-zA-Z][\w-]*)/);
+        if (openMatch && !isClosing) {
+            const tag = openMatch[1];
+            const selfClosed = /\/>\s*$/.test(line) || VOID_TAGS.test(tag);
+            const closedSameLine = new RegExp('</' + tag + '\\s*>\\s*$', 'i').test(line);
+            if (!selfClosed && !closedSameLine) {
+                depth++;
+            }
+        }
+    }
+    return out.join('\n').replace(/@@DGBLK(\d+)@@/g, (m, i) => protectedBlocks[Number(i)]);
+}
+
+// ---------------------------------------------------------------------------
+// Inline preview (Code ⇄ Preview toggle)
+// ---------------------------------------------------------------------------
+
+/**
+ * Prepare template HTML for INLINE rendering inside the admin UI.
+ *
+ * Lightning Web Security blocks iframe srcdoc/document.write, so the preview
+ * renders straight into a lwc:dom="manual" div. To keep the template's CSS
+ * from leaking into the admin page, every selector is prefixed with the
+ * .dg-pv scope class (html/body selectors are remapped to the scope itself),
+ * @page rules are dropped (meaningless inline), and scripts/event handlers
+ * are stripped. Merge tags render as-is — this is a layout preview, not a
+ * data merge.
+ */
+export function scopeHtmlForInlinePreview(html) {
+    let work = (html || '').replace(/<script\b[\s\S]*?<\/script\s*>/gi, '').replace(/<link\b[^>]*>/gi, '');
+    const styles = [];
+    work = work.replace(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi, (m, css) => {
+        styles.push(css);
+        return '';
+    });
+    const bodyMatch = work.match(/<body\b[^>]*>([\s\S]*?)<\/body\s*>/i);
+    let content = bodyMatch ? bodyMatch[1] : work.replace(/<\/?(?:!DOCTYPE|html|head|body|meta|title)\b[^>]*>/gi, '');
+    // Strip inline event handlers (on*="...") — static preview only.
+    content = content.replace(/\son\w+\s*=\s*(["'])[\s\S]*?\1/gi, '');
+
+    let css = styles.join('\n').replace(/@page\b[^{]*{[^}]*}/gi, '');
+    // Prefix every selector with the scope class. Handles the flat CSS 2.1
+    // rules templates use; at-rule headers (@media etc.) pass through and
+    // their inner rules get scoped by the same pass.
+    css = css.replace(/(^|})([^{}@]+){/g, (m, brace, selectors) => {
+        const scoped = selectors
+            .split(',')
+            .map((s) => {
+                const sel = s.trim();
+                if (!sel) {
+                    return sel;
+                }
+                if (/^(html|body)$/i.test(sel)) {
+                    return '.dg-pv';
+                }
+                return '.dg-pv ' + sel.replace(/^(html|body)\s+/i, '');
+            })
+            .join(', ');
+        return brace + '\n' + scoped + ' {';
+    });
+
+    // Baseline "paper sheet" look, injected with the content because
+    // component CSS can't reach lwc:dom="manual" children. Declared first so
+    // the template's own (scoped) rules win any conflicts.
+    const baseline =
+        '.dg-pv { background: #fff; max-width: 850px; margin: 0 auto; padding: 48px 56px; ' +
+        'box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18); font-family: Helvetica, Arial, sans-serif; ' +
+        'font-size: 10.5pt; color: #1a1a1a; min-height: 380px; box-sizing: border-box; }';
+    return '<div class="dg-pv"><style>' + baseline + css + '</style>' + content + '</div>';
+}
