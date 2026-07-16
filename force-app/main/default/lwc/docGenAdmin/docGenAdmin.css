@@ -565,3 +565,89 @@
     border-color: #7c3aed;
     color: #fff;
 }
+
+/* --- Full-screen Designer tab --- */
+.dg-designer-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    background: #fff;
+    border: 1px solid #d8dde6;
+    border-radius: 10px;
+}
+
+.dg-designer-toolbar__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 0 1 auto;
+}
+
+.dg-designer-toolbar__title span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dg-designer-toolbar__sample {
+    flex: 1 1 240px;
+    max-width: 340px;
+}
+
+.dg-designer-toolbar__actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+}
+
+.dg-designer-layout {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+}
+
+.dg-designer-canvas-col {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.dg-designer-rail {
+    flex: 0 0 340px;
+    max-height: calc(100vh - 290px);
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.dg-rail-section-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #1f3a5f;
+    margin: 12px 0 6px 2px;
+}
+
+.dg-rail-section-label:first-child {
+    margin-top: 0;
+}
+
+.dg-designer-size {
+    height: calc(100vh - 360px) !important;
+    min-height: 480px !important;
+}
+
+.dg-block-chip {
+    background: #eaf3fb;
+    border-color: #a8cbe8;
+    color: #1b5e9e;
+}
+
+.dg-block-chip:hover {
+    background: #1b5e9e;
+    border-color: #1b5e9e;
+    color: #fff;
+}

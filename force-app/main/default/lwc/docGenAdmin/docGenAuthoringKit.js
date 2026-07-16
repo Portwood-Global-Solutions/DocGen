@@ -593,6 +593,197 @@ export function scopeHtmlForInlinePreview(html) {
  * ready-made loop table), plus the universal built-ins, signature tags,
  * conditionals, and aggregates.
  */
+/**
+ * Ready-made layout blocks for the visual builder. Every snippet is
+ * self-contained (inline styles only — no dependence on the template's CSS)
+ * and Flying Saucer-safe: table-based columns, solid colors, CSS 2.1 only.
+ */
+export function buildBlockPalette(shape) {
+    const td = 'vertical-align: top; padding: 0 8pt 0 0';
+    const cell = 'padding: 5pt 7pt; border-bottom: 0.75pt solid #dddddd';
+    const th = 'background: #1f3a5f; color: #ffffff; text-align: left; padding: 5pt 7pt; font-size: 9.5pt';
+
+    const sections = [
+        {
+            key: 'blk_layout',
+            label: 'Layout',
+            hint: 'Table-based — the only layout the PDF engine renders reliably.',
+            items: [
+                {
+                    key: 'blk_2col',
+                    label: 'Two columns',
+                    snippet:
+                        '\n<table style="width: 100%; border-collapse: collapse"><tr>' +
+                        '<td style="width: 50%; ' +
+                        td +
+                        '"><p>Left column</p></td>' +
+                        '<td style="width: 50%; vertical-align: top; padding: 0 0 0 8pt"><p>Right column</p></td>' +
+                        '</tr></table>\n',
+                    title: '50/50 side-by-side content'
+                },
+                {
+                    key: 'blk_3col',
+                    label: 'Three columns',
+                    snippet:
+                        '\n<table style="width: 100%; border-collapse: collapse"><tr>' +
+                        '<td style="width: 33%; ' +
+                        td +
+                        '"><p>First</p></td>' +
+                        '<td style="width: 34%; ' +
+                        td +
+                        '"><p>Second</p></td>' +
+                        '<td style="width: 33%; vertical-align: top"><p>Third</p></td>' +
+                        '</tr></table>\n',
+                    title: 'Three equal columns'
+                },
+                {
+                    key: 'blk_table',
+                    label: 'Data table',
+                    snippet:
+                        '\n<table style="width: 100%; border-collapse: collapse">' +
+                        '<thead><tr>' +
+                        '<th style="' +
+                        th +
+                        '">Column 1</th><th style="' +
+                        th +
+                        '">Column 2</th><th style="' +
+                        th +
+                        '">Column 3</th>' +
+                        '</tr></thead><tbody>' +
+                        '<tr><td style="' +
+                        cell +
+                        '">&nbsp;</td><td style="' +
+                        cell +
+                        '">&nbsp;</td><td style="' +
+                        cell +
+                        '">&nbsp;</td></tr>' +
+                        '<tr><td style="' +
+                        cell +
+                        '">&nbsp;</td><td style="' +
+                        cell +
+                        '">&nbsp;</td><td style="' +
+                        cell +
+                        '">&nbsp;</td></tr>' +
+                        '</tbody></table>\n',
+                    title: 'Styled 3-column table shell — add your own rows and fields'
+                },
+                {
+                    key: 'blk_divider',
+                    label: 'Divider line',
+                    snippet:
+                        '\n<div style="border-top: 1pt solid #cccccc; margin: 14pt 0; font-size: 0">&nbsp;</div>\n',
+                    title: 'Horizontal rule'
+                },
+                {
+                    key: 'blk_spacer',
+                    label: 'Spacer',
+                    snippet: '\n<div style="height: 18pt; font-size: 0">&nbsp;</div>\n',
+                    title: 'Vertical breathing room'
+                },
+                {
+                    key: 'blk_pagebreak',
+                    label: 'Page break',
+                    snippet: '\n<div style="page-break-before: always; font-size: 0">&nbsp;</div>\n',
+                    title: 'Starts a new PDF page here (invisible in the editor)'
+                }
+            ]
+        },
+        {
+            key: 'blk_content',
+            label: 'Content',
+            hint: 'Drop in, then click the text to rewrite it.',
+            items: [
+                {
+                    key: 'blk_band',
+                    label: 'Header band',
+                    snippet:
+                        '\n<table style="width: 100%; border-collapse: collapse; background: #1f3a5f"><tr>' +
+                        '<td style="padding: 14pt 16pt">' +
+                        '<span style="color: #ffffff; font-size: 20pt">Document Title</span><br />' +
+                        '<span style="color: #9fb8cf; font-size: 9pt">Subtitle — drop fields from Insert Tags here</span>' +
+                        '</td></tr></table>\n',
+                    title: 'Navy title banner'
+                },
+                {
+                    key: 'blk_heading',
+                    label: 'Section heading',
+                    snippet:
+                        '\n<h2 style="font-size: 13pt; color: #1f3a5f; border-bottom: 2pt solid #1f3a5f; padding-bottom: 3pt; margin: 18pt 0 6pt 0">Section Title</h2>\n',
+                    title: 'Underlined section header'
+                },
+                {
+                    key: 'blk_para',
+                    label: 'Paragraph',
+                    snippet:
+                        '\n<p style="margin: 6pt 0">Your text here — mix in fields from Insert Tags anywhere.</p>\n',
+                    title: 'Plain text block'
+                },
+                {
+                    key: 'blk_callout',
+                    label: 'Callout box',
+                    snippet:
+                        '\n<table style="width: 100%; border-collapse: collapse"><tr>' +
+                        '<td style="background: #f2f6fc; border-left: 4pt solid #1f3a5f; padding: 8pt 12pt">Callout — great for notes, terms, or highlights.</td>' +
+                        '</tr></table>\n',
+                    title: 'Accented highlight box'
+                },
+                {
+                    key: 'blk_footer',
+                    label: 'Footer note',
+                    snippet:
+                        '\n<div style="margin-top: 24pt; padding-top: 6pt; border-top: 1pt solid #cccccc; color: #888888; font-size: 8.5pt">Generated {Today:MM/dd/yyyy} by {RunningUser.Name}</div>\n',
+                    title: 'Small gray footer line'
+                }
+            ]
+        }
+    ];
+
+    // Ready-made pieces built from THIS template's query.
+    const readyItems = [];
+    const detailFields = [...(shape.baseFields || []), ...(shape.parentFields || [])];
+    if (detailFields.length) {
+        const rows = detailFields
+            .map((f) => {
+                const tag = isMoneyField(f) ? '{' + f + ':currency}' : '{' + f + '}';
+                return (
+                    '<tr><td style="width: 35%; font-weight: bold; color: #444444; background: #f2f4f7; padding: 5pt 7pt">' +
+                    humanizeField(f) +
+                    '</td><td style="border-bottom: 1pt solid #eeeeee; padding: 5pt 7pt">' +
+                    tag +
+                    '</td></tr>'
+                );
+            })
+            .join('');
+        readyItems.push({
+            key: 'blk_details',
+            label: 'Details table (your fields)',
+            snippet: '\n<table style="width: 100%; border-collapse: collapse">' + rows + '</table>\n',
+            title: 'Label/value rows for every field in your Query Config'
+        });
+    }
+    readyItems.push({
+        key: 'blk_sig',
+        label: 'Signature block (two-party)',
+        snippet:
+            '\n<table style="width: 100%; border-collapse: collapse; margin-top: 24pt"><tr>' +
+            '<td style="width: 48%; vertical-align: bottom">{@Signature_Customer:1:Full}' +
+            '<div style="border-top: 1pt solid #333333; margin-top: 4pt; padding-top: 3pt; color: #666666; font-size: 9pt">Customer &#8226; Date: {@Signature_Customer:1:Date}</div></td>' +
+            '<td style="width: 4%">&nbsp;</td>' +
+            '<td style="width: 48%; vertical-align: bottom">{@Signature_Company_Representative:2:Full}' +
+            '<div style="border-top: 1pt solid #333333; margin-top: 4pt; padding-top: 3pt; color: #666666; font-size: 9pt">Company &#8226; Date: {@Signature_Company_Representative:2:Date}</div></td>' +
+            '</tr></table>\n',
+        title: 'E-signature areas for both parties, wired to DocGen signing'
+    });
+    sections.push({
+        key: 'blk_ready',
+        label: 'Ready-made',
+        hint: 'Built from this template’s own Query Config.',
+        items: readyItems
+    });
+
+    return sections;
+}
+
 export function buildTagPalette(shape) {
     const sections = [];
     const tagFor = (f) => (isMoneyField(f) ? '{' + f + ':currency}' : '{' + f + '}');

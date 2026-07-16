@@ -13,7 +13,8 @@ import {
     buildAiPrompt,
     prettyPrintHtml,
     scopeHtmlForInlinePreview,
-    buildTagPalette
+    buildTagPalette,
+    buildBlockPalette
 } from './docGenAuthoringKit';
 
 // Apex
@@ -193,6 +194,7 @@ const COLUMNS = [
             rowActions: [
                 { label: 'View', name: 'view' },
                 { label: 'Edit', name: 'edit' },
+                { label: 'Design', name: 'design' },
                 { label: 'Clone', name: 'clone' },
                 { label: 'Export', name: 'export' },
                 { label: 'Delete', name: 'delete' }
@@ -377,6 +379,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track showDocxHtmlPreview = false;
     // Tags palette (click-to-insert merge tags from the template's own schema)
     @track showTagPanel = false;
+    // Blocks palette (drag-in layout pieces: columns, tables, bands, breaks…)
+    @track showBlockPanel = false;
     // Images panel (upload/insert <img> tags without knowing shepherd URLs)
     @track showImagePanel = false;
     @track isLoadingTemplateImages = false;
@@ -3015,6 +3019,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.openEditModal(newRow, 'document');
             if (authoringMode === 'starter') {
                 await this._applyStarterBody(record.id, starterKey, starterShape);
+                // Land straight in the full-screen designer with the starter open.
+                this.isEditModalOpen = false;
+                await this._openDesignerSurface();
+            } else if (authoringMode === 'ai') {
+                // AI path: designer opens in code view, ready for the paste-back.
+                this.isEditModalOpen = false;
+                await this._openDesignerSurface();
             }
         } catch (error) {
             this.showToast('Error creating record', error.body ? error.body.message : error.message, 'error');
@@ -3078,6 +3089,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
         } else if (actionName === 'edit') {
             this.openEditModal(row, 'details');
+        } else if (actionName === 'design') {
+            if (row[F.Type] === 'HTML') {
+                this.openDesignerForRow(row);
+            } else {
+                this.showToast(
+                    'Designer is for HTML templates',
+                    row[F.Type] === 'Word'
+                        ? 'Open Edit → Document & History → View Converted HTML, and use "Switch to HTML Template" to bring this Word template into the designer.'
+                        : 'This template type is file-based — use Edit to manage its document.',
+                    'info'
+                );
+            }
         } else if (actionName === 'view') {
             this.openEditModal(row, 'tags');
         } else if (actionName === 'clone') {
@@ -4676,6 +4699,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.showHtmlBodyVisual ? 'Back to Code' : 'Visual';
     }
 
+    /** Designer canvas: same editor classes plus the full-height variant. */
+    get designerEditorClass() {
+        return this.htmlBodyEditorClass + ' dg-designer-size';
+    }
+
     /**
      * Enter/exit visual (in-place) editing. The template renders through the
      * SAME scoped-preview pipeline the Preview toggle uses — tables, bands,
@@ -5017,6 +5045,63 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    // --- Designer tab (full-screen editing surface) ---
+    get designerHasTemplate() {
+        return !!this.editTemplateId && this.editTemplateType === 'HTML';
+    }
+
+    get designerTitle() {
+        return this.editTemplateName || 'Template Designer';
+    }
+
+    /** Row action / modal button → full-screen designer for HTML templates. */
+    async openDesignerForRow(row) {
+        this.openEditModal(row, 'document');
+        this.isEditModalOpen = false;
+        await this._openDesignerSurface();
+    }
+
+    async handleOpenDesignerFromModal() {
+        this.isEditModalOpen = false;
+        await this._openDesignerSurface();
+    }
+
+    async _openDesignerSurface() {
+        this.activeMainTab = 'design';
+        this.showHtmlBodyEditor = true;
+        this.showBlockPanel = true;
+        this.showTagPanel = true;
+        this.showImagePanel = true;
+        await this._loadBodyIntoEditor();
+        this._loadTemplateImages();
+        const body = this._lastUploadedHtmlText;
+        if (body && body.trim()) {
+            this._enterVisualMode(body);
+        }
+    }
+
+    handleCloseDesigner() {
+        if (this.showHtmlBodyVisual) {
+            this._exitVisualMode();
+        }
+        if (this.htmlEditorDirty || this.stagedBodySource) {
+            this.showToast(
+                'Heads up',
+                this.stagedBodySource
+                    ? 'Your staged body is kept — reopen the designer or the template editor to Save as New Version.'
+                    : 'Unapplied editor changes were left un-staged.',
+                'info'
+            );
+        }
+        this.activeMainTab = 'list';
+    }
+
+    // --- Blocks palette (drag-in layout pieces) ---
+    get blockPaletteSections() {
+        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+        return buildBlockPalette(shape);
+    }
+
     // --- Tags palette (Insert Tags without memorizing syntax) ---
     get tagPanelToggleLabel() {
         return this.showTagPanel ? 'Hide Tags' : 'Insert Tags';
@@ -5033,18 +5118,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     handleInsertTagSnippet(event) {
         const snippet = event.currentTarget.dataset.snippet;
+        const isBlock = event.currentTarget.dataset.kind === 'block';
         if (!snippet) {
             return;
         }
         if (this.showHtmlBodyVisual) {
             this._insertIntoVisualPage(snippet);
-            this.showToast('Tag inserted', 'Added at the end of the document — move it where you need it.', 'success');
+            this.showToast(
+                isBlock ? 'Block added' : 'Tag inserted',
+                isBlock
+                    ? 'Added at the end of the document — click into it to edit, or drag chips from the rail to drop them exactly where you point.'
+                    : 'Added at the end of the document — move it where you need it.',
+                'success'
+            );
             return;
         }
         if (this._insertAtEditorCursor(snippet)) {
             this.showToast(
-                'Tag inserted',
-                snippet.length > 60 ? 'Loop table inserted at your cursor.' : snippet + ' inserted at your cursor.',
+                isBlock ? 'Block added' : 'Tag inserted',
+                snippet.length > 60
+                    ? (isBlock ? 'Block' : 'Loop table') + ' inserted at your cursor.'
+                    : snippet + ' inserted at your cursor.',
                 'success'
             );
         }
