@@ -2909,19 +2909,10 @@
                                                         ></lightning-button>
                                                         <lightning-button
                                                             label={visualToggleLabel}
-                                                            icon-name="utility:richtextbulletedlist"
-                                                            variant="base"
-                                                            onclick={handleToggleHtmlVisual}
-                                                            title="Edit the document text like a rich-text editor. Your @page/style shell is preserved and reapplied when you switch back. Table layouts need Code view."
-                                                            class="slds-var-m-left_small"
-                                                        ></lightning-button>
-                                                        <lightning-button
-                                                            label={htmlBodyPreviewToggleLabel}
                                                             icon-name="utility:preview"
                                                             variant="base"
-                                                            data-target="body"
-                                                            onclick={handleToggleHtmlPreview}
-                                                            title="Render the HTML inline. Merge tags show as-is — use Generate Sample for real data."
+                                                            onclick={handleToggleHtmlVisual}
+                                                            title="See and edit the document as it renders — click anywhere and type. Your @page/style shell is never touched; structure work happens in Code."
                                                             class="slds-var-m-left_small"
                                                         ></lightning-button>
                                                         <lightning-button
@@ -2948,13 +2939,6 @@
                                                         oninput={handleHtmlBodyEditorInput}
                                                         placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
                                                     ></textarea>
-                                                    <template if:true={showHtmlBodyPreview}>
-                                                        <div
-                                                            class="dg-html-preview-frame dg-body-preview"
-                                                            lwc:dom="manual"
-                                                            title="Rendered preview — merge tags shown as-is"
-                                                        ></div>
-                                                    </template>
                                                     <template if:true={showHtmlBodyVisual}>
                                                         <div
                                                             class="dg-html-preview-frame dg-visual-host"

@@ -374,7 +374,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isSwitchingToHtml = false;
     @track docxSnapshotInfo = null;
     // Code ⇄ Preview toggles (textarea stays mounted-but-hidden so its value survives)
-    @track showHtmlBodyPreview = false;
     @track showDocxHtmlPreview = false;
     // Tags palette (click-to-insert merge tags from the template's own schema)
     @track showTagPanel = false;
@@ -3242,7 +3241,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.docxSnapshotInfo = null;
             this.isLoadingDocxHtml = false;
             this.isSwitchingToHtml = false;
-            this.showHtmlBodyPreview = false;
             this.showDocxHtmlPreview = false;
             this.showImagePanel = false;
             this.templateImages = [];
@@ -4666,18 +4664,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     // --- Format Code + Code ⇄ Preview (shared by the HTML editor and the DOCX viewer) ---
-    get htmlBodyPreviewToggleLabel() {
-        return this.showHtmlBodyPreview ? 'Show Code' : 'Preview';
-    }
-
     get docxHtmlPreviewToggleLabel() {
         return this.showDocxHtmlPreview ? 'Show Code' : 'Preview';
     }
 
     get htmlBodyEditorClass() {
-        return this.showHtmlBodyPreview || this.showHtmlBodyVisual
-            ? 'dg-html-body-editor slds-hide'
-            : 'dg-html-body-editor';
+        return this.showHtmlBodyVisual ? 'dg-html-body-editor slds-hide' : 'dg-html-body-editor';
     }
 
     get visualToggleLabel() {
@@ -4710,7 +4702,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _enterVisualMode(html) {
         this._visualOriginalCode = html;
         this._visualEnteredDom = null; // captured in renderedCallback after mount
-        this.showHtmlBodyPreview = false;
         this.showHtmlBodyVisual = true;
         // Reuse the preview pipeline, but flag the write as editable so
         // renderedCallback turns the rendered page into an editor.
@@ -4825,21 +4816,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    handleToggleHtmlPreview(event) {
-        const isDocx = event.currentTarget.dataset.target === 'docx';
-        if (isDocx) {
-            this.showDocxHtmlPreview = !this.showDocxHtmlPreview;
-            if (this.showDocxHtmlPreview) {
-                this._renderHtmlPreview('.dg-docx-preview', '.dg-docx-html-editor');
-            }
-        } else {
-            if (this.showHtmlBodyVisual) {
-                this._exitVisualMode();
-            }
-            this.showHtmlBodyPreview = !this.showHtmlBodyPreview;
-            if (this.showHtmlBodyPreview) {
-                this._renderHtmlPreview('.dg-body-preview', '.dg-html-body-editor');
-            }
+    // Preview exists only on the DOCX converted-HTML viewer — the HTML body
+    // editor's Visual mode IS the preview (same render, plus editing).
+    handleToggleHtmlPreview() {
+        this.showDocxHtmlPreview = !this.showDocxHtmlPreview;
+        if (this.showDocxHtmlPreview) {
+            this._renderHtmlPreview('.dg-docx-preview', '.dg-docx-html-editor');
         }
     }
 

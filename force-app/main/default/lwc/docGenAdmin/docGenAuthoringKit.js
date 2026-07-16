@@ -35,6 +35,11 @@ export function isMoneyField(apiName) {
     return /amount|total|price|cost|revenue|budget/i.test(apiName || '');
 }
 
+/** Quantity-shaped field name → summable, but no currency symbol. */
+export function isQuantityField(apiName) {
+    return /qty|quantity|hours|units|weight|points|score|seats|licenses/i.test(apiName || '');
+}
+
 /**
  * Normalize any Query_Config__c flavor into one simple shape.
  * Never throws — falls back to a Name-only shape so the starter/prompt
@@ -609,10 +614,52 @@ export function buildTagPalette(shape) {
 
     for (const child of shape.children || []) {
         const rel = child.relationshipName;
+        // Aggregates generated from the loop's OWN fields — no placeholder
+        // editing. Money fields get SUM/AVG with :currency, quantity-shaped
+        // fields plain SUM, and every loop gets a record count.
+        const aggregateItems = [];
+        for (const f of child.fields || []) {
+            if (isMoneyField(f)) {
+                aggregateItems.push(
+                    {
+                        key: rel + '_sum_' + f,
+                        label: 'Total ' + humanizeField(f),
+                        snippet: '{SUM:' + rel + '.' + f + ':currency}',
+                        title:
+                            'Sum of ' +
+                            humanizeField(f) +
+                            ' across all ' +
+                            humanizeField(rel) +
+                            ' — goes OUTSIDE the loop'
+                    },
+                    {
+                        key: rel + '_avg_' + f,
+                        label: 'Average ' + humanizeField(f),
+                        snippet: '{AVG:' + rel + '.' + f + ':currency}',
+                        title: 'Average ' + humanizeField(f) + ' — goes OUTSIDE the loop'
+                    }
+                );
+            } else if (isQuantityField(f)) {
+                aggregateItems.push({
+                    key: rel + '_sum_' + f,
+                    label: 'Total ' + humanizeField(f),
+                    snippet: '{SUM:' + rel + '.' + f + '}',
+                    title:
+                        'Sum of ' + humanizeField(f) + ' across all ' + humanizeField(rel) + ' — goes OUTSIDE the loop'
+                });
+            }
+        }
+        aggregateItems.push({
+            key: rel + '_count',
+            label: 'Count of ' + humanizeField(rel),
+            snippet: '{COUNT:' + rel + '.Id}',
+            title: 'Number of ' + humanizeField(rel) + ' records — goes OUTSIDE the loop'
+        });
         sections.push({
             key: 'rel_' + rel,
             label: humanizeField(rel) + ' — child loop',
-            hint: 'Child fields only resolve inside the {#' + rel + '}…{/' + rel + '} loop.',
+            hint:
+                'Child fields only resolve inside the {#' + rel + '}…{/' + rel + '} loop. Totals/counts go outside it.',
             items: [
                 {
                     key: rel + '_table',
@@ -631,7 +678,8 @@ export function buildTagPalette(shape) {
                     label: humanizeField(f),
                     snippet: tagFor(f),
                     title: tagFor(f) + ' — place inside the {#' + rel + '} loop'
-                }))
+                })),
+                ...aggregateItems
             ]
         });
     }
@@ -697,36 +745,44 @@ export function buildTagPalette(shape) {
         ]
     });
 
-    sections.push({
-        key: 'logic',
-        label: 'Conditionals & Aggregates',
-        hint: 'Replace FieldName / Relationship.Field with yours.',
-        items: [
-            {
-                key: 'ifelse',
-                label: 'If / else block',
-                snippet: '{#FieldName}shown when set{:else}shown when empty{/FieldName}',
-                title: 'Conditional content'
-            },
+    // Real aggregates live in each relationship's own section, built from its
+    // actual fields. Generic placeholders only appear as a fallback when the
+    // Query Config has no child relationships to build from.
+    const logicItems = [
+        {
+            key: 'ifelse',
+            label: 'If / else block',
+            snippet: '{#FieldName}shown when set{:else}shown when empty{/FieldName}',
+            title: 'Conditional content — swap FieldName for one of yours'
+        },
+        {
+            key: 'checkbox',
+            label: 'Checkbox render',
+            snippet: '{FieldName:checkbox}',
+            title: '[X] when true, [ ] when false'
+        }
+    ];
+    if (!(shape.children || []).length) {
+        logicItems.push(
             {
                 key: 'sum',
                 label: 'SUM of child field',
                 snippet: '{SUM:Relationship.Field:currency}',
-                title: 'Total across child records'
+                title: 'Total across child records — add a child relationship to your Query Config for ready-made totals'
             },
             {
                 key: 'count',
                 label: 'COUNT of children',
                 snippet: '{COUNT:Relationship.Id}',
                 title: 'Number of child records'
-            },
-            {
-                key: 'checkbox',
-                label: 'Checkbox render',
-                snippet: '{FieldName:checkbox}',
-                title: '[X] when true, [ ] when false'
             }
-        ]
+        );
+    }
+    sections.push({
+        key: 'logic',
+        label: 'Conditionals',
+        hint: 'Swap FieldName for one of your fields.',
+        items: logicItems
     });
 
     return sections;
