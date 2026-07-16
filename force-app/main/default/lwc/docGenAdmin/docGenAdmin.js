@@ -4704,6 +4704,71 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.htmlBodyEditorClass + ' dg-designer-size';
     }
 
+    // --- Visual-mode format bar (alignment, size, colors) ---
+    get textColorSwatches() {
+        return [
+            { key: 'c_black', value: '#1a1a1a', style: 'background: #1a1a1a', title: 'Black text' },
+            { key: 'c_navy', value: '#1f3a5f', style: 'background: #1f3a5f', title: 'Navy text' },
+            { key: 'c_gray', value: '#666666', style: 'background: #666666', title: 'Gray text' },
+            { key: 'c_blue', value: '#1b5e9e', style: 'background: #1b5e9e', title: 'Blue text' },
+            { key: 'c_green', value: '#1c7a3d', style: 'background: #1c7a3d', title: 'Green text' },
+            { key: 'c_red', value: '#b91c1c', style: 'background: #b91c1c', title: 'Red text' },
+            { key: 'c_white', value: '#ffffff', style: 'background: #ffffff; border-color: #999', title: 'White text' }
+        ];
+    }
+
+    get highlightSwatches() {
+        return [
+            {
+                key: 'h_none',
+                value: 'transparent',
+                style: 'background: #fff; border-color: #999',
+                title: 'No highlight'
+            },
+            { key: 'h_yellow', value: '#fef3c7', style: 'background: #fef3c7', title: 'Yellow highlight' },
+            { key: 'h_blue', value: '#e8f0fb', style: 'background: #e8f0fb', title: 'Blue highlight' },
+            { key: 'h_green', value: '#e3f5e9', style: 'background: #e3f5e9', title: 'Green highlight' },
+            { key: 'h_gray', value: '#f2f4f7', style: 'background: #f2f4f7', title: 'Gray highlight' },
+            { key: 'h_navy', value: '#1f3a5f', style: 'background: #1f3a5f', title: 'Navy fill (use white text)' }
+        ];
+    }
+
+    /** Keep the page's text selection alive while clicking toolbar controls. */
+    handleFmtMouseDown(event) {
+        event.preventDefault();
+    }
+
+    /**
+     * Apply formatting to the current selection in the editable page.
+     * styleWithCSS makes execCommand emit inline CSS spans — exactly the
+     * flat, Flying Saucer-safe styling the PDF engine renders.
+     */
+    handleFormatAction(event) {
+        if (!this.showHtmlBodyVisual) {
+            return;
+        }
+        const cmd = event.currentTarget.dataset.cmd;
+        const value = event.currentTarget.dataset.value || null;
+        if (!cmd) {
+            return;
+        }
+        try {
+            document.execCommand('styleWithCSS', false, 'true');
+            const ok = document.execCommand(cmd, false, value);
+            if (ok) {
+                this.htmlEditorDirty = true;
+            } else {
+                this.showToast(
+                    'Select some text first',
+                    'Highlight text in the page, then click a format button.',
+                    'info'
+                );
+            }
+        } catch (e) {
+            this.showToast('Formatting unavailable', 'This browser blocked the formatting command.', 'warning');
+        }
+    }
+
     /**
      * Enter/exit visual (in-place) editing. The template renders through the
      * SAME scoped-preview pipeline the Preview toggle uses — tables, bands,

@@ -1278,6 +1278,142 @@
                                     placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
                                 ></textarea>
                                 <template if:true={showHtmlBodyVisual}>
+                                    <div class="dg-format-bar" role="toolbar" aria-label="Text formatting">
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="bold"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Bold"
+                                        >
+                                            <b>B</b>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="italic"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Italic"
+                                        >
+                                            <i>I</i>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="underline"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Underline"
+                                        >
+                                            <u>U</u>
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyLeft"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align left"
+                                        >
+                                            Left
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyCenter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align center"
+                                        >
+                                            Center
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyRight"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align right"
+                                        >
+                                            Right
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="fontSize"
+                                            data-value="2"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Small text"
+                                        >
+                                            S
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="fontSize"
+                                            data-value="3"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Normal text"
+                                        >
+                                            M
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="fontSize"
+                                            data-value="5"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Large text"
+                                        >
+                                            L
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="fontSize"
+                                            data-value="6"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Extra large text"
+                                        >
+                                            XL
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Text color">A</span>
+                                        <template for:each={textColorSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-cmd="foreColor"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Highlight color">BG</span>
+                                        <template for:each={highlightSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-cmd="hiliteColor"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="removeFormat"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Clear formatting from the selection"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
                                     <div
                                         class="dg-html-preview-frame dg-visual-host dg-designer-size"
                                         lwc:dom="manual"
@@ -1446,6 +1582,42 @@
                                         </p>
                                     </template>
                                 </div>
+
+                                <template if:true={editTemplateOutputIsPdf}>
+                                    <div class="dg-rail-section-label">
+                                        <lightning-icon icon-name="utility:layers" size="xx-small"></lightning-icon>
+                                        Watermark
+                                    </div>
+                                    <div class="dg-image-panel">
+                                        <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                            Full-page background image behind your content (PDF output). Pre-fade the
+                                            image (~15-20% opacity over white) for a watermark look. Needs a saved
+                                            version first.
+                                        </p>
+                                        <template if:true={watermarkPreviewUrl}>
+                                            <div class="dg-watermark-preview">
+                                                <img src={watermarkPreviewUrl} alt="Current watermark" />
+                                                <lightning-button
+                                                    label="Remove"
+                                                    icon-name="utility:delete"
+                                                    variant="destructive-text"
+                                                    onclick={handleClearWatermark}
+                                                    disabled={isUploadingWatermark}
+                                                ></lightning-button>
+                                            </div>
+                                        </template>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onchange={handleWatermarkFileSelected}
+                                            disabled={isUploadingWatermark}
+                                            class="slds-var-m-top_x-small"
+                                        />
+                                        <template if:true={isUploadingWatermark}>
+                                            <p class="slds-text-body_small slds-var-m-top_x-small">Uploading…</p>
+                                        </template>
+                                    </div>
+                                </template>
                             </div>
                         </div>
                     </template>
