@@ -734,3 +734,35 @@
     flex-basis: 100%;
     height: 0;
 }
+
+/* Code mode: editor and live preview side by side */
+.dg-code-split {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.dg-code-split .dg-html-body-editor {
+    flex: 1 1 50%;
+    min-width: 0;
+}
+
+.dg-code-split .dg-code-preview {
+    flex: 1 1 50%;
+    min-width: 0;
+}
+
+.dg-fmt-colorpick {
+    width: 26px;
+    height: 26px;
+    padding: 1px;
+    border: 1px solid #d8dde6;
+    border-radius: 5px;
+    cursor: pointer;
+    background: #fff;
+}
+
+.dg-fmt-colorpick:hover {
+    outline: 2px solid #7c3aed;
+    outline-offset: 1px;
+}

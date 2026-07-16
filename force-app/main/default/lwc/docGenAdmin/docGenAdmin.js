@@ -1273,8 +1273,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // Merge tags render as friendly atomic pills.
                         this._pillifyTags(pv);
                         // Drag targets: tag chips and image thumbnails drop
-                        // exactly where the user points.
-                        pv.addEventListener('dragover', (e) => e.preventDefault());
+                        // exactly where the user points — with a live insertion
+                        // marker so the drop point is never a guess.
+                        pv.addEventListener('dragover', (e) => {
+                            e.preventDefault();
+                            this._showDropMarker(e, pv);
+                        });
+                        pv.addEventListener('dragleave', (e) => {
+                            if (e.target === pv) {
+                                this._hideDropMarker(pv);
+                            }
+                        });
                         pv.addEventListener('drop', (e) => this._handleVisualDrop(e, pv));
                         // Snapshot AFTER pillify so "unchanged" compares
                         // like-for-like on exit.
@@ -4684,6 +4693,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     handleHtmlBodyEditorInput() {
         this.htmlEditorDirty = true;
+        // Live preview beside the code — debounced so typing stays smooth.
+        clearTimeout(this._codePreviewTimer);
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        this._codePreviewTimer = setTimeout(() => this._refreshCodePreview(), 400);
+    }
+
+    /** Re-render the side-by-side preview from the code editor's current text. */
+    _refreshCodePreview() {
+        const host = this.template.querySelector('.dg-code-preview');
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        if (host && ta) {
+            // eslint-disable-next-line @lwc/lwc/no-inner-html
+            host.innerHTML = scopeHtmlForInlinePreview(ta.value || '');
+        }
+    }
+
+    get codeSplitClass() {
+        return this.showHtmlBodyVisual ? 'dg-code-split slds-hide' : 'dg-code-split';
     }
 
     // --- Format Code + Code ⇄ Preview (shared by the HTML editor and the DOCX viewer) ---
@@ -4871,7 +4898,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const ok = document.execCommand(cmd, false, value);
             if (ok) {
                 this.htmlEditorDirty = true;
-            } else {
+            } else if (cmd !== 'undo' && cmd !== 'redo') {
                 this.showToast(
                     'Select some text first',
                     'Highlight text in the page, then click a format button.',
@@ -4880,6 +4907,59 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
         } catch (e) {
             this.showToast('Formatting unavailable', 'This browser blocked the formatting command.', 'warning');
+        }
+    }
+
+    /**
+     * Custom color pickers: opening the native picker steals focus, so the
+     * page selection is snapshotted on mousedown and restored before the
+     * chosen color is applied.
+     */
+    handleColorPickMouseDown() {
+        try {
+            const sel = window.getSelection();
+            this._savedFmtRange = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+        } catch (e) {
+            this._savedFmtRange = null;
+        }
+    }
+
+    handleColorPickChange(event) {
+        if (!this.showHtmlBodyVisual) {
+            return;
+        }
+        const cmd = event.currentTarget.dataset.cmd;
+        const value = event.currentTarget.value;
+        if (this._savedFmtRange) {
+            try {
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(this._savedFmtRange);
+            } catch (e) {
+                /* selection restore is best-effort */
+            }
+        }
+        if (cmd === 'cellFill') {
+            const cell = this._selectedTableCell();
+            if (cell) {
+                cell.style.background = value;
+                this.htmlEditorDirty = true;
+            } else {
+                this.showToast(
+                    'Click inside a table cell first',
+                    'Put your cursor in a cell, then pick the fill color.',
+                    'info'
+                );
+            }
+            return;
+        }
+        try {
+            document.execCommand('styleWithCSS', false, 'true');
+            if (document.execCommand(cmd, false, value)) {
+                this.htmlEditorDirty = true;
+            }
+        } catch (e) {
+            /* ignore */
         }
     }
 
@@ -4976,6 +5056,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 for (const styleEl of clone.querySelectorAll('style')) {
                     styleEl.remove();
                 }
+                for (const markerEl of clone.querySelectorAll('.dg-drop-marker')) {
+                    markerEl.remove();
+                }
                 this._unpillifyTags(clone);
                 const edited = clone.innerHTML.trim();
                 // Swap ONLY the body content back into the original document —
@@ -5001,6 +5084,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.showHtmlBodyVisual = false;
         this._visualOriginalCode = null;
         this._visualEnteredDom = null;
+        // Landing back in Code view — make the side-by-side preview current.
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => this._refreshCodePreview(), 120);
     }
 
     get docxHtmlEditorClass() {
@@ -5020,6 +5106,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!isDocx) {
             // Formatting changes the text that Apply would stage — surface it.
             this.htmlEditorDirty = true;
+            this._refreshCodePreview();
         }
     }
 
@@ -5110,6 +5197,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (ta) {
                 ta.value = text || '';
             }
+            this._refreshCodePreview();
         }, 120);
     }
 
@@ -5334,9 +5422,57 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    /** Purple insertion caret that tracks the pointer while dragging. */
+    _showDropMarker(event, pv) {
+        let marker = pv.querySelector('.dg-drop-marker');
+        if (!marker) {
+            marker = document.createElement('span');
+            marker.className = 'dg-drop-marker';
+            marker.setAttribute('contenteditable', 'false');
+            marker.style.cssText =
+                'position: absolute; width: 3px; background: #7c3aed; pointer-events: none; z-index: 99; border-radius: 2px; box-shadow: 0 0 4px rgba(124, 58, 237, 0.7);';
+            pv.style.position = 'relative';
+            pv.appendChild(marker);
+        }
+        let rect = null;
+        try {
+            const range = document.caretRangeFromPoint(event.clientX, event.clientY);
+            if (range && pv.contains(range.startContainer)) {
+                const rects = range.getClientRects();
+                rect = rects && rects.length ? rects[0] : null;
+                if (!rect) {
+                    const el =
+                        range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
+                    rect = el ? el.getBoundingClientRect() : null;
+                }
+            }
+        } catch (e) {
+            rect = null;
+        }
+        if (rect) {
+            const pvRect = pv.getBoundingClientRect();
+            marker.style.left = rect.left - pvRect.left + 'px';
+            marker.style.top = rect.top - pvRect.top + 'px';
+            marker.style.height = (rect.height || 16) + 'px';
+            marker.style.display = 'block';
+        } else {
+            marker.style.display = 'none';
+        }
+        pv.style.boxShadow = '0 0 0 3px rgba(124, 58, 237, 0.35)';
+    }
+
+    _hideDropMarker(pv) {
+        const marker = pv.querySelector('.dg-drop-marker');
+        if (marker) {
+            marker.remove();
+        }
+        pv.style.boxShadow = '';
+    }
+
     /** Drop a dragged tag chip / image thumbnail at the pointed-at spot. */
     _handleVisualDrop(event, pv) {
         event.preventDefault();
+        this._hideDropMarker(pv);
         const text = event.dataTransfer && event.dataTransfer.getData('text/plain');
         if (!text) {
             return;

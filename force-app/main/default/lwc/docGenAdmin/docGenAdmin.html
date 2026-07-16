@@ -1270,13 +1270,20 @@
                                         ></lightning-spinner>
                                     </div>
                                 </template>
-                                <textarea
-                                    class={designerEditorClass}
-                                    spellcheck="false"
-                                    aria-label="Template HTML body"
-                                    oninput={handleHtmlBodyEditorInput}
-                                    placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
-                                ></textarea>
+                                <div class={codeSplitClass}>
+                                    <textarea
+                                        class={designerEditorClass}
+                                        spellcheck="false"
+                                        aria-label="Template HTML body"
+                                        oninput={handleHtmlBodyEditorInput}
+                                        placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
+                                    ></textarea>
+                                    <div
+                                        class="dg-html-preview-frame dg-code-preview dg-designer-size"
+                                        lwc:dom="manual"
+                                        title="Live preview — updates as you type"
+                                    ></div>
+                                </div>
                                 <template if:true={showHtmlBodyVisual}>
                                     <div class="dg-format-bar" role="toolbar" aria-label="Text formatting">
                                         <button
@@ -1389,6 +1396,15 @@
                                                 title={sw.title}
                                             ></button>
                                         </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="foreColor"
+                                            value="#1f3a5f"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom text color — any color you want"
+                                        />
                                         <span class="dg-fmt-sep"></span>
                                         <span class="dg-fmt-label" title="Highlight color">BG</span>
                                         <template for:each={highlightSwatches} for:item="sw">
@@ -1403,6 +1419,15 @@
                                                 title={sw.title}
                                             ></button>
                                         </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="hiliteColor"
+                                            value="#fef3c7"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom highlight color"
+                                        />
                                         <span class="dg-fmt-sep"></span>
                                         <span
                                             class="dg-fmt-label"
@@ -1432,6 +1457,24 @@
                                             title="Clear formatting from the selection"
                                         >
                                             Clear
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="undo"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Undo"
+                                        >
+                                            &#8630; Undo
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="redo"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Redo"
+                                        >
+                                            &#8631; Redo
                                         </button>
                                         <span class="dg-fmt-break"></span>
                                         <span class="dg-fmt-label" title="Table tools — put your cursor in a cell first"
@@ -1497,6 +1540,15 @@
                                                 title={sw.title}
                                             ></button>
                                         </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="cellFill"
+                                            value="#f2f4f7"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom cell fill color"
+                                        />
                                     </div>
                                     <div
                                         class="dg-html-preview-frame dg-visual-host dg-designer-size"
