@@ -4,6 +4,8 @@ import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { refreshApex } from '@salesforce/apex';
 import { downloadBase64 as downloadBase64Util, parseSOQLFields, stripOuterSelectFrom } from 'c/docGenUtils';
+// HTML-first authoring: starter designs, AI prompt builder, query-shape extractor
+import { STARTERS, extractQueryShape, buildStarterHtml, buildAiPrompt } from './docGenAuthoringKit';
 
 // Apex
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
@@ -38,6 +40,7 @@ import previewRecordData from '@salesforce/apex/DocGenController.previewRecordDa
 import saveWatermarkImage from '@salesforce/apex/DocGenController.saveWatermarkImage';
 import clearWatermarkImage from '@salesforce/apex/DocGenController.clearWatermarkImage';
 import searchDataProviders from '@salesforce/apex/DocGenController.searchDataProviders';
+import getHtmlTemplateBody from '@salesforce/apex/DocGenController.getHtmlTemplateBody';
 import validateDataProvider from '@salesforce/apex/DocGenController.validateDataProvider';
 
 // Schema
@@ -274,7 +277,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track newTemplateApiName = '';
     _newApiNameEdited = false;
     newTemplateCategory = '';
-    @track newTemplateType = 'Word';
+    // HTML-first: the wizard's default authoring path (starter) creates HTML templates.
+    @track newTemplateType = 'HTML';
     @track newTemplateOutputFormat = 'PDF';
     @track newTemplatePageOrientation = 'Portrait';
     @track newTemplatePageSize = 'Letter';
@@ -283,6 +287,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     newTemplateObject = 'Account';
     newTemplateDesc = '';
     newTemplateQuery = '';
+    // HTML-first authoring path. 'starter' (recommended) and 'ai' both create
+    // HTML templates; 'file' exposes the classic Type picker for uploads.
+    @track newAuthoringMode = 'starter';
+    @track newStarterKey = 'report';
     @track newTemplateSampleRecordId = '';
     @track sampleRecordData = null;
     isCreating = true;
@@ -340,6 +348,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // Drives the "your HTML defines its own page setup" banner and hides the
     // template-level page-layout fields, which the engine ignores in this case.
     @track editHtmlBodyOwnsPageRule = false;
+    // HTML body editor (paste-back surface for LLM-generated templates)
+    @track showHtmlBodyEditor = false;
+    @track isLoadingHtmlBody = false;
+    @track isApplyingHtmlBody = false;
+    // Last HTML body text this session touched (upload, starter, or Apply) so
+    // reopening the editor doesn't need a server round-trip.
+    _lastUploadedHtmlText = null;
 
     @track currentFileId;
     @track uploadedFileName = '';
@@ -1323,6 +1338,153 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         if (event.detail.value === 'HTML' || event.detail.value === 'PDF') {
             this.newTemplateOutputFormat = 'PDF';
+        }
+    }
+
+    // --- HTML-first authoring path ---
+    get isAuthoringStarter() {
+        return this.newAuthoringMode === 'starter';
+    }
+    get isAuthoringAi() {
+        return this.newAuthoringMode === 'ai';
+    }
+    get isAuthoringFile() {
+        return this.newAuthoringMode === 'file';
+    }
+
+    get authoringCards() {
+        const defs = [
+            {
+                mode: 'starter',
+                title: 'Start from a Design',
+                badge: 'Recommended',
+                icon: 'utility:brush',
+                desc: 'Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Creates an HTML template, the most reliable path to pixel-perfect PDFs.'
+            },
+            {
+                mode: 'ai',
+                title: 'Generate with AI',
+                badge: null,
+                icon: 'utility:einstein',
+                desc: "We assemble a ready-to-paste prompt with your fields and DocGen's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor."
+            },
+            {
+                mode: 'file',
+                title: 'I Have an Existing File',
+                badge: null,
+                icon: 'utility:upload',
+                desc: 'Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. Word documents are converted to HTML for PDF output — complex layouts may not convert exactly.'
+            }
+        ];
+        return defs.map((d) => ({
+            ...d,
+            selected: this.newAuthoringMode === d.mode,
+            cardClass:
+                this.newAuthoringMode === d.mode ? 'dg-authoring-card dg-authoring-card_selected' : 'dg-authoring-card'
+        }));
+    }
+
+    get starterCards() {
+        return STARTERS.map((s) => ({
+            ...s,
+            selected: this.newStarterKey === s.key,
+            cardClass: this.newStarterKey === s.key ? 'dg-starter-card dg-starter-card_selected' : 'dg-starter-card'
+        }));
+    }
+
+    get selectedStarterLabel() {
+        const s = STARTERS.find((x) => x.key === this.newStarterKey);
+        return s ? s.label : '';
+    }
+
+    handleAuthoringModeSelect(event) {
+        const mode = event.currentTarget.dataset.mode;
+        if (!mode || mode === this.newAuthoringMode) {
+            return;
+        }
+        this.newAuthoringMode = mode;
+        if (mode === 'starter' || mode === 'ai') {
+            this.newTemplateType = 'HTML';
+            this.newTemplateOutputFormat = 'PDF';
+        } else {
+            this.newTemplateType = 'Word';
+            this.newTemplateOutputFormat = 'PDF';
+        }
+    }
+
+    handleAuthoringModeKeydown(event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            this.handleAuthoringModeSelect(event);
+        }
+    }
+
+    handleStarterSelect(event) {
+        this.newStarterKey = event.currentTarget.dataset.key;
+    }
+
+    /** Word→HTML conversion expectation-setting, shown under the Type picker. */
+    get showWordConversionNote() {
+        return this.isAuthoringFile && this.newTemplateType === 'Word';
+    }
+
+    /** v1.90 HTML @page note only applies when the user brings their own HTML file. */
+    get showHtmlPageRuleNote() {
+        return this.isCreatingHtmlPdf && this.isAuthoringFile;
+    }
+
+    get aiAuthoringPrompt() {
+        const shape = extractQueryShape(this.newTemplateQuery, this.newTemplateObject);
+        return buildAiPrompt(shape, {
+            dataSourceMode: this.dataSourceMode,
+            providerFields: (this.providerFields || []).map((f) => f.name || f)
+        });
+    }
+
+    get editAiPrompt() {
+        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+        return buildAiPrompt(shape, {
+            dataSourceMode: this.editTemplateObject === 'FlowJsonData' ? 'flow' : 'record',
+            providerFields: (this.providerFields || []).map((f) => f.name || f)
+        });
+    }
+
+    handleCopyAiPrompt() {
+        this._copyToClipboard(this.aiAuthoringPrompt, 'AI prompt copied — paste it into your AI assistant.');
+    }
+
+    handleCopyEditAiPrompt() {
+        this._copyToClipboard(this.editAiPrompt, 'AI prompt copied — paste it into your AI assistant.');
+    }
+
+    _copyToClipboard(text, successMsg) {
+        const fallback = () => {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try {
+                ok = document.execCommand('copy');
+            } catch (e) {
+                ok = false;
+            }
+            document.body.removeChild(ta);
+            if (ok) {
+                this.showToast('Copied', successMsg, 'success');
+            } else {
+                this.showToast('Copy failed', 'Select the prompt text and copy it manually.', 'warning');
+            }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(
+                () => this.showToast('Copied', successMsg, 'success'),
+                () => fallback()
+            );
+        } else {
+            fallback();
         }
     }
     handleOutputFormatChange(event) {
@@ -2739,11 +2901,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             fields[TEST_RECORD_FIELD.fieldApiName] = this.newTemplateSampleRecordId;
         }
 
+        // Snapshot authoring-path inputs before resetForm() clears them — the
+        // starter body is built and attached after the modal opens.
+        const authoringMode = this.newAuthoringMode;
+        const starterKey = this.newStarterKey;
+        const starterShape =
+            authoringMode === 'starter' ? extractQueryShape(this.newTemplateQuery, this.newTemplateObject) : null;
+
         try {
             const record = await createRecord({ apiName: DOCGEN_TEMPLATE_OBJECT.objectApiName, fields });
             this.createdTemplateId = record.id;
             this.isCreating = false;
-            this.showToast('Success', 'Template Record created. Please upload your document.', 'success');
+            if (authoringMode !== 'starter') {
+                this.showToast('Success', 'Template Record created. Please upload your document.', 'success');
+            }
 
             const newRow = {
                 Id: record.id,
@@ -2773,9 +2944,51 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.activeMainTab = 'list';
             this.activeEditTab = 'document';
             this.openEditModal(newRow, 'document');
+            if (authoringMode === 'starter') {
+                await this._applyStarterBody(record.id, starterKey, starterShape);
+            }
         } catch (error) {
             this.showToast('Error creating record', error.body ? error.body.message : error.message, 'error');
         }
+    }
+
+    /**
+     * Starter path: build the chosen design with the author's real merge
+     * fields and attach it as the template body, so the very first "Save as
+     * New Version" click produces a working v1 that renders on Generate.
+     */
+    async _applyStarterBody(templateId, starterKey, shape) {
+        try {
+            const html = buildStarterHtml(starterKey, shape);
+            const fileName = (this.selectedStarterLabelFor(starterKey) || 'Starter').replace(/[^\w]+/g, '_') + '.html';
+            const bodyResult = await saveHtmlTemplateBody({ templateId, fileName, htmlContent: html });
+            this.currentFileId = bodyResult.contentDocumentId;
+            this.uploadedContentVersionId = bodyResult.contentVersionId;
+            this.uploadedFileName = fileName;
+            this._lastUploadedHtmlText = html;
+            // Starters declare @page — same handling as an uploaded body that owns it.
+            this.editHtmlBodyOwnsPageRule = true;
+            this.editTemplatePageOrientation = null;
+            this.editTemplatePageSize = null;
+            this.editTemplatePageMargins = null;
+            this.editTemplateCustomMargins = '';
+            // Land the author inside the HTML with the draft loaded.
+            this.showHtmlBodyEditor = true;
+            this._syncHtmlBodyEditorDom(html);
+            this.showToast(
+                'Starter design attached',
+                'Review the HTML, then click "Save as New Version" to activate it. Generate Sample shows it with real data.',
+                'success'
+            );
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Starter attach failed', msg, 'error');
+        }
+    }
+
+    selectedStarterLabelFor(key) {
+        const s = STARTERS.find((x) => x.key === key);
+        return s ? s.label : '';
     }
 
     // --- Row Action ---
@@ -2946,6 +3159,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // Same staleness trap: the @page-ownership flag belongs to whatever
             // HTML body was last uploaded, not to this template.
             this.editHtmlBodyOwnsPageRule = false;
+            // HTML body editor state is per-template too.
+            this.showHtmlBodyEditor = false;
+            this._lastUploadedHtmlText = null;
+            this.isLoadingHtmlBody = false;
+            this.isApplyingHtmlBody = false;
 
             let cdLinks = [];
             if (row.ContentDocumentLinks) {
@@ -4205,105 +4423,180 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 htmlText = await file.text();
             }
 
-            // Extract inline data: URI images (common in Notion, ChatGPT, Apple
-            // Pages, or any rich-text-paste HTML). Blob.toPdf can't decode
-            // data URIs, so each inline image becomes its own ContentVersion
-            // with the src rewritten to /sfc/... just like zipped images.
-            const dataUriMatches = [];
-            const dataUriRe = /src\s*=\s*(["'])(data:image\/([a-zA-Z0-9+.-]+);base64,([A-Za-z0-9+/=\s]+?))\1/g;
-            let m;
-            while ((m = dataUriRe.exec(htmlText)) !== null) {
-                const dataUri = m[2];
-                let ext = m[3].toLowerCase();
-                if (ext === 'jpeg') {
-                    ext = 'jpg';
-                }
-                if (ext === 'svg+xml') {
-                    ext = 'svg';
-                }
-                const base64 = m[4].replace(/\s+/g, '');
-                dataUriMatches.push({ dataUri, ext, base64 });
-            }
-
-            // Upload each image; server returns CV Id + URL per part
-            const urlByPath = {};
-            for (let i = 0; i < imagePaths.length; i++) {
-                const base = imagePaths[i].split('/').pop() || imagePaths[i];
-                // eslint-disable-next-line no-await-in-loop
-                const imgResult = await saveHtmlTemplateImage({
-                    templateId,
-                    fileName: base,
-                    base64Content: bytesToBase64(imageBytes[i])
-                });
-                urlByPath[imagePaths[i]] = imgResult.url;
-                if (base !== imagePaths[i]) {
-                    urlByPath[base] = imgResult.url;
-                }
-            }
-
-            // Upload extracted data: URIs; key by the full data: string so the
-            // regex-replace below swaps each original URI for its CV URL.
-            const dataUriUrlMap = [];
-            for (let i = 0; i < dataUriMatches.length; i++) {
-                const d = dataUriMatches[i];
-                // eslint-disable-next-line no-await-in-loop
-                const imgResult = await saveHtmlTemplateImage({
-                    templateId,
-                    fileName: 'inline_' + (i + 1) + '.' + d.ext,
-                    base64Content: d.base64
-                });
-                dataUriUrlMap.push({ dataUri: d.dataUri, url: imgResult.url });
-            }
-
-            // Rewrite <img src="..."> references client-side
-            let rewritten = htmlText;
-            for (const path of Object.keys(urlByPath)) {
-                const url = urlByPath[path];
-                rewritten = rewritten.split('"' + path + '"').join('"' + url + '"');
-                rewritten = rewritten.split("'" + path + "'").join("'" + url + "'");
-            }
-            for (const entry of dataUriUrlMap) {
-                rewritten = rewritten.split(entry.dataUri).join(entry.url);
-            }
-            const totalImages = imagePaths.length + dataUriMatches.length;
-
-            // Save the final HTML body
-            const bodyResult = await saveHtmlTemplateBody({
-                templateId,
-                fileName: file.name,
-                htmlContent: rewritten
-            });
-
-            this.currentFileId = bodyResult.contentDocumentId;
-            this.uploadedContentVersionId = bodyResult.contentVersionId;
-            this.uploadedFileName = file.name;
-            const imgMsg =
-                totalImages > 0 ? ' (' + totalImages + ' image' + (totalImages === 1 ? '' : 's') + ' extracted)' : '';
-            // v1.90 — detect author-declared @page rule; if present, the engine suppresses
-            // its own size/margin and the template-level page fields are dead inputs. Hide
-            // them and clear in-memory values so a subsequent Save doesn't silently
-            // re-introduce conflicting values.
-            this.editHtmlBodyOwnsPageRule = this.htmlContainsPageRule(rewritten);
-            if (this.editHtmlBodyOwnsPageRule) {
-                this.editTemplatePageOrientation = null;
-                this.editTemplatePageSize = null;
-                this.editTemplatePageMargins = null;
-                this.editTemplateCustomMargins = '';
-            }
-            const pageMsg = this.editHtmlBodyOwnsPageRule
-                ? ' Your HTML defines its own @page CSS — template page-layout fields cleared.'
-                : '';
-            this.showToast(
-                'Uploaded',
-                file.name + imgMsg + '.' + pageMsg + ' Click "Save as New Version" to activate.',
-                'success'
-            );
+            await this._processAndSaveHtmlBody(templateId, htmlText, file.name, { imagePaths, imageBytes });
         } catch (err) {
             const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
             this.showToast('Upload Failed', msg, 'error');
         } finally {
             this.isUploadingHtml = false;
             event.target.value = '';
+        }
+    }
+
+    /**
+     * Shared HTML-body pipeline (file upload, paste-back editor, starter):
+     * extract inline data: URI images, upload every image part, rewrite
+     * <img src> to CV URLs, store the body, and sync the @page-ownership
+     * state. Throws on failure — callers own the error toast.
+     */
+    async _processAndSaveHtmlBody(templateId, htmlText, fileName, zipImages) {
+        const imagePaths = (zipImages && zipImages.imagePaths) || [];
+        const imageBytes = (zipImages && zipImages.imageBytes) || [];
+
+        // Extract inline data: URI images (common in Notion, ChatGPT, Apple
+        // Pages, or any rich-text-paste HTML). Blob.toPdf can't decode
+        // data URIs, so each inline image becomes its own ContentVersion
+        // with the src rewritten to /sfc/... just like zipped images.
+        const dataUriMatches = [];
+        const dataUriRe = /src\s*=\s*(["'])(data:image\/([a-zA-Z0-9+.-]+);base64,([A-Za-z0-9+/=\s]+?))\1/g;
+        let m;
+        while ((m = dataUriRe.exec(htmlText)) !== null) {
+            const dataUri = m[2];
+            let ext = m[3].toLowerCase();
+            if (ext === 'jpeg') {
+                ext = 'jpg';
+            }
+            if (ext === 'svg+xml') {
+                ext = 'svg';
+            }
+            const base64 = m[4].replace(/\s+/g, '');
+            dataUriMatches.push({ dataUri, ext, base64 });
+        }
+
+        // Upload each image; server returns CV Id + URL per part
+        const urlByPath = {};
+        for (let i = 0; i < imagePaths.length; i++) {
+            const base = imagePaths[i].split('/').pop() || imagePaths[i];
+            // eslint-disable-next-line no-await-in-loop
+            const imgResult = await saveHtmlTemplateImage({
+                templateId,
+                fileName: base,
+                base64Content: bytesToBase64(imageBytes[i])
+            });
+            urlByPath[imagePaths[i]] = imgResult.url;
+            if (base !== imagePaths[i]) {
+                urlByPath[base] = imgResult.url;
+            }
+        }
+
+        // Upload extracted data: URIs; key by the full data: string so the
+        // regex-replace below swaps each original URI for its CV URL.
+        const dataUriUrlMap = [];
+        for (let i = 0; i < dataUriMatches.length; i++) {
+            const d = dataUriMatches[i];
+            // eslint-disable-next-line no-await-in-loop
+            const imgResult = await saveHtmlTemplateImage({
+                templateId,
+                fileName: 'inline_' + (i + 1) + '.' + d.ext,
+                base64Content: d.base64
+            });
+            dataUriUrlMap.push({ dataUri: d.dataUri, url: imgResult.url });
+        }
+
+        // Rewrite <img src="..."> references client-side
+        let rewritten = htmlText;
+        for (const path of Object.keys(urlByPath)) {
+            const url = urlByPath[path];
+            rewritten = rewritten.split('"' + path + '"').join('"' + url + '"');
+            rewritten = rewritten.split("'" + path + "'").join("'" + url + "'");
+        }
+        for (const entry of dataUriUrlMap) {
+            rewritten = rewritten.split(entry.dataUri).join(entry.url);
+        }
+        const totalImages = imagePaths.length + dataUriMatches.length;
+
+        // Save the final HTML body
+        const bodyResult = await saveHtmlTemplateBody({
+            templateId,
+            fileName,
+            htmlContent: rewritten
+        });
+
+        this.currentFileId = bodyResult.contentDocumentId;
+        this.uploadedContentVersionId = bodyResult.contentVersionId;
+        this.uploadedFileName = fileName;
+        this._lastUploadedHtmlText = rewritten;
+        const imgMsg =
+            totalImages > 0 ? ' (' + totalImages + ' image' + (totalImages === 1 ? '' : 's') + ' extracted)' : '';
+        // v1.90 — detect author-declared @page rule; if present, the engine suppresses
+        // its own size/margin and the template-level page fields are dead inputs. Hide
+        // them and clear in-memory values so a subsequent Save doesn't silently
+        // re-introduce conflicting values.
+        this.editHtmlBodyOwnsPageRule = this.htmlContainsPageRule(rewritten);
+        if (this.editHtmlBodyOwnsPageRule) {
+            this.editTemplatePageOrientation = null;
+            this.editTemplatePageSize = null;
+            this.editTemplatePageMargins = null;
+            this.editTemplateCustomMargins = '';
+        }
+        const pageMsg = this.editHtmlBodyOwnsPageRule
+            ? ' Your HTML defines its own @page CSS — template page-layout fields cleared.'
+            : '';
+        this.showToast(
+            'Uploaded',
+            fileName + imgMsg + '.' + pageMsg + ' Click "Save as New Version" to activate.',
+            'success'
+        );
+        return rewritten;
+    }
+
+    // --- HTML body editor (paste-back surface) ---
+    get htmlBodyEditorToggleLabel() {
+        return this.showHtmlBodyEditor ? 'Hide HTML Editor' : 'Edit HTML';
+    }
+
+    async toggleHtmlBodyEditor() {
+        if (this.showHtmlBodyEditor) {
+            this.showHtmlBodyEditor = false;
+            return;
+        }
+        this.showHtmlBodyEditor = true;
+        if (this._lastUploadedHtmlText != null) {
+            this._syncHtmlBodyEditorDom(this._lastUploadedHtmlText);
+            return;
+        }
+        // No body touched this session — pull the latest stored body.
+        this.isLoadingHtmlBody = true;
+        try {
+            const body = await getHtmlTemplateBody({ templateId: this.editTemplateId });
+            this._lastUploadedHtmlText = body || '';
+            this._syncHtmlBodyEditorDom(this._lastUploadedHtmlText);
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Could not load HTML body', msg, 'error');
+            this._syncHtmlBodyEditorDom('');
+        } finally {
+            this.isLoadingHtmlBody = false;
+        }
+    }
+
+    /** Native textarea doesn't track LWC state — set the DOM after render. */
+    _syncHtmlBodyEditorDom(text) {
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            const ta = this.template.querySelector('.dg-html-body-editor');
+            if (ta) {
+                ta.value = text || '';
+            }
+        }, 120);
+    }
+
+    async handleApplyHtmlBody() {
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        const text = ta ? ta.value : '';
+        if (!text || !text.trim()) {
+            this.showToast('Nothing to apply', 'Paste or edit HTML in the editor first.', 'warning');
+            return;
+        }
+        this.isApplyingHtmlBody = true;
+        try {
+            const base = (this.uploadedFileName || 'template.html').replace(/\.(html?|zip)$/i, '');
+            await this._processAndSaveHtmlBody(this.editTemplateId, text, base + '.html', null);
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Apply failed', msg, 'error');
+        } finally {
+            this.isApplyingHtmlBody = false;
         }
     }
 
@@ -4334,7 +4627,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.newTemplateCategory = '';
         // Excel leaves Output Format = 'Native'; without this reset the next
         // wizard open shows Type=Excel with a forced-invalid 'PDF' format.
-        this.newTemplateType = 'Word';
+        // HTML-first: the wizard opens on the recommended starter path, so the
+        // default Type is HTML until the user picks "I Have an Existing File".
+        this.newAuthoringMode = 'starter';
+        this.newStarterKey = 'report';
+        this.newTemplateType = 'HTML';
         this.newTemplateDesc = '';
         this.newTemplateQuery = '';
         this.newTemplateOutputFormat = 'PDF';

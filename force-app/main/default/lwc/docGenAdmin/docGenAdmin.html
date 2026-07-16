@@ -18,6 +18,34 @@
                     <div class="wizard-content">
                         <!-- Step 1: Details + Data Source Selection -->
                         <template if:true={isStep1}>
+                            <!-- HTML-first authoring path picker -->
+                            <div
+                                class="dg-authoring-cards slds-var-m-bottom_large"
+                                role="radiogroup"
+                                aria-label="How do you want to build this template?"
+                            >
+                                <template for:each={authoringCards} for:item="card">
+                                    <div
+                                        key={card.mode}
+                                        class={card.cardClass}
+                                        data-mode={card.mode}
+                                        onclick={handleAuthoringModeSelect}
+                                        onkeydown={handleAuthoringModeKeydown}
+                                        role="radio"
+                                        aria-checked={card.selected}
+                                        tabindex="0"
+                                    >
+                                        <div class="dg-authoring-card-head">
+                                            <lightning-icon icon-name={card.icon} size="small"></lightning-icon>
+                                            <span class="dg-authoring-card-title">{card.title}</span>
+                                            <template if:true={card.badge}>
+                                                <span class="dg-authoring-badge">{card.badge}</span>
+                                            </template>
+                                        </div>
+                                        <p class="dg-authoring-card-desc">{card.desc}</p>
+                                    </div>
+                                </template>
+                            </div>
                             <div class="slds-grid slds-gutters_large">
                                 <div class="slds-col slds-size_1-of-2">
                                     <lightning-input
@@ -260,21 +288,96 @@
                                     </template>
                                 </div>
                                 <div class="slds-col slds-size_1-of-2">
-                                    <lightning-combobox
-                                        label="Type"
-                                        value={newTemplateType}
-                                        options={typeOptions}
-                                        onchange={handleTypeChange}
-                                        required
-                                    ></lightning-combobox>
-                                    <lightning-combobox
-                                        label="Output Format"
-                                        value={newTemplateOutputFormat}
-                                        options={outputFormatOptions}
-                                        onchange={handleOutputFormatChange}
-                                        class="slds-var-m-top_medium"
-                                        required
-                                    ></lightning-combobox>
+                                    <!-- Starter path: design gallery -->
+                                    <template if:true={isAuthoringStarter}>
+                                        <label class="slds-form-element__label">Starter Design</label>
+                                        <div role="radiogroup" aria-label="Starter design">
+                                            <template for:each={starterCards} for:item="starter">
+                                                <div
+                                                    key={starter.key}
+                                                    class={starter.cardClass}
+                                                    data-key={starter.key}
+                                                    onclick={handleStarterSelect}
+                                                    role="radio"
+                                                    aria-checked={starter.selected}
+                                                    tabindex="0"
+                                                >
+                                                    <div class="dg-starter-card-head">
+                                                        <lightning-icon
+                                                            icon-name={starter.icon}
+                                                            size="x-small"
+                                                        ></lightning-icon>
+                                                        <span class="dg-starter-card-title">{starter.label}</span>
+                                                    </div>
+                                                    <p class="dg-starter-card-desc">{starter.description}</p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                            Your Query Config fields are merged into the design automatically — pick
+                                            data in the next step, review the HTML, done.
+                                        </p>
+                                    </template>
+
+                                    <!-- AI path: explain the prompt handoff -->
+                                    <template if:true={isAuthoringAi}>
+                                        <div class="slds-box slds-theme_shade" style="border-radius: 8px" role="note">
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:einstein"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                After you pick your data in the next step, the
+                                                <strong>Review</strong> screen shows a complete prompt — your fields,
+                                                DocGen's merge-tag syntax, and the PDF engine's layout rules. Copy it
+                                                into Claude, ChatGPT, Gemini, or Copilot, then paste the returned HTML
+                                                into the template editor. No data leaves Salesforce unless you paste it.
+                                            </p>
+                                        </div>
+                                    </template>
+
+                                    <!-- File path: classic Type/Output Format pickers -->
+                                    <template if:true={isAuthoringFile}>
+                                        <lightning-combobox
+                                            label="Type"
+                                            value={newTemplateType}
+                                            options={typeOptions}
+                                            onchange={handleTypeChange}
+                                            field-level-help="What kind of source file you'll upload. HTML is the most reliable for PDF output; Word/PowerPoint/Excel keep their native format or convert to PDF."
+                                            required
+                                        ></lightning-combobox>
+                                        <template if:true={showWordConversionNote}>
+                                            <div
+                                                class="slds-box slds-box_x-small slds-theme_warning slds-var-m-top_x-small"
+                                                role="note"
+                                            >
+                                                <p class="slds-text-body_small">
+                                                    <lightning-icon
+                                                        icon-name="utility:info"
+                                                        size="x-small"
+                                                        class="slds-var-m-right_x-small"
+                                                    ></lightning-icon>
+                                                    Word templates are converted to HTML for PDF output — complex
+                                                    layouts (text boxes, floating images, unusual tables) may not
+                                                    convert exactly. Keep Output Format&nbsp;<strong
+                                                        >Native (.docx)</strong
+                                                    >&nbsp;for full fidelity, or use&nbsp;<strong
+                                                        >Start from a Design</strong
+                                                    >&nbsp;/&nbsp;<strong>Generate with AI</strong>&nbsp;for
+                                                    pixel-perfect PDFs.
+                                                </p>
+                                            </div>
+                                        </template>
+                                        <lightning-combobox
+                                            label="Output Format"
+                                            value={newTemplateOutputFormat}
+                                            options={outputFormatOptions}
+                                            onchange={handleOutputFormatChange}
+                                            class="slds-var-m-top_medium"
+                                            required
+                                        ></lightning-combobox>
+                                    </template>
                                     <template if:true={showNewPageLayoutFields}>
                                         <lightning-combobox
                                             label="Page Orientation"
@@ -311,7 +414,7 @@
                                             ></lightning-input>
                                         </template>
                                     </template>
-                                    <template if:true={isCreatingHtmlPdf}>
+                                    <template if:true={showHtmlPageRuleNote}>
                                         <div class="slds-box slds-theme_shade slds-var-m-top_medium" role="status">
                                             <p class="slds-text-body_small">
                                                 <lightning-icon
@@ -933,6 +1036,42 @@
                                     >
 {readableQueryConfig}</pre
                                     >
+                                </template>
+                                <template if:true={isAuthoringStarter}>
+                                    <p class="slds-var-m-bottom_small">
+                                        <strong>Starter design:</strong> {selectedStarterLabel} — a ready-to-render HTML
+                                        body with your merge fields is attached on create. Review it in the editor, then
+                                        click "Save as New Version" to activate v1.
+                                    </p>
+                                </template>
+                                <template if:true={isAuthoringAi}>
+                                    <div class="slds-var-m-top_medium">
+                                        <div
+                                            style="
+                                                display: flex;
+                                                align-items: center;
+                                                justify-content: space-between;
+                                                margin-bottom: 6px;
+                                            "
+                                        >
+                                            <strong
+                                                >Your AI prompt — copy this into Claude, ChatGPT, Gemini, or
+                                                Copilot</strong
+                                            >
+                                            <lightning-button
+                                                label="Copy Prompt"
+                                                icon-name="utility:copy"
+                                                variant="brand"
+                                                onclick={handleCopyAiPrompt}
+                                            ></lightning-button>
+                                        </div>
+                                        <pre class="dg-ai-prompt">{aiAuthoringPrompt}</pre>
+                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                            Paste the HTML your assistant returns into the template's&nbsp;<strong
+                                                >Edit HTML</strong
+                                            >&nbsp;editor (it opens after Create). The prompt stays available there too.
+                                        </p>
+                                    </div>
                                 </template>
                                 <p class="slds-var-m-top_large">Click "Create Template" to save.</p>
                             </div>
@@ -2641,12 +2780,67 @@
                                                 disabled={isUploadingHtml}
                                             >
                                             </lightning-button>
+                                            <lightning-button
+                                                label={htmlBodyEditorToggleLabel}
+                                                icon-name="utility:edit"
+                                                onclick={toggleHtmlBodyEditor}
+                                                class="slds-var-m-left_x-small"
+                                            >
+                                            </lightning-button>
+                                            <lightning-button
+                                                label="Copy AI Prompt"
+                                                icon-name="utility:copy"
+                                                onclick={handleCopyEditAiPrompt}
+                                                title="Copies a ready-to-paste prompt (your fields + DocGen tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot. Paste the returned HTML into the editor."
+                                                class="slds-var-m-left_x-small"
+                                            >
+                                            </lightning-button>
                                             <template if:true={isUploadingHtml}>
                                                 <lightning-spinner
                                                     alternative-text="Uploading"
                                                     size="small"
                                                     class="slds-var-m-left_small"
                                                 ></lightning-spinner>
+                                            </template>
+                                            <template if:true={showHtmlBodyEditor}>
+                                                <div class="slds-var-m-top_small">
+                                                    <template if:true={isLoadingHtmlBody}>
+                                                        <div class="slds-is-relative" style="height: 40px">
+                                                            <lightning-spinner
+                                                                alternative-text="Loading HTML body"
+                                                                size="small"
+                                                            ></lightning-spinner>
+                                                        </div>
+                                                    </template>
+                                                    <textarea
+                                                        class="dg-html-body-editor"
+                                                        spellcheck="false"
+                                                        aria-label="Template HTML body"
+                                                        placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
+                                                    ></textarea>
+                                                    <div class="slds-var-m-top_x-small">
+                                                        <lightning-button
+                                                            variant="brand"
+                                                            label="Apply HTML"
+                                                            icon-name="utility:check"
+                                                            onclick={handleApplyHtmlBody}
+                                                            disabled={isApplyingHtmlBody}
+                                                        ></lightning-button>
+                                                        <template if:true={isApplyingHtmlBody}>
+                                                            <lightning-spinner
+                                                                alternative-text="Applying"
+                                                                size="small"
+                                                                class="slds-var-m-left_small"
+                                                            ></lightning-spinner>
+                                                        </template>
+                                                        <span
+                                                            class="slds-text-body_small slds-text-color_weak slds-var-m-left_small"
+                                                        >
+                                                            Applies as the uploaded body — then click "Save as New
+                                                            Version" below. Inline images are extracted automatically.
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </template>
                                         </template>
 

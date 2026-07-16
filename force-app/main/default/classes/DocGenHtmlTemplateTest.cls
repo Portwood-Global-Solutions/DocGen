@@ -299,6 +299,51 @@ private class DocGenHtmlTemplateTest {
     }
 
     @IsTest
+    static void getHtmlTemplateBodyReturnsLatestBody() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'BodyRead ' + Datetime.now().getTime(),
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        System.assertEquals(null, DocGenController.getHtmlTemplateBody(tmpl.Id), 'No body yet — expect null');
+
+        DocGenController.saveHtmlTemplateBody(tmpl.Id, 'v1.html', '<html><body>first</body></html>');
+        String htmlV2 = '<html><body><h1>{Name}</h1>second</body></html>';
+
+        Test.startTest();
+        DocGenController.saveHtmlTemplateBody(tmpl.Id, 'v2.html', htmlV2);
+        String readBack = DocGenController.getHtmlTemplateBody(tmpl.Id);
+        Test.stopTest();
+
+        System.assertEquals(htmlV2, readBack, 'Read-back should return the most recent body verbatim');
+    }
+
+    @IsTest
+    static void getHtmlTemplateBodyRejectsNonHtmlTemplate() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'WordRead ' + Datetime.now().getTime(),
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        Boolean threw = false;
+        try {
+            DocGenController.getHtmlTemplateBody(tmpl.Id);
+        } catch (Exception e) {
+            threw = true;
+            System.assert(e.getMessage().contains('HTML-type'), 'Error should mention HTML-type: ' + e.getMessage());
+        }
+        System.assert(threw, 'Should refuse non-HTML templates');
+    }
+
+    @IsTest
     static void saveHtmlTemplateImageRejectsNonHtmlTemplate() {
         DocGen_Template__c tmpl = new DocGen_Template__c(
             Name = 'Word ' + Datetime.now().getTime(),

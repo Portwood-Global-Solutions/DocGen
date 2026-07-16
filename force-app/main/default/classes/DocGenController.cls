@@ -3056,6 +3056,60 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * HTML template body read-back for the admin editor (paste-back surface).
+     *
+     * Returns the most recent docgen_html_body_* ContentVersion attached to
+     * the template, or null when no body has been uploaded yet. The CV read
+     * runs WITH SYSTEM_MODE after an explicit FLS/CRUD gate on the template —
+     * template-internal CVs can carry Visibility=InternalUsers ContentDocumentLinks,
+     * which USER_MODE reads silently drop (the #114 quirk).
+     */
+    @AuraEnabled
+    public static String getHtmlTemplateBody(Id templateId) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+
+        List<DocGen_Template__c> tpls;
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            tpls = [
+                SELECT Id, Type__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+        } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+        if (tpls.isEmpty()) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+        if (tpls[0].Type__c != 'HTML') {
+            throw new DocGenException('getHtmlTemplateBody is for HTML-type templates only.');
+        }
+
+        String titlePrefix = 'docgen_html_body_' + templateId + '%';
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Title LIKE :titlePrefix AND IsLatest = TRUE
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC, Id DESC
+            LIMIT 1
+        ];
+        if (cvs.isEmpty()) {
+            return null;
+        }
+        return cvs[0].VersionData.toString();
+    }
+
+    /**
      * PDF AcroForm template upload — prepared browser-normalized body.
      *
      * Encrypted/object-stream-heavy government forms are normalized once in the
