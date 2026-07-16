@@ -2982,6 +2982,63 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * List the images already attached to an HTML template (uploaded via
+     * saveHtmlTemplateImage — the zip/data-URI extraction path or the
+     * editor's Add Image flow). Feeds the editor's image picker so authors
+     * can re-insert existing images without knowing shepherd URLs.
+     */
+    @AuraEnabled
+    public static List<Map<String, Object>> listHtmlTemplateImages(Id templateId) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template__c> tpls = [
+                SELECT Id
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (tpls.isEmpty()) {
+                throw DocGenService.ahe('Template not found or access denied.');
+            }
+        } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+
+        String titlePrefix = 'docgen_html_img_' + templateId + '%';
+        DocGenFlsGuard.assertAccessible(
+            ContentVersion.sObjectType,
+            new Set<String>{ 'Title', 'PathOnClient', 'IsLatest' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT Id, PathOnClient
+            FROM ContentVersion
+            WHERE Title LIKE :titlePrefix AND IsLatest = TRUE
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC
+            LIMIT 50
+        ];
+        List<Map<String, Object>> results = new List<Map<String, Object>>();
+        for (ContentVersion cv : cvs) {
+            results.add(
+                new Map<String, Object>{
+                    'contentVersionId' => cv.Id,
+                    'fileName' => cv.PathOnClient,
+                    'url' => '/sfc/servlet.shepherd/version/download/' + cv.Id
+                }
+            );
+        }
+        return results;
+    }
+
+    /**
      * HTML template upload — body part (v1.61+).
      *
      * Final call in the client-side zip-break-apart flow. The LWC has already

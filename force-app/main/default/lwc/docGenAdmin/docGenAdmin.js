@@ -12,7 +12,8 @@ import {
     buildStarterHtml,
     buildAiPrompt,
     prettyPrintHtml,
-    scopeHtmlForInlinePreview
+    scopeHtmlForInlinePreview,
+    buildTagPalette
 } from './docGenAuthoringKit';
 
 // Apex
@@ -50,6 +51,7 @@ import clearWatermarkImage from '@salesforce/apex/DocGenController.clearWatermar
 import searchDataProviders from '@salesforce/apex/DocGenController.searchDataProviders';
 import getHtmlTemplateBody from '@salesforce/apex/DocGenController.getHtmlTemplateBody';
 import getConvertedHtmlSnapshot from '@salesforce/apex/DocGenController.getConvertedHtmlSnapshot';
+import listHtmlTemplateImages from '@salesforce/apex/DocGenController.listHtmlTemplateImages';
 import validateDataProvider from '@salesforce/apex/DocGenController.validateDataProvider';
 
 // Schema
@@ -374,6 +376,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // Code ⇄ Preview toggles (textarea stays mounted-but-hidden so its value survives)
     @track showHtmlBodyPreview = false;
     @track showDocxHtmlPreview = false;
+    // Tags palette (click-to-insert merge tags from the template's own schema)
+    @track showTagPanel = false;
+    // Images panel (upload/insert <img> tags without knowing shepherd URLs)
+    @track showImagePanel = false;
+    @track isLoadingTemplateImages = false;
+    @track isUploadingInsertImage = false;
+    @track templateImages = [];
+    // Visual (WYSIWYG) mode — rich-text editing of the body content while the
+    // template's <style>/@page shell is preserved and reapplied on exit.
+    @track showHtmlBodyVisual = false;
+    @track visualEditorHtml = '';
+    _visualShellStyles = null;
     // Last HTML body text this session touched (upload, starter, or Apply) so
     // reopening the editor doesn't need a server round-trip.
     _lastUploadedHtmlText = null;
@@ -3207,6 +3221,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.isSwitchingToHtml = false;
             this.showHtmlBodyPreview = false;
             this.showDocxHtmlPreview = false;
+            this.showImagePanel = false;
+            this.templateImages = [];
+            this.showTagPanel = false;
+            this.showHtmlBodyVisual = false;
+            this.visualEditorHtml = '';
+            this._visualShellStyles = null;
+            this._visualOriginalCode = null;
+            this._visualEnteredHtml = null;
 
             let cdLinks = [];
             if (row.ContentDocumentLinks) {
@@ -4632,7 +4654,113 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     get htmlBodyEditorClass() {
-        return this.showHtmlBodyPreview ? 'dg-html-body-editor slds-hide' : 'dg-html-body-editor';
+        return this.showHtmlBodyPreview || this.showHtmlBodyVisual
+            ? 'dg-html-body-editor slds-hide'
+            : 'dg-html-body-editor';
+    }
+
+    get visualToggleLabel() {
+        return this.showHtmlBodyVisual ? 'Back to Code' : 'Visual';
+    }
+
+    /**
+     * Enter/exit WYSIWYG mode. Entering splits the document: <style>/@page
+     * shell is stashed, body content goes into lightning-input-rich-text.
+     * Exiting reassembles the full document (Quill alignment classes mapped
+     * to inline CSS 2.1) back into the code editor. Table layouts can't be
+     * represented by the rich-text editor, so entering warns first.
+     */
+    async handleToggleHtmlVisual() {
+        if (this.showHtmlBodyVisual) {
+            this._exitVisualMode();
+            return;
+        }
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        const html = (ta && ta.value) || '';
+        // HARD BLOCK, not a warning: the rich-text editor (Quill) strips
+        // tables and div layout, so entering visual mode on a layout-heavy
+        // template would destroy the design on exit. Never offer a path
+        // that silently mangles content.
+        if (/<table\b|display\s*:\s*table/i.test(html)) {
+            this.showToast(
+                'Visual editor not available for this layout',
+                'This template uses table-based layout, which the visual editor cannot represent without simplifying your design. Use Code + Preview here — Visual works great for letter-style templates.',
+                'warning'
+            );
+            return;
+        }
+        const styleBlocks = [];
+        let work = html.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, (m) => {
+            styleBlocks.push(m);
+            return '';
+        });
+        const bodyMatch = work.match(/<body\b[^>]*>([\s\S]*?)<\/body\s*>/i);
+        this._visualShellStyles = styleBlocks.join('\n');
+        // Snapshots for a lossless exit: if the user just looks around and
+        // changes nothing, the code editor gets its ORIGINAL text back —
+        // no Quill-normalization round-trip.
+        this._visualOriginalCode = html;
+        this.visualEditorHtml = (bodyMatch ? bodyMatch[1] : work).trim();
+        this._visualEnteredHtml = null; // captured after Quill sanitizes, on first render
+        this.showHtmlBodyPreview = false;
+        this.showHtmlBodyVisual = true;
+        // Capture Quill's sanitized baseline once the editor renders, so
+        // "unchanged" is judged against what the user actually saw.
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            const rte = this.template.querySelector('.dg-visual-editor');
+            if (rte && this._visualEnteredHtml === null) {
+                this._visualEnteredHtml = rte.value || '';
+            }
+        }, 400);
+    }
+
+    /** Leave visual mode — lossless when nothing changed. */
+    _exitVisualMode() {
+        const rte = this.template.querySelector('.dg-visual-editor');
+        const current = (rte && rte.value) || this.visualEditorHtml || '';
+        const unchanged = this._visualEnteredHtml !== null && current === this._visualEnteredHtml;
+        if (unchanged) {
+            const ta = this.template.querySelector('.dg-html-body-editor');
+            if (ta && this._visualOriginalCode != null) {
+                ta.value = this._visualOriginalCode;
+            }
+        } else {
+            this._applyVisualToCode();
+        }
+        this.showHtmlBodyVisual = false;
+        this._visualOriginalCode = null;
+        this._visualEnteredHtml = null;
+    }
+
+    /** Reassemble shell + rich-text content into the code editor. */
+    _applyVisualToCode() {
+        const rte = this.template.querySelector('.dg-visual-editor');
+        let inner = (rte && rte.value) || this.visualEditorHtml || '';
+        // Quill emits alignment/indent as classes — translate to inline CSS 2.1.
+        inner = inner
+            .replace(/class="ql-align-(center|right|justify)"/gi, 'style="text-align: $1"')
+            .replace(/class="ql-indent-(\d)"/gi, (m, n) => 'style="margin-left: ' + Number(n) * 24 + 'pt"');
+        const shell =
+            this._visualShellStyles && this._visualShellStyles.trim()
+                ? this._visualShellStyles
+                : '<style>\n@page { size: Letter portrait; margin: 0.75in; }\nbody { font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #1a1a1a; }\n</style>';
+        const doc =
+            '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n' +
+            shell +
+            '\n</head>\n<body>\n' +
+            inner +
+            '\n</body>\n</html>\n';
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        if (ta) {
+            ta.value = prettyPrintHtml(doc);
+        }
+        this.htmlEditorDirty = true;
+    }
+
+    handleVisualEditorChange(event) {
+        this.visualEditorHtml = event.target.value;
+        this.htmlEditorDirty = true;
     }
 
     get docxHtmlEditorClass() {
@@ -4663,6 +4791,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._renderHtmlPreview('.dg-docx-preview', '.dg-docx-html-editor');
             }
         } else {
+            if (this.showHtmlBodyVisual) {
+                this._exitVisualMode();
+            }
             this.showHtmlBodyPreview = !this.showHtmlBodyPreview;
             if (this.showHtmlBodyPreview) {
                 this._renderHtmlPreview('.dg-body-preview', '.dg-html-body-editor');
@@ -4703,6 +4834,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     /** Reload = show what's actually staged (or saved), discarding unapplied edits. */
     async handleReloadHtmlBodyEditor() {
+        // Reload means "discard my edits" — visual edits included.
+        this.showHtmlBodyVisual = false;
         await this._loadBodyIntoEditor();
     }
 
@@ -4851,7 +4984,173 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    // --- Tags palette (Insert Tags without memorizing syntax) ---
+    get tagPanelToggleLabel() {
+        return this.showTagPanel ? 'Hide Tags' : 'Insert Tags';
+    }
+
+    get tagPaletteSections() {
+        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+        return buildTagPalette(shape);
+    }
+
+    toggleTagPanel() {
+        this.showTagPanel = !this.showTagPanel;
+    }
+
+    handleInsertTagSnippet(event) {
+        const snippet = event.currentTarget.dataset.snippet;
+        if (!snippet) {
+            return;
+        }
+        if (this.showHtmlBodyVisual) {
+            const rte = this.template.querySelector('.dg-visual-editor');
+            this.visualEditorHtml = ((rte && rte.value) || this.visualEditorHtml || '') + snippet;
+            this.htmlEditorDirty = true;
+            this.showToast('Tag inserted', 'Added at the end of the document — move it where you need it.', 'success');
+            return;
+        }
+        if (this._insertAtEditorCursor(snippet)) {
+            this.showToast(
+                'Tag inserted',
+                snippet.length > 60 ? 'Loop table inserted at your cursor.' : snippet + ' inserted at your cursor.',
+                'success'
+            );
+        }
+    }
+
+    /** Splice text into the code textarea at the cursor (or before </body>). */
+    _insertAtEditorCursor(text) {
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        if (!ta) {
+            return false;
+        }
+        let start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
+        let end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : start;
+        if (start === end && (start === 0 || start === ta.value.length)) {
+            const bodyClose = ta.value.search(/<\/body\s*>/i);
+            if (bodyClose > -1) {
+                start = bodyClose;
+                end = bodyClose;
+            }
+        }
+        ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+        const pos = start + text.length;
+        try {
+            ta.focus();
+            ta.setSelectionRange(pos, pos);
+        } catch (e) {
+            /* focus/selection is best-effort */
+        }
+        this.htmlEditorDirty = true;
+        return true;
+    }
+
+    // --- Images panel (Add Image without knowing shepherd URLs) ---
+    get imagePanelToggleLabel() {
+        return this.showImagePanel ? 'Hide Images' : 'Add Image';
+    }
+
+    get hasTemplateImages() {
+        return (this.templateImages || []).length > 0;
+    }
+
+    async toggleImagePanel() {
+        this.showImagePanel = !this.showImagePanel;
+        if (this.showImagePanel) {
+            await this._loadTemplateImages();
+        }
+    }
+
+    async _loadTemplateImages() {
+        this.isLoadingTemplateImages = true;
+        try {
+            this.templateImages = (await listHtmlTemplateImages({ templateId: this.editTemplateId })) || [];
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Could not load images', msg, 'error');
+            this.templateImages = [];
+        } finally {
+            this.isLoadingTemplateImages = false;
+        }
+    }
+
+    triggerInsertImagePicker() {
+        const input = this.template.querySelector('.dg-insert-image-input');
+        if (input) {
+            input.click();
+        }
+    }
+
+    async handleInsertImageSelected(event) {
+        const file = event.target.files && event.target.files[0];
+        if (!file) {
+            return;
+        }
+        // SVG excluded on purpose — the PDF engine silently drops it.
+        if (!/\.(png|jpe?g|gif|bmp)$/i.test(file.name)) {
+            this.showToast(
+                'Unsupported image',
+                'Use .png, .jpg, .gif, or .bmp — SVG does not render in PDF output.',
+                'error'
+            );
+            event.target.value = '';
+            return;
+        }
+        this.isUploadingInsertImage = true;
+        try {
+            const buffer = await file.arrayBuffer();
+            const result = await saveHtmlTemplateImage({
+                templateId: this.editTemplateId,
+                fileName: file.name,
+                base64Content: bytesToBase64(new Uint8Array(buffer))
+            });
+            this._insertImageSnippet(result.url, result.fileName);
+            await this._loadTemplateImages();
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Image upload failed', msg, 'error');
+        } finally {
+            this.isUploadingInsertImage = false;
+            event.target.value = '';
+        }
+    }
+
+    handleInsertExistingImage(event) {
+        const { url, name } = event.currentTarget.dataset;
+        this._insertImageSnippet(url, name);
+    }
+
+    /** Drop a ready-made, PDF-safe <img> tag at the editor cursor. */
+    _insertImageSnippet(url, name) {
+        const snippet = '<img src="' + url + '" alt="' + (name || 'image') + '" style="width: 180px" />';
+        // Visual mode: append to the rich-text content instead of the textarea.
+        if (this.showHtmlBodyVisual) {
+            const rte = this.template.querySelector('.dg-visual-editor');
+            this.visualEditorHtml = ((rte && rte.value) || this.visualEditorHtml || '') + '<p>' + snippet + '</p>';
+            this.htmlEditorDirty = true;
+            this.showToast(
+                'Image inserted',
+                'Added at the end of the document — drag it where you want it.',
+                'success'
+            );
+            return;
+        }
+        if (this._insertAtEditorCursor(snippet)) {
+            this.showToast(
+                'Image inserted',
+                'A PDF-safe <img> tag was placed at your cursor — adjust the width, then click "Apply Editor HTML".',
+                'success'
+            );
+        }
+    }
+
     async handleApplyHtmlBody() {
+        // Visual mode edits live in the rich-text editor — fold them into the
+        // code editor first so Apply stages what the user is looking at.
+        if (this.showHtmlBodyVisual) {
+            this._exitVisualMode();
+        }
         const ta = this.template.querySelector('.dg-html-body-editor');
         const text = ta ? ta.value : '';
         if (!text || !text.trim()) {

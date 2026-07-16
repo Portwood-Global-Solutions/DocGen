@@ -2908,6 +2908,14 @@
                                                             class="slds-var-m-left_small"
                                                         ></lightning-button>
                                                         <lightning-button
+                                                            label={visualToggleLabel}
+                                                            icon-name="utility:richtextbulletedlist"
+                                                            variant="base"
+                                                            onclick={handleToggleHtmlVisual}
+                                                            title="Edit the document text like a rich-text editor. Your @page/style shell is preserved and reapplied when you switch back. Table layouts need Code view."
+                                                            class="slds-var-m-left_small"
+                                                        ></lightning-button>
+                                                        <lightning-button
                                                             label={htmlBodyPreviewToggleLabel}
                                                             icon-name="utility:preview"
                                                             variant="base"
@@ -2947,6 +2955,23 @@
                                                             title="Rendered preview — merge tags shown as-is"
                                                         ></div>
                                                     </template>
+                                                    <template if:true={showHtmlBodyVisual}>
+                                                        <div class="dg-visual-editor-wrap">
+                                                            <lightning-input-rich-text
+                                                                class="dg-visual-editor"
+                                                                value={visualEditorHtml}
+                                                                onchange={handleVisualEditorChange}
+                                                            ></lightning-input-rich-text>
+                                                        </div>
+                                                        <p
+                                                            class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small"
+                                                        >
+                                                            Visual mode edits the document text — your template's page
+                                                            setup and styles are preserved and reapplied when you switch
+                                                            back to Code. Merge tags are plain text: type
+                                                            &#123;Name&#125; anywhere.
+                                                        </p>
+                                                    </template>
                                                     <div class="slds-var-m-top_x-small">
                                                         <lightning-button
                                                             variant="brand"
@@ -2954,6 +2979,20 @@
                                                             icon-name="utility:check"
                                                             onclick={handleApplyHtmlBody}
                                                             disabled={isApplyingHtmlBody}
+                                                        ></lightning-button>
+                                                        <lightning-button
+                                                            label={tagPanelToggleLabel}
+                                                            icon-name="utility:merge_field"
+                                                            onclick={toggleTagPanel}
+                                                            title="Click-to-insert merge tags: this template's fields, child loops, dates, running user, signatures, conditionals."
+                                                            class="slds-var-m-left_x-small"
+                                                        ></lightning-button>
+                                                        <lightning-button
+                                                            label={imagePanelToggleLabel}
+                                                            icon-name="utility:image"
+                                                            onclick={toggleImagePanel}
+                                                            title="Upload an image or pick one already attached — a PDF-safe <img> tag is inserted at your cursor."
+                                                            class="slds-var-m-left_x-small"
                                                         ></lightning-button>
                                                         <template if:true={isApplyingHtmlBody}>
                                                             <lightning-spinner
@@ -2971,6 +3010,113 @@
                                                             saves.
                                                         </span>
                                                     </div>
+                                                    <template if:true={showTagPanel}>
+                                                        <div class="dg-tag-panel slds-var-m-top_small">
+                                                            <template for:each={tagPaletteSections} for:item="section">
+                                                                <div key={section.key} class="dg-tag-section">
+                                                                    <div class="dg-tag-section-label">
+                                                                        {section.label}
+                                                                    </div>
+                                                                    <template if:true={section.hint}>
+                                                                        <div class="dg-tag-section-hint">
+                                                                            {section.hint}
+                                                                        </div>
+                                                                    </template>
+                                                                    <div class="dg-tag-chips">
+                                                                        <template
+                                                                            for:each={section.items}
+                                                                            for:item="tag"
+                                                                        >
+                                                                            <button
+                                                                                key={tag.key}
+                                                                                class="dg-tag-chip"
+                                                                                data-snippet={tag.snippet}
+                                                                                title={tag.title}
+                                                                                onclick={handleInsertTagSnippet}
+                                                                            >
+                                                                                {tag.label}
+                                                                            </button>
+                                                                        </template>
+                                                                    </div>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                    <template if:true={showImagePanel}>
+                                                        <div class="dg-image-panel slds-var-m-top_small">
+                                                            <div class="dg-image-panel-head">
+                                                                <span class="slds-text-body_small">
+                                                                    Upload once — DocGen stores the image with this
+                                                                    template and inserts a PDF-safe
+                                                                    <code>&lt;img&gt;</code>&nbsp;tag at your cursor.
+                                                                    Click a thumbnail to insert an existing image. Use
+                                                                    PNG or JPG — SVG doesn't render in PDF output.
+                                                                </span>
+                                                                <lightning-button
+                                                                    variant="brand"
+                                                                    label="Upload Image"
+                                                                    icon-name="utility:upload"
+                                                                    onclick={triggerInsertImagePicker}
+                                                                    disabled={isUploadingInsertImage}
+                                                                ></lightning-button>
+                                                            </div>
+                                                            <input
+                                                                type="file"
+                                                                class="dg-insert-image-input"
+                                                                accept=".png,.jpg,.jpeg,.gif,.bmp"
+                                                                style="display: none"
+                                                                onchange={handleInsertImageSelected}
+                                                            />
+                                                            <template if:true={isUploadingInsertImage}>
+                                                                <div
+                                                                    class="slds-is-relative slds-var-m-top_small"
+                                                                    style="height: 30px"
+                                                                >
+                                                                    <lightning-spinner
+                                                                        alternative-text="Uploading image"
+                                                                        size="small"
+                                                                    ></lightning-spinner>
+                                                                </div>
+                                                            </template>
+                                                            <template if:true={isLoadingTemplateImages}>
+                                                                <div
+                                                                    class="slds-is-relative slds-var-m-top_small"
+                                                                    style="height: 30px"
+                                                                >
+                                                                    <lightning-spinner
+                                                                        alternative-text="Loading images"
+                                                                        size="small"
+                                                                    ></lightning-spinner>
+                                                                </div>
+                                                            </template>
+                                                            <template if:true={hasTemplateImages}>
+                                                                <div class="dg-image-grid">
+                                                                    <template for:each={templateImages} for:item="img">
+                                                                        <div
+                                                                            key={img.contentVersionId}
+                                                                            class="dg-image-thumb"
+                                                                            data-url={img.url}
+                                                                            data-name={img.fileName}
+                                                                            onclick={handleInsertExistingImage}
+                                                                            title={img.fileName}
+                                                                        >
+                                                                            <img src={img.url} alt={img.fileName} />
+                                                                            <span class="dg-image-thumb-name"
+                                                                                >{img.fileName}</span
+                                                                            >
+                                                                        </div>
+                                                                    </template>
+                                                                </div>
+                                                            </template>
+                                                            <template if:false={hasTemplateImages}>
+                                                                <p
+                                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small"
+                                                                >
+                                                                    No images attached to this template yet.
+                                                                </p>
+                                                            </template>
+                                                        </div>
+                                                    </template>
                                                 </div>
                                             </template>
                                         </template>

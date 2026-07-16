@@ -344,6 +344,33 @@ private class DocGenHtmlTemplateTest {
     }
 
     @IsTest
+    static void listHtmlTemplateImagesReturnsUploadedImages() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'ImgList ' + Datetime.now().getTime(),
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        System.assertEquals(0, DocGenController.listHtmlTemplateImages(tmpl.Id).size(), 'No images yet');
+
+        String pngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        DocGenController.saveHtmlTemplateImage(tmpl.Id, 'logo.png', pngB64);
+        DocGenController.saveHtmlTemplateImage(tmpl.Id, 'hero.png', pngB64);
+
+        Test.startTest();
+        List<Map<String, Object>> imgs = DocGenController.listHtmlTemplateImages(tmpl.Id);
+        Test.stopTest();
+
+        System.assertEquals(2, imgs.size(), 'Both uploaded images should be listed');
+        String url = (String) imgs[0].get('url');
+        System.assert(url.startsWith('/sfc/servlet.shepherd/version/download/'), 'Relative shepherd URL expected');
+        System.assertNotEquals(null, imgs[0].get('fileName'), 'File name expected');
+    }
+
+    @IsTest
     static void getConvertedHtmlSnapshotReturnsBakedHtmlAndStatus() {
         DocGen_Template__c tmpl = new DocGen_Template__c(
             Name = 'DocxSnap ' + Datetime.now().getTime(),

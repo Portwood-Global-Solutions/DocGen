@@ -129,7 +129,7 @@ function detailRows(fields) {
 
 // Loop tags must open in the first cell and close in the last so container
 // auto-expansion repeats the whole <tr> per child row.
-function childLoopTable(child) {
+export function childLoopTable(child) {
     const rel = child.relationshipName;
     const fields = child.fields.length ? child.fields : ['Name'];
     const headCells = fields
@@ -576,4 +576,158 @@ export function scopeHtmlForInlinePreview(html) {
         'box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18); font-family: Helvetica, Arial, sans-serif; ' +
         'font-size: 10.5pt; color: #1a1a1a; min-height: 380px; box-sizing: border-box; }';
     return '<div class="dg-pv"><style>' + baseline + css + '</style>' + content + '</div>';
+}
+
+// ---------------------------------------------------------------------------
+// Tag palette (Insert Tags panel)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the click-to-insert tag palette from the template's actual Query
+ * Config shape: its record fields, its child relationships (with a
+ * ready-made loop table), plus the universal built-ins, signature tags,
+ * conditionals, and aggregates.
+ */
+export function buildTagPalette(shape) {
+    const sections = [];
+    const tagFor = (f) => (isMoneyField(f) ? '{' + f + ':currency}' : '{' + f + '}');
+
+    const fieldItems = [...(shape.baseFields || []), ...(shape.parentFields || [])].map((f) => ({
+        key: 'f_' + f,
+        label: humanizeField(f),
+        snippet: tagFor(f),
+        title: 'Insert ' + tagFor(f)
+    }));
+    if (fieldItems.length) {
+        sections.push({
+            key: 'fields',
+            label: 'Record Fields',
+            hint: 'From this template’s Query Config — click to insert at your cursor.',
+            items: fieldItems
+        });
+    }
+
+    for (const child of shape.children || []) {
+        const rel = child.relationshipName;
+        sections.push({
+            key: 'rel_' + rel,
+            label: humanizeField(rel) + ' — child loop',
+            hint: 'Child fields only resolve inside the {#' + rel + '}…{/' + rel + '} loop.',
+            items: [
+                {
+                    key: rel + '_table',
+                    label: 'Loop table (all fields)',
+                    snippet: '\n' + childLoopTable(child) + '\n',
+                    title: 'A table that repeats one row per ' + rel + ' record'
+                },
+                {
+                    key: rel + '_loop',
+                    label: 'Inline loop block',
+                    snippet: '{#' + rel + '} … {/' + rel + '}',
+                    title: 'Repeats its contents once per ' + rel + ' record'
+                },
+                ...(child.fields || []).map((f) => ({
+                    key: rel + '_' + f,
+                    label: humanizeField(f),
+                    snippet: tagFor(f),
+                    title: tagFor(f) + ' — place inside the {#' + rel + '} loop'
+                }))
+            ]
+        });
+    }
+
+    sections.push({
+        key: 'builtins',
+        label: 'Built-ins',
+        hint: 'Work on every template, no configuration.',
+        items: [
+            { key: 'today_long', label: 'Today (long)', snippet: '{Today:MMMM d, yyyy}', title: 'April 17, 2026' },
+            { key: 'today_num', label: 'Today (numeric)', snippet: '{Today:MM/dd/yyyy}', title: '04/17/2026' },
+            { key: 'now', label: 'Now (timestamp)', snippet: '{Now:yyyy-MM-dd HH:mm}', title: 'Current date-time' },
+            {
+                key: 'ru_name',
+                label: 'Running user',
+                snippet: '{RunningUser.Name}',
+                title: 'Whoever generates the document'
+            },
+            {
+                key: 'ru_title',
+                label: 'Running user title',
+                snippet: '{RunningUser.Title}',
+                title: '{RunningUser.Title}'
+            },
+            {
+                key: 'ru_email',
+                label: 'Running user email',
+                snippet: '{RunningUser.Email}',
+                title: '{RunningUser.Email}'
+            }
+        ]
+    });
+
+    sections.push({
+        key: 'sig',
+        label: 'E-Signature',
+        hint: 'Role + order + type. Roles are free-form — Buyer, Seller, Witness…',
+        items: [
+            {
+                key: 'sig_full',
+                label: 'Signature (Customer)',
+                snippet: '{@Signature_Customer:1:Full}',
+                title: 'Full signature stamp'
+            },
+            {
+                key: 'sig_date',
+                label: 'Signed date (Customer)',
+                snippet: '{@Signature_Customer:1:Date}',
+                title: 'Auto-filled when signed'
+            },
+            {
+                key: 'sig_init',
+                label: 'Initials (Customer)',
+                snippet: '{@Signature_Customer:1:Initials}',
+                title: 'Initials stamp'
+            },
+            {
+                key: 'sig_rep',
+                label: 'Signature (Company rep)',
+                snippet: '{@Signature_Company_Representative:2:Full}',
+                title: 'Second signer, order 2'
+            }
+        ]
+    });
+
+    sections.push({
+        key: 'logic',
+        label: 'Conditionals & Aggregates',
+        hint: 'Replace FieldName / Relationship.Field with yours.',
+        items: [
+            {
+                key: 'ifelse',
+                label: 'If / else block',
+                snippet: '{#FieldName}shown when set{:else}shown when empty{/FieldName}',
+                title: 'Conditional content'
+            },
+            {
+                key: 'sum',
+                label: 'SUM of child field',
+                snippet: '{SUM:Relationship.Field:currency}',
+                title: 'Total across child records'
+            },
+            {
+                key: 'count',
+                label: 'COUNT of children',
+                snippet: '{COUNT:Relationship.Id}',
+                title: 'Number of child records'
+            },
+            {
+                key: 'checkbox',
+                label: 'Checkbox render',
+                snippet: '{FieldName:checkbox}',
+                title: '[X] when true, [ ] when false'
+            }
+        ]
+    });
+
+    return sections;
 }
