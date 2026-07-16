@@ -2956,20 +2956,20 @@
                                                         ></div>
                                                     </template>
                                                     <template if:true={showHtmlBodyVisual}>
-                                                        <div class="dg-visual-editor-wrap">
-                                                            <lightning-input-rich-text
-                                                                class="dg-visual-editor"
-                                                                value={visualEditorHtml}
-                                                                onchange={handleVisualEditorChange}
-                                                            ></lightning-input-rich-text>
-                                                        </div>
+                                                        <div
+                                                            class="dg-html-preview-frame dg-visual-host"
+                                                            lwc:dom="manual"
+                                                            title="Visual editing — click into the page and type"
+                                                        ></div>
                                                         <p
                                                             class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small"
                                                         >
-                                                            Visual mode edits the document text — your template's page
-                                                            setup and styles are preserved and reapplied when you switch
-                                                            back to Code. Merge tags are plain text: type
-                                                            &#123;Name&#125; anywhere.
+                                                            Click into the page and edit text right where it appears —
+                                                            tables and styling render exactly as the PDF engine sees
+                                                            them. Merge tags are plain text: type &#123;Name&#125;
+                                                            anywhere. Structure changes (new rows, sections) are Code
+                                                            work. "Back to Code" folds your edits in — only the document
+                                                            content changes, never your styles or page setup.
                                                         </p>
                                                     </template>
                                                     <div class="slds-var-m-top_x-small">

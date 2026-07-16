@@ -383,11 +383,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isLoadingTemplateImages = false;
     @track isUploadingInsertImage = false;
     @track templateImages = [];
-    // Visual (WYSIWYG) mode — rich-text editing of the body content while the
-    // template's <style>/@page shell is preserved and reapplied on exit.
+    // Visual mode — the scoped preview rendered contenteditable, so authors
+    // edit text in place with the real layout visible. Only the body content
+    // round-trips; head/styles/@page never do.
     @track showHtmlBodyVisual = false;
-    @track visualEditorHtml = '';
-    _visualShellStyles = null;
+    _visualOriginalCode = null;
+    _visualEnteredDom = null;
     // Last HTML body text this session touched (upload, starter, or Apply) so
     // reopening the editor doesn't need a server round-trip.
     _lastUploadedHtmlText = null;
@@ -1255,6 +1256,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (host) {
                 // eslint-disable-next-line @lwc/lwc/no-inner-html
                 host.innerHTML = this._pendingPreviewWrite.html;
+                // Visual mode: the rendered page becomes the editor.
+                if (this._pendingPreviewWrite.editable) {
+                    const pv = host.querySelector('.dg-pv');
+                    if (pv) {
+                        pv.setAttribute('contenteditable', 'true');
+                        pv.setAttribute('spellcheck', 'false');
+                        // Component CSS can't reach manual DOM — style inline.
+                        pv.style.outline = '2px dashed #b49aef';
+                        pv.style.outlineOffset = '6px';
+                        pv.style.caretColor = '#7c3aed';
+                        pv.style.cursor = 'text';
+                        this._visualEnteredDom = pv.innerHTML;
+                    }
+                }
                 this._pendingPreviewWrite = null;
             }
         }
@@ -3225,10 +3240,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.templateImages = [];
             this.showTagPanel = false;
             this.showHtmlBodyVisual = false;
-            this.visualEditorHtml = '';
-            this._visualShellStyles = null;
             this._visualOriginalCode = null;
-            this._visualEnteredHtml = null;
+            this._visualEnteredDom = null;
 
             let cdLinks = [];
             if (row.ContentDocumentLinks) {
@@ -4664,103 +4677,73 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /**
-     * Enter/exit WYSIWYG mode. Entering splits the document: <style>/@page
-     * shell is stashed, body content goes into lightning-input-rich-text.
-     * Exiting reassembles the full document (Quill alignment classes mapped
-     * to inline CSS 2.1) back into the code editor. Table layouts can't be
-     * represented by the rich-text editor, so entering warns first.
+     * Enter/exit visual (in-place) editing. The template renders through the
+     * SAME scoped-preview pipeline the Preview toggle uses — tables, bands,
+     * everything — and the rendered page is made contenteditable, so authors
+     * edit text exactly where it appears. On exit, only the edited body
+     * content is swapped back between the ORIGINAL document's <body> tags:
+     * head, styles, and @page are never round-tripped, so structure can't be
+     * mangled. Unchanged sessions restore the original code byte-for-byte.
      */
-    async handleToggleHtmlVisual() {
+    handleToggleHtmlVisual() {
         if (this.showHtmlBodyVisual) {
             this._exitVisualMode();
             return;
         }
         const ta = this.template.querySelector('.dg-html-body-editor');
         const html = (ta && ta.value) || '';
-        // HARD BLOCK, not a warning: the rich-text editor (Quill) strips
-        // tables and div layout, so entering visual mode on a layout-heavy
-        // template would destroy the design on exit. Never offer a path
-        // that silently mangles content.
-        if (/<table\b|display\s*:\s*table/i.test(html)) {
-            this.showToast(
-                'Visual editor not available for this layout',
-                'This template uses table-based layout, which the visual editor cannot represent without simplifying your design. Use Code + Preview here — Visual works great for letter-style templates.',
-                'warning'
-            );
+        if (!html.trim()) {
+            this.showToast('Nothing to edit', 'Load or paste a template body first.', 'warning');
             return;
         }
-        const styleBlocks = [];
-        let work = html.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, (m) => {
-            styleBlocks.push(m);
-            return '';
-        });
-        const bodyMatch = work.match(/<body\b[^>]*>([\s\S]*?)<\/body\s*>/i);
-        this._visualShellStyles = styleBlocks.join('\n');
-        // Snapshots for a lossless exit: if the user just looks around and
-        // changes nothing, the code editor gets its ORIGINAL text back —
-        // no Quill-normalization round-trip.
         this._visualOriginalCode = html;
-        this.visualEditorHtml = (bodyMatch ? bodyMatch[1] : work).trim();
-        this._visualEnteredHtml = null; // captured after Quill sanitizes, on first render
+        this._visualEnteredDom = null; // captured in renderedCallback after mount
         this.showHtmlBodyPreview = false;
         this.showHtmlBodyVisual = true;
-        // Capture Quill's sanitized baseline once the editor renders, so
-        // "unchanged" is judged against what the user actually saw.
-        // eslint-disable-next-line @lwc/lwc/no-async-operation
-        setTimeout(() => {
-            const rte = this.template.querySelector('.dg-visual-editor');
-            if (rte && this._visualEnteredHtml === null) {
-                this._visualEnteredHtml = rte.value || '';
-            }
-        }, 400);
+        // Reuse the preview pipeline, but flag the write as editable so
+        // renderedCallback turns the rendered page into an editor.
+        const scoped = scopeHtmlForInlinePreview(html);
+        this._pendingPreviewWrite = { selector: '.dg-visual-host', html: scoped, editable: true };
     }
 
     /** Leave visual mode — lossless when nothing changed. */
     _exitVisualMode() {
-        const rte = this.template.querySelector('.dg-visual-editor');
-        const current = (rte && rte.value) || this.visualEditorHtml || '';
-        const unchanged = this._visualEnteredHtml !== null && current === this._visualEnteredHtml;
-        if (unchanged) {
-            const ta = this.template.querySelector('.dg-html-body-editor');
-            if (ta && this._visualOriginalCode != null) {
+        const host = this.template.querySelector('.dg-visual-host');
+        const pv = host && host.querySelector('.dg-pv');
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        if (pv && ta && this._visualOriginalCode != null) {
+            const current = pv.innerHTML;
+            if (this._visualEnteredDom !== null && current !== this._visualEnteredDom) {
+                // Extract the edited content: everything except the scoped
+                // <style> the preview pipeline injected.
+                const clone = pv.cloneNode(true);
+                for (const styleEl of clone.querySelectorAll('style')) {
+                    styleEl.remove();
+                }
+                const edited = clone.innerHTML.trim();
+                // Swap ONLY the body content back into the original document —
+                // head/styles/@page are untouched by design.
+                const bodyRe = /(<body\b[^>]*>)[\s\S]*?(<\/body\s*>)/i;
+                let newCode;
+                if (bodyRe.test(this._visualOriginalCode)) {
+                    newCode = this._visualOriginalCode.replace(
+                        bodyRe,
+                        (m, open, close) => open + '\n' + edited + '\n' + close
+                    );
+                } else {
+                    // Body-fragment template (no <body> wrapper): the content IS the doc.
+                    newCode = edited;
+                }
+                ta.value = prettyPrintHtml(newCode);
+                this.htmlEditorDirty = true;
+            } else {
+                // Untouched — hand back the original text exactly.
                 ta.value = this._visualOriginalCode;
             }
-        } else {
-            this._applyVisualToCode();
         }
         this.showHtmlBodyVisual = false;
         this._visualOriginalCode = null;
-        this._visualEnteredHtml = null;
-    }
-
-    /** Reassemble shell + rich-text content into the code editor. */
-    _applyVisualToCode() {
-        const rte = this.template.querySelector('.dg-visual-editor');
-        let inner = (rte && rte.value) || this.visualEditorHtml || '';
-        // Quill emits alignment/indent as classes — translate to inline CSS 2.1.
-        inner = inner
-            .replace(/class="ql-align-(center|right|justify)"/gi, 'style="text-align: $1"')
-            .replace(/class="ql-indent-(\d)"/gi, (m, n) => 'style="margin-left: ' + Number(n) * 24 + 'pt"');
-        const shell =
-            this._visualShellStyles && this._visualShellStyles.trim()
-                ? this._visualShellStyles
-                : '<style>\n@page { size: Letter portrait; margin: 0.75in; }\nbody { font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #1a1a1a; }\n</style>';
-        const doc =
-            '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n' +
-            shell +
-            '\n</head>\n<body>\n' +
-            inner +
-            '\n</body>\n</html>\n';
-        const ta = this.template.querySelector('.dg-html-body-editor');
-        if (ta) {
-            ta.value = prettyPrintHtml(doc);
-        }
-        this.htmlEditorDirty = true;
-    }
-
-    handleVisualEditorChange(event) {
-        this.visualEditorHtml = event.target.value;
-        this.htmlEditorDirty = true;
+        this._visualEnteredDom = null;
     }
 
     get docxHtmlEditorClass() {
@@ -5004,9 +4987,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         if (this.showHtmlBodyVisual) {
-            const rte = this.template.querySelector('.dg-visual-editor');
-            this.visualEditorHtml = ((rte && rte.value) || this.visualEditorHtml || '') + snippet;
-            this.htmlEditorDirty = true;
+            this._insertIntoVisualPage(snippet);
             this.showToast('Tag inserted', 'Added at the end of the document — move it where you need it.', 'success');
             return;
         }
@@ -5016,6 +4997,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 snippet.length > 60 ? 'Loop table inserted at your cursor.' : snippet + ' inserted at your cursor.',
                 'success'
             );
+        }
+    }
+
+    /** Append markup to the editable visual page (visual mode only). */
+    _insertIntoVisualPage(markup) {
+        const host = this.template.querySelector('.dg-visual-host');
+        const pv = host && host.querySelector('.dg-pv');
+        if (pv) {
+            pv.insertAdjacentHTML('beforeend', markup);
+            this.htmlEditorDirty = true;
         }
     }
 
@@ -5124,14 +5115,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     /** Drop a ready-made, PDF-safe <img> tag at the editor cursor. */
     _insertImageSnippet(url, name) {
         const snippet = '<img src="' + url + '" alt="' + (name || 'image') + '" style="width: 180px" />';
-        // Visual mode: append to the rich-text content instead of the textarea.
+        // Visual mode: insert into the editable rendered page directly.
         if (this.showHtmlBodyVisual) {
-            const rte = this.template.querySelector('.dg-visual-editor');
-            this.visualEditorHtml = ((rte && rte.value) || this.visualEditorHtml || '') + '<p>' + snippet + '</p>';
-            this.htmlEditorDirty = true;
+            this._insertIntoVisualPage('<p>' + snippet + '</p>');
             this.showToast(
                 'Image inserted',
-                'Added at the end of the document — drag it where you want it.',
+                'Added at the end of the document — cut/paste it where you want it, or fine-tune in Code.',
                 'success'
             );
             return;

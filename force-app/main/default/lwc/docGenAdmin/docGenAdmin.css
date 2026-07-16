@@ -509,10 +509,12 @@
     white-space: nowrap;
 }
 
-.dg-visual-editor-wrap {
-    border: 1px solid #d8dde6;
-    border-radius: 6px;
-    background: #fff;
+/* Visual mode: the editable rendered page needs a visible caret + focus cue */
+.dg-html-preview-frame .dg-pv[contenteditable='true'] {
+    outline: 2px dashed #b49aef;
+    outline-offset: 6px;
+    cursor: text;
+    caret-color: #7c3aed;
 }
 
 .dg-tag-panel {
