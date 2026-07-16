@@ -4733,9 +4733,123 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         ];
     }
 
+    /** The PDF engine ships exactly four fonts — the picker offers exactly those. */
+    get fontChoices() {
+        return [
+            {
+                key: 'f_helv',
+                label: 'Helvetica',
+                value: 'Helvetica, Arial, sans-serif',
+                style: 'font-family: Helvetica, Arial, sans-serif',
+                title: 'Helvetica — clean sans-serif (default)'
+            },
+            {
+                key: 'f_times',
+                label: 'Times',
+                value: "'Times New Roman', Times, serif",
+                style: "font-family: 'Times New Roman', Times, serif",
+                title: 'Times — formal serif'
+            },
+            {
+                key: 'f_courier',
+                label: 'Courier',
+                value: "'Courier New', Courier, monospace",
+                style: "font-family: 'Courier New', Courier, monospace",
+                title: 'Courier — monospace, great for codes and numbers'
+            },
+            {
+                key: 'f_unicode',
+                label: 'Unicode',
+                value: "'Arial Unicode MS', Arial, sans-serif",
+                style: 'font-family: Arial, sans-serif',
+                title: 'Arial Unicode MS — widest character coverage (international text)'
+            }
+        ];
+    }
+
     /** Keep the page's text selection alive while clicking toolbar controls. */
     handleFmtMouseDown(event) {
         event.preventDefault();
+    }
+
+    // --- Table tools (visual mode): operate on the cell holding the caret ---
+    _selectedTableCell() {
+        let node = null;
+        try {
+            const sel = window.getSelection();
+            node = sel && sel.anchorNode;
+        } catch (e) {
+            node = null;
+        }
+        while (node && node.nodeType === 3) {
+            node = node.parentNode;
+        }
+        const host = this.template.querySelector('.dg-visual-host');
+        const pv = host && host.querySelector('.dg-pv');
+        if (!node || !pv || !pv.contains(node) || !node.closest) {
+            return null;
+        }
+        const cell = node.closest('td, th');
+        return cell && pv.contains(cell) ? cell : null;
+    }
+
+    handleTableAction(event) {
+        if (!this.showHtmlBodyVisual) {
+            return;
+        }
+        const action = event.currentTarget.dataset.taction;
+        const value = event.currentTarget.dataset.value || null;
+        const cell = this._selectedTableCell();
+        if (!cell) {
+            this.showToast(
+                'Click inside a table cell first',
+                'Put your cursor in the table you want to change, then use the table tools.',
+                'info'
+            );
+            return;
+        }
+        const row = cell.parentElement;
+        const table = cell.closest('table');
+        const cellIndex = Array.prototype.indexOf.call(row.children, cell);
+        if (action === 'rowAfter') {
+            const clone = row.cloneNode(true);
+            for (const c of clone.children) {
+                c.innerHTML = '&nbsp;';
+            }
+            row.insertAdjacentElement('afterend', clone);
+        } else if (action === 'rowDel') {
+            row.remove();
+            if (table && !table.querySelector('tr')) {
+                table.remove();
+            }
+        } else if (action === 'colAfter') {
+            for (const tr of table.rows) {
+                const ref = tr.children[Math.min(cellIndex, tr.children.length - 1)];
+                if (ref) {
+                    const c = ref.cloneNode(false);
+                    c.innerHTML = '&nbsp;';
+                    ref.insertAdjacentElement('afterend', c);
+                }
+            }
+        } else if (action === 'colDel') {
+            for (const tr of table.rows) {
+                if (tr.children[cellIndex]) {
+                    tr.children[cellIndex].remove();
+                }
+            }
+            if (table && !table.querySelector('td, th')) {
+                table.remove();
+            }
+        } else if (action === 'headerRow') {
+            for (const c of row.children) {
+                c.style.background = '#1f3a5f';
+                c.style.color = '#ffffff';
+                c.style.fontWeight = 'bold';
+            }
+        } else if (action === 'cellFill') {
+            cell.style.background = value === 'transparent' ? '' : value;
+        }
+        this.htmlEditorDirty = true;
     }
 
     /**

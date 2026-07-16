@@ -1404,6 +1404,26 @@
                                             ></button>
                                         </template>
                                         <span class="dg-fmt-sep"></span>
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Font — the PDF engine ships exactly these four"
+                                            >Font</span
+                                        >
+                                        <template for:each={fontChoices} for:item="font">
+                                            <button
+                                                key={font.key}
+                                                class="dg-fmt-btn dg-fmt-btn_word"
+                                                style={font.style}
+                                                data-cmd="fontName"
+                                                data-value={font.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={font.title}
+                                            >
+                                                {font.label}
+                                            </button>
+                                        </template>
+                                        <span class="dg-fmt-sep"></span>
                                         <button
                                             class="dg-fmt-btn dg-fmt-btn_word"
                                             data-cmd="removeFormat"
@@ -1413,6 +1433,70 @@
                                         >
                                             Clear
                                         </button>
+                                        <span class="dg-fmt-break"></span>
+                                        <span class="dg-fmt-label" title="Table tools — put your cursor in a cell first"
+                                            >Table</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="rowAfter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Add a row below the current cell"
+                                        >
+                                            + Row
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="colAfter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Add a column to the right of the current cell"
+                                        >
+                                            + Col
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="rowDel"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Delete the current row"
+                                        >
+                                            − Row
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="colDel"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Delete the current column"
+                                        >
+                                            − Col
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="headerRow"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Style the current row as a header (navy fill, white bold text)"
+                                        >
+                                            Header Row
+                                        </button>
+                                        <span class="dg-fmt-label" title="Fill the current cell's background"
+                                            >Cell</span
+                                        >
+                                        <template for:each={highlightSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-taction="cellFill"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleTableAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
                                     </div>
                                     <div
                                         class="dg-html-preview-frame dg-visual-host dg-designer-size"

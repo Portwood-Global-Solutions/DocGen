@@ -728,3 +728,9 @@
     padding: 3px;
     background: #fff;
 }
+
+/* Forces the Table tools onto their own row of the format bar */
+.dg-fmt-break {
+    flex-basis: 100%;
+    height: 0;
+}
