@@ -418,3 +418,27 @@
     background: #fff;
     box-sizing: border-box;
 }
+
+.dg-html-editor-statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.dg-html-editor-status {
+    font-size: 0.78rem;
+    color: #444;
+    background: #f2f4f7;
+    border: 1px solid #d8dde6;
+    border-radius: 6px;
+    padding: 4px 10px;
+    flex: 1 1 auto;
+}
+
+.dg-html-editor-status_dirty {
+    background: #fef4e5;
+    border-color: #e6a233;
+    color: #7a4a00;
+    font-weight: 600;
+}

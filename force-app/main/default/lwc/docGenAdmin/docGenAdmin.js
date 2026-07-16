@@ -1,5 +1,6 @@
 import { LightningElement, track, wire } from 'lwc';
-import { createRecord } from 'lightning/uiRecordApi';
+import { createRecord, updateRecord } from 'lightning/uiRecordApi';
+import LightningConfirm from 'lightning/confirm';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { refreshApex } from '@salesforce/apex';
@@ -41,6 +42,7 @@ import saveWatermarkImage from '@salesforce/apex/DocGenController.saveWatermarkI
 import clearWatermarkImage from '@salesforce/apex/DocGenController.clearWatermarkImage';
 import searchDataProviders from '@salesforce/apex/DocGenController.searchDataProviders';
 import getHtmlTemplateBody from '@salesforce/apex/DocGenController.getHtmlTemplateBody';
+import getConvertedHtmlSnapshot from '@salesforce/apex/DocGenController.getConvertedHtmlSnapshot';
 import validateDataProvider from '@salesforce/apex/DocGenController.validateDataProvider';
 
 // Schema
@@ -352,6 +354,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track showHtmlBodyEditor = false;
     @track isLoadingHtmlBody = false;
     @track isApplyingHtmlBody = false;
+    // What "Save as New Version" will save: 'file' | 'editor' | 'starter' | null
+    // (null = nothing staged this session; the stored body remains active).
+    @track stagedBodySource = null;
+    // True when the textarea has been typed in since the last stage/reload.
+    @track htmlEditorDirty = false;
+    // DOCX→HTML transparency viewer (Word templates, PDF output)
+    @track showDocxHtmlViewer = false;
+    @track isLoadingDocxHtml = false;
+    @track isSwitchingToHtml = false;
+    @track docxSnapshotInfo = null;
     // Last HTML body text this session touched (upload, starter, or Apply) so
     // reopening the editor doesn't need a server round-trip.
     _lastUploadedHtmlText = null;
@@ -2966,6 +2978,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.uploadedContentVersionId = bodyResult.contentVersionId;
             this.uploadedFileName = fileName;
             this._lastUploadedHtmlText = html;
+            this.stagedBodySource = 'starter';
+            this.htmlEditorDirty = false;
             // Starters declare @page — same handling as an uploaded body that owns it.
             this.editHtmlBodyOwnsPageRule = true;
             this.editTemplatePageOrientation = null;
@@ -3164,6 +3178,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._lastUploadedHtmlText = null;
             this.isLoadingHtmlBody = false;
             this.isApplyingHtmlBody = false;
+            this.stagedBodySource = null;
+            this.htmlEditorDirty = false;
+            this.showDocxHtmlViewer = false;
+            this.docxSnapshotInfo = null;
+            this.isLoadingDocxHtml = false;
+            this.isSwitchingToHtml = false;
 
             let cdLinks = [];
             if (row.ContentDocumentLinks) {
@@ -4439,7 +4459,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * <img src> to CV URLs, store the body, and sync the @page-ownership
      * state. Throws on failure — callers own the error toast.
      */
-    async _processAndSaveHtmlBody(templateId, htmlText, fileName, zipImages) {
+    async _processAndSaveHtmlBody(templateId, htmlText, fileName, zipImages, source) {
         const imagePaths = (zipImages && zipImages.imagePaths) || [];
         const imageBytes = (zipImages && zipImages.imageBytes) || [];
 
@@ -4516,6 +4536,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.uploadedContentVersionId = bodyResult.contentVersionId;
         this.uploadedFileName = fileName;
         this._lastUploadedHtmlText = rewritten;
+        this.stagedBodySource = source || 'file';
+        this.htmlEditorDirty = false;
+        // Keep the editor in lockstep with whatever just got staged — a file
+        // upload while the editor is open must not leave stale HTML showing.
+        if (this.showHtmlBodyEditor) {
+            this._syncHtmlBodyEditorDom(rewritten);
+        }
         const imgMsg =
             totalImages > 0 ? ' (' + totalImages + ' image' + (totalImages === 1 ? '' : 's') + ' extracted)' : '';
         // v1.90 — detect author-declared @page rule; if present, the engine suppresses
@@ -4533,7 +4560,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             ? ' Your HTML defines its own @page CSS — template page-layout fields cleared.'
             : '';
         this.showToast(
-            'Uploaded',
+            source === 'editor' ? 'Editor HTML staged' : 'Uploaded',
             fileName + imgMsg + '.' + pageMsg + ' Click "Save as New Version" to activate.',
             'success'
         );
@@ -4545,14 +4572,52 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.showHtmlBodyEditor ? 'Hide HTML Editor' : 'Edit HTML';
     }
 
+    /** One-line answer to "what will Save as New Version actually save?" */
+    get htmlEditorStatusText() {
+        if (this.htmlEditorDirty) {
+            return 'Unapplied edits — click "Apply Editor HTML" to stage them, or Reload to discard.';
+        }
+        if (this.stagedBodySource === 'editor') {
+            return 'Staged: your editor HTML — "Save as New Version" saves it.';
+        }
+        if (this.stagedBodySource === 'starter') {
+            return 'Staged: starter design (' + this.uploadedFileName + ') — "Save as New Version" saves it.';
+        }
+        if (this.stagedBodySource === 'file') {
+            return (
+                'Staged: uploaded file "' + this.uploadedFileName + '" (shown below) — "Save as New Version" saves it.'
+            );
+        }
+        return 'Showing the current saved body — nothing staged yet.';
+    }
+
+    get htmlEditorStatusClass() {
+        return this.htmlEditorDirty ? 'dg-html-editor-status dg-html-editor-status_dirty' : 'dg-html-editor-status';
+    }
+
+    handleHtmlBodyEditorInput() {
+        this.htmlEditorDirty = true;
+    }
+
     async toggleHtmlBodyEditor() {
         if (this.showHtmlBodyEditor) {
             this.showHtmlBodyEditor = false;
             return;
         }
         this.showHtmlBodyEditor = true;
+        await this._loadBodyIntoEditor();
+    }
+
+    /** Reload = show what's actually staged (or saved), discarding unapplied edits. */
+    async handleReloadHtmlBodyEditor() {
+        await this._loadBodyIntoEditor();
+    }
+
+    /** Fill the editor with the staged body, falling back to the stored one. */
+    async _loadBodyIntoEditor() {
         if (this._lastUploadedHtmlText != null) {
             this._syncHtmlBodyEditorDom(this._lastUploadedHtmlText);
+            this.htmlEditorDirty = false;
             return;
         }
         // No body touched this session — pull the latest stored body.
@@ -4561,6 +4626,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const body = await getHtmlTemplateBody({ templateId: this.editTemplateId });
             this._lastUploadedHtmlText = body || '';
             this._syncHtmlBodyEditorDom(this._lastUploadedHtmlText);
+            this.htmlEditorDirty = false;
         } catch (err) {
             const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
             this.showToast('Could not load HTML body', msg, 'error');
@@ -4581,6 +4647,117 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }, 120);
     }
 
+    // --- DOCX→HTML transparency viewer (Word templates, PDF output) ---
+    get showDocxConvertedHtmlSection() {
+        return this.editTemplateType === 'Word' && this.editTemplateOutputFormat === 'PDF';
+    }
+
+    get docxHtmlViewerToggleLabel() {
+        return this.showDocxHtmlViewer ? 'Hide Converted HTML' : 'View Converted HTML';
+    }
+
+    get docxViewerStatusText() {
+        const info = this.docxSnapshotInfo;
+        if (!info) {
+            return 'Loading conversion snapshot…';
+        }
+        if (info.status === 'NoActiveVersion') {
+            return 'No active version yet — upload a Word file and "Save as New Version" first.';
+        }
+        if (!info.html) {
+            const st = info.status || 'Pending';
+            return (
+                'Conversion snapshot not baked yet (status: ' + st + '). Re-save the version, then reopen this viewer.'
+            );
+        }
+        return (
+            'Converted HTML from ' +
+            (info.versionName || 'the active version') +
+            ' — this is exactly what the PDF engine renders from your Word file.'
+        );
+    }
+
+    async toggleDocxHtmlViewer() {
+        if (this.showDocxHtmlViewer) {
+            this.showDocxHtmlViewer = false;
+            return;
+        }
+        this.showDocxHtmlViewer = true;
+        this.isLoadingDocxHtml = true;
+        this.docxSnapshotInfo = null;
+        try {
+            const info = await getConvertedHtmlSnapshot({ templateId: this.editTemplateId });
+            this.docxSnapshotInfo = info || { html: null, status: 'Unknown' };
+            this._syncDocxHtmlViewerDom((info && info.html) || '');
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Could not load converted HTML', msg, 'error');
+            this.docxSnapshotInfo = { html: null, status: 'Error' };
+            this._syncDocxHtmlViewerDom('');
+        } finally {
+            this.isLoadingDocxHtml = false;
+        }
+    }
+
+    _syncDocxHtmlViewerDom(text) {
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            const ta = this.template.querySelector('.dg-docx-html-editor');
+            if (ta) {
+                ta.value = text || '';
+            }
+        }, 120);
+    }
+
+    /**
+     * One-way ramp from Word to HTML: the (possibly fine-tuned) converted
+     * HTML becomes the template's real body and Type flips to HTML, so edits
+     * stick instead of being clobbered by the next DOCX re-decomposition.
+     */
+    async handleSwitchToHtmlTemplate() {
+        const ta = this.template.querySelector('.dg-docx-html-editor');
+        const text = ta ? ta.value : '';
+        if (!text || !text.trim()) {
+            this.showToast('Nothing to convert', 'The converted-HTML view is empty.', 'warning');
+            return;
+        }
+        const proceed = await LightningConfirm.open({
+            message:
+                "This makes the HTML shown (including your edits) the template's real body and changes the template Type from Word to HTML. " +
+                'The Word file stays in Version History, but future edits happen in the HTML editor. Continue?',
+            label: 'Switch to HTML Template',
+            theme: 'warning'
+        });
+        if (!proceed) {
+            return;
+        }
+        this.isSwitchingToHtml = true;
+        try {
+            const fields = { Id: this.editTemplateId };
+            fields[TYPE_FIELD.fieldApiName] = 'HTML';
+            fields[OUTPUT_FORMAT_FIELD.fieldApiName] = 'PDF';
+            await updateRecord({ fields });
+            this.editTemplateType = 'HTML';
+            this.editTemplateOutputFormat = 'PDF';
+            this.showDocxHtmlViewer = false;
+            // Stage the tuned HTML as the body through the standard pipeline.
+            await this._processAndSaveHtmlBody(this.editTemplateId, text, 'converted-from-word.html', null, 'editor');
+            this.showHtmlBodyEditor = true;
+            this._syncHtmlBodyEditorDom(text);
+            await refreshApex(this.wiredTemplatesResult);
+            this.showToast(
+                'Now an HTML template',
+                'Your converted HTML is staged — review it in the editor and click "Save as New Version" to activate.',
+                'success'
+            );
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Switch failed', msg, 'error');
+        } finally {
+            this.isSwitchingToHtml = false;
+        }
+    }
+
     async handleApplyHtmlBody() {
         const ta = this.template.querySelector('.dg-html-body-editor');
         const text = ta ? ta.value : '';
@@ -4591,7 +4768,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.isApplyingHtmlBody = true;
         try {
             const base = (this.uploadedFileName || 'template.html').replace(/\.(html?|zip)$/i, '');
-            await this._processAndSaveHtmlBody(this.editTemplateId, text, base + '.html', null);
+            await this._processAndSaveHtmlBody(this.editTemplateId, text, base + '.html', null, 'editor');
         } catch (err) {
             const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
             this.showToast('Apply failed', msg, 'error');

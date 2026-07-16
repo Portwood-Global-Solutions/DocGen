@@ -3110,6 +3110,79 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * DOCX→HTML conversion transparency (admin editor).
+     *
+     * Returns the pre-baked docgen_tmpl_html_<versionId> snapshot for the
+     * template's active version — the exact HTML the PDF engine renders from
+     * the author's Word file — plus the decomposition status so the client
+     * can explain a missing snapshot ("Pending" = not yet baked). Read-only
+     * from the engine's perspective: the snapshot regenerates on every new
+     * DOCX upload, so edits are only honored by converting the template to
+     * Type=HTML (client-side flow).
+     *
+     * Uses the same without-sharing internal-CV loaders as the giant-query
+     * assembler — these CVs carry Visibility=InternalUsers links that
+     * USER_MODE reads silently drop (the #114 quirk).
+     */
+    @AuraEnabled
+    public static Map<String, Object> getConvertedHtmlSnapshot(Id templateId) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template__c> tpls = [
+                SELECT Id
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (tpls.isEmpty()) {
+                throw DocGenService.ahe('Template not found or access denied.');
+            }
+        } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Is_Active__c', 'Pre_Decomposition_Status__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> vers = [
+            SELECT Id, Name, Pre_Decomposition_Status__c
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (vers.isEmpty()) {
+            return new Map<String, Object>{ 'html' => null, 'status' => 'NoActiveVersion' };
+        }
+
+        String htmlTitle = 'docgen_tmpl_html_' + vers[0].Id;
+        List<ContentVersion> htmlCvs = DocGenService.loadInternalContentVersionsForVersionByTitle(
+            vers[0].Id,
+            htmlTitle
+        );
+        if (htmlCvs.isEmpty()) {
+            htmlCvs = DocGenService.loadInternalContentVersionsByTitle(htmlTitle);
+        }
+
+        return new Map<String, Object>{
+            'html' => htmlCvs.isEmpty() ? null : htmlCvs[0].VersionData.toString(),
+            'versionId' => vers[0].Id,
+            'versionName' => vers[0].Name,
+            'status' => vers[0].Pre_Decomposition_Status__c
+        };
+    }
+
+    /**
      * PDF AcroForm template upload — prepared browser-normalized body.
      *
      * Encrypted/object-stream-heavy government forms are normalized once in the

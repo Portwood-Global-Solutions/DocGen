@@ -344,6 +344,53 @@ private class DocGenHtmlTemplateTest {
     }
 
     @IsTest
+    static void getConvertedHtmlSnapshotReturnsBakedHtmlAndStatus() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'DocxSnap ' + Datetime.now().getTime(),
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        // No active version yet
+        Map<String, Object> r0 = DocGenController.getConvertedHtmlSnapshot(tmpl.Id);
+        System.assertEquals('NoActiveVersion', r0.get('status'), 'Expected NoActiveVersion before any version');
+
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tmpl.Id,
+            Is_Active__c = true,
+            Type__c = 'Word',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name',
+            Pre_Decomposition_Status__c = 'Complete'
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        // Pending snapshot: version exists, no baked CV yet
+        Map<String, Object> r1 = DocGenController.getConvertedHtmlSnapshot(tmpl.Id);
+        System.assertEquals(null, r1.get('html'), 'No snapshot CV yet — html should be null');
+        System.assertEquals('Complete', r1.get('status'), 'Status should surface the version decomp status');
+
+        String snapshotHtml = '<html><body><h1>{Name}</h1>CONVERTED</body></html>';
+        insert new ContentVersion(
+            Title = 'docgen_tmpl_html_' + ver.Id,
+            PathOnClient = 'snapshot.html',
+            VersionData = Blob.valueOf(snapshotHtml),
+            IsMajorVersion = false,
+            FirstPublishLocationId = ver.Id
+        );
+
+        Test.startTest();
+        Map<String, Object> r2 = DocGenController.getConvertedHtmlSnapshot(tmpl.Id);
+        Test.stopTest();
+
+        System.assertEquals(snapshotHtml, r2.get('html'), 'Baked snapshot HTML should be returned verbatim');
+        System.assertEquals(ver.Id, r2.get('versionId'), 'Active version id expected');
+    }
+
+    @IsTest
     static void saveHtmlTemplateImageRejectsNonHtmlTemplate() {
         DocGen_Template__c tmpl = new DocGen_Template__c(
             Name = 'Word ' + Datetime.now().getTime(),

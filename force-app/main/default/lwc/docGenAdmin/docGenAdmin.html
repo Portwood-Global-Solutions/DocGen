@@ -2757,6 +2757,67 @@
                                                 <em>Compress Pictures → Email (96 ppi)</em> — most 20 MB templates drop
                                                 to under 2 MB with no visible quality loss.
                                             </p>
+
+                                            <!-- DOCX→HTML transparency: show the exact HTML the PDF engine
+                                                 renders from the Word file. Editing it is a one-way ramp to an
+                                                 HTML template — the snapshot regenerates on every DOCX upload,
+                                                 so in-place edits would be silently clobbered. -->
+                                            <template if:true={showDocxConvertedHtmlSection}>
+                                                <div class="slds-var-m-top_small">
+                                                    <lightning-button
+                                                        label={docxHtmlViewerToggleLabel}
+                                                        icon-name="utility:preview"
+                                                        onclick={toggleDocxHtmlViewer}
+                                                    ></lightning-button>
+                                                    <template if:true={showDocxHtmlViewer}>
+                                                        <div class="slds-var-m-top_small">
+                                                            <div class="dg-html-editor-statusbar">
+                                                                <span class="dg-html-editor-status"
+                                                                    >{docxViewerStatusText}</span
+                                                                >
+                                                            </div>
+                                                            <template if:true={isLoadingDocxHtml}>
+                                                                <div class="slds-is-relative" style="height: 40px">
+                                                                    <lightning-spinner
+                                                                        alternative-text="Loading converted HTML"
+                                                                        size="small"
+                                                                    ></lightning-spinner>
+                                                                </div>
+                                                            </template>
+                                                            <textarea
+                                                                class="dg-html-body-editor dg-docx-html-editor"
+                                                                spellcheck="false"
+                                                                aria-label="Converted HTML (what the PDF engine renders)"
+                                                                placeholder="No conversion snapshot yet — upload a Word file and Save as New Version, then reopen this viewer."
+                                                            ></textarea>
+                                                            <div class="slds-var-m-top_x-small">
+                                                                <lightning-button
+                                                                    variant="brand"
+                                                                    label="Switch to HTML Template"
+                                                                    icon-name="utility:change_record_type"
+                                                                    onclick={handleSwitchToHtmlTemplate}
+                                                                    disabled={isSwitchingToHtml}
+                                                                ></lightning-button>
+                                                                <template if:true={isSwitchingToHtml}>
+                                                                    <lightning-spinner
+                                                                        alternative-text="Converting"
+                                                                        size="small"
+                                                                        class="slds-var-m-left_small"
+                                                                    ></lightning-spinner>
+                                                                </template>
+                                                                <span
+                                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-left_small"
+                                                                >
+                                                                    Fine-tuned this HTML? Converting makes it the
+                                                                    template's real body (Type becomes HTML) so your
+                                                                    edits stick. Until then this view is regenerated
+                                                                    from the Word file on every upload.
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
                                         </template>
 
                                         <template if:true={isEditTypeHtml}>
@@ -2804,6 +2865,23 @@
                                             </template>
                                             <template if:true={showHtmlBodyEditor}>
                                                 <div class="slds-var-m-top_small">
+                                                    <!-- What the editor is showing, and where it stands vs. the
+                                                         staged body. "Clear is kind": whatever was staged LAST —
+                                                         an uploaded file or applied editor HTML — is what
+                                                         "Save as New Version" saves. -->
+                                                    <div class="dg-html-editor-statusbar">
+                                                        <span class={htmlEditorStatusClass}
+                                                            >{htmlEditorStatusText}</span
+                                                        >
+                                                        <lightning-button
+                                                            label="Reload"
+                                                            icon-name="utility:refresh"
+                                                            variant="base"
+                                                            onclick={handleReloadHtmlBodyEditor}
+                                                            title="Replace the editor contents with the currently staged body (or the saved body if nothing is staged). Discards unapplied edits."
+                                                            class="slds-var-m-left_small"
+                                                        ></lightning-button>
+                                                    </div>
                                                     <template if:true={isLoadingHtmlBody}>
                                                         <div class="slds-is-relative" style="height: 40px">
                                                             <lightning-spinner
@@ -2816,12 +2894,13 @@
                                                         class="dg-html-body-editor"
                                                         spellcheck="false"
                                                         aria-label="Template HTML body"
+                                                        oninput={handleHtmlBodyEditorInput}
                                                         placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
                                                     ></textarea>
                                                     <div class="slds-var-m-top_x-small">
                                                         <lightning-button
                                                             variant="brand"
-                                                            label="Apply HTML"
+                                                            label="Apply Editor HTML"
                                                             icon-name="utility:check"
                                                             onclick={handleApplyHtmlBody}
                                                             disabled={isApplyingHtmlBody}
@@ -2836,8 +2915,10 @@
                                                         <span
                                                             class="slds-text-body_small slds-text-color_weak slds-var-m-left_small"
                                                         >
-                                                            Applies as the uploaded body — then click "Save as New
-                                                            Version" below. Inline images are extracted automatically.
+                                                            Stages this HTML as the body (inline images extracted
+                                                            automatically). Uploading a file instead replaces it —
+                                                            whichever was staged last is what "Save as New Version"
+                                                            saves.
                                                         </span>
                                                     </div>
                                                 </div>
