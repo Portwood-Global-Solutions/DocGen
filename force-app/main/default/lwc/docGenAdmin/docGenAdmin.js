@@ -1267,6 +1267,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         pv.style.outlineOffset = '6px';
                         pv.style.caretColor = '#7c3aed';
                         pv.style.cursor = 'text';
+                        // Merge tags render as friendly atomic pills.
+                        this._pillifyTags(pv);
+                        // Drag targets: tag chips and image thumbnails drop
+                        // exactly where the user points.
+                        pv.addEventListener('dragover', (e) => e.preventDefault());
+                        pv.addEventListener('drop', (e) => this._handleVisualDrop(e, pv));
+                        // Snapshot AFTER pillify so "unchanged" compares
+                        // like-for-like on exit.
                         this._visualEnteredDom = pv.innerHTML;
                     }
                 }
@@ -4696,6 +4704,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.showToast('Nothing to edit', 'Load or paste a template body first.', 'warning');
             return;
         }
+        this._enterVisualMode(html);
+    }
+
+    _enterVisualMode(html) {
         this._visualOriginalCode = html;
         this._visualEnteredDom = null; // captured in renderedCallback after mount
         this.showHtmlBodyPreview = false;
@@ -4704,6 +4716,51 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // renderedCallback turns the rendered page into an editor.
         const scoped = scopeHtmlForInlinePreview(html);
         this._pendingPreviewWrite = { selector: '.dg-visual-host', html: scoped, editable: true };
+    }
+
+    /**
+     * Merge tags become atomic pills in the editable page: friendly colored
+     * chips (purple fields, green loop/section markers) that read as objects
+     * instead of code, and — because they're contenteditable=false — can only
+     * be deleted whole, never half-mangled. Walks TEXT nodes only, so tags
+     * inside attributes are untouched.
+     */
+    _pillifyTags(root) {
+        const doc = root.ownerDocument || document;
+        const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        const targets = [];
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            if (/\{[^{}]+\}/.test(node.nodeValue) && (!node.parentElement || node.parentElement.tagName !== 'STYLE')) {
+                targets.push(node);
+            }
+        }
+        for (const node of targets) {
+            const frag = doc.createDocumentFragment();
+            for (const part of node.nodeValue.split(/(\{[^{}]+\})/g)) {
+                if (/^\{[^{}]+\}$/.test(part)) {
+                    const pill = doc.createElement('span');
+                    pill.setAttribute('data-dg-tag', 'true');
+                    pill.setAttribute('contenteditable', 'false');
+                    pill.textContent = part;
+                    const isStructural = /^[#/:%@]/.test(part.charAt(1));
+                    pill.style.cssText = isStructural
+                        ? 'background:#e3f5e9;border:1px solid #9fd6b1;color:#1c7a3d;border-radius:9px;padding:0 6px;font-size:0.9em;white-space:nowrap;'
+                        : 'background:#ede7fd;border:1px solid #c9b8f5;color:#5a3fc4;border-radius:9px;padding:0 6px;font-size:0.9em;white-space:nowrap;';
+                    frag.appendChild(pill);
+                } else if (part) {
+                    frag.appendChild(doc.createTextNode(part));
+                }
+            }
+            node.parentNode.replaceChild(frag, node);
+        }
+    }
+
+    /** Pills back to plain merge-tag text (exit path). */
+    _unpillifyTags(root) {
+        for (const pill of root.querySelectorAll('[data-dg-tag]')) {
+            pill.replaceWith((root.ownerDocument || document).createTextNode(pill.textContent));
+        }
     }
 
     /** Leave visual mode — lossless when nothing changed. */
@@ -4715,11 +4772,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const current = pv.innerHTML;
             if (this._visualEnteredDom !== null && current !== this._visualEnteredDom) {
                 // Extract the edited content: everything except the scoped
-                // <style> the preview pipeline injected.
+                // <style> the preview pipeline injected, with tag pills
+                // unwrapped back to plain merge-tag text.
                 const clone = pv.cloneNode(true);
                 for (const styleEl of clone.querySelectorAll('style')) {
                     styleEl.remove();
                 }
+                this._unpillifyTags(clone);
                 const edited = clone.innerHTML.trim();
                 // Swap ONLY the body content back into the original document —
                 // head/styles/@page are untouched by design.
@@ -4809,10 +4868,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     async toggleHtmlBodyEditor() {
         if (this.showHtmlBodyEditor) {
             this.showHtmlBodyEditor = false;
+            this.showHtmlBodyVisual = false;
+            this._visualOriginalCode = null;
+            this._visualEnteredDom = null;
             return;
         }
         this.showHtmlBodyEditor = true;
         await this._loadBodyIntoEditor();
+        // The page, not the code, is the front door: when a body exists,
+        // open straight into visual editing. Code stays one click away.
+        const body = this._lastUploadedHtmlText;
+        if (body && body.trim()) {
+            this._enterVisualMode(body);
+        }
     }
 
     /** Reload = show what's actually staged (or saved), discarding unapplied edits. */
@@ -5006,7 +5074,63 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const pv = host && host.querySelector('.dg-pv');
         if (pv) {
             pv.insertAdjacentHTML('beforeend', markup);
+            this._pillifyTags(pv);
             this.htmlEditorDirty = true;
+        }
+    }
+
+    /** Drop a dragged tag chip / image thumbnail at the pointed-at spot. */
+    _handleVisualDrop(event, pv) {
+        event.preventDefault();
+        const text = event.dataTransfer && event.dataTransfer.getData('text/plain');
+        if (!text) {
+            return;
+        }
+        const doc = pv.ownerDocument || document;
+        const tpl = doc.createElement('template');
+        tpl.innerHTML = text;
+        this._pillifyTags(tpl.content);
+        let range = null;
+        try {
+            if (doc.caretRangeFromPoint) {
+                range = doc.caretRangeFromPoint(event.clientX, event.clientY);
+            } else if (doc.caretPositionFromPoint) {
+                const p = doc.caretPositionFromPoint(event.clientX, event.clientY);
+                if (p) {
+                    range = doc.createRange();
+                    range.setStart(p.offsetNode, p.offset);
+                }
+            }
+        } catch (e) {
+            range = null;
+        }
+        // Only honor drop points inside the page; otherwise append at the end.
+        if (range && pv.contains(range.startContainer)) {
+            range.collapse(true);
+            range.insertNode(tpl.content);
+        } else {
+            pv.appendChild(tpl.content);
+        }
+        this.htmlEditorDirty = true;
+    }
+
+    /** Tag chips and image thumbnails are draggable onto the visual page. */
+    handleTagDragStart(event) {
+        const snippet = event.currentTarget.dataset.snippet;
+        if (snippet && event.dataTransfer) {
+            event.dataTransfer.setData('text/plain', snippet);
+            event.dataTransfer.effectAllowed = 'copy';
+        }
+    }
+
+    handleImageDragStart(event) {
+        const { url, name } = event.currentTarget.dataset;
+        if (url && event.dataTransfer) {
+            event.dataTransfer.setData(
+                'text/plain',
+                '<img src="' + url + '" alt="' + (name || 'image') + '" style="width: 180px" />'
+            );
+            event.dataTransfer.effectAllowed = 'copy';
         }
     }
 

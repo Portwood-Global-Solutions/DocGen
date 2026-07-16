@@ -2964,12 +2964,14 @@
                                                         <p
                                                             class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small"
                                                         >
-                                                            Click into the page and edit text right where it appears —
-                                                            tables and styling render exactly as the PDF engine sees
-                                                            them. Merge tags are plain text: type &#123;Name&#125;
-                                                            anywhere. Structure changes (new rows, sections) are Code
-                                                            work. "Back to Code" folds your edits in — only the document
-                                                            content changes, never your styles or page setup.
+                                                            This is your document — click anywhere and type. The colored
+                                                            pills are your data fields: drag more in from&nbsp;<strong
+                                                                >Insert Tags</strong
+                                                            >&nbsp;or drop a picture from&nbsp;<strong>Add Image</strong
+                                                            >&nbsp;right where you want it. Deleting a pill removes the
+                                                            whole field — they can't break. Your styles and page setup
+                                                            are never touched here; "Back to Code" is one click away for
+                                                            structure work.
                                                         </p>
                                                     </template>
                                                     <div class="slds-var-m-top_x-small">
@@ -3032,6 +3034,8 @@
                                                                                 class="dg-tag-chip"
                                                                                 data-snippet={tag.snippet}
                                                                                 title={tag.title}
+                                                                                draggable="true"
+                                                                                ondragstart={handleTagDragStart}
                                                                                 onclick={handleInsertTagSnippet}
                                                                             >
                                                                                 {tag.label}
@@ -3097,6 +3101,8 @@
                                                                             class="dg-image-thumb"
                                                                             data-url={img.url}
                                                                             data-name={img.fileName}
+                                                                            draggable="true"
+                                                                            ondragstart={handleImageDragStart}
                                                                             onclick={handleInsertExistingImage}
                                                                             title={img.fileName}
                                                                         >
