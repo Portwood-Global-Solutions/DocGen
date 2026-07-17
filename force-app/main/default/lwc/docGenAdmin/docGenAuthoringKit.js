@@ -603,7 +603,12 @@ export function scopeHtmlForInlinePreview(html) {
         // numbers inside the page (matches how the PDF engine renders them).
         '.dg-pv ul { list-style: disc outside !important; padding-left: 18pt; }\n' +
         '.dg-pv ol { list-style: decimal outside !important; padding-left: 18pt; }\n' +
-        '.dg-pv li { list-style: inherit !important; }';
+        '.dg-pv li { list-style: inherit !important; }\n' +
+        // Converted DOCX tables often carry absolute widths wider than the
+        // page (extra loop-tag cells, twips math) — keep them ON the sheet so
+        // their edges stay reachable for column drag-resize.
+        '.dg-pv table { max-width: 100% !important; }\n' +
+        '.dg-pv td, .dg-pv th { overflow-wrap: break-word; }';
     return '<div class="dg-pv"><style>' + baseline + css + '</style>' + content + '</div>';
 }
 

@@ -1231,3 +1231,8 @@
 .dg-slash-foot a:hover {
     text-decoration: underline;
 }
+
+.dg-designer-template-switch {
+    min-width: 220px;
+    max-width: 300px;
+}

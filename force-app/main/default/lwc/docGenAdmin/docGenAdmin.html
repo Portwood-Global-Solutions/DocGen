@@ -1455,7 +1455,15 @@
                             <div class="dg-designer-toolbar">
                                 <div class="dg-designer-toolbar__title">
                                     <lightning-icon icon-name="utility:brush" size="small"></lightning-icon>
-                                    <span class="slds-text-heading_small">{designerTitle}</span>
+                                    <div class="dg-designer-template-switch">
+                                        <lightning-combobox
+                                            variant="label-hidden"
+                                            value={editTemplateId}
+                                            options={designerTemplateOptions}
+                                            onchange={handleDesignerTemplateSwitch}
+                                            title="Switch to another HTML template without leaving the designer"
+                                        ></lightning-combobox>
+                                    </div>
                                 </div>
                                 <template if:true={isRealObject}>
                                     <div class="dg-designer-toolbar__sample">
@@ -1644,6 +1652,23 @@
                                         class="slds-var-m-left_small"
                                     ></lightning-button>
                                 </template>
+                                <lightning-button
+                                    label="Apply Editor HTML"
+                                    icon-name="utility:check"
+                                    variant="base"
+                                    onclick={handleApplyHtmlBody}
+                                    disabled={isApplyingHtmlBody}
+                                    title="Stage the current editor contents now. Save as New Version does this automatically."
+                                    class="slds-var-m-left_small"
+                                ></lightning-button>
+                                <lightning-button
+                                    label="Copy AI Prompt"
+                                    icon-name="utility:copy"
+                                    variant="base"
+                                    onclick={handleCopyEditAiPrompt}
+                                    title="Copies a ready-to-paste prompt (your fields + DocGen tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot."
+                                    class="slds-var-m-left_small"
+                                ></lightning-button>
                                 <lightning-button
                                     label="Reload"
                                     icon-name="utility:refresh"
@@ -2121,32 +2146,6 @@
                                         setup are never touched here.
                                     </p>
                                 </template>
-                                <div class="slds-var-m-top_x-small">
-                                    <lightning-button
-                                        variant="brand"
-                                        label="Apply Editor HTML"
-                                        icon-name="utility:check"
-                                        onclick={handleApplyHtmlBody}
-                                        disabled={isApplyingHtmlBody}
-                                    ></lightning-button>
-                                    <lightning-button
-                                        label="Copy AI Prompt"
-                                        icon-name="utility:copy"
-                                        onclick={handleCopyEditAiPrompt}
-                                        title="Copies a ready-to-paste prompt (your fields + DocGen tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot."
-                                        class="slds-var-m-left_x-small"
-                                    ></lightning-button>
-                                    <template if:true={isApplyingHtmlBody}>
-                                        <lightning-spinner
-                                            alternative-text="Applying"
-                                            size="small"
-                                            class="slds-var-m-left_small"
-                                        ></lightning-spinner>
-                                    </template>
-                                    <span class="slds-text-body_small slds-text-color_weak slds-var-m-left_small">
-                                        Stage your changes, then "Save as New Version" makes them the active body.
-                                    </span>
-                                </div>
                             </div>
 
                             <template if:true={showFloatPanel}>

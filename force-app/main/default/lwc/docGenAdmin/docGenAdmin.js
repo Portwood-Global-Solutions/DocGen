@@ -6869,6 +6869,40 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.editTemplateName || 'Template Designer';
     }
 
+    /** Switch templates without leaving the designer. */
+    get designerTemplateOptions() {
+        return (this.templates || []).filter((t) => t[F.Type] === 'HTML').map((t) => ({ label: t.Name, value: t.Id }));
+    }
+
+    async handleDesignerTemplateSwitch(event) {
+        const id = event.detail.value;
+        if (!id || id === this.editTemplateId) {
+            return;
+        }
+        if (this.htmlEditorDirty) {
+            const ok = await LightningConfirm.open({
+                message: 'Switch templates? Unapplied edits in this editor will be discarded — staged bodies are kept.',
+                label: 'Switch template',
+                theme: 'warning'
+            });
+            if (!ok) {
+                // Re-render snaps the picker back to the current template.
+                this.editTemplateId = this.editTemplateId; // eslint-disable-line no-self-assign
+                return;
+            }
+        }
+        const row = (this.templates || []).find((t) => t.Id === id);
+        if (!row) {
+            return;
+        }
+        if (this.showHtmlBodyVisual) {
+            this._exitVisualMode();
+        }
+        this.handleClosePdfPreview();
+        this.activePanel = null;
+        await this.openDesignerForRow(row);
+    }
+
     /** Row action / modal button → full-screen designer for HTML templates. */
     async openDesignerForRow(row) {
         this.openEditModal(row, 'document');
