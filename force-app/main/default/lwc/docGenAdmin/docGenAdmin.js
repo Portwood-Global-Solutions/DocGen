@@ -2027,7 +2027,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this.newTemplateObject = STARTER_OBJECTS[this.newStarterKey] || 'Account';
             }
             if (this.dataSourceMode === 'record' && !(this.newTemplateQuery || '').trim()) {
-                this.newTemplateQuery = await this._buildDefaultQueryConfig(this.newTemplateObject);
+                // Scratch builds get the RICH query — the author picks fields
+                // from the palette, so all usable fields must be available.
+                this.newTemplateQuery = await this._buildDefaultQueryConfig(
+                    this.newTemplateObject,
+                    this.isAuthoringScratch
+                );
             }
             await this.createTemplate();
         } finally {
@@ -2035,8 +2040,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    /** Sensible default query from the object's describe — refinable later. */
-    async _buildDefaultQueryConfig(objectApiName) {
+    /** Sensible default query from the object's describe — refinable later.
+     *  rich=true (Start From Scratch): pull EVERY usable field (capped at 40)
+     *  and more relationships, so the tag palette isn't a six-field diet. */
+    async _buildDefaultQueryConfig(objectApiName, rich) {
         try {
             const [fields, rels] = await Promise.all([
                 getObjectFields({ objectName: objectApiName }),
@@ -2047,6 +2054,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             (fields || []).forEach((f) => {
                 typeOf[f.value] = f.type;
             });
+            const fieldCap = rich ? 40 : 6;
             const PREF = [
                 'Name',
                 'Industry',
@@ -2067,12 +2075,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 /^(Id|OwnerId|CreatedById|LastModifiedById|SystemModstamp|IsDeleted|CurrencyIsoCode|Jigsaw.*|CleanStatus|PhotoUrl)$/;
             const chosen = [];
             for (const p of PREF) {
-                if (chosen.length < 6 && names.includes(p)) {
+                if (chosen.length < fieldCap && names.includes(p)) {
                     chosen.push(p);
                 }
             }
             for (const f of names) {
-                if (chosen.length >= 6) {
+                if (chosen.length >= fieldCap) {
                     break;
                 }
                 if (!chosen.includes(f) && !SKIP.test(f) && !f.endsWith('Id') && GOOD.test(typeOf[f] || '')) {
@@ -2087,10 +2095,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const NOISE =
                 /Histories|Feeds|Shares|Teams|ContentDocumentLinks|ProcessInstances|ActivityHistories|Emails|Events|Tasks|Notes|Attachments|DuplicateRecord|RecordAction|TopicAssign|Vote/i;
             const picked = [];
+            const relCap = rich ? 4 : 2;
+            const childCap = rich ? 8 : 4;
             for (const rp of RELPREF) {
                 const r = (rels || []).find((x) => x.value === rp);
-                if (r && picked.length < 2) {
+                if (r && picked.length < relCap) {
                     picked.push(r);
+                }
+            }
+            if (rich) {
+                for (const r of rels || []) {
+                    if (picked.length >= relCap) {
+                        break;
+                    }
+                    if (!picked.includes(r) && !NOISE.test(r.value)) {
+                        picked.push(r);
+                    }
                 }
             }
             if (!picked.length && rels && rels.length) {
@@ -2103,6 +2123,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 try {
                     const cf = await getObjectFields({ objectName: r.childObjectApiName });
                     const cnames = (cf || []).map((f) => f.value);
+                    const ctypeOf = {};
+                    (cf || []).forEach((f) => {
+                        ctypeOf[f.value] = f.type;
+                    });
                     const cchosen = [];
                     for (const p of [
                         'Name',
@@ -2119,8 +2143,23 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         'Subject',
                         'Status'
                     ]) {
-                        if (cchosen.length < 4 && cnames.includes(p)) {
+                        if (cchosen.length < childCap && cnames.includes(p)) {
                             cchosen.push(p);
+                        }
+                    }
+                    if (rich) {
+                        for (const f of cnames) {
+                            if (cchosen.length >= childCap) {
+                                break;
+                            }
+                            if (
+                                !cchosen.includes(f) &&
+                                !SKIP.test(f) &&
+                                !f.endsWith('Id') &&
+                                GOOD.test(ctypeOf[f] || '')
+                            ) {
+                                cchosen.push(f);
+                            }
                         }
                     }
                     if (cchosen.length) {
