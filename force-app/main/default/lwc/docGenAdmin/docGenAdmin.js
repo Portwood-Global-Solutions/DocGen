@@ -6944,6 +6944,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._enterVisualMode(body);
     }
 
+    /** Designer → this template's full edit modal, no list-hunting. */
+    handleEditTemplateFromDesigner() {
+        if (this.showHtmlBodyVisual) {
+            this._exitVisualMode();
+        }
+        this.handleClosePdfPreview();
+        this.activePanel = null;
+        this._closeSlashMenu();
+        this.activeMainTab = 'list';
+        this.activeEditTab = 'document';
+        this.isEditModalOpen = true;
+    }
+
     handleCloseDesigner() {
         if (this.showHtmlBodyVisual) {
             this._exitVisualMode();
