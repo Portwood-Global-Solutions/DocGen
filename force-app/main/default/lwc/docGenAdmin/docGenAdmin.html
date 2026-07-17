@@ -1630,6 +1630,14 @@
                                 >
                                     Images
                                 </button>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="hf"
+                                    onclick={handlePanelToggle}
+                                    title="Header and footer that repeat on every PDF page — with page numbers"
+                                >
+                                    Header/Footer
+                                </button>
                                 <template if:true={editTemplateOutputIsPdf}>
                                     <button
                                         class="dg-fmt-btn dg-panel-btn"
@@ -2080,6 +2088,15 @@
                                         >
                                             Header Row
                                         </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="repeatHeader"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Repeat this table's header row at the top of every PDF page it spans (toggles the {RepeatHeader} marker)"
+                                        >
+                                            Repeat Hdr
+                                        </button>
                                         <span class="dg-fmt-sep"></span>
                                         <span class="dg-fmt-label" title="Table borders">Borders</span>
                                         <button
@@ -2167,7 +2184,7 @@
                                             &#10005;
                                         </button>
                                     </div>
-                                    <template if:false={isPanelWatermark}>
+                                    <template if:true={showPanelSearch}>
                                         <input
                                             type="search"
                                             class="dg-panel-search"
@@ -2266,6 +2283,77 @@
                                         </div>
                                     </template>
 
+                                    <template if:true={isPanelHf}>
+                                        <div class="dg-image-panel">
+                                            <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                Repeats on every PDF page. Merge tags work here too. Click a chip to
+                                                insert at your cursor; changes save with
+                                                <strong>Save as New Version</strong>.
+                                            </p>
+                                            <div class="dg-tag-chips slds-var-m-bottom_x-small">
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="pagexy"
+                                                    onclick={handleHfTokenInsert}
+                                                    title="Page counters — only work in the header/footer"
+                                                >
+                                                    Page X of Y
+                                                </button>
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="pagenum"
+                                                    onclick={handleHfTokenInsert}
+                                                >
+                                                    &#123;PageNumber&#125;
+                                                </button>
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="pagetotal"
+                                                    onclick={handleHfTokenInsert}
+                                                >
+                                                    &#123;TotalPages&#125;
+                                                </button>
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="today"
+                                                    onclick={handleHfTokenInsert}
+                                                >
+                                                    Today
+                                                </button>
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="name"
+                                                    onclick={handleHfTokenInsert}
+                                                >
+                                                    &#123;Name&#125;
+                                                </button>
+                                            </div>
+                                            <label class="slds-form-element__label">Header (top of every page)</label>
+                                            <textarea
+                                                class="dg-hf-ta dg-hf-header"
+                                                data-hf="header"
+                                                spellcheck="false"
+                                                placeholder="e.g. <div style='text-align:center'>&#123;Name&#125; — Confidential</div>"
+                                                onfocus={handleHfFocus}
+                                                oninput={handleDesignerHeaderChange}
+                                            ></textarea>
+                                            <label class="slds-form-element__label slds-var-m-top_small"
+                                                >Footer (bottom of every page)</label
+                                            >
+                                            <textarea
+                                                class="dg-hf-ta dg-hf-footer"
+                                                data-hf="footer"
+                                                spellcheck="false"
+                                                placeholder="e.g. <div style='text-align:center'>Page &#123;PageNumber&#125; of &#123;TotalPages&#125;</div>"
+                                                onfocus={handleHfFocus}
+                                                oninput={handleDesignerFooterChange}
+                                            ></textarea>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                                With page counters the engine uses plain-text margin boxes; without
+                                                them, full HTML (including images) renders as a running band.
+                                            </p>
+                                        </div>
+                                    </template>
                                     <template if:true={isPanelWatermark}>
                                         <div class="dg-image-panel">
                                             <p class="slds-text-body_small slds-var-m-bottom_x-small">

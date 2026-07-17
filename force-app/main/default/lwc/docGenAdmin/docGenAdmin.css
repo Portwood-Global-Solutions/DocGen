@@ -1273,3 +1273,21 @@
     background: #f4f2ff;
     outline: 1px solid #c9b8f5;
 }
+
+.dg-hf-ta {
+    width: 100%;
+    height: 90px;
+    box-sizing: border-box;
+    font-family: 'SF Mono', Consolas, Menlo, monospace;
+    font-size: 0.75rem;
+    border: 1px solid #d8dde6;
+    border-radius: 8px;
+    padding: 8px;
+    resize: vertical;
+}
+
+.dg-hf-ta:focus {
+    outline: none;
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}

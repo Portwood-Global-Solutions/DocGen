@@ -966,6 +966,74 @@ export function buildTagPalette(shape) {
         });
     }
 
+    // Chart gallery: all nine engine styles, wired to the first child
+    // relationship's first bucketable field — pills are editable, so authors
+    // retarget by double-clicking. SVG-only styles carry htmlRender=svg.
+    const chartRel = (shape.children || [])[0];
+    const chartField = chartRel ? (chartRel.fields || []).find((f) => f !== 'Id' && !f.includes('.')) : null;
+    if (chartRel && chartField) {
+        const cr = chartRel.relationshipName;
+        const mkChart = (style, svg) =>
+            '{Chart:' +
+            cr +
+            ':' +
+            chartField +
+            ':' +
+            style +
+            ':title=' +
+            humanizeField(cr) +
+            ' by ' +
+            humanizeField(chartField) +
+            (svg ? '&htmlRender=svg' : '') +
+            '}';
+        sections.push({
+            key: 'chartstyles',
+            label: 'Chart gallery',
+            hint: 'Nine styles. SVG styles (pie, donut, column, line, area) render in HTML output; for PDFs prefer bar/stacked/clustered/pivot. Double-click the pill to retarget.',
+            items: [
+                {
+                    key: 'ch_bar',
+                    label: 'Bar chart',
+                    snippet: mkChart('bar', false),
+                    title: 'Horizontal bars — PDF-safe'
+                },
+                {
+                    key: 'ch_stacked',
+                    label: 'Stacked bar',
+                    snippet: mkChart('stacked', false),
+                    title: 'Needs groupBy= and colSort= options — PDF-safe'
+                },
+                {
+                    key: 'ch_clustered',
+                    label: 'Clustered bars',
+                    snippet: mkChart('clustered', false),
+                    title: 'Needs groupBy= and colSort= — PDF-safe'
+                },
+                {
+                    key: 'ch_pivot',
+                    label: 'Pivot table',
+                    snippet: mkChart('pivot', false),
+                    title: 'Cross-tab counts — needs groupBy= and colSort= — PDF-safe'
+                },
+                {
+                    key: 'ch_column',
+                    label: 'Column chart (SVG)',
+                    snippet: mkChart('column', true),
+                    title: 'Vertical columns — HTML output'
+                },
+                { key: 'ch_pie', label: 'Pie chart (SVG)', snippet: mkChart('pie', true), title: 'HTML output' },
+                {
+                    key: 'ch_donut',
+                    label: 'Donut chart (SVG)',
+                    snippet: mkChart('donut', true),
+                    title: 'HTML output — innerRadius= tunes the hole'
+                },
+                { key: 'ch_line', label: 'Line chart (SVG)', snippet: mkChart('line', true), title: 'HTML output' },
+                { key: 'ch_area', label: 'Area chart (SVG)', snippet: mkChart('area', true), title: 'HTML output' }
+            ]
+        });
+    }
+
     sections.push({
         key: 'builtins',
         label: 'Built-ins',
@@ -991,6 +1059,36 @@ export function buildTagPalette(shape) {
                 label: 'Running user email',
                 snippet: '{RunningUser.Email}',
                 title: '{RunningUser.Email}'
+            },
+            {
+                key: 'ru_phone',
+                label: 'Running user phone',
+                snippet: '{RunningUser.Phone}',
+                title: '{RunningUser.Phone} — also: MobilePhone, Fax, Extension'
+            },
+            {
+                key: 'ru_dept',
+                label: 'Running user department',
+                snippet: '{RunningUser.Department}',
+                title: '{RunningUser.Department} — also: CompanyName, EmployeeNumber, Alias'
+            },
+            {
+                key: 'ru_company',
+                label: 'Running user company',
+                snippet: '{RunningUser.CompanyName}',
+                title: '{RunningUser.CompanyName} — address fields too: Street, City, State, PostalCode, Country'
+            },
+            {
+                key: 'pagenum',
+                label: 'Page number',
+                snippet: '{PageNumber}',
+                title: 'Current page — ONLY works in the template Header/Footer, not the body'
+            },
+            {
+                key: 'pagetotal',
+                label: 'Total pages',
+                snippet: '{TotalPages}',
+                title: 'Page count — ONLY works in the template Header/Footer, not the body'
             }
         ]
     });
@@ -1023,6 +1121,18 @@ export function buildTagPalette(shape) {
                 label: 'Signature (Company rep)',
                 snippet: '{@Signature_Company_Representative:2:Full}',
                 title: 'Second signer, order 2'
+            },
+            {
+                key: 'sig_datepick',
+                label: 'Date picker (signer chooses)',
+                snippet: '{@Signature_Customer:1:DatePick}',
+                title: 'Signer picks a date instead of auto-fill'
+            },
+            {
+                key: 'sig_inline',
+                label: 'Inline signature (compact)',
+                snippet: '{@Signature_Customer:1:Full:inline}',
+                title: 'Compact in-place mark — sits inside a sentence instead of a block'
             }
         ]
     });
@@ -1087,6 +1197,30 @@ export function buildTagPalette(shape) {
             label: 'If / else block',
             snippet: '{#FieldName}shown when set{:else}shown when empty{/FieldName}',
             title: 'Conditional content — swap FieldName for one of yours'
+        },
+        {
+            key: 'inverse',
+            label: 'Show when EMPTY (inverse)',
+            snippet: '{^FieldName}shown only when FieldName is blank{/FieldName}',
+            title: 'Renders only when the field is null, false, or an empty list'
+        },
+        {
+            key: 'if_compare',
+            label: 'If — number comparison',
+            snippet: '{#IF Amount >= 100000}big deal content{:else}standard content{/IF}',
+            title: 'Operators: == != > < >= <= — close with {/IF}'
+        },
+        {
+            key: 'if_text',
+            label: 'If — text equals',
+            snippet: "{#IF StageName == 'Closed Won'}congratulations{/IF}",
+            title: "Quote text values: {#IF Status == 'Active'}"
+        },
+        {
+            key: 'if_logic',
+            label: 'If — AND / OR / NOT',
+            snippet: "{#IF (Amount > 1000 AND StageName == 'Closed Won') OR Type == 'Renewal'}...{/IF}",
+            title: 'Combine with AND, OR, NOT and parentheses'
         },
         {
             key: 'checkbox',

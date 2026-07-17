@@ -1469,6 +1469,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 sel.value = want;
             }
         }
+        // Header/Footer panel textareas: sync tracked values into the DOM
+        // (LWC textareas have no value binding); skip while focused.
+        if (this.activePanel === 'hf') {
+            const hta = this.template.querySelector('.dg-hf-header');
+            if (hta && hta !== document.activeElement && hta.value !== (this.editTemplateHeaderHtml || '')) {
+                hta.value = this.editTemplateHeaderHtml || '';
+            }
+            const fta = this.template.querySelector('.dg-hf-footer');
+            if (fta && fta !== document.activeElement && fta.value !== (this.editTemplateFooterHtml || '')) {
+                fta.value = this.editTemplateFooterHtml || '';
+            }
+        }
         // Searchable panel just opened — put the cursor in its search box.
         if (this._focusPanelSearch) {
             const inp = this.template.querySelector('.dg-panel-search');
@@ -6006,6 +6018,29 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (table && !table.querySelector('td, th')) {
                 table.remove();
             }
+        } else if (action === 'repeatHeader') {
+            // {RepeatHeader} in the header row makes it repeat on every PDF
+            // page (the v2.9 large-table behavior). Toggle it.
+            const headerRow = (table.tHead && table.tHead.rows[0]) || table.rows[0];
+            const firstCell = headerRow && headerRow.cells[0];
+            if (firstCell) {
+                const existing = Array.from(headerRow.querySelectorAll('[data-dg-tag]')).find((pl) =>
+                    /repeatheader/i.test(pl.textContent)
+                );
+                if (existing) {
+                    existing.remove();
+                    this.showToast('Repeat header off', 'This table header no longer repeats on every page.', 'info');
+                } else {
+                    firstCell.insertBefore(document.createTextNode('{RepeatHeader}'), firstCell.firstChild);
+                    this._pillifyTags(firstCell);
+                    this.showToast(
+                        'Repeat header on',
+                        'The header row now repeats at the top of every PDF page this table spans.',
+                        'success'
+                    );
+                }
+                this.htmlEditorDirty = true;
+            }
         } else if (action === 'headerRow') {
             for (const c of row.children) {
                 c.style.background = '#1f3a5f';
@@ -6397,6 +6432,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     key: 'currency',
                     label: 'Currency',
                     options: [
+                        opt(
+                            'cur_auto',
+                            "Record's currency (multi-currency orgs) — recommended",
+                            '{' + f + ':currency:auto}'
+                        ),
                         opt('currency', "User's currency — $1,234.00", '{' + f + ':currency}'),
                         cur('USD', '$1,234.56'),
                         cur('EUR', '1.234,56 €'),
@@ -6415,7 +6455,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     key: 'dates',
                     label: 'Dates',
                     options: [
-                        opt('date_user', "User's locale date", '{' + f + ':date}'),
+                        opt('date_user', "Reader's locale date (auto)", '{' + f + ':date}'),
+                        opt('date_gb', 'UK locale — 17/04/2026', '{' + f + ':date:en_GB}'),
+                        opt('date_de', 'German locale — 17.04.2026', '{' + f + ':date:de_DE}'),
+                        opt('date_fr', 'French locale — 17/04/2026', '{' + f + ':date:fr_FR}'),
+                        opt('date_jp', 'Japanese locale — 2026/04/17', '{' + f + ':date:ja_JP}'),
+                        opt('date_br', 'Brazilian locale — 17/04/2026', '{' + f + ':date:pt_BR}'),
                         dt('MMMM d, yyyy', 'April 17, 2026 — US long'),
                         dt('MMM d, yyyy', 'Apr 17, 2026'),
                         dt('MM/dd/yyyy', '04/17/2026 — US'),
@@ -6434,6 +6479,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     label: 'Numbers',
                     options: [
                         opt('number', 'Number — 1,234', '{' + f + ':number}'),
+                        opt('number_eu', 'Number EU — 1.234', '{' + f + ':number:de_DE}'),
+                        opt('percent_eu', 'Percent EU — 15,5%', '{' + f + ':percent:de_DE}'),
                         dt('#,##0.00', '1,234.50 — two decimals'),
                         dt('#,##0', '1,235 — whole'),
                         dt('0.00', '1234.50 — no thousands'),
@@ -6993,6 +7040,45 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return (this.templates || []).filter((t) => t[F.Type] === 'HTML').map((t) => ({ label: t.Name, value: t.Id }));
     }
 
+    // --- Header / Footer panel (repeats on every PDF page) ---
+    handleDesignerHeaderChange(event) {
+        this.editTemplateHeaderHtml = event.target.value;
+        this.htmlEditorDirty = true;
+    }
+    handleDesignerFooterChange(event) {
+        this.editTemplateFooterHtml = event.target.value;
+        this.htmlEditorDirty = true;
+    }
+    handleHfFocus(event) {
+        this._lastHfFocus = event.target.dataset.hf;
+    }
+    handleHfTokenInsert(event) {
+        // Token keys, not literal tags — LWC decodes entities in attributes
+        // BEFORE expression parsing, so brace literals can't live in markup.
+        const TOKS = {
+            pagexy: 'Page {PageNumber} of {TotalPages}',
+            pagenum: '{PageNumber}',
+            pagetotal: '{TotalPages}',
+            today: '{Today:MMMM d, yyyy}',
+            name: '{Name}'
+        };
+        const tok = TOKS[event.currentTarget.dataset.tok];
+        const which = this._lastHfFocus === 'header' ? 'header' : 'footer';
+        const ta = this.template.querySelector(which === 'header' ? '.dg-hf-header' : '.dg-hf-footer');
+        if (!ta || !tok) {
+            return;
+        }
+        const st = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
+        const en = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : st;
+        ta.value = ta.value.slice(0, st) + tok + ta.value.slice(en);
+        if (which === 'header') {
+            this.editTemplateHeaderHtml = ta.value;
+        } else {
+            this.editTemplateFooterHtml = ta.value;
+        }
+        this.htmlEditorDirty = true;
+    }
+
     async handleDesignerTemplateSwitch(event) {
         const id = event.detail.value;
         if (!id || id === this.editTemplateId) {
@@ -7120,10 +7206,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get isPanelWatermark() {
         return this.activePanel === 'watermark';
     }
+    get isPanelHf() {
+        return this.activePanel === 'hf';
+    }
+    get showPanelSearch() {
+        return !this.isPanelWatermark && !this.isPanelHf;
+    }
     get floatPanelTitle() {
-        return { insert: 'Insert blocks', tags: 'Merge tags', images: 'Image assets', watermark: 'Watermark' }[
-            this.activePanel
-        ];
+        return {
+            insert: 'Insert blocks',
+            tags: 'Merge tags',
+            images: 'Image assets',
+            watermark: 'Watermark',
+            hf: 'Header & Footer'
+        }[this.activePanel];
     }
     get panelSearchPlaceholder() {
         return this.activePanel === 'tags' ? 'Search fields, loops, charts…' : 'Search…';
@@ -7428,7 +7524,35 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     get tagPaletteSections() {
         const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
-        return buildTagPalette(shape);
+        const sections = buildTagPalette(shape);
+        // Signer form fields ({?key}) configured on the Signer Inputs tab.
+        try {
+            const cfg = (this.editFormFieldsConfig || '').trim();
+            if (cfg.startsWith('{')) {
+                const parsed = JSON.parse(cfg);
+                if (Array.isArray(parsed.formFields) && parsed.formFields.length) {
+                    sections.push({
+                        key: 'formfields',
+                        label: 'Signer form fields',
+                        hint: 'Filled in by the signer during e-signing. Configure keys under Edit Template → Signer Inputs.',
+                        items: parsed.formFields.map((ff) => ({
+                            key: 'ff_' + ff.key,
+                            label: ff.label || ff.key,
+                            snippet: '{?' + ff.key + '}',
+                            title:
+                                '{?' +
+                                ff.key +
+                                "} — the signer's answer. Add a default with {?" +
+                                ff.key +
+                                '|fallback}.'
+                        }))
+                    });
+                }
+            }
+        } catch (e) {
+            /* malformed config — skip */
+        }
+        return sections;
     }
 
     toggleTagPanel() {
