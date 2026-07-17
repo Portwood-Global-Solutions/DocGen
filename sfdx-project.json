@@ -3,13 +3,13 @@
         {
             "versionName": "v3.34.0 — HTML-first template wizard + visual designer (Beta)",
             "versionNumber": "3.34.0.NEXT",
-            "ancestorId": "04tVx000000qZxlIAE",
             "path": "force-app",
             "default": true,
             "definitionFile": "config/build-def.json",
             "postInstallScript": "DocGenEmailTemplateInstall",
             "package": "Portwood DocGen Managed",
-            "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.34 introduces the visual Template Designer (Beta): start from a professional design, a blank page, an AI prompt, or your existing Word file, then click anywhere and type — drag in your fields, format currencies and dates for any locale in one click, add headers, footers, page numbers, charts, and signature blocks, and preview the exact PDF before you save. 100% native Salesforce — no external services or callouts. Free for all users."
+            "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.34 introduces the visual Template Designer (Beta): start from a professional design, a blank page, an AI prompt, or your existing Word file, then click anywhere and type — drag in your fields, format currencies and dates for any locale in one click, add headers, footers, page numbers, charts, and signature blocks, and preview the exact PDF before you save. 100% native Salesforce — no external services or callouts. Free for all users.",
+            "ancestorVersion": "3.33.0"
         }
     ],
     "name": "Portwood DocGen",
