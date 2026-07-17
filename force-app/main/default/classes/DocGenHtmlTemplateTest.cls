@@ -299,6 +299,125 @@ private class DocGenHtmlTemplateTest {
     }
 
     @IsTest
+    static void getHtmlTemplateBodyReturnsLatestBody() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'BodyRead ' + Datetime.now().getTime(),
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        System.assertEquals(null, DocGenController.getHtmlTemplateBody(tmpl.Id), 'No body yet — expect null');
+
+        DocGenController.saveHtmlTemplateBody(tmpl.Id, 'v1.html', '<html><body>first</body></html>');
+        String htmlV2 = '<html><body><h1>{Name}</h1>second</body></html>';
+
+        Test.startTest();
+        DocGenController.saveHtmlTemplateBody(tmpl.Id, 'v2.html', htmlV2);
+        String readBack = DocGenController.getHtmlTemplateBody(tmpl.Id);
+        Test.stopTest();
+
+        System.assertEquals(htmlV2, readBack, 'Read-back should return the most recent body verbatim');
+    }
+
+    @IsTest
+    static void getHtmlTemplateBodyRejectsNonHtmlTemplate() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'WordRead ' + Datetime.now().getTime(),
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        Boolean threw = false;
+        try {
+            DocGenController.getHtmlTemplateBody(tmpl.Id);
+        } catch (Exception e) {
+            threw = true;
+            System.assert(e.getMessage().contains('HTML-type'), 'Error should mention HTML-type: ' + e.getMessage());
+        }
+        System.assert(threw, 'Should refuse non-HTML templates');
+    }
+
+    @IsTest
+    static void listHtmlTemplateImagesReturnsUploadedImages() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'ImgList ' + Datetime.now().getTime(),
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        System.assertEquals(0, DocGenController.listHtmlTemplateImages(tmpl.Id).size(), 'No images yet');
+
+        String pngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        DocGenController.saveHtmlTemplateImage(tmpl.Id, 'logo.png', pngB64);
+        DocGenController.saveHtmlTemplateImage(tmpl.Id, 'hero.png', pngB64);
+
+        Test.startTest();
+        List<Map<String, Object>> imgs = DocGenController.listHtmlTemplateImages(tmpl.Id);
+        Test.stopTest();
+
+        System.assertEquals(2, imgs.size(), 'Both uploaded images should be listed');
+        String url = (String) imgs[0].get('url');
+        System.assert(url.startsWith('/sfc/servlet.shepherd/version/download/'), 'Relative shepherd URL expected');
+        System.assertNotEquals(null, imgs[0].get('fileName'), 'File name expected');
+    }
+
+    @IsTest
+    static void getConvertedHtmlSnapshotReturnsBakedHtmlAndStatus() {
+        DocGen_Template__c tmpl = new DocGen_Template__c(
+            Name = 'DocxSnap ' + Datetime.now().getTime(),
+            Type__c = 'Word',
+            Output_Format__c = 'PDF',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name'
+        );
+        insert tmpl;
+
+        // No active version yet
+        Map<String, Object> r0 = DocGenController.getConvertedHtmlSnapshot(tmpl.Id);
+        System.assertEquals('NoActiveVersion', r0.get('status'), 'Expected NoActiveVersion before any version');
+
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tmpl.Id,
+            Is_Active__c = true,
+            Type__c = 'Word',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name',
+            Pre_Decomposition_Status__c = 'Complete'
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        // Pending snapshot: version exists, no baked CV yet
+        Map<String, Object> r1 = DocGenController.getConvertedHtmlSnapshot(tmpl.Id);
+        System.assertEquals(null, r1.get('html'), 'No snapshot CV yet — html should be null');
+        System.assertEquals('Complete', r1.get('status'), 'Status should surface the version decomp status');
+
+        String snapshotHtml = '<html><body><h1>{Name}</h1>CONVERTED</body></html>';
+        insert new ContentVersion(
+            Title = 'docgen_tmpl_html_' + ver.Id,
+            PathOnClient = 'snapshot.html',
+            VersionData = Blob.valueOf(snapshotHtml),
+            IsMajorVersion = false,
+            FirstPublishLocationId = ver.Id
+        );
+
+        Test.startTest();
+        Map<String, Object> r2 = DocGenController.getConvertedHtmlSnapshot(tmpl.Id);
+        Test.stopTest();
+
+        System.assertEquals(snapshotHtml, r2.get('html'), 'Baked snapshot HTML should be returned verbatim');
+        System.assertEquals(ver.Id, r2.get('versionId'), 'Active version id expected');
+    }
+
+    @IsTest
     static void saveHtmlTemplateImageRejectsNonHtmlTemplate() {
         DocGen_Template__c tmpl = new DocGen_Template__c(
             Name = 'Word ' + Datetime.now().getTime(),
@@ -697,6 +816,42 @@ private class DocGenHtmlTemplateTest {
         System.assert(!result.contains('<w:r>'), 'HTML output must not contain DOCX runs: ' + result);
     }
 
+    // Aggregate tags: full format-suffix surface (Dave's spec) — bare COUNT,
+    // :number, :currency, ISO+locale segments, and currency:auto=Field.
+    @IsTest
+    static void aggregateTagsSupportFullFormatSuffixes() {
+        List<Object> lines = new List<Object>{
+            new Map<String, Object>{ 'Amount' => 20000, 'UnitPrice' => 100 },
+            new Map<String, Object>{ 'Amount' => 30000, 'UnitPrice' => 155 }
+        };
+        Map<String, Object> data = new Map<String, Object>{
+            'CustomerCurrency__c' => 'EUR',
+            'Lines' => new Map<String, Object>{ 'records' => lines }
+        };
+        Test.startTest();
+        String outp = DocGenService.processXmlForTest(
+            '<p>C={COUNT:Lines}|CN={COUNT:Lines:number}|S={SUM:Lines.Amount}' +
+                '|SC={SUM:Lines.Amount:currency}|SDE={SUM:Lines.Amount:currency:EUR:de_DE}' +
+                '|AV={AVG:Lines.UnitPrice:currency}|MN={MIN:Lines.Amount:currency}' +
+                '|MX={MAX:Lines.Amount:currency:GBP}|AUTO={SUM:Lines.Amount:currency:auto=CustomerCurrency__c}</p>',
+            data,
+            'HTML'
+        );
+        Test.stopTest();
+        System.assert(outp.contains('C=2|'), 'bare COUNT: ' + outp);
+        System.assert(outp.contains('CN=2|'), 'COUNT:number: ' + outp);
+        System.assert(outp.contains('S=50000|'), 'raw SUM: ' + outp);
+        System.assert(outp.contains('SC=$50,000.00|'), 'SUM currency: ' + outp);
+        System.assert(outp.contains('SDE=50.000,00'), 'ISO+locale de_DE grouping: ' + outp);
+        System.assert(outp.contains('AV=$127.50|'), 'AVG currency: ' + outp);
+        System.assert(outp.contains('MN=$20,000.00|'), 'MIN currency: ' + outp);
+        System.assert(outp.contains('MX=£30,000.00|'), 'MAX currency GBP: ' + outp);
+        System.assert(
+            outp.contains('AUTO=') && outp.substringAfter('AUTO=').contains('€'),
+            'currency:auto=Field should use EUR: ' + outp
+        );
+    }
+
     @IsTest
     static void singleLinePlainTextEscapesXmlForHtmlTemplates() {
         Map<String, Object> data = new Map<String, Object>{ 'Name' => 'A & B <C>' };
@@ -704,5 +859,51 @@ private class DocGenHtmlTemplateTest {
         String result = DocGenService.processXmlForTest('<p>{Name}</p>', data, 'HTML');
         Test.stopTest();
         System.assertEquals('<p>A &amp; B &lt;C&gt;</p>', result, 'XML-special chars escaped');
+    }
+
+    // Designer live PDF preview: draft HTML replaces the saved body for the
+    // merge, renders through the real pipeline, and never touches versions.
+    @IsTest
+    static void previewDraftPdfRendersDraftHtmlNotSavedBody() {
+        Account acct = [SELECT Id FROM Account LIMIT 1];
+        Id tmplId = createHtmlTemplate(null, null, '<html><body><p>SAVED BODY {Name}</p></body></html>');
+
+        Test.startTest();
+        Map<String, Object> result = DocGenController.previewDraftPdf(
+            tmplId,
+            acct.Id,
+            '<html><body><h1>DRAFT ONLY {Name} — {Industry}</h1></body></html>'
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('contentDocumentId'), 'Preview should return a ContentDocument Id');
+        Integer previews = [
+            SELECT COUNT()
+            FROM ContentVersion
+            WHERE Title = :('dg_pdf_preview_' + tmplId) AND IsLatest = TRUE
+        ];
+        System.assertEquals(1, previews, 'Exactly one preview file should exist');
+        String rendered = DocGenService.lastRenderedHtml;
+        System.assert(rendered.contains('DRAFT ONLY'), 'Draft body should be the rendered document: ' + rendered);
+        System.assert(rendered.contains('HTMLTpl Test Co'), 'Merge tags must resolve in the draft: ' + rendered);
+        System.assert(!rendered.contains('SAVED BODY'), 'Saved body must NOT render when a draft is supplied');
+        // The override is one-shot — cleared even on success.
+        System.assertEquals(null, DocGenService.draftHtmlBodyOverride, 'Override must be cleared after preview');
+        Integer versions = [SELECT COUNT() FROM DocGen_Template_Version__c WHERE Template__c = :tmplId];
+        System.assertEquals(1, versions, 'Preview must not create template versions');
+    }
+
+    @IsTest
+    static void previewDraftPdfRejectsEmptyDraft() {
+        Account acct = [SELECT Id FROM Account LIMIT 1];
+        Id tmplId = createHtmlTemplate(null, null, '<html><body><p>{Name}</p></body></html>');
+        Boolean threw = false;
+        try {
+            DocGenController.previewDraftPdf(tmplId, acct.Id, '   ');
+        } catch (AuraHandledException e) {
+            threw = true;
+        }
+        System.assert(threw, 'Blank draft must be rejected');
+        System.assertEquals(null, DocGenService.draftHtmlBodyOverride, 'Override must stay clear');
     }
 }

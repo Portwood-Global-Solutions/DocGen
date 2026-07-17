@@ -13,7 +13,8 @@
         },
         "securitySettings": {
             "sessionSettings": {
-                "forceRelogin": false
+                "forceRelogin": false,
+                "enableCacheAndAutocomplete": false
             }
         }
     }

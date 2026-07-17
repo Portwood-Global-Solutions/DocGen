@@ -8,6 +8,12 @@ public with sharing class DocGenTemplateManager {
         if (templateId == null) {
             throw new DocGenException('Template ID is required.');
         }
+        // Designer live-preview override: render the caller-supplied draft in
+        // place of the saved body. Handled here (not just in mergeTemplate) so
+        // a brand-new template with NO saved version can still preview.
+        if (DocGenService.draftHtmlBodyOverride != null) {
+            return EncodingUtil.base64Encode(Blob.valueOf(DocGenService.draftHtmlBodyOverride));
+        }
 
         // Object-level CRUD gate — caller (generateDocumentData) has already
         // enforced Template CRUD; this redundant check documents enforcement

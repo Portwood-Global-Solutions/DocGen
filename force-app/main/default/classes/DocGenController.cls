@@ -2982,6 +2982,63 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * List the images already attached to an HTML template (uploaded via
+     * saveHtmlTemplateImage — the zip/data-URI extraction path or the
+     * editor's Add Image flow). Feeds the editor's image picker so authors
+     * can re-insert existing images without knowing shepherd URLs.
+     */
+    @AuraEnabled
+    public static List<Map<String, Object>> listHtmlTemplateImages(Id templateId) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template__c> tpls = [
+                SELECT Id
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (tpls.isEmpty()) {
+                throw DocGenService.ahe('Template not found or access denied.');
+            }
+        } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+
+        String titlePrefix = 'docgen_html_img_' + templateId + '%';
+        DocGenFlsGuard.assertAccessible(
+            ContentVersion.sObjectType,
+            new Set<String>{ 'Title', 'PathOnClient', 'IsLatest' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT Id, PathOnClient
+            FROM ContentVersion
+            WHERE Title LIKE :titlePrefix AND IsLatest = TRUE
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC
+            LIMIT 50
+        ];
+        List<Map<String, Object>> results = new List<Map<String, Object>>();
+        for (ContentVersion cv : cvs) {
+            results.add(
+                new Map<String, Object>{
+                    'contentVersionId' => cv.Id,
+                    'fileName' => cv.PathOnClient,
+                    'url' => '/sfc/servlet.shepherd/version/download/' + cv.Id
+                }
+            );
+        }
+        return results;
+    }
+
+    /**
      * HTML template upload — body part (v1.61+).
      *
      * Final call in the client-side zip-break-apart flow. The LWC has already
@@ -3052,6 +3109,133 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             'contentVersionId' => cv.Id,
             'contentDocumentId' => reload.ContentDocumentId,
             'fileName' => fileName
+        };
+    }
+
+    /**
+     * HTML template body read-back for the admin editor (paste-back surface).
+     *
+     * Returns the most recent docgen_html_body_* ContentVersion attached to
+     * the template, or null when no body has been uploaded yet. The CV read
+     * runs WITH SYSTEM_MODE after an explicit FLS/CRUD gate on the template —
+     * template-internal CVs can carry Visibility=InternalUsers ContentDocumentLinks,
+     * which USER_MODE reads silently drop (the #114 quirk).
+     */
+    @AuraEnabled
+    public static String getHtmlTemplateBody(Id templateId) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+
+        List<DocGen_Template__c> tpls;
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            tpls = [
+                SELECT Id, Type__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+        } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+        if (tpls.isEmpty()) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+        if (tpls[0].Type__c != 'HTML') {
+            throw new DocGenException('getHtmlTemplateBody is for HTML-type templates only.');
+        }
+
+        String titlePrefix = 'docgen_html_body_' + templateId + '%';
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Title LIKE :titlePrefix AND IsLatest = TRUE
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC, Id DESC
+            LIMIT 1
+        ];
+        if (cvs.isEmpty()) {
+            return null;
+        }
+        return cvs[0].VersionData.toString();
+    }
+
+    /**
+     * DOCX→HTML conversion transparency (admin editor).
+     *
+     * Returns the pre-baked docgen_tmpl_html_<versionId> snapshot for the
+     * template's active version — the exact HTML the PDF engine renders from
+     * the author's Word file — plus the decomposition status so the client
+     * can explain a missing snapshot ("Pending" = not yet baked). Read-only
+     * from the engine's perspective: the snapshot regenerates on every new
+     * DOCX upload, so edits are only honored by converting the template to
+     * Type=HTML (client-side flow).
+     *
+     * Uses the same without-sharing internal-CV loaders as the giant-query
+     * assembler — these CVs carry Visibility=InternalUsers links that
+     * USER_MODE reads silently drop (the #114 quirk).
+     */
+    @AuraEnabled
+    public static Map<String, Object> getConvertedHtmlSnapshot(Id templateId) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+
+        try {
+            DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template__c> tpls = [
+                SELECT Id
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (tpls.isEmpty()) {
+                throw DocGenService.ahe('Template not found or access denied.');
+            }
+        } catch (QueryException qe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        } catch (DocGenException fe) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Is_Active__c', 'Pre_Decomposition_Status__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> vers = [
+            SELECT Id, Name, Pre_Decomposition_Status__c
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (vers.isEmpty()) {
+            return new Map<String, Object>{ 'html' => null, 'status' => 'NoActiveVersion' };
+        }
+
+        String htmlTitle = 'docgen_tmpl_html_' + vers[0].Id;
+        List<ContentVersion> htmlCvs = DocGenService.loadInternalContentVersionsForVersionByTitle(
+            vers[0].Id,
+            htmlTitle
+        );
+        if (htmlCvs.isEmpty()) {
+            htmlCvs = DocGenService.loadInternalContentVersionsByTitle(htmlTitle);
+        }
+
+        return new Map<String, Object>{
+            'html' => htmlCvs.isEmpty() ? null : htmlCvs[0].VersionData.toString(),
+            'versionId' => vers[0].Id,
+            'versionName' => vers[0].Name,
+            'status' => vers[0].Pre_Decomposition_Status__c
         };
     }
 
@@ -3752,6 +3936,66 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe(e, 'Error generating PDF document. Please check the template configuration.');
         } finally {
             DocGenService.endChartContext();
+        }
+    }
+
+    /**
+     * Designer live PDF preview: renders the caller's DRAFT HTML (unsaved
+     * editor contents) through the full merge + Blob.toPdf pipeline against a
+     * real record, without touching the template's saved versions. The result
+     * is returned as base64 for a client-side blob: iframe — nothing is stored.
+     */
+    @AuraEnabled
+    public static Map<String, Object> previewDraftPdf(Id templateId, Id recordId, String draftHtml) {
+        if (String.isBlank(draftHtml)) {
+            throw DocGenService.ahe('Nothing to preview — the editor is empty.');
+        }
+        try {
+            DocGenService.draftHtmlBodyOverride = draftHtml;
+            Map<String, Object> result = DocGenService.generatePdfBlob(templateId, recordId);
+            Blob pdfBlob = (Blob) result.get('blob');
+            // Persist as a ContentVersion so the LWC can open Salesforce's
+            // native file-preview overlay (LWS forbids blob: iframes). One
+            // preview file per template — prior previews are deleted first.
+            String previewTitle = 'dg_pdf_preview_' + templateId;
+            List<ContentVersion> old = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Title = :previewTitle AND IsLatest = TRUE
+                WITH SYSTEM_MODE
+                LIMIT 10
+            ]; // NOPMD ApexCRUDViolation — internal preview artifacts, owner-scoped cleanup
+            if (!old.isEmpty()) {
+                Set<Id> docIds = new Set<Id>();
+                for (ContentVersion c : old) {
+                    docIds.add(c.ContentDocumentId);
+                }
+                delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds]; // NOPMD ApexCRUDViolation
+            }
+            ContentVersion cv = new ContentVersion(
+                Title = previewTitle,
+                PathOnClient = 'preview.pdf',
+                VersionData = pdfBlob,
+                FirstPublishLocationId = templateId
+            );
+            DocGenFlsGuard.assertCreateable(cv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+            insert cv; // NOPMD ApexCRUDViolation — guarded above
+            cv = [
+                SELECT Id, ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :cv.Id
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD ApexCRUDViolation — reading back the row just inserted
+            return new Map<String, Object>{
+                'contentVersionId' => cv.Id,
+                'contentDocumentId' => cv.ContentDocumentId,
+                'title' => (String) result.get('title')
+            };
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'PDF preview failed. Check the template HTML and sample record.');
+        } finally {
+            DocGenService.draftHtmlBodyOverride = null;
         }
     }
 

@@ -8,7 +8,7 @@
             <lightning-tab label="Create New" value="new_template" onactive={handleWizardTabActive}>
                 <div class="slds-var-p-around_large">
                     <div class="wizard-header">
-                        <lightning-progress-indicator current-step={currentWizardStep} type="base" variant="base">
+                        <lightning-progress-indicator current-step={wizardProgressStep} type="base" variant="base">
                             <lightning-progress-step label="Name Your Template" value="1"></lightning-progress-step>
                             <lightning-progress-step label="Pick Your Data" value="2"></lightning-progress-step>
                             <lightning-progress-step label="Review &amp; Create" value="3"></lightning-progress-step>
@@ -18,6 +18,34 @@
                     <div class="wizard-content">
                         <!-- Step 1: Details + Data Source Selection -->
                         <template if:true={isStep1}>
+                            <!-- HTML-first authoring path picker -->
+                            <div
+                                class="dg-authoring-cards slds-var-m-bottom_large"
+                                role="radiogroup"
+                                aria-label="How do you want to build this template?"
+                            >
+                                <template for:each={authoringCards} for:item="card">
+                                    <div
+                                        key={card.mode}
+                                        class={card.cardClass}
+                                        data-mode={card.mode}
+                                        onclick={handleAuthoringModeSelect}
+                                        onkeydown={handleAuthoringModeKeydown}
+                                        role="radio"
+                                        aria-checked={card.selected}
+                                        tabindex="0"
+                                    >
+                                        <div class="dg-authoring-card-head">
+                                            <lightning-icon icon-name={card.icon} size="small"></lightning-icon>
+                                            <span class="dg-authoring-card-title">{card.title}</span>
+                                            <template if:true={card.badge}>
+                                                <span class="dg-authoring-badge">{card.badge}</span>
+                                            </template>
+                                        </div>
+                                        <p class="dg-authoring-card-desc">{card.desc}</p>
+                                    </div>
+                                </template>
+                            </div>
                             <div class="slds-grid slds-gutters_large">
                                 <div class="slds-col slds-size_1-of-2">
                                     <lightning-input
@@ -26,38 +54,44 @@
                                         onchange={handleNameChange}
                                         required
                                     ></lightning-input>
-                                    <lightning-input
-                                        label="API Name"
-                                        value={newTemplateApiName}
-                                        onchange={handleNewApiNameChange}
-                                        max-length="80"
-                                        pattern="[a-zA-Z][a-zA-Z0-9_]*"
-                                        message-when-pattern-mismatch="Letters, numbers, and underscores only; must start with a letter."
-                                        field-level-help="Stable key for referencing this template from Flows and DocGen Buttons (Template API Name input). Auto-fills from the name; survives sandbox-to-production deploys, unlike the record Id. Must be unique. Clear it to re-sync with the name."
-                                        class="slds-var-m-top_medium"
-                                    ></lightning-input>
-                                    <lightning-input
-                                        label="Category"
-                                        value={newTemplateCategory}
-                                        onchange={handleCategoryChange}
-                                        class="slds-var-m-top_medium"
-                                    ></lightning-input>
+                                    <!-- Starter/AI paths keep Step 1 minimal: name, object,
+                                         logo. Power-user fields live behind Advanced. -->
+                                    <template if:true={showStep1AdvancedFields}>
+                                        <lightning-input
+                                            label="API Name"
+                                            value={newTemplateApiName}
+                                            onchange={handleNewApiNameChange}
+                                            max-length="80"
+                                            pattern="[a-zA-Z][a-zA-Z0-9_]*"
+                                            message-when-pattern-mismatch="Letters, numbers, and underscores only; must start with a letter."
+                                            field-level-help="Stable key for referencing this template from Flows and DocGen Buttons (Template API Name input). Auto-fills from the name; survives sandbox-to-production deploys, unlike the record Id. Must be unique. Clear it to re-sync with the name."
+                                            class="slds-var-m-top_medium"
+                                        ></lightning-input>
+                                        <lightning-input
+                                            label="Category"
+                                            value={newTemplateCategory}
+                                            onchange={handleCategoryChange}
+                                            class="slds-var-m-top_medium"
+                                        ></lightning-input>
 
-                                    <!-- Data Source: Salesforce Record vs Apex Class -->
-                                    <lightning-radio-group
-                                        class="slds-var-m-top_medium"
-                                        label="Data Source"
-                                        name="dataSourceMode"
-                                        options={dataSourceModeOptions}
-                                        value={dataSourceMode}
-                                        onchange={handleDataSourceModeChange}
-                                        type="radio"
-                                        required
-                                    >
-                                    </lightning-radio-group>
+                                        <!-- Data Source: Salesforce Record vs Apex Class -->
+                                        <lightning-radio-group
+                                            class="slds-var-m-top_medium"
+                                            label="Data Source"
+                                            name="dataSourceMode"
+                                            options={dataSourceModeOptions}
+                                            value={dataSourceMode}
+                                            onchange={handleDataSourceModeChange}
+                                            type="radio"
+                                            required
+                                        >
+                                        </lightning-radio-group>
+                                    </template>
 
-                                    <!-- Salesforce Record path: Base Object picker -->
-                                    <template if:true={isRecordDataSource}>
+                                    <!-- Salesforce Record path: Base Object picker.
+                                         Hidden for predesigned starters — each starter
+                                         brings its own object and query. -->
+                                    <template if:true={showBaseObjectField}>
                                         <div style="position: relative" class="slds-var-m-top_medium">
                                             <lightning-input
                                                 label="Base Object"
@@ -258,23 +292,253 @@
                                             </template>
                                         </div>
                                     </template>
+                                    <template if:true={showAdvancedToggle}>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="base"
+                                                label={advancedToggleLabel}
+                                                icon-name="utility:settings"
+                                                onclick={handleToggleAdvanced}
+                                            ></lightning-button>
+                                        </div>
+                                    </template>
                                 </div>
                                 <div class="slds-col slds-size_1-of-2">
-                                    <lightning-combobox
-                                        label="Type"
-                                        value={newTemplateType}
-                                        options={typeOptions}
-                                        onchange={handleTypeChange}
-                                        required
-                                    ></lightning-combobox>
-                                    <lightning-combobox
-                                        label="Output Format"
-                                        value={newTemplateOutputFormat}
-                                        options={outputFormatOptions}
-                                        onchange={handleOutputFormatChange}
-                                        class="slds-var-m-top_medium"
-                                        required
-                                    ></lightning-combobox>
+                                    <!-- Starter path: design gallery -->
+                                    <template if:true={isAuthoringStarter}>
+                                        <label class="slds-form-element__label">Starter Design</label>
+                                        <div role="radiogroup" aria-label="Starter design">
+                                            <template for:each={starterCards} for:item="starter">
+                                                <div
+                                                    key={starter.key}
+                                                    class={starter.cardClass}
+                                                    data-key={starter.key}
+                                                    onclick={handleStarterSelect}
+                                                    role="radio"
+                                                    aria-checked={starter.selected}
+                                                    tabindex="0"
+                                                >
+                                                    <div class="dg-starter-card-head">
+                                                        <lightning-icon
+                                                            icon-name={starter.icon}
+                                                            size="x-small"
+                                                        ></lightning-icon>
+                                                        <span class="dg-starter-card-title">{starter.label}</span>
+                                                        <span class="dg-starter-card-obj">{starter.targetObject}</span>
+                                                    </div>
+                                                    <p class="dg-starter-card-desc">{starter.description}</p>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <div class="slds-var-m-top_small">
+                                            <lightning-combobox
+                                                label="Company logo (optional)"
+                                                value={newTemplateLogoChoice}
+                                                options={logoChoiceOptions}
+                                                onchange={handleLogoChoiceChange}
+                                                field-level-help="Pick a shared image asset — the starter header carries its merge tag. Add new images under the Assets tab."
+                                            ></lightning-combobox>
+                                            <template if:true={selectedLogoPreviewUrl}>
+                                                <img
+                                                    class="dg-logo-preview"
+                                                    src={selectedLogoPreviewUrl}
+                                                    alt="Selected logo preview"
+                                                />
+                                            </template>
+                                            <template if:true={hasNoAssetsYet}>
+                                                <p class="slds-text-body_small slds-text-color_weak">
+                                                    No image assets yet — add your logo under the
+                                                    <strong>Assets</strong> tab and it becomes selectable here.
+                                                </p>
+                                            </template>
+                                        </div>
+                                        <template if:true={isRecordDataSource}>
+                                            <template if:true={newTemplateObject}>
+                                                <div class="slds-var-m-top_small">
+                                                    <lightning-record-picker
+                                                        label="Sample Record (optional)"
+                                                        object-api-name={newTemplateObject}
+                                                        value={newTemplateSampleRecordId}
+                                                        onchange={handleSampleRecordChange}
+                                                        placeholder="Pick a record to preview with real data..."
+                                                    >
+                                                    </lightning-record-picker>
+                                                </div>
+                                            </template>
+                                        </template>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="brand"
+                                                label="Create &amp; Open Designer"
+                                                icon-name="utility:magicwand"
+                                                onclick={handleCreateAndDesign}
+                                                disabled={isAutoCreating}
+                                            ></lightning-button>
+                                            <template if:true={isAutoCreating}>
+                                                <lightning-spinner
+                                                    alternative-text="Creating..."
+                                                    size="small"
+                                                    class="slds-var-m-left_small"
+                                                ></lightning-spinner>
+                                            </template>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                                One click: we pick sensible fields for your object automatically, build
+                                                the document, and open it in the designer. Refine fields anytime under
+                                                Query Configuration.
+                                            </p>
+                                        </div>
+                                    </template>
+
+                                    <!-- AI path: name + logo here, prompt + paste on the next screen -->
+                                    <template if:true={isAuthoringAi}>
+                                        <div class="slds-box slds-theme_shade" style="border-radius: 8px" role="note">
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:einstein"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                Next builds a complete prompt for you — your fields, DocGen's merge-tag
+                                                syntax, the PDF engine's layout rules, and your shared image assets.
+                                                Copy it into Claude, ChatGPT, Gemini, or Copilot, paste the HTML it
+                                                returns, and you land in the designer. No data leaves Salesforce unless
+                                                you paste it.
+                                            </p>
+                                        </div>
+                                        <div class="slds-var-m-top_small">
+                                            <lightning-combobox
+                                                label="Company logo (optional)"
+                                                value={newTemplateLogoChoice}
+                                                options={logoChoiceOptions}
+                                                onchange={handleLogoChoiceChange}
+                                                field-level-help="Pick a shared image asset — the AI prompt tells the assistant how to reference it. Add new images under the Assets tab."
+                                            ></lightning-combobox>
+                                            <template if:true={selectedLogoPreviewUrl}>
+                                                <img
+                                                    class="dg-logo-preview"
+                                                    src={selectedLogoPreviewUrl}
+                                                    alt="Selected logo preview"
+                                                />
+                                            </template>
+                                            <template if:true={hasNoAssetsYet}>
+                                                <p class="slds-text-body_small slds-text-color_weak">
+                                                    No image assets yet — add your logo under the
+                                                    <strong>Assets</strong> tab and it becomes selectable here.
+                                                </p>
+                                            </template>
+                                        </div>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="brand"
+                                                label="Next: Build My Prompt"
+                                                icon-name="utility:einstein"
+                                                onclick={handleNextStep}
+                                                disabled={isAutoCreating}
+                                            ></lightning-button>
+                                            <template if:true={isAutoCreating}>
+                                                <lightning-spinner
+                                                    alternative-text="Preparing prompt..."
+                                                    size="small"
+                                                    class="slds-var-m-left_small"
+                                                ></lightning-spinner>
+                                            </template>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                                Sensible fields are picked automatically — refine them anytime under
+                                                Query Configuration.
+                                            </p>
+                                        </div>
+                                    </template>
+
+                                    <!-- Scratch path: straight to a blank designer page -->
+                                    <template if:true={isAuthoringScratch}>
+                                        <div class="slds-box slds-theme_shade" style="border-radius: 8px" role="note">
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:edit"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                You get a clean page in the visual designer. Click anywhere and type,
+                                                drag in blocks and merge tags, or press&nbsp;<code>&#96;</code>&nbsp;for
+                                                the insert menu. All of your object's usable fields and its main child
+                                                lists are queried automatically, so the whole tag palette is ready to
+                                                drop in — fine-tune anytime under Query Configuration.
+                                            </p>
+                                        </div>
+                                        <template if:true={isRecordDataSource}>
+                                            <template if:true={newTemplateObject}>
+                                                <div class="slds-var-m-top_small">
+                                                    <lightning-record-picker
+                                                        label="Sample Record (optional)"
+                                                        object-api-name={newTemplateObject}
+                                                        value={newTemplateSampleRecordId}
+                                                        onchange={handleSampleRecordChange}
+                                                        placeholder="Pick a record to preview with real data..."
+                                                    >
+                                                    </lightning-record-picker>
+                                                </div>
+                                            </template>
+                                        </template>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="brand"
+                                                label="Create &amp; Open Designer"
+                                                icon-name="utility:edit"
+                                                onclick={handleCreateAndDesign}
+                                                disabled={isAutoCreating}
+                                            ></lightning-button>
+                                            <template if:true={isAutoCreating}>
+                                                <lightning-spinner
+                                                    alternative-text="Creating..."
+                                                    size="small"
+                                                    class="slds-var-m-left_small"
+                                                ></lightning-spinner>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    <!-- File path: classic Type/Output Format pickers -->
+                                    <template if:true={isAuthoringFile}>
+                                        <lightning-combobox
+                                            label="Type"
+                                            value={newTemplateType}
+                                            options={typeOptions}
+                                            onchange={handleTypeChange}
+                                            field-level-help="What kind of source file you'll upload. HTML is the most reliable for PDF output; Word/PowerPoint/Excel keep their native format or convert to PDF."
+                                            required
+                                        ></lightning-combobox>
+                                        <template if:true={showWordConversionNote}>
+                                            <div
+                                                class="slds-box slds-box_x-small slds-theme_warning slds-var-m-top_x-small"
+                                                role="note"
+                                            >
+                                                <p class="slds-text-body_small">
+                                                    <lightning-icon
+                                                        icon-name="utility:info"
+                                                        size="x-small"
+                                                        class="slds-var-m-right_x-small"
+                                                    ></lightning-icon>
+                                                    Word templates are converted to HTML for PDF output — complex
+                                                    layouts (text boxes, floating images, unusual tables) may not
+                                                    convert exactly. Keep Output Format&nbsp;<strong
+                                                        >Native (.docx)</strong
+                                                    >&nbsp;for full fidelity, or use&nbsp;<strong
+                                                        >Start from a Design</strong
+                                                    >&nbsp;/&nbsp;<strong>Generate with AI</strong>&nbsp;/&nbsp;<strong
+                                                        >Start From Scratch</strong
+                                                    >&nbsp;for pixel-perfect PDFs.
+                                                </p>
+                                            </div>
+                                        </template>
+                                        <lightning-combobox
+                                            label="Output Format"
+                                            value={newTemplateOutputFormat}
+                                            options={outputFormatOptions}
+                                            onchange={handleOutputFormatChange}
+                                            class="slds-var-m-top_medium"
+                                            required
+                                        ></lightning-combobox>
+                                    </template>
                                     <template if:true={showNewPageLayoutFields}>
                                         <lightning-combobox
                                             label="Page Orientation"
@@ -311,7 +575,7 @@
                                             ></lightning-input>
                                         </template>
                                     </template>
-                                    <template if:true={isCreatingHtmlPdf}>
+                                    <template if:true={showHtmlPageRuleNote}>
                                         <div class="slds-box slds-theme_shade slds-var-m-top_medium" role="status">
                                             <p class="slds-text-body_small">
                                                 <lightning-icon
@@ -326,23 +590,25 @@
                                             </p>
                                         </div>
                                     </template>
-                                    <template if:true={isRecordDataSource}>
-                                        <template if:true={newTemplateObject}>
-                                            <div class="slds-var-m-top_medium">
-                                                <lightning-record-picker
-                                                    label="Sample Record (optional)"
-                                                    object-api-name={newTemplateObject}
-                                                    value={newTemplateSampleRecordId}
-                                                    onchange={handleSampleRecordChange}
-                                                    placeholder="Pick a record to preview data..."
-                                                >
-                                                </lightning-record-picker>
-                                                <p
-                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small"
-                                                >
-                                                    See real data from this record while building your query.
-                                                </p>
-                                            </div>
+                                    <template if:true={isAuthoringFile}>
+                                        <template if:true={isRecordDataSource}>
+                                            <template if:true={newTemplateObject}>
+                                                <div class="slds-var-m-top_medium">
+                                                    <lightning-record-picker
+                                                        label="Sample Record (optional)"
+                                                        object-api-name={newTemplateObject}
+                                                        value={newTemplateSampleRecordId}
+                                                        onchange={handleSampleRecordChange}
+                                                        placeholder="Pick a record to preview data..."
+                                                    >
+                                                    </lightning-record-picker>
+                                                    <p
+                                                        class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small"
+                                                    >
+                                                        See real data from this record while building your query.
+                                                    </p>
+                                                </div>
+                                            </template>
                                         </template>
                                     </template>
                                     <template if:true={isApexDataSource}>
@@ -354,6 +620,107 @@
                                             supplies its own data shape at render time.
                                         </div>
                                     </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- AI step: prompt → paste → designer, all on one screen -->
+                        <template if:true={isStepAi}>
+                            <div class="slds-grid slds-gutters_large slds-wrap">
+                                <div
+                                    class="slds-col slds-size_1-of-2 slds-medium-size_1-of-2 slds-max-small-size_1-of-1"
+                                >
+                                    <div class="dg-ai-step-head">
+                                        <span class="dg-ai-step-num">1</span>
+                                        <strong>Copy your prompt</strong>
+                                        <lightning-button
+                                            label="Copy Prompt"
+                                            icon-name="utility:copy"
+                                            variant="brand"
+                                            onclick={handleCopyAiPrompt}
+                                            class="slds-var-m-left_small"
+                                        ></lightning-button>
+                                    </div>
+                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
+                                        Everything the AI needs: your {newTemplateObject} fields, DocGen's merge-tag
+                                        syntax, the PDF engine's layout rules, and your shared image assets. Paste it
+                                        into Claude, ChatGPT, Gemini, or Copilot and describe the document you want
+                                        where the prompt says so.
+                                    </p>
+                                    <pre class="dg-ai-prompt dg-ai-prompt_tall">{aiAuthoringPrompt}</pre>
+                                </div>
+                                <div
+                                    class="slds-col slds-size_1-of-2 slds-medium-size_1-of-2 slds-max-small-size_1-of-1"
+                                >
+                                    <template if:true={hasWizardAssets}>
+                                        <div class="dg-ai-step-head">
+                                            <span class="dg-ai-step-num">2</span>
+                                            <strong>Your shared image assets</strong>
+                                        </div>
+                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
+                                            Already included in the prompt — the AI can place these. Click a tag to copy
+                                            it.
+                                        </p>
+                                        <div class="dg-ai-asset-chips">
+                                            <template for:each={wizardAssets} for:item="asset">
+                                                <button
+                                                    key={asset.id}
+                                                    type="button"
+                                                    class="dg-tag-chip"
+                                                    data-tag={asset.mergeTag}
+                                                    onclick={handleAssetTagCopy}
+                                                    title={asset.name}
+                                                >
+                                                    {asset.mergeTag}
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <div class="dg-ai-step-head slds-var-m-top_medium">
+                                        <span class="dg-ai-step-num">{aiPasteStepNum}</span>
+                                        <strong>Paste the HTML it returns</strong>
+                                    </div>
+                                    <textarea
+                                        class="dg-ai-paste"
+                                        placeholder="Paste the complete HTML file your AI assistant returned (starts with <!DOCTYPE html>)..."
+                                        onchange={handleAiPasteChange}
+                                        spellcheck="false"
+                                    ></textarea>
+                                    <template if:true={isRecordDataSource}>
+                                        <template if:true={newTemplateObject}>
+                                            <div class="slds-var-m-top_small">
+                                                <lightning-record-picker
+                                                    label="Sample Record (optional)"
+                                                    object-api-name={newTemplateObject}
+                                                    value={newTemplateSampleRecordId}
+                                                    onchange={handleSampleRecordChange}
+                                                    placeholder="Pick a record to preview with real data..."
+                                                >
+                                                </lightning-record-picker>
+                                            </div>
+                                        </template>
+                                    </template>
+                                    <div class="slds-var-m-top_small">
+                                        <lightning-button
+                                            variant="brand"
+                                            label="Create &amp; Open Designer"
+                                            icon-name="utility:magicwand"
+                                            onclick={handleAiCreateFromPaste}
+                                            disabled={isAutoCreating}
+                                        ></lightning-button>
+                                        <template if:true={isAutoCreating}>
+                                            <lightning-spinner
+                                                alternative-text="Creating..."
+                                                size="small"
+                                                class="slds-var-m-left_small"
+                                            ></lightning-spinner>
+                                        </template>
+                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                            Pasted HTML is staged as the template body and opens in the visual designer.
+                                            Nothing pasted yet? That's fine — the designer opens empty and the prompt
+                                            stays available there.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </template>
@@ -934,6 +1301,42 @@
 {readableQueryConfig}</pre
                                     >
                                 </template>
+                                <template if:true={isAuthoringStarter}>
+                                    <p class="slds-var-m-bottom_small">
+                                        <strong>Starter design:</strong> {selectedStarterLabel} — a ready-to-render HTML
+                                        body with your merge fields is attached on create. Review it in the editor, then
+                                        click "Save as New Version" to activate v1.
+                                    </p>
+                                </template>
+                                <template if:true={isAuthoringAi}>
+                                    <div class="slds-var-m-top_medium">
+                                        <div
+                                            style="
+                                                display: flex;
+                                                align-items: center;
+                                                justify-content: space-between;
+                                                margin-bottom: 6px;
+                                            "
+                                        >
+                                            <strong
+                                                >Your AI prompt — copy this into Claude, ChatGPT, Gemini, or
+                                                Copilot</strong
+                                            >
+                                            <lightning-button
+                                                label="Copy Prompt"
+                                                icon-name="utility:copy"
+                                                variant="brand"
+                                                onclick={handleCopyAiPrompt}
+                                            ></lightning-button>
+                                        </div>
+                                        <pre class="dg-ai-prompt">{aiAuthoringPrompt}</pre>
+                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                            Paste the HTML your assistant returns into the template's&nbsp;<strong
+                                                >Edit HTML</strong
+                                            >&nbsp;editor (it opens after Create). The prompt stays available there too.
+                                        </p>
+                                    </div>
+                                </template>
                                 <p class="slds-var-m-top_large">Click "Create Template" to save.</p>
                             </div>
                         </template>
@@ -950,7 +1353,7 @@
                             >
                             </lightning-button>
 
-                            <template if:false={isStep3}>
+                            <template if:false={hideWizardFooterNext}>
                                 <lightning-button label="Next" variant="brand" onclick={handleNextStep}>
                                 </lightning-button>
                             </template>
@@ -1026,6 +1429,1092 @@
                                 hide-checkbox-column
                             >
                             </lightning-datatable>
+                        </div>
+                    </template>
+                </div>
+            </lightning-tab>
+
+            <!-- Full-screen template designer: the page is the canvas, palettes ride the rail -->
+            <lightning-tab label="Designer (Beta)" value="design" onactive={handleTabActive}>
+                <div class="slds-var-p-around_medium">
+                    <template if:false={designerHasTemplate}>
+                        <div class="slds-text-align_center slds-var-p-around_xx-large slds-text-color_weak">
+                            <lightning-icon icon-name="utility:brush" size="medium"></lightning-icon>
+                            <p class="slds-text-heading_small slds-var-m-top_small slds-var-m-bottom_x-small">
+                                No template open
+                            </p>
+                            <p class="slds-text-body_small">
+                                Pick an HTML template under&nbsp;<strong>Your Templates</strong>&nbsp;and choose
+                                the&nbsp;<strong>Design</strong>&nbsp;row action — or build one from&nbsp;<strong
+                                    >Create New</strong
+                                >.
+                            </p>
+                        </div>
+                    </template>
+                    <template if:true={designerHasTemplate}>
+                        <div class="dg-designer-chrome">
+                            <div class="dg-designer-toolbar">
+                                <div class="dg-designer-toolbar__title">
+                                    <lightning-icon icon-name="utility:brush" size="small"></lightning-icon>
+                                    <span
+                                        class="dg-beta-chip"
+                                        title="The visual designer is in beta — rough edge? Report a Bug in the sidebar or email support@portwood.dev."
+                                        >BETA</span
+                                    >
+                                    <div class="dg-designer-template-switch">
+                                        <lightning-combobox
+                                            variant="label-hidden"
+                                            value={editTemplateId}
+                                            options={designerTemplateOptions}
+                                            onchange={handleDesignerTemplateSwitch}
+                                            title="Switch to another HTML template without leaving the designer"
+                                        ></lightning-combobox>
+                                    </div>
+                                </div>
+                                <template if:true={isRealObject}>
+                                    <div class="dg-designer-toolbar__sample">
+                                        <lightning-record-picker
+                                            label="Sample Record"
+                                            variant="label-hidden"
+                                            object-api-name={editTemplateObject}
+                                            value={editTemplateTestRecordId}
+                                            onchange={handleEditTestRecordChange}
+                                            placeholder="Sample record for previews..."
+                                        >
+                                        </lightning-record-picker>
+                                    </div>
+                                    <lightning-button
+                                        label="Generate Sample"
+                                        icon-name="utility:page"
+                                        onclick={handleTestGenerate}
+                                        disabled={editGenerateSampleDisabled}
+                                    ></lightning-button>
+                                    <template if:true={isLoadingVersions}>
+                                        <lightning-spinner
+                                            alternative-text="Working..."
+                                            size="small"
+                                        ></lightning-spinner>
+                                    </template>
+                                </template>
+                                <div class="dg-designer-toolbar__actions">
+                                    <lightning-button
+                                        variant="brand"
+                                        label="Save as New Version"
+                                        icon-name="utility:save"
+                                        onclick={handleSaveAndClose}
+                                    ></lightning-button>
+                                    <lightning-button
+                                        label="Edit Template"
+                                        icon-name="utility:settings"
+                                        onclick={handleEditTemplateFromDesigner}
+                                        title="Open this template's full settings — query, versions, sharing, signatures — right from here."
+                                        class="slds-var-m-left_x-small"
+                                    ></lightning-button>
+                                </div>
+                            </div>
+
+                            <div class="dg-html-editor-statusbar">
+                                <div class="dg-mode-seg" role="tablist" aria-label="Editor mode">
+                                    <button
+                                        class={visualModeBtnClass}
+                                        onclick={handleSelectVisualMode}
+                                        title="Edit the document as it renders — click anywhere and type"
+                                    >
+                                        Visual
+                                    </button>
+                                    <button
+                                        class={sourceModeBtnClass}
+                                        onclick={handleSelectSourceMode}
+                                        title="Edit the raw HTML with a live full-page preview below"
+                                    >
+                                        Source
+                                    </button>
+                                </div>
+                                <template if:true={selectionContextLabel}>
+                                    <span class="dg-context-label">{selectionContextLabel}</span>
+                                </template>
+                                <span class={htmlEditorStatusClass}>{htmlEditorStatusText}</span>
+                                <span class="dg-fmt-label">Page</span>
+                                <select
+                                    class="dg-page-select"
+                                    data-field="size"
+                                    onchange={handlePageSetupChange}
+                                    title="Page size"
+                                >
+                                    <option value="Letter">Letter</option>
+                                    <option value="Legal">Legal</option>
+                                    <option value="A4">A4</option>
+                                    <option value="Custom">Custom…</option>
+                                </select>
+                                <template if:false={isCustomPageSize}>
+                                    <select
+                                        class="dg-page-select"
+                                        data-field="orient"
+                                        onchange={handlePageSetupChange}
+                                        title="Orientation"
+                                    >
+                                        <option value="portrait">Portrait</option>
+                                        <option value="landscape">Landscape</option>
+                                    </select>
+                                </template>
+                                <template if:true={isCustomPageSize}>
+                                    <input
+                                        type="number"
+                                        class="dg-page-input"
+                                        data-field="customW"
+                                        min="1"
+                                        max="200"
+                                        step="0.25"
+                                        onchange={handlePageSetupChange}
+                                        title="Page width in inches"
+                                    />
+                                    <span class="dg-fmt-label">×</span>
+                                    <input
+                                        type="number"
+                                        class="dg-page-input"
+                                        data-field="customH"
+                                        min="1"
+                                        max="200"
+                                        step="0.25"
+                                        onchange={handlePageSetupChange}
+                                        title="Page height in inches"
+                                    />
+                                    <span class="dg-fmt-label">in</span>
+                                </template>
+                                <select
+                                    class="dg-page-select"
+                                    data-field="margin"
+                                    onchange={handlePageSetupChange}
+                                    title="Page margins"
+                                >
+                                    <option value="0.5">0.5&quot; margins</option>
+                                    <option value="0.75">0.75&quot; margins</option>
+                                    <option value="1">1&quot; margins</option>
+                                    <option value="custom">Custom…</option>
+                                </select>
+                                <template if:true={isCustomMargin}>
+                                    <input
+                                        type="number"
+                                        class="dg-page-input"
+                                        data-field="customMargin"
+                                        min="0"
+                                        max="10"
+                                        step="0.05"
+                                        onchange={handlePageSetupChange}
+                                        title="Margin in inches"
+                                    />
+                                    <span class="dg-fmt-label">in</span>
+                                </template>
+                                <span class="dg-fmt-sep"></span>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="insert"
+                                    onclick={handlePanelToggle}
+                                    title="Insert blocks, sections, tables — searchable. Or just type ` or [ in the page."
+                                >
+                                    + Insert
+                                </button>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="tags"
+                                    onclick={handlePanelToggle}
+                                    title="Merge tags from your query — searchable"
+                                >
+                                    &#123;&nbsp;&#125; Tags
+                                </button>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="images"
+                                    onclick={handlePanelToggle}
+                                    title="Upload and place images"
+                                >
+                                    Images
+                                </button>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="versions"
+                                    onclick={handlePanelToggle}
+                                    title="Load any previous version's body into the editor"
+                                >
+                                    Versions
+                                </button>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="hf"
+                                    onclick={handlePanelToggle}
+                                    title="Header and footer that repeat on every PDF page — with page numbers"
+                                >
+                                    Header/Footer
+                                </button>
+                                <template if:true={editTemplateOutputIsPdf}>
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn"
+                                        data-panel="watermark"
+                                        onclick={handlePanelToggle}
+                                        title="Full-page background image (PDF)"
+                                    >
+                                        Watermark
+                                    </button>
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn dg-pdf-preview-btn"
+                                        onclick={handlePdfPreview}
+                                        disabled={isPdfPreviewLoading}
+                                        title="Render the current draft through the REAL PDF engine with your sample record — see exactly what customers get."
+                                    >
+                                        {pdfPreviewBtnLabel}
+                                    </button>
+                                </template>
+                                <template if:false={showHtmlBodyVisual}>
+                                    <lightning-button
+                                        label="Format Code"
+                                        icon-name="utility:magicwand"
+                                        variant="base"
+                                        data-target="body"
+                                        onclick={handleFormatHtml}
+                                        title="Pretty-print the HTML: indent nested tags without touching text or merge tags."
+                                        class="slds-var-m-left_small"
+                                    ></lightning-button>
+                                </template>
+                                <lightning-button
+                                    label="Apply Editor HTML"
+                                    icon-name="utility:check"
+                                    onclick={handleApplyHtmlBody}
+                                    disabled={isApplyingHtmlBody}
+                                    title="Stage the current editor contents now. Save as New Version does this automatically."
+                                    class="slds-var-m-left_small"
+                                ></lightning-button>
+                                <lightning-button
+                                    label="Copy AI Prompt"
+                                    icon-name="utility:copy"
+                                    onclick={handleCopyEditAiPrompt}
+                                    title="Copies a ready-to-paste prompt (your fields + DocGen tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot."
+                                    class="slds-var-m-left_small"
+                                ></lightning-button>
+                                <lightning-button
+                                    label="Reload"
+                                    icon-name="utility:refresh"
+                                    onclick={handleReloadHtmlBodyEditor}
+                                    title="Replace the editor contents with the currently staged body (or the saved body if nothing is staged). Discards unapplied edits."
+                                    class="slds-var-m-left_small"
+                                ></lightning-button>
+                            </div>
+                        </div>
+
+                        <div class="dg-designer-layout">
+                            <div class="dg-designer-canvas-col">
+                                <template if:true={pillMenu}>
+                                    <div class="dg-pill-menu" style={pillMenu.posStyle} role="menu">
+                                        <div class="dg-pill-menu-head">
+                                            <code>{pillMenu.tagText}</code>
+                                            <button class="dg-pill-menu-x" onclick={handlePillMenuClose} title="Close">
+                                                &#10005;
+                                            </button>
+                                        </div>
+                                        <template if:true={pillMenu.hasOptions}>
+                                            <div class="dg-pill-menu-scroll">
+                                                <template for:each={pillMenu.sections} for:item="sec">
+                                                    <div key={sec.key}>
+                                                        <div class="dg-pill-menu-sec">{sec.label}</div>
+                                                        <template for:each={sec.options} for:item="opt">
+                                                            <button
+                                                                key={opt.key}
+                                                                class={opt.cls}
+                                                                data-tag={opt.tag}
+                                                                onclick={handlePillTransform}
+                                                            >
+                                                                {opt.label}
+                                                            </button>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                        <button class="dg-pill-menu-item" onclick={handlePillEdit}>
+                                            Edit tag&#8230; (or double-click the pill)
+                                        </button>
+                                        <button
+                                            class="dg-pill-menu-item dg-pill-menu-remove"
+                                            onclick={handlePillRemove}
+                                        >
+                                            Remove from document
+                                        </button>
+                                    </div>
+                                </template>
+                                <!-- Notion-style slash-command menu: type "/" in the page -->
+                                <template if:true={slashMenu}>
+                                    <div class="dg-slash-menu" style={slashMenu.posStyle} role="menu">
+                                        <div class="dg-slash-menu-head">
+                                            <span>Insert&nbsp;&#8212;&nbsp;keep typing to filter</span>
+                                            <button
+                                                class="dg-pill-menu-x"
+                                                onclick={handleSlashMenuClose}
+                                                title="Close (Esc)"
+                                            >
+                                                &#10005;
+                                            </button>
+                                        </div>
+                                        <template if:true={slashMenu.hasItems}>
+                                            <template for:each={slashMenu.items} for:item="opt">
+                                                <button
+                                                    key={opt.key}
+                                                    class={opt.itemClass}
+                                                    data-key={opt.key}
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleSlashItemClick}
+                                                >
+                                                    <span class="dg-slash-item-label">{opt.label}</span>
+                                                    <span class="dg-slash-item-group">{opt.group}</span>
+                                                </button>
+                                            </template>
+                                        </template>
+                                        <template if:false={slashMenu.hasItems}>
+                                            <div class="dg-slash-empty">
+                                                Nothing matches &#8220;{slashMenu.query}&#8221;
+                                            </div>
+                                        </template>
+                                        <template if:true={slashMenu.errorMsg}>
+                                            <div class="dg-slash-empty">{slashMenu.errorMsg}</div>
+                                        </template>
+                                        <div class="dg-slash-foot">
+                                            Not seeing your field? Edit your query: Edit Template &#8594; Query
+                                            Configuration.
+                                            <br />
+                                            Think this should be a command?
+                                            <a
+                                                href="mailto:hello@portwood.dev?subject=DocGen%20designer%20command%20idea"
+                                                >Email hello@portwood.dev</a
+                                            >
+                                        </div>
+                                    </div>
+                                </template>
+                                <!-- Right-click context menu -->
+                                <template if:true={ctxMenu}>
+                                    <div class="dg-slash-menu dg-ctx-menu" style={ctxMenu.posStyle} role="menu">
+                                        <button class="dg-slash-item" onclick={handleCtxInsert}>
+                                            <span class="dg-slash-item-label">Insert&#8230;</span>
+                                            <span class="dg-slash-item-group">blocks &amp; tags</span>
+                                        </button>
+                                        <button
+                                            class="dg-slash-item"
+                                            data-cmd="bold"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleCtxFormat}
+                                        >
+                                            <span class="dg-slash-item-label"><b>Bold</b></span>
+                                        </button>
+                                        <button
+                                            class="dg-slash-item"
+                                            data-cmd="italic"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleCtxFormat}
+                                        >
+                                            <span class="dg-slash-item-label"><i>Italic</i></span>
+                                        </button>
+                                        <button
+                                            class="dg-slash-item"
+                                            data-kind="ul"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleCtxList}
+                                        >
+                                            <span class="dg-slash-item-label">&#8226; Bulleted list</span>
+                                        </button>
+                                        <button
+                                            class="dg-slash-item"
+                                            data-kind="ol"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleCtxList}
+                                        >
+                                            <span class="dg-slash-item-label">1. Numbered list</span>
+                                        </button>
+                                        <template if:true={ctxMenu.inTable}>
+                                            <div class="dg-slash-menu-head"><span>Table</span></div>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="rowAfter"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">+ Row below</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="colAfter"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">+ Column right</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="rowDel"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">&#8722; Delete row</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="colDel"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">&#8722; Delete column</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="repeatHeader"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">Repeat header each page</span>
+                                            </button>
+                                        </template>
+                                        <button
+                                            class="dg-slash-item dg-pill-menu-remove"
+                                            onclick={handleCtxDeleteBlock}
+                                        >
+                                            <span class="dg-slash-item-label">Delete this block</span>
+                                        </button>
+                                    </div>
+                                </template>
+                                <template if:true={isLoadingHtmlBody}>
+                                    <div class="slds-is-relative" style="height: 40px">
+                                        <lightning-spinner
+                                            alternative-text="Loading HTML body"
+                                            size="small"
+                                        ></lightning-spinner>
+                                    </div>
+                                </template>
+                                <div class={codeSplitClass}>
+                                    <textarea
+                                        class={designerEditorClass}
+                                        spellcheck="false"
+                                        aria-label="Template HTML body"
+                                        oninput={handleHtmlBodyEditorInput}
+                                        placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
+                                    ></textarea>
+                                </div>
+                                <template if:true={showHtmlBodyVisual}>
+                                    <div class="dg-format-bar" role="toolbar" aria-label="Text formatting">
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="bold"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Bold"
+                                        >
+                                            <b>B</b>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="italic"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Italic"
+                                        >
+                                            <i>I</i>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="underline"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Underline"
+                                        >
+                                            <u>U</u>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="strikeThrough"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Strikethrough"
+                                        >
+                                            <s>S</s>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="superscript"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Superscript"
+                                        >
+                                            x&#178;
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="subscript"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Subscript"
+                                        >
+                                            x&#8322;
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="insertUnorderedList"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Bulleted list"
+                                        >
+                                            &#8226; List
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="insertOrderedList"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Numbered list"
+                                        >
+                                            1. List
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyLeft"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align left"
+                                        >
+                                            Left
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyCenter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align center"
+                                        >
+                                            Center
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyRight"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align right"
+                                        >
+                                            Right
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="fontSize"
+                                            data-value="2"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Small text"
+                                        >
+                                            S
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="fontSize"
+                                            data-value="3"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Normal text"
+                                        >
+                                            M
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="fontSize"
+                                            data-value="5"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Large text"
+                                        >
+                                            L
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="fontSize"
+                                            data-value="6"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Extra large text"
+                                        >
+                                            XL
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Text color">A</span>
+                                        <template for:each={textColorSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-cmd="foreColor"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="foreColor"
+                                            value="#1f3a5f"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom text color — any color you want"
+                                        />
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Highlight color">BG</span>
+                                        <template for:each={highlightSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-cmd="hiliteColor"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="hiliteColor"
+                                            value="#fef3c7"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom highlight color"
+                                        />
+                                        <span class="dg-fmt-sep"></span>
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Font — the PDF engine ships exactly these four"
+                                            >Font</span
+                                        >
+                                        <template for:each={fontChoices} for:item="font">
+                                            <button
+                                                key={font.key}
+                                                class="dg-fmt-btn dg-fmt-btn_word"
+                                                style={font.style}
+                                                data-cmd="fontName"
+                                                data-value={font.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={font.title}
+                                            >
+                                                {font.label}
+                                            </button>
+                                        </template>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="removeFormat"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Clear formatting from the selection"
+                                        >
+                                            Clear
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="undo"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Undo"
+                                        >
+                                            &#8630; Undo
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="redo"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Redo"
+                                        >
+                                            &#8631; Redo
+                                        </button>
+                                        <span class="dg-fmt-break"></span>
+                                        <span class="dg-fmt-label" title="Table tools — put your cursor in a cell first"
+                                            >Table</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleInsertTable}
+                                            title="Insert a 3-column table at your cursor"
+                                        >
+                                            + Table
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="rowAfter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Add a row below the current cell"
+                                        >
+                                            + Row
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="colAfter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Add a column to the right of the current cell"
+                                        >
+                                            + Col
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="rowDel"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Delete the current row"
+                                        >
+                                            − Row
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="colDel"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Delete the current column"
+                                        >
+                                            − Col
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="headerRow"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Style the current row as a header (navy fill, white bold text)"
+                                        >
+                                            Header Row
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="repeatHeader"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Repeat this table's header row at the top of every PDF page it spans (toggles the {RepeatHeader} marker)"
+                                        >
+                                            Repeat Hdr
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Table borders">Borders</span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersAll"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Full grid — every cell outlined"
+                                        >
+                                            All
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersOutline"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Outline around the table only"
+                                        >
+                                            Outline
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersRows"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Horizontal row lines only"
+                                        >
+                                            Rows
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersNone"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="No borders"
+                                        >
+                                            None
+                                        </button>
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Fill the current cell — or, outside a table, the paragraph/panel the cursor is in"
+                                            >Fill</span
+                                        >
+                                        <template for:each={highlightSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-taction="cellFill"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleTableAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="cellFill"
+                                            value="#f2f4f7"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom cell fill color"
+                                        />
+                                    </div>
+                                    <div
+                                        class="dg-html-preview-frame dg-visual-host dg-designer-size"
+                                        lwc:dom="manual"
+                                        title="Visual editing — click into the page and type"
+                                    ></div>
+                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">
+                                        This is your document — click anywhere and type. The colored pills are your data
+                                        fields. Drag anything from the rail on the right straight onto the page.
+                                        Deleting a pill removes the whole field — they can't break. Your styles and page
+                                        setup are never touched here.
+                                    </p>
+                                </template>
+                            </div>
+
+                            <template if:true={showFloatPanel}>
+                                <div class="dg-float-panel">
+                                    <div class="dg-float-panel-head">
+                                        <span class="dg-float-panel-title">{floatPanelTitle}</span>
+                                        <button class="dg-pill-menu-x" onclick={handlePanelClose} title="Close">
+                                            &#10005;
+                                        </button>
+                                    </div>
+                                    <template if:true={showPanelSearch}>
+                                        <input
+                                            type="search"
+                                            class="dg-panel-search"
+                                            placeholder={panelSearchPlaceholder}
+                                            oninput={handlePanelSearch}
+                                            autocomplete="off"
+                                        />
+                                    </template>
+                                    <template if:true={isPanelInsert}>
+                                        <p class="dg-float-panel-tip">
+                                            Tip: type <code>&#96;</code> or <code>[</code> anywhere in the page for this
+                                            menu at your cursor.
+                                        </p>
+                                        <template for:each={filteredBlockSections} for:item="section">
+                                            <div key={section.key} class="dg-tag-section">
+                                                <div class="dg-tag-section-label">{section.label}</div>
+                                                <template if:true={section.hint}>
+                                                    <div class="dg-tag-section-hint">{section.hint}</div>
+                                                </template>
+                                                <div class="dg-tag-chips">
+                                                    <template for:each={section.items} for:item="blk">
+                                                        <button
+                                                            key={blk.key}
+                                                            class="dg-tag-chip dg-block-chip"
+                                                            data-snippet={blk.snippet}
+                                                            data-kind="block"
+                                                            title={blk.title}
+                                                            onmousedown={handleChipDragMouseDown}
+                                                            onclick={handleInsertTagSnippet}
+                                                        >
+                                                            {blk.label}
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </template>
+                                    <template if:true={isPanelTags}>
+                                        <template for:each={filteredTagSections} for:item="section">
+                                            <div key={section.key} class="dg-tag-section">
+                                                <div class="dg-tag-section-label">{section.label}</div>
+                                                <template if:true={section.hint}>
+                                                    <div class="dg-tag-section-hint">{section.hint}</div>
+                                                </template>
+                                                <div class="dg-tag-chips">
+                                                    <template for:each={section.items} for:item="tag">
+                                                        <button
+                                                            key={tag.key}
+                                                            class="dg-tag-chip"
+                                                            data-snippet={tag.snippet}
+                                                            title={tag.title}
+                                                            onmousedown={handleChipDragMouseDown}
+                                                            onclick={handleInsertTagSnippet}
+                                                        >
+                                                            {tag.label}
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </template>
+                                    <template if:true={isPanelImages}>
+                                        <div class="dg-image-panel">
+                                            <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                Every image lives in the shared <strong>Asset Library</strong> and is
+                                                placed by merge tag — the engine renders these natively. Add or update
+                                                images under the Assets tab.
+                                            </p>
+                                            <template if:true={hasFilteredAssets}>
+                                                <div class="dg-image-grid">
+                                                    <template for:each={filteredAssets} for:item="asset">
+                                                        <div
+                                                            key={asset.id}
+                                                            class="dg-image-thumb"
+                                                            data-snippet={asset.mergeTag}
+                                                            onmousedown={handleChipDragMouseDown}
+                                                            onclick={handleInsertTagSnippet}
+                                                            title={asset.mergeTag}
+                                                        >
+                                                            <template if:true={asset.previewUrl}>
+                                                                <img src={asset.previewUrl} alt={asset.name} />
+                                                            </template>
+                                                            <span class="dg-image-thumb-name">{asset.name}</span>
+                                                            <span class="dg-asset-thumb-tag">{asset.mergeTag}</span>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                            <template if:false={hasFilteredAssets}>
+                                                <p
+                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small"
+                                                >
+                                                    No matching assets — add images under the Assets tab.
+                                                </p>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    <template if:true={isPanelVersions}>
+                                        <div class="dg-image-panel">
+                                            <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                Load any version into the editor to view or branch from it. Loading
+                                                changes nothing — <strong>Save as New Version</strong> creates a new
+                                                version from whatever is loaded.
+                                            </p>
+                                            <template for:each={versions} for:item="ver">
+                                                <div key={ver.Id} class="dg-version-row">
+                                                    <div class="dg-version-meta">
+                                                        <span class={ver.activeClass}
+                                                            >{ver.VersionNumber} {ver.isActiveLabel}</span
+                                                        >
+                                                        <span class="dg-version-file">{ver.bodyCvFileName}</span>
+                                                    </div>
+                                                    <button
+                                                        class="dg-tag-chip"
+                                                        data-cvid={ver.bodyCvId}
+                                                        data-ver={ver.VersionNumber}
+                                                        onclick={handleLoadVersionIntoDesigner}
+                                                    >
+                                                        Load
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <template if:true={isPanelHf}>
+                                        <div class="dg-image-panel">
+                                            <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                Repeats on every PDF page. Merge tags work here too. Click a chip to
+                                                insert at your cursor; changes save with
+                                                <strong>Save as New Version</strong>.
+                                            </p>
+                                            <div class="dg-tag-chips slds-var-m-bottom_x-small">
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="pagexy"
+                                                    onclick={handleHfTokenInsert}
+                                                    title="Page counters — only work in the header/footer"
+                                                >
+                                                    Page X of Y
+                                                </button>
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="pagenum"
+                                                    onclick={handleHfTokenInsert}
+                                                >
+                                                    &#123;PageNumber&#125;
+                                                </button>
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="pagetotal"
+                                                    onclick={handleHfTokenInsert}
+                                                >
+                                                    &#123;TotalPages&#125;
+                                                </button>
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="today"
+                                                    onclick={handleHfTokenInsert}
+                                                >
+                                                    Today
+                                                </button>
+                                                <button
+                                                    class="dg-tag-chip"
+                                                    data-tok="name"
+                                                    onclick={handleHfTokenInsert}
+                                                >
+                                                    &#123;Name&#125;
+                                                </button>
+                                            </div>
+                                            <label class="slds-form-element__label">Header (top of every page)</label>
+                                            <textarea
+                                                class="dg-hf-ta dg-hf-header"
+                                                data-hf="header"
+                                                spellcheck="false"
+                                                placeholder="e.g. <div style='text-align:center'>&#123;Name&#125; — Confidential</div>"
+                                                onfocus={handleHfFocus}
+                                                oninput={handleDesignerHeaderChange}
+                                            ></textarea>
+                                            <label class="slds-form-element__label slds-var-m-top_small"
+                                                >Footer (bottom of every page)</label
+                                            >
+                                            <textarea
+                                                class="dg-hf-ta dg-hf-footer"
+                                                data-hf="footer"
+                                                spellcheck="false"
+                                                placeholder="e.g. <div style='text-align:center'>Page &#123;PageNumber&#125; of &#123;TotalPages&#125;</div>"
+                                                onfocus={handleHfFocus}
+                                                oninput={handleDesignerFooterChange}
+                                            ></textarea>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                                With page counters the engine uses plain-text margin boxes; without
+                                                them, full HTML (including images) renders as a running band.
+                                            </p>
+                                        </div>
+                                    </template>
+                                    <template if:true={isPanelWatermark}>
+                                        <div class="dg-image-panel">
+                                            <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                Full-page background image behind your content (PDF output). Pre-fade
+                                                the image (~15-20% opacity over white) for a watermark look. Needs a
+                                                saved version first.
+                                            </p>
+                                            <template if:true={watermarkPreviewUrl}>
+                                                <div class="dg-watermark-preview">
+                                                    <img src={watermarkPreviewUrl} alt="Current watermark" />
+                                                    <lightning-button
+                                                        label="Remove"
+                                                        icon-name="utility:delete"
+                                                        variant="destructive-text"
+                                                        onclick={handleClearWatermark}
+                                                        disabled={isUploadingWatermark}
+                                                    ></lightning-button>
+                                                </div>
+                                            </template>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onchange={handleWatermarkFileSelected}
+                                                disabled={isUploadingWatermark}
+                                                class="slds-var-m-top_x-small"
+                                            />
+                                            <template if:true={isUploadingWatermark}>
+                                                <p class="slds-text-body_small slds-var-m-top_x-small">Uploading…</p>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -2618,6 +4107,92 @@
                                                 <em>Compress Pictures → Email (96 ppi)</em> — most 20 MB templates drop
                                                 to under 2 MB with no visible quality loss.
                                             </p>
+
+                                            <!-- DOCX→HTML transparency: show the exact HTML the PDF engine
+                                                 renders from the Word file. Editing it is a one-way ramp to an
+                                                 HTML template — the snapshot regenerates on every DOCX upload,
+                                                 so in-place edits would be silently clobbered. -->
+                                            <template if:true={showDocxConvertedHtmlSection}>
+                                                <div class="slds-var-m-top_small">
+                                                    <lightning-button
+                                                        label={docxHtmlViewerToggleLabel}
+                                                        icon-name="utility:preview"
+                                                        onclick={toggleDocxHtmlViewer}
+                                                    ></lightning-button>
+                                                    <template if:true={showDocxHtmlViewer}>
+                                                        <div class="slds-var-m-top_small">
+                                                            <div class="dg-html-editor-statusbar">
+                                                                <span class="dg-html-editor-status"
+                                                                    >{docxViewerStatusText}</span
+                                                                >
+                                                                <lightning-button
+                                                                    label="Format Code"
+                                                                    icon-name="utility:magicwand"
+                                                                    variant="base"
+                                                                    data-target="docx"
+                                                                    onclick={handleFormatHtml}
+                                                                    title="Pretty-print the converted HTML — the converter emits it as one long line."
+                                                                    class="slds-var-m-left_small"
+                                                                ></lightning-button>
+                                                                <lightning-button
+                                                                    label={docxHtmlPreviewToggleLabel}
+                                                                    icon-name="utility:preview"
+                                                                    variant="base"
+                                                                    data-target="docx"
+                                                                    onclick={handleToggleHtmlPreview}
+                                                                    title="Render the converted HTML inline. Merge tags show as-is."
+                                                                    class="slds-var-m-left_small"
+                                                                ></lightning-button>
+                                                            </div>
+                                                            <template if:true={isLoadingDocxHtml}>
+                                                                <div class="slds-is-relative" style="height: 40px">
+                                                                    <lightning-spinner
+                                                                        alternative-text="Loading converted HTML"
+                                                                        size="small"
+                                                                    ></lightning-spinner>
+                                                                </div>
+                                                            </template>
+                                                            <textarea
+                                                                class={docxHtmlEditorClass}
+                                                                spellcheck="false"
+                                                                aria-label="Converted HTML (what the PDF engine renders)"
+                                                                placeholder="No conversion snapshot yet — upload a Word file and Save as New Version, then reopen this viewer."
+                                                            ></textarea>
+                                                            <template if:true={showDocxHtmlPreview}>
+                                                                <div
+                                                                    class="dg-html-preview-frame dg-docx-preview"
+                                                                    lwc:dom="manual"
+                                                                    title="Rendered preview of the converted HTML"
+                                                                ></div>
+                                                            </template>
+                                                            <div class="slds-var-m-top_x-small">
+                                                                <lightning-button
+                                                                    variant="brand"
+                                                                    label="Switch to HTML Template"
+                                                                    icon-name="utility:change_record_type"
+                                                                    onclick={handleSwitchToHtmlTemplate}
+                                                                    disabled={isSwitchingToHtml}
+                                                                ></lightning-button>
+                                                                <template if:true={isSwitchingToHtml}>
+                                                                    <lightning-spinner
+                                                                        alternative-text="Converting"
+                                                                        size="small"
+                                                                        class="slds-var-m-left_small"
+                                                                    ></lightning-spinner>
+                                                                </template>
+                                                                <span
+                                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-left_small"
+                                                                >
+                                                                    Fine-tuned this HTML? Converting makes it the
+                                                                    template's real body (Type becomes HTML) so your
+                                                                    edits stick. Until then this view is regenerated
+                                                                    from the Word file on every upload.
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
                                         </template>
 
                                         <template if:true={isEditTypeHtml}>
@@ -2639,6 +4214,23 @@
                                                 icon-name="utility:upload"
                                                 onclick={triggerHtmlFilePicker}
                                                 disabled={isUploadingHtml}
+                                            >
+                                            </lightning-button>
+                                            <lightning-button
+                                                variant="brand"
+                                                label="Open Designer"
+                                                icon-name="utility:brush"
+                                                onclick={handleOpenDesignerFromModal}
+                                                title="Full-screen visual designer: edit the rendered page, drag in blocks, tags, and images."
+                                                class="slds-var-m-left_x-small"
+                                            >
+                                            </lightning-button>
+                                            <lightning-button
+                                                label="Copy AI Prompt"
+                                                icon-name="utility:copy"
+                                                onclick={handleCopyEditAiPrompt}
+                                                title="Copies a ready-to-paste prompt (your fields + DocGen tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot. Paste the returned HTML into the designer."
+                                                class="slds-var-m-left_x-small"
                                             >
                                             </lightning-button>
                                             <template if:true={isUploadingHtml}>
