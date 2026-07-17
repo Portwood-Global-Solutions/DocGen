@@ -1391,11 +1391,6 @@
                                         oninput={handleHtmlBodyEditorInput}
                                         placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
                                     ></textarea>
-                                    <div
-                                        class="dg-html-preview-frame dg-code-preview dg-designer-size"
-                                        lwc:dom="manual"
-                                        title="Live preview — updates as you type"
-                                    ></div>
                                 </div>
                                 <template if:true={showHtmlBodyVisual}>
                                     <div class="dg-format-bar" role="toolbar" aria-label="Text formatting">
@@ -1425,6 +1420,52 @@
                                             title="Underline"
                                         >
                                             <u>U</u>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="strikeThrough"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Strikethrough"
+                                        >
+                                            <s>S</s>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="superscript"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Superscript"
+                                        >
+                                            x&#178;
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="subscript"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Subscript"
+                                        >
+                                            x&#8322;
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="insertUnorderedList"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Bulleted list"
+                                        >
+                                            &#8226; List
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="insertOrderedList"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Numbered list"
+                                        >
+                                            1. List
                                         </button>
                                         <span class="dg-fmt-sep"></span>
                                         <button

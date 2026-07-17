@@ -5342,7 +5342,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!cmd) {
             return;
         }
-        if (/^(bold|italic|underline|foreColor|hiliteColor|fontName|fontSize)$/.test(cmd)) {
+        if (
+            /^(bold|italic|underline|strikeThrough|superscript|subscript|foreColor|hiliteColor|fontName|fontSize)$/.test(
+                cmd
+            )
+        ) {
             this._expandCaretToWord();
         }
         try {

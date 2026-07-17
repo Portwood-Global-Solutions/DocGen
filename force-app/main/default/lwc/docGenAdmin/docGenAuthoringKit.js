@@ -575,11 +575,19 @@ export function scopeHtmlForInlinePreview(html) {
 
     // Baseline "paper sheet" look, injected with the content because
     // component CSS can't reach lwc:dom="manual" children. Declared first so
-    // the template's own (scoped) rules win any conflicts.
+    // the template's own (scoped) rules win any conflicts. Page-break
+    // elements render as a visible Word-style page seam — editor-only
+    // styling that lives in this injected sheet and never touches saved HTML.
     const baseline =
         '.dg-pv { background: #fff; max-width: 850px; margin: 0 auto; padding: 48px 56px; ' +
         'box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18); font-family: Helvetica, Arial, sans-serif; ' +
-        'font-size: 10.5pt; color: #1a1a1a; min-height: 380px; box-sizing: border-box; }';
+        'font-size: 10.5pt; color: #1a1a1a; min-height: 380px; box-sizing: border-box; }\n' +
+        ".dg-pv [style*='page-break-before'], .dg-pv [style*='page-break-after'] { display: block; " +
+        'height: 30px !important; font-size: 0 !important; margin: 18px 0; background: #e8eaed; ' +
+        'border-top: 2px dashed #a9b2c0; border-bottom: 2px dashed #a9b2c0; position: relative; }\n' +
+        ".dg-pv [style*='page-break-before']::after, .dg-pv [style*='page-break-after']::after { " +
+        "content: 'PAGE BREAK — new page starts here'; position: absolute; left: 0; right: 0; top: 8px; " +
+        'text-align: center; font-size: 10px; letter-spacing: 2px; color: #7a8598; }';
     return '<div class="dg-pv"><style>' + baseline + css + '</style>' + content + '</div>';
 }
 
@@ -717,6 +725,27 @@ export function buildBlockPalette(shape) {
                     snippet:
                         '\n<p style="margin: 6pt 0">Your text here — mix in fields from Insert Tags anywhere.</p>\n',
                     title: 'Plain text block'
+                },
+                {
+                    key: 'blk_ul',
+                    label: 'Bulleted list',
+                    snippet:
+                        '\n<ul style="margin: 6pt 0 6pt 18pt"><li>First item</li><li>Second item</li><li>Third item</li></ul>\n',
+                    title: 'Bullet points — Enter adds items while editing'
+                },
+                {
+                    key: 'blk_ol',
+                    label: 'Numbered list',
+                    snippet:
+                        '\n<ol style="margin: 6pt 0 6pt 18pt"><li>First step</li><li>Second step</li><li>Third step</li></ol>\n',
+                    title: 'Numbered steps'
+                },
+                {
+                    key: 'blk_quote',
+                    label: 'Indented quote',
+                    snippet:
+                        '\n<div style="margin: 8pt 0 8pt 18pt; padding-left: 10pt; border-left: 3pt solid #cccccc; color: #555555; font-style: italic">Quoted or emphasized text.</div>\n',
+                    title: 'Left-ruled italic block for quotes and emphasis'
                 },
                 {
                     key: 'blk_panel',
