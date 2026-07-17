@@ -587,7 +587,12 @@ export function scopeHtmlForInlinePreview(html) {
         'border-top: 2px dashed #a9b2c0; border-bottom: 2px dashed #a9b2c0; position: relative; }\n' +
         ".dg-pv [style*='page-break-before']::after, .dg-pv [style*='page-break-after']::after { " +
         "content: 'PAGE BREAK — new page starts here'; position: absolute; left: 0; right: 0; top: 8px; " +
-        'text-align: center; font-size: 10px; letter-spacing: 2px; color: #7a8598; }';
+        'text-align: center; font-size: 10px; letter-spacing: 2px; color: #7a8598; }\n' +
+        // SLDS globally resets list-style to none — restore real bullets and
+        // numbers inside the page (matches how the PDF engine renders them).
+        '.dg-pv ul { list-style: disc outside !important; padding-left: 18pt; }\n' +
+        '.dg-pv ol { list-style: decimal outside !important; padding-left: 18pt; }\n' +
+        '.dg-pv li { list-style: inherit !important; }';
     return '<div class="dg-pv"><style>' + baseline + css + '</style>' + content + '</div>';
 }
 

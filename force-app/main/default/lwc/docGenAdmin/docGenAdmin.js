@@ -5307,6 +5307,66 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         doc.addEventListener('mouseup', onUp);
     }
 
+    /**
+     * Turn the caret's paragraph into a list item (or back). Enter inside a
+     * list adds items natively; toggling a list item lifts it back out as a
+     * paragraph. Inside a table cell the list wraps the cell's content.
+     */
+    _toggleListAtCaret(ordered) {
+        const blk = this._selectedBlockElement();
+        if (!blk) {
+            this.showToast(
+                'Click into some text first',
+                'Put your cursor in a paragraph, then click the list button.',
+                'info'
+            );
+            return;
+        }
+        const doc = blk.ownerDocument || document;
+        const placeCaret = (el) => {
+            try {
+                const r = doc.createRange();
+                r.selectNodeContents(el);
+                r.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(r);
+            } catch (e) {
+                /* best effort */
+            }
+        };
+        if (blk.tagName === 'LI') {
+            // Toggle OFF: lift this item out of the list as a paragraph.
+            const list = blk.parentElement;
+            const p = doc.createElement('p');
+            p.innerHTML = blk.innerHTML;
+            list.insertAdjacentElement('afterend', p);
+            blk.remove();
+            if (list && !list.querySelector('li')) {
+                list.remove();
+            }
+            placeCaret(p);
+        } else if (blk.tagName === 'TD' || blk.tagName === 'TH') {
+            const list = doc.createElement(ordered ? 'ol' : 'ul');
+            list.style.margin = '2pt 0 2pt 14pt';
+            const li = doc.createElement('li');
+            li.innerHTML = blk.innerHTML && blk.innerHTML.trim() !== '&nbsp;' ? blk.innerHTML : 'List item';
+            list.appendChild(li);
+            blk.innerHTML = '';
+            blk.appendChild(list);
+            placeCaret(li);
+        } else {
+            const list = doc.createElement(ordered ? 'ol' : 'ul');
+            list.style.margin = '6pt 0 6pt 18pt';
+            const li = doc.createElement('li');
+            li.innerHTML = blk.innerHTML || 'List item';
+            list.appendChild(li);
+            blk.replaceWith(list);
+            placeCaret(li);
+        }
+        this.htmlEditorDirty = true;
+    }
+
     /** The block element (p, heading, list item, div, td) holding the caret. */
     _selectedBlockElement() {
         let node = null;
@@ -5340,6 +5400,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const cmd = event.currentTarget.dataset.cmd;
         const value = event.currentTarget.dataset.value || null;
         if (!cmd) {
+            return;
+        }
+        // Lists via DOM surgery — LWS quietly breaks execCommand's list
+        // commands, and this way numbers/bullets always render.
+        if (cmd === 'insertUnorderedList' || cmd === 'insertOrderedList') {
+            this._toggleListAtCaret(cmd === 'insertOrderedList');
             return;
         }
         if (
