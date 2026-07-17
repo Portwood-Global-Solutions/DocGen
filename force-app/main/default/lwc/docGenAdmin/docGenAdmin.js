@@ -327,7 +327,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     newTemplateQuery = '';
     // HTML-first authoring path. 'starter' (recommended) and 'ai' both create
     // HTML templates; 'file' exposes the classic Type picker for uploads.
-    @track newAuthoringMode = 'starter';
+    @track newAuthoringMode = 'file';
     @track newStarterKey = 'report';
     // One-click create: auto-built query + optional company logo asset
     @track isAutoCreating = false;
@@ -4546,6 +4546,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             if (templateBodyContentVersionId) {
                 this.showToast('Success', 'New version saved. You can now Generate to test it.', 'success');
+            } else if (this.activeMainTab === 'design') {
+                // Designer saves auto-stage any edits before reaching here, so
+                // "no new file" simply means the body didn't change — say so
+                // calmly instead of the sticky re-upload warning (that warning
+                // is for the file-upload modal where a stale body surprises).
+                this.showToast(
+                    'Saved',
+                    'Version saved — the document body is unchanged from the previous version.',
+                    'success'
+                );
             } else {
                 // Carry-forward warning (builds on #176's Version History diagnostics):
                 // a new version saved WITHOUT re-uploading a body file reuses the prior
@@ -7809,14 +7819,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     async handleApplyHtmlBody() {
-        // Visual mode edits live in the rich-text editor — fold them into the
-        // code editor first so Apply stages what the user is looking at.
-        if (this.showHtmlBodyVisual) {
-            this._exitVisualMode();
-        }
-        const ta = this.template.querySelector('.dg-html-body-editor');
-        const text = ta ? ta.value : '';
-        if (!text || !text.trim()) {
+        // Serialize the CURRENT view non-destructively — Apply must never kick
+        // the author out of Visual mode.
+        const text = (this._currentDraftHtml() || '').trim();
+        if (!text) {
             this.showToast('Nothing to apply', 'Paste or edit HTML in the editor first.', 'warning');
             return;
         }
@@ -7824,6 +7830,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         try {
             const base = (this.uploadedFileName || 'template.html').replace(/\.(html?|zip)$/i, '');
             await this._processAndSaveHtmlBody(this.editTemplateId, text, base + '.html', null, 'editor');
+            this.htmlEditorDirty = false;
+            if (this.showHtmlBodyVisual) {
+                // Staged text is the new baseline: Source view and the
+                // visual round-trip both work from what was just staged.
+                this._visualOriginalCode = text;
+                const ta = this.template.querySelector('.dg-html-body-editor');
+                if (ta) {
+                    ta.value = text;
+                }
+            }
         } catch (err) {
             const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
             this.showToast('Apply failed', msg, 'error');
@@ -7859,16 +7875,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.newTemplateCategory = '';
         // Excel leaves Output Format = 'Native'; without this reset the next
         // wizard open shows Type=Excel with a forced-invalid 'PDF' format.
-        // HTML-first: the wizard opens on the recommended starter path, so the
-        // default Type is HTML until the user picks "I Have an Existing File".
-        this.newAuthoringMode = 'starter';
+        // Default path is "I Have an Existing File" — most admins arrive with
+        // a document in hand; the design/AI/scratch cards sit right beside it.
+        this.newAuthoringMode = 'file';
         this.newStarterKey = 'report';
         this._logoFile = null;
         this.newTemplateLogoName = '';
         this.isAutoCreating = false;
         this.showAdvancedOptions = false;
         this.newTemplateLogoChoice = 'none';
-        this.newTemplateType = 'HTML';
+        this.newTemplateType = 'Word';
         this.newTemplateDesc = '';
         this.newTemplateQuery = '';
         this.newTemplateOutputFormat = 'PDF';

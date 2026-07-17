@@ -524,8 +524,9 @@
                                                         >Native (.docx)</strong
                                                     >&nbsp;for full fidelity, or use&nbsp;<strong
                                                         >Start from a Design</strong
-                                                    >&nbsp;/&nbsp;<strong>Generate with AI</strong>&nbsp;for
-                                                    pixel-perfect PDFs.
+                                                    >&nbsp;/&nbsp;<strong>Generate with AI</strong>&nbsp;/&nbsp;<strong
+                                                        >Start From Scratch</strong
+                                                    >&nbsp;for pixel-perfect PDFs.
                                                 </p>
                                             </div>
                                         </template>
@@ -1655,7 +1656,6 @@
                                 <lightning-button
                                     label="Apply Editor HTML"
                                     icon-name="utility:check"
-                                    variant="base"
                                     onclick={handleApplyHtmlBody}
                                     disabled={isApplyingHtmlBody}
                                     title="Stage the current editor contents now. Save as New Version does this automatically."
@@ -1664,7 +1664,6 @@
                                 <lightning-button
                                     label="Copy AI Prompt"
                                     icon-name="utility:copy"
-                                    variant="base"
                                     onclick={handleCopyEditAiPrompt}
                                     title="Copies a ready-to-paste prompt (your fields + DocGen tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot."
                                     class="slds-var-m-left_small"
@@ -1672,7 +1671,6 @@
                                 <lightning-button
                                     label="Reload"
                                     icon-name="utility:refresh"
-                                    variant="base"
                                     onclick={handleReloadHtmlBodyEditor}
                                     title="Replace the editor contents with the currently staged body (or the saved body if nothing is staged). Discards unapplied edits."
                                     class="slds-var-m-left_small"
