@@ -4421,6 +4421,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.showToast('Error', 'Name and Type are required.', 'error');
             return;
         }
+        // Designer: unapplied visual/source edits fold into the staged body
+        // automatically — "Save as New Version" saves what you're looking at,
+        // no separate Apply click required.
+        if (this.activeMainTab === 'design' && this.htmlEditorDirty && this.editTemplateType === 'HTML') {
+            const draft = (this._currentDraftHtml() || '').trim();
+            if (draft) {
+                try {
+                    const base = (this.uploadedFileName || 'template.html').replace(/\.(html?|zip)$/i, '');
+                    await this._processAndSaveHtmlBody(this.editTemplateId, draft, base + '.html', null, 'editor');
+                    this.htmlEditorDirty = false;
+                } catch (err) {
+                    const msg =
+                        err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+                    this.showToast('Could not stage your edits', msg, 'error');
+                    return;
+                }
+            }
+        }
 
         const fields = {
             Id: this.editTemplateId,
@@ -6931,22 +6949,65 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     // --- Notion-style slash-command menu ---
-    /** Everything insertable, flattened and rankable by the "/" query. */
+    /** EVERY command, flattened and searchable by plain-language intent —
+     *  "close tag", "start loop", "money", "bold" all find their thing. */
     _slashCatalog() {
         const out = [];
         let i = 0;
+        const add = (label, group, item) => out.push({ key: 's' + i++, label, group, ...item });
+        // Plain-language loop + conditional entries, built from the real query.
+        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+        for (const c of shape.children || []) {
+            add(`Start loop — repeat for each ${c.relationshipName}`, 'Loops', {
+                snippet: '{#' + c.relationshipName + '}',
+                keywords: 'start open begin loop repeat each every child rows for'
+            });
+            add(`Close loop — end of ${c.relationshipName}`, 'Loops', {
+                snippet: '{/' + c.relationshipName + '}',
+                keywords: 'close end stop finish loop tag slash'
+            });
+        }
+        add('Show only when… (start of if)', 'Conditionals', {
+            snippet: '{#FieldName}',
+            keywords: 'if condition conditional when show only start open hide'
+        });
+        add('Otherwise… (else)', 'Conditionals', {
+            snippet: '{:else}',
+            keywords: 'else otherwise fallback condition'
+        });
+        add('End of condition (close the if)', 'Conditionals', {
+            snippet: '{/FieldName}',
+            keywords: 'close end if condition tag finish stop'
+        });
+        // Editor commands — the format bar, searchable from the keyboard.
+        const CMDS = [
+            ['Bold text', 'bold', 'bold strong heavy thick'],
+            ['Italic text', 'italic', 'italic slant emphasis'],
+            ['Underline text', 'underline', 'underline'],
+            ['Strikethrough text', 'strikeThrough', 'strike strikethrough cross out'],
+            ['Bulleted list', 'ul', 'bullet bulleted list dots points unordered'],
+            ['Numbered list', 'ol', 'number numbered list ordered steps 123'],
+            ['Align left', 'justifyLeft', 'align left'],
+            ['Align center', 'justifyCenter', 'align center middle'],
+            ['Align right', 'justifyRight', 'align right'],
+            ['Clear formatting', 'removeFormat', 'clear remove formatting plain reset'],
+            ['Insert table (3 columns)', 'table', 'table grid columns rows insert']
+        ];
+        for (const [label, cmd, keywords] of CMDS) {
+            add(label, 'Formatting', { cmd, keywords });
+        }
         for (const sec of this.blockPaletteSections) {
             for (const it of sec.items) {
-                out.push({ key: 's' + i++, label: it.label, group: sec.label, snippet: it.snippet });
+                add(it.label, sec.label, { snippet: it.snippet, keywords: it.title || '' });
             }
         }
         for (const sec of this.tagPaletteSections) {
             for (const it of sec.items) {
-                out.push({ key: 's' + i++, label: it.label, group: sec.label, snippet: it.snippet });
+                add(it.label, sec.label, { snippet: it.snippet, keywords: (it.title || '') + ' merge tag field' });
             }
         }
         for (const a of this.wizardAssets || []) {
-            out.push({ key: 's' + i++, label: a.name, group: 'Image assets', snippet: a.mergeTag });
+            add(a.name, 'Image assets', { snippet: a.mergeTag, keywords: 'image picture logo asset photo' });
         }
         return out;
     }
@@ -6991,15 +7052,31 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
             this._renderSlashMenu(rect, colRect);
         } catch (e) {
-            this._closeSlashMenu();
+            // Surface failures IN the menu — console output from LWS contexts
+            // is unreliable, silent closes hide real bugs.
+            this.slashMenu = {
+                query: '',
+                hasItems: false,
+                posStyle: 'left: 40px; top: 40px;',
+                items: [],
+                errorMsg: (e && e.message) || String(e)
+            };
         }
     }
 
     _renderSlashMenu(rect, colRect) {
         const q = (this._slashQuery || '').toLowerCase().trim();
         const all = this._slashCatalog();
-        const scored = q ? all.filter((o) => (o.label + ' ' + o.group).toLowerCase().includes(q)) : all;
-        const items = scored.slice(0, 9);
+        // Every word of the query must match somewhere in label/group/keywords
+        // — so "close loop", "start loop", "end if" all find their command.
+        const terms = q.split(/\s+/).filter(Boolean);
+        const scored = terms.length
+            ? all.filter((o) => {
+                  const hay = (o.label + ' ' + o.group + ' ' + (o.keywords || '')).toLowerCase();
+                  return terms.every((t) => hay.includes(t));
+              })
+            : all;
+        const items = scored.slice(0, 10);
         if (this._slashSel >= items.length) {
             this._slashSel = Math.max(0, items.length - 1);
         }
@@ -7086,6 +7163,23 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
         } catch (e) {
             /* insertion falls back to caret/append */
+        }
+        // Formatting commands act at the caret instead of inserting markup.
+        if (item.cmd) {
+            if (item.cmd === 'ul' || item.cmd === 'ol') {
+                this._toggleListAtCaret(item.cmd === 'ol');
+            } else if (item.cmd === 'table') {
+                this.handleInsertTable();
+            } else {
+                try {
+                    document.execCommand('styleWithCSS', false, false);
+                } catch (e) {
+                    /* best effort */
+                }
+                document.execCommand(item.cmd, false, null);
+            }
+            this.htmlEditorDirty = true;
+            return;
         }
         this._insertIntoVisualPage(item.snippet);
     }

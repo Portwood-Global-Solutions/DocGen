@@ -1719,6 +1719,16 @@
                                                 Nothing matches &#8220;{slashMenu.query}&#8221;
                                             </div>
                                         </template>
+                                        <template if:true={slashMenu.errorMsg}>
+                                            <div class="dg-slash-empty">{slashMenu.errorMsg}</div>
+                                        </template>
+                                        <div class="dg-slash-foot">
+                                            Think this should be a command?
+                                            <a
+                                                href="mailto:hello@portwood.dev?subject=DocGen%20designer%20command%20idea"
+                                                >Email hello@portwood.dev</a
+                                            >
+                                        </div>
                                     </div>
                                 </template>
                                 <template if:true={isLoadingHtmlBody}>

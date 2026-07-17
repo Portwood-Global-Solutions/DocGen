@@ -1213,3 +1213,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.dg-slash-foot {
+    border-top: 1px solid #f0eef8;
+    margin-top: 4px;
+    padding: 6px 10px 4px 10px;
+    font-size: 0.68rem;
+    color: #9a93b5;
+}
+
+.dg-slash-foot a {
+    color: #7c3aed;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.dg-slash-foot a:hover {
+    text-decoration: underline;
+}
