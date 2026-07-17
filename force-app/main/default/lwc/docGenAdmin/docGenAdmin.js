@@ -17,6 +17,15 @@ import {
     buildBlockPalette
 } from './docGenAuthoringKit';
 
+// Each predesigned starter carries its natural object — the wizard's starter
+// path never asks for one (Advanced options exposes the picker for overrides).
+const STARTER_OBJECTS = {
+    report: 'Account',
+    invoice: 'Opportunity',
+    letter: 'Contact',
+    agreement: 'Account'
+};
+
 // Apex
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
 import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
@@ -311,6 +320,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isAutoCreating = false;
     @track newTemplateLogoName = '';
     _logoFile = null;
+    // Starter/AI paths hide the power-user fields behind this toggle.
+    @track showAdvancedOptions = false;
+    // AI wizard step: assets the prompt can reference + the paste-back box.
+    @track wizardAssets = [];
+    _aiPastedHtml = null;
+    // Logo control: 'none' | asset id | 'upload'.
+    @track newTemplateLogoChoice = 'none';
     @track newTemplateSampleRecordId = '';
     @track sampleRecordData = null;
     isCreating = true;
@@ -1265,6 +1281,93 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             document.removeEventListener('selectionchange', this._onSelectionChange);
             this._selListenerAdded = false;
         }
+        if (this._docMouseListenerAdded) {
+            document.removeEventListener('mousedown', this._onDocMouseDown, true);
+            this._docMouseListenerAdded = false;
+        }
+    }
+
+    /**
+     * Yank focus and caret back from Lightning's global-search box after its
+     * "/" hotkey fired while the user was typing in the visual canvas, then
+     * insert the "/" they typed. See the key-trap comment in renderedCallback.
+     */
+    _recoverStolenSlash() {
+        // The search dialog keeps re-grabbing focus asynchronously while it
+        // opens, so a single focus() call loses the race — retry until the
+        // canvas HOLDS focus, inserting the "/" exactly once.
+        let inserted = false;
+        const attempt = (triesLeft) => {
+            try {
+                const host = this.template.querySelector('.dg-visual-host');
+                const pv = host && host.querySelector('.dg-pv');
+                if (!pv) {
+                    return;
+                }
+                pv.focus();
+                const s = window.getSelection();
+                if (this._lastCanvasRange) {
+                    s.removeAllRanges();
+                    s.addRange(this._lastCanvasRange);
+                }
+                if (this._canvasFocused && !inserted) {
+                    inserted = true;
+                    document.execCommand('insertText', false, '/');
+                    this.htmlEditorDirty = true;
+                    this._maybePillifyTyped();
+                }
+                if (triesLeft > 0) {
+                    // eslint-disable-next-line @lwc/lwc/no-async-operation
+                    setTimeout(() => {
+                        if (!this._canvasFocused) {
+                            attempt(triesLeft - 1);
+                        }
+                    }, 220);
+                }
+            } catch (e) {
+                /* best effort */
+            }
+        };
+        attempt(5);
+    }
+
+    /**
+     * Word-style "click and type": place the caret exactly where the user
+     * double-clicked. Inside existing content the browser range is used
+     * directly; in empty space below the last block, a fresh paragraph is
+     * created there so typing can start immediately.
+     */
+    _placeCaretAtPoint(e, pv) {
+        try {
+            const sel = window.getSelection();
+            let range = null;
+            if (document.caretRangeFromPoint) {
+                range = document.caretRangeFromPoint(e.clientX, e.clientY);
+            } else if (document.caretPositionFromPoint) {
+                const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+                if (pos) {
+                    range = document.createRange();
+                    range.setStart(pos.offsetNode, pos.offset);
+                }
+            }
+            const blocks = Array.from(pv.children).filter((c) => !c.matches('style'));
+            const last = blocks[blocks.length - 1];
+            const belowContent = last && e.clientY > last.getBoundingClientRect().bottom + 4;
+            if (belowContent || !range || !pv.contains(range.startContainer)) {
+                const p = document.createElement('p');
+                p.appendChild(document.createElement('br'));
+                pv.appendChild(p);
+                range = document.createRange();
+                range.setStart(p, 0);
+                this.htmlEditorDirty = true;
+            }
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            pv.focus();
+        } catch (err) {
+            /* caret placement is best-effort */
+        }
     }
 
     renderedCallback() {
@@ -1346,16 +1449,69 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             if (pill) {
                                 e.preventDefault();
                                 this._beginPillEdit(pill);
+                                return;
                             }
+                            // Word-style click-and-type: double-click empty page
+                            // space starts a cursor right there.
+                            this._placeCaretAtPoint(e, pv);
                         });
                         // Column resize: grab a cell's right edge and drag.
                         pv.addEventListener('mousemove', (e) => this._tableResizeHover(e, pv));
                         pv.addEventListener('mousedown', (e) => this._tableResizeStart(e, pv));
-                        // Keep keystrokes OURS: Lightning binds "/" (and more)
-                        // to global shortcuts and doesn't recognize manual-DOM
-                        // contenteditable as an editing context.
-                        pv.addEventListener('keydown', (e) => e.stopPropagation());
-                        pv.addEventListener('keypress', (e) => e.stopPropagation());
+                        // Keep keystrokes OURS: Lightning binds "/" (and more) to
+                        // global shortcuts via a capture-phase listener high in the
+                        // tree, so stopping propagation at the page is too late.
+                        // Trap at the window in capture phase — fires before
+                        // Lightning's hotkey handler — and stop only events that
+                        // originate inside the editable page. preventDefault is
+                        // NOT called, so typing itself is untouched.
+                        // Synthetic shadow retargets e.target for listeners
+                        // outside the component, so the trap can't identify the
+                        // canvas from the event — track focus from INSIDE it.
+                        pv.addEventListener('focusin', () => {
+                            this._canvasFocused = true;
+                        });
+                        pv.addEventListener('keydown', (e) => {
+                            // Track typing recency for the "/" recovery below.
+                            // Only content keys — Tab/arrows must not count, or
+                            // tabbing away right after typing would false-match.
+                            if (e.key && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter')) {
+                                this._lastCanvasKeyTs = Date.now();
+                            }
+                            e.stopPropagation();
+                        });
+                        // Lightning's "/" global-search hotkey preempts us
+                        // completely: its window-capture handler runs first,
+                        // preventDefaults, stops propagation (the canvas never
+                        // sees the keydown), and focuses the search box. LWS
+                        // never delivers window-capture listeners to component
+                        // code, so the ONLY reliable signal is the SYMPTOM: a
+                        // focusout to the search input (saInput) while the user
+                        // was mid-typing with no mouse involved. On that
+                        // signature, steal focus back, restore the caret, and
+                        // type the "/" the user actually pressed.
+                        pv.addEventListener('focusout', (e) => {
+                            this._canvasFocused = false;
+                            this._canvasBlurTs = Date.now();
+                            const rt = e.relatedTarget;
+                            const toSearchBox = rt && String(rt.className || '').indexOf('saInput') !== -1;
+                            const typedRecently = this._lastCanvasKeyTs && Date.now() - this._lastCanvasKeyTs < 1500;
+                            const mousedRecently = this._lastDocMouseTs && Date.now() - this._lastDocMouseTs < 150;
+                            if (toSearchBox && typedRecently && !mousedRecently) {
+                                // eslint-disable-next-line @lwc/lwc/no-async-operation
+                                setTimeout(() => this._recoverStolenSlash(), 120);
+                            }
+                        });
+                        // Distinguishes hotkey focus-theft from a deliberate
+                        // click into global search (document listeners DO fire
+                        // for component code — see _onSelectionChange).
+                        if (!this._docMouseListenerAdded) {
+                            this._onDocMouseDown = () => {
+                                this._lastDocMouseTs = Date.now();
+                            };
+                            document.addEventListener('mousedown', this._onDocMouseDown, true);
+                            this._docMouseListenerAdded = true;
+                        }
                         // Land ready-to-type: focus the page with the caret at
                         // the first text block so the cursor is never a hunt.
                         try {
@@ -1398,14 +1554,80 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get isStep3() {
         return this.currentWizardStep === '3';
     }
+    /** Dedicated AI step: prompt + assets + paste-back, no query builder. */
+    get isStepAi() {
+        return this.currentWizardStep === 'ai';
+    }
+    get isStepAiOrLater() {
+        return this.currentWizardStep !== '1';
+    }
+    get hideWizardFooterNext() {
+        if (this.currentWizardStep === '3' || this.currentWizardStep === 'ai') {
+            return true;
+        }
+        // One place to move forward: on Step 1 the starter/AI paths advance
+        // ONLY via their in-card button; the footer Next belongs to the file
+        // path. Query refinement lives in the template's Query Configuration
+        // tab after creation, not in a parallel wizard branch.
+        return this.currentWizardStep === '1' && !this.isAuthoringFile;
+    }
+
+    // --- Step-1 declutter: starter/AI paths hide power-user fields ---
+    get showStep1AdvancedFields() {
+        return this.isAuthoringFile || this.showAdvancedOptions;
+    }
+    /** Starters bring their own object+query — hide the picker on that path. */
+    get showBaseObjectField() {
+        return this.isRecordDataSource && (!this.isAuthoringStarter || this.showAdvancedOptions);
+    }
+    get showAdvancedToggle() {
+        return !this.isAuthoringFile;
+    }
+    get advancedToggleLabel() {
+        return this.showAdvancedOptions
+            ? 'Hide advanced options'
+            : 'Advanced options (API name, category, data source)';
+    }
+    handleToggleAdvanced() {
+        this.showAdvancedOptions = !this.showAdvancedOptions;
+    }
     get isBackDisabled() {
         return this.currentWizardStep === '1';
     }
+    /** Progress ring value — the AI screen maps to the "Pick Your Data" slot. */
+    get wizardProgressStep() {
+        return this.currentWizardStep === 'ai' ? '2' : this.currentWizardStep;
+    }
 
-    handleNextStep() {
+    async handleNextStep() {
         if (this.currentWizardStep === '1') {
             if (!this.newTemplateName || !this.newTemplateType) {
                 this.showToast('Error', 'Please fill in the template name and type.', 'error');
+                return;
+            }
+            // AI path: skip the query builder entirely. Auto-build a sensible
+            // query for the prompt, load shared assets it can reference, and
+            // land on the prompt + paste screen.
+            if (this.isAuthoringAi && this.dataSourceMode === 'record') {
+                if (!this.newTemplateObject) {
+                    this.showToast('Pick an object', 'Choose the Base Object this document is about.', 'error');
+                    return;
+                }
+                this.isAutoCreating = true;
+                try {
+                    if (!(this.newTemplateQuery || '').trim()) {
+                        this.newTemplateQuery = await this._buildDefaultQueryConfig(this.newTemplateObject);
+                    }
+                    await this._loadWizardAssets();
+                } finally {
+                    this.isAutoCreating = false;
+                }
+                this.currentWizardStep = 'ai';
+                return;
+            }
+            if (this.isAuthoringAi && this.dataSourceMode === 'flow') {
+                await this._loadWizardAssets();
+                this.currentWizardStep = 'ai';
                 return;
             }
             // JSON Data (from Flow) data source: no SOQL, no provider class.
@@ -1465,7 +1687,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     handlePrevStep() {
-        if (this.currentWizardStep === '3') {
+        if (this.currentWizardStep === 'ai') {
+            this.currentWizardStep = '1';
+        } else if (this.currentWizardStep === '3') {
             // JSON-flow templates skip Step 2 going forward; mirror that going back
             // so the user lands on Step 1 (where they can re-pick the data source).
             this.currentWizardStep = this.dataSourceMode === 'flow' ? '1' : '2';
@@ -1474,9 +1698,59 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    /** Shared image assets shown on the AI step and named in the prompt. */
+    async _loadWizardAssets() {
+        try {
+            const assets = (await getAssets()) || [];
+            this.wizardAssets = assets.map((a) => ({
+                id: a.id,
+                name: a.name,
+                mergeTag: a.mergeTag || '{%asset:' + a.assetKey + '}'
+            }));
+        } catch (e) {
+            this.wizardAssets = [];
+        }
+    }
+
+    get hasWizardAssets() {
+        return (this.wizardAssets || []).length > 0;
+    }
+
+    /** Paste step is "3" after the assets step, "2" when there are no assets yet. */
+    get aiPasteStepNum() {
+        return this.hasWizardAssets ? '3' : '2';
+    }
+
+    handleAssetTagCopy(event) {
+        const tag = event.currentTarget.dataset.tag;
+        if (tag) {
+            this._copyToClipboard(tag, tag + ' copied — the AI prompt already lists it too.');
+        }
+    }
+
+    handleAiPasteChange(event) {
+        this._aiPastedHtml = event.target.value;
+    }
+
+    /** AI step finale: create the template with the pasted HTML staged as its body. */
+    async handleAiCreateFromPaste() {
+        const ta = this.template.querySelector('.dg-ai-paste');
+        if (ta) {
+            this._aiPastedHtml = ta.value;
+        }
+        this.isAutoCreating = true;
+        try {
+            await this.createTemplate();
+        } finally {
+            this.isAutoCreating = false;
+        }
+    }
+
     handleWizardTabActive() {
         this.activeMainTab = 'new_template';
         this.resetForm();
+        // Existing shared assets feed the logo picker and the AI prompt.
+        this._loadWizardAssets();
     }
 
     handleTabActive(event) {
@@ -1563,6 +1837,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get starterCards() {
         return STARTERS.map((s) => ({
             ...s,
+            targetObject: STARTER_OBJECTS[s.key] || 'Account',
             selected: this.newStarterKey === s.key,
             cardClass: this.newStarterKey === s.key ? 'dg-starter-card dg-starter-card_selected' : 'dg-starter-card'
         }));
@@ -1597,6 +1872,50 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     handleStarterSelect(event) {
         this.newStarterKey = event.currentTarget.dataset.key;
+        // Predesigned templates carry their natural object — no object picker
+        // on this path (Advanced options exposes it for power users).
+        if (!this.showAdvancedOptions) {
+            const obj = STARTER_OBJECTS[this.newStarterKey] || 'Account';
+            if (obj !== this.newTemplateObject) {
+                this.newTemplateObject = obj;
+                this.newTemplateQuery = '';
+                this.newTemplateSampleRecordId = null;
+            }
+        }
+    }
+
+    /** Logo control: pick an existing shared asset or upload a new image. */
+    get logoChoiceOptions() {
+        const opts = [{ label: 'No logo', value: 'none' }];
+        for (const a of this.wizardAssets || []) {
+            opts.push({ label: a.name + ' — ' + a.mergeTag, value: a.id });
+        }
+        opts.push({ label: 'Upload a new image…', value: 'upload' });
+        return opts;
+    }
+
+    get showLogoUpload() {
+        return this.newTemplateLogoChoice === 'upload';
+    }
+
+    handleLogoChoiceChange(event) {
+        this.newTemplateLogoChoice = event.detail.value;
+        if (this.newTemplateLogoChoice !== 'upload') {
+            this._logoFile = null;
+            this.newTemplateLogoName = '';
+        }
+    }
+
+    /** Merge tag the starter's logo slots should carry, per the user's choice. */
+    get _chosenLogoTag() {
+        const choice = this.newTemplateLogoChoice;
+        if (choice && choice !== 'none' && choice !== 'upload') {
+            const a = (this.wizardAssets || []).find((x) => x.id === choice);
+            if (a) {
+                return a.mergeTag;
+            }
+        }
+        return '{%asset:logo}';
     }
 
     handleLogoSelected(event) {
@@ -1630,6 +1949,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         this.isAutoCreating = true;
         try {
+            // Predesigned path with the object picker hidden: the starter's
+            // natural object drives the auto-built query.
+            if (this.isAuthoringStarter && !this.showAdvancedOptions) {
+                this.newTemplateObject = STARTER_OBJECTS[this.newStarterKey] || 'Account';
+            }
             if (this.dataSourceMode === 'record' && !(this.newTemplateQuery || '').trim()) {
                 this.newTemplateQuery = await this._buildDefaultQueryConfig(this.newTemplateObject);
             }
@@ -1786,7 +2110,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const shape = extractQueryShape(this.newTemplateQuery, this.newTemplateObject);
         return buildAiPrompt(shape, {
             dataSourceMode: this.dataSourceMode,
-            providerFields: (this.providerFields || []).map((f) => f.name || f)
+            providerFields: (this.providerFields || []).map((f) => f.name || f),
+            assets: this.wizardAssets
         });
     }
 
@@ -3256,6 +3581,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const starterKey = this.newStarterKey;
         const starterShape =
             authoringMode === 'starter' ? extractQueryShape(this.newTemplateQuery, this.newTemplateObject) : null;
+        const aiPastedHtml = (this._aiPastedHtml || '').trim();
+        this._aiPastedHtml = null;
+        const chosenLogoTag = this._chosenLogoTag;
 
         try {
             const record = await createRecord({ apiName: DOCGEN_TEMPLATE_OBJECT.objectApiName, fields });
@@ -3295,13 +3623,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.openEditModal(newRow, 'document');
             if (authoringMode === 'starter') {
                 await this._ensureLogoAsset(record.id);
-                await this._applyStarterBody(record.id, starterKey, starterShape);
+                await this._applyStarterBody(record.id, starterKey, starterShape, chosenLogoTag);
                 // Land straight in the full-screen designer with the starter open.
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
             } else if (authoringMode === 'ai') {
                 await this._ensureLogoAsset(record.id);
-                // AI path: designer opens in code view, ready for the paste-back.
+                // AI path: the wizard's paste-back becomes the staged body; if
+                // nothing was pasted, the designer opens ready for it.
+                if (aiPastedHtml) {
+                    await this._applyPastedBody(record.id, aiPastedHtml, newRow.Name);
+                }
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
             }
@@ -3315,9 +3647,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * fields and attach it as the template body, so the very first "Save as
      * New Version" click produces a working v1 that renders on Generate.
      */
-    async _applyStarterBody(templateId, starterKey, shape) {
+    async _applyStarterBody(templateId, starterKey, shape, logoTag) {
         try {
-            const html = buildStarterHtml(starterKey, shape);
+            let html = buildStarterHtml(starterKey, shape);
+            // Starter bodies carry {%asset:logo} slots; an existing asset picked
+            // in the wizard swaps its own merge tag in.
+            if (logoTag && logoTag !== '{%asset:logo}') {
+                html = html.split('{%asset:logo}').join(logoTag);
+            }
             const fileName = (this.selectedStarterLabelFor(starterKey) || 'Starter').replace(/[^\w]+/g, '_') + '.html';
             const bodyResult = await saveHtmlTemplateBody({ templateId, fileName, htmlContent: html });
             this.currentFileId = bodyResult.contentDocumentId;
@@ -3349,6 +3686,40 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     selectedStarterLabelFor(key) {
         const s = STARTERS.find((x) => x.key === key);
         return s ? s.label : '';
+    }
+
+    /**
+     * AI path: the HTML pasted on the wizard's AI step becomes the staged
+     * template body, so the designer opens on the finished document.
+     */
+    async _applyPastedBody(templateId, html, templateName) {
+        try {
+            const fileName = (templateName || 'AI_Template').replace(/[^\w]+/g, '_') + '.html';
+            const bodyResult = await saveHtmlTemplateBody({ templateId, fileName, htmlContent: html });
+            this.currentFileId = bodyResult.contentDocumentId;
+            this.uploadedContentVersionId = bodyResult.contentVersionId;
+            this.uploadedFileName = fileName;
+            this._lastUploadedHtmlText = html;
+            this.stagedBodySource = 'editor';
+            this.htmlEditorDirty = false;
+            if (/@page\b/i.test(html)) {
+                this.editHtmlBodyOwnsPageRule = true;
+                this.editTemplatePageOrientation = null;
+                this.editTemplatePageSize = null;
+                this.editTemplatePageMargins = null;
+                this.editTemplateCustomMargins = '';
+            }
+            this.showHtmlBodyEditor = true;
+            this._syncHtmlBodyEditorDom(html);
+            this.showToast(
+                'AI design attached',
+                'Your pasted HTML is staged — review it, then "Save as New Version" activates it.',
+                'success'
+            );
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Paste attach failed', msg, 'error');
+        }
     }
 
     // --- Row Action ---
@@ -5322,6 +5693,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.selectionContextLabel = '';
             return;
         }
+        // Stash the live caret so the "/" hotkey recovery can restore it after
+        // Lightning's global-search handler steals focus.
+        try {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount) {
+                this._lastCanvasRange = sel.getRangeAt(0).cloneRange();
+            }
+        } catch (e) {
+            /* best effort */
+        }
         const names = {
             H1: 'Title',
             H2: 'Heading',
@@ -6714,6 +7095,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._logoFile = null;
         this.newTemplateLogoName = '';
         this.isAutoCreating = false;
+        this.showAdvancedOptions = false;
+        this.newTemplateLogoChoice = 'none';
         this.newTemplateType = 'HTML';
         this.newTemplateDesc = '';
         this.newTemplateQuery = '';

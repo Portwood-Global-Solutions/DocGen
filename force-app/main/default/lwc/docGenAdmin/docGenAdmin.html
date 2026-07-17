@@ -8,7 +8,7 @@
             <lightning-tab label="Create New" value="new_template" onactive={handleWizardTabActive}>
                 <div class="slds-var-p-around_large">
                     <div class="wizard-header">
-                        <lightning-progress-indicator current-step={currentWizardStep} type="base" variant="base">
+                        <lightning-progress-indicator current-step={wizardProgressStep} type="base" variant="base">
                             <lightning-progress-step label="Name Your Template" value="1"></lightning-progress-step>
                             <lightning-progress-step label="Pick Your Data" value="2"></lightning-progress-step>
                             <lightning-progress-step label="Review &amp; Create" value="3"></lightning-progress-step>
@@ -54,38 +54,44 @@
                                         onchange={handleNameChange}
                                         required
                                     ></lightning-input>
-                                    <lightning-input
-                                        label="API Name"
-                                        value={newTemplateApiName}
-                                        onchange={handleNewApiNameChange}
-                                        max-length="80"
-                                        pattern="[a-zA-Z][a-zA-Z0-9_]*"
-                                        message-when-pattern-mismatch="Letters, numbers, and underscores only; must start with a letter."
-                                        field-level-help="Stable key for referencing this template from Flows and DocGen Buttons (Template API Name input). Auto-fills from the name; survives sandbox-to-production deploys, unlike the record Id. Must be unique. Clear it to re-sync with the name."
-                                        class="slds-var-m-top_medium"
-                                    ></lightning-input>
-                                    <lightning-input
-                                        label="Category"
-                                        value={newTemplateCategory}
-                                        onchange={handleCategoryChange}
-                                        class="slds-var-m-top_medium"
-                                    ></lightning-input>
+                                    <!-- Starter/AI paths keep Step 1 minimal: name, object,
+                                         logo. Power-user fields live behind Advanced. -->
+                                    <template if:true={showStep1AdvancedFields}>
+                                        <lightning-input
+                                            label="API Name"
+                                            value={newTemplateApiName}
+                                            onchange={handleNewApiNameChange}
+                                            max-length="80"
+                                            pattern="[a-zA-Z][a-zA-Z0-9_]*"
+                                            message-when-pattern-mismatch="Letters, numbers, and underscores only; must start with a letter."
+                                            field-level-help="Stable key for referencing this template from Flows and DocGen Buttons (Template API Name input). Auto-fills from the name; survives sandbox-to-production deploys, unlike the record Id. Must be unique. Clear it to re-sync with the name."
+                                            class="slds-var-m-top_medium"
+                                        ></lightning-input>
+                                        <lightning-input
+                                            label="Category"
+                                            value={newTemplateCategory}
+                                            onchange={handleCategoryChange}
+                                            class="slds-var-m-top_medium"
+                                        ></lightning-input>
 
-                                    <!-- Data Source: Salesforce Record vs Apex Class -->
-                                    <lightning-radio-group
-                                        class="slds-var-m-top_medium"
-                                        label="Data Source"
-                                        name="dataSourceMode"
-                                        options={dataSourceModeOptions}
-                                        value={dataSourceMode}
-                                        onchange={handleDataSourceModeChange}
-                                        type="radio"
-                                        required
-                                    >
-                                    </lightning-radio-group>
+                                        <!-- Data Source: Salesforce Record vs Apex Class -->
+                                        <lightning-radio-group
+                                            class="slds-var-m-top_medium"
+                                            label="Data Source"
+                                            name="dataSourceMode"
+                                            options={dataSourceModeOptions}
+                                            value={dataSourceMode}
+                                            onchange={handleDataSourceModeChange}
+                                            type="radio"
+                                            required
+                                        >
+                                        </lightning-radio-group>
+                                    </template>
 
-                                    <!-- Salesforce Record path: Base Object picker -->
-                                    <template if:true={isRecordDataSource}>
+                                    <!-- Salesforce Record path: Base Object picker.
+                                         Hidden for predesigned starters — each starter
+                                         brings its own object and query. -->
+                                    <template if:true={showBaseObjectField}>
                                         <div style="position: relative" class="slds-var-m-top_medium">
                                             <lightning-input
                                                 label="Base Object"
@@ -286,6 +292,16 @@
                                             </template>
                                         </div>
                                     </template>
+                                    <template if:true={showAdvancedToggle}>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="base"
+                                                label={advancedToggleLabel}
+                                                icon-name="utility:settings"
+                                                onclick={handleToggleAdvanced}
+                                            ></lightning-button>
+                                        </div>
+                                    </template>
                                 </div>
                                 <div class="slds-col slds-size_1-of-2">
                                     <!-- Starter path: design gallery -->
@@ -308,14 +324,29 @@
                                                             size="x-small"
                                                         ></lightning-icon>
                                                         <span class="dg-starter-card-title">{starter.label}</span>
+                                                        <span class="dg-starter-card-obj">{starter.targetObject}</span>
                                                     </div>
                                                     <p class="dg-starter-card-desc">{starter.description}</p>
                                                 </div>
                                             </template>
                                         </div>
                                         <div class="slds-var-m-top_small">
-                                            <label class="slds-form-element__label">Company logo (optional)</label>
-                                            <input type="file" accept=".png,.jpg,.jpeg" onchange={handleLogoSelected} />
+                                            <lightning-combobox
+                                                label="Company logo (optional)"
+                                                value={newTemplateLogoChoice}
+                                                options={logoChoiceOptions}
+                                                onchange={handleLogoChoiceChange}
+                                                field-level-help="Pick a shared image asset you already saved, or upload a new one. The starter header carries the logo slot either way."
+                                            ></lightning-combobox>
+                                            <template if:true={showLogoUpload}>
+                                                <div class="slds-var-m-top_x-small">
+                                                    <input
+                                                        type="file"
+                                                        accept=".png,.jpg,.jpeg"
+                                                        onchange={handleLogoSelected}
+                                                    />
+                                                </div>
+                                            </template>
                                             <template if:true={newTemplateLogoName}>
                                                 <p class="slds-text-body_small slds-text-color_weak">
                                                     {newTemplateLogoName} — saved as your shared logo, placed in the
@@ -323,6 +354,20 @@
                                                 </p>
                                             </template>
                                         </div>
+                                        <template if:true={isRecordDataSource}>
+                                            <template if:true={newTemplateObject}>
+                                                <div class="slds-var-m-top_small">
+                                                    <lightning-record-picker
+                                                        label="Sample Record (optional)"
+                                                        object-api-name={newTemplateObject}
+                                                        value={newTemplateSampleRecordId}
+                                                        onchange={handleSampleRecordChange}
+                                                        placeholder="Pick a record to preview with real data..."
+                                                    >
+                                                    </lightning-record-picker>
+                                                </div>
+                                            </template>
+                                        </template>
                                         <div class="slds-var-m-top_medium">
                                             <lightning-button
                                                 variant="brand"
@@ -341,12 +386,12 @@
                                             <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
                                                 One click: we pick sensible fields for your object automatically, build
                                                 the document, and open it in the designer. Refine fields anytime under
-                                                Query Configuration — or use Next to pick them yourself.
+                                                Query Configuration.
                                             </p>
                                         </div>
                                     </template>
 
-                                    <!-- AI path: explain the prompt handoff -->
+                                    <!-- AI path: name + logo here, prompt + paste on the next screen -->
                                     <template if:true={isAuthoringAi}>
                                         <div class="slds-box slds-theme_shade" style="border-radius: 8px" role="note">
                                             <p class="slds-text-body_small">
@@ -355,31 +400,55 @@
                                                     size="x-small"
                                                     class="slds-var-m-right_x-small"
                                                 ></lightning-icon>
-                                                After you pick your data in the next step, the
-                                                <strong>Review</strong> screen shows a complete prompt — your fields,
-                                                DocGen's merge-tag syntax, and the PDF engine's layout rules. Copy it
-                                                into Claude, ChatGPT, Gemini, or Copilot, then paste the returned HTML
-                                                into the template editor. No data leaves Salesforce unless you paste it.
+                                                Next builds a complete prompt for you — your fields, DocGen's merge-tag
+                                                syntax, the PDF engine's layout rules, and your shared image assets.
+                                                Copy it into Claude, ChatGPT, Gemini, or Copilot, paste the HTML it
+                                                returns, and you land in the designer. No data leaves Salesforce unless
+                                                you paste it.
                                             </p>
+                                        </div>
+                                        <div class="slds-var-m-top_small">
+                                            <lightning-combobox
+                                                label="Company logo (optional)"
+                                                value={newTemplateLogoChoice}
+                                                options={logoChoiceOptions}
+                                                onchange={handleLogoChoiceChange}
+                                                field-level-help="Pick a shared image asset you already saved, or upload a new one. The AI prompt tells the assistant how to reference it."
+                                            ></lightning-combobox>
+                                            <template if:true={showLogoUpload}>
+                                                <div class="slds-var-m-top_x-small">
+                                                    <input
+                                                        type="file"
+                                                        accept=".png,.jpg,.jpeg"
+                                                        onchange={handleLogoSelected}
+                                                    />
+                                                </div>
+                                            </template>
+                                            <template if:true={newTemplateLogoName}>
+                                                <p class="slds-text-body_small slds-text-color_weak">
+                                                    {newTemplateLogoName} — saved as your shared logo; the AI prompt
+                                                    will tell the assistant how to reference it.
+                                                </p>
+                                            </template>
                                         </div>
                                         <div class="slds-var-m-top_medium">
                                             <lightning-button
                                                 variant="brand"
-                                                label="Create &amp; Open Designer"
-                                                icon-name="utility:magicwand"
-                                                onclick={handleCreateAndDesign}
+                                                label="Next: Build My Prompt"
+                                                icon-name="utility:einstein"
+                                                onclick={handleNextStep}
                                                 disabled={isAutoCreating}
                                             ></lightning-button>
                                             <template if:true={isAutoCreating}>
                                                 <lightning-spinner
-                                                    alternative-text="Creating..."
+                                                    alternative-text="Preparing prompt..."
                                                     size="small"
                                                     class="slds-var-m-left_small"
                                                 ></lightning-spinner>
                                             </template>
                                             <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
-                                                One click: sensible fields are picked automatically and the designer
-                                                opens with your Copy AI Prompt ready.
+                                                Sensible fields are picked automatically — refine them anytime under
+                                                Query Configuration.
                                             </p>
                                         </div>
                                     </template>
@@ -476,23 +545,25 @@
                                             </p>
                                         </div>
                                     </template>
-                                    <template if:true={isRecordDataSource}>
-                                        <template if:true={newTemplateObject}>
-                                            <div class="slds-var-m-top_medium">
-                                                <lightning-record-picker
-                                                    label="Sample Record (optional)"
-                                                    object-api-name={newTemplateObject}
-                                                    value={newTemplateSampleRecordId}
-                                                    onchange={handleSampleRecordChange}
-                                                    placeholder="Pick a record to preview data..."
-                                                >
-                                                </lightning-record-picker>
-                                                <p
-                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small"
-                                                >
-                                                    See real data from this record while building your query.
-                                                </p>
-                                            </div>
+                                    <template if:true={isAuthoringFile}>
+                                        <template if:true={isRecordDataSource}>
+                                            <template if:true={newTemplateObject}>
+                                                <div class="slds-var-m-top_medium">
+                                                    <lightning-record-picker
+                                                        label="Sample Record (optional)"
+                                                        object-api-name={newTemplateObject}
+                                                        value={newTemplateSampleRecordId}
+                                                        onchange={handleSampleRecordChange}
+                                                        placeholder="Pick a record to preview data..."
+                                                    >
+                                                    </lightning-record-picker>
+                                                    <p
+                                                        class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small"
+                                                    >
+                                                        See real data from this record while building your query.
+                                                    </p>
+                                                </div>
+                                            </template>
                                         </template>
                                     </template>
                                     <template if:true={isApexDataSource}>
@@ -504,6 +575,107 @@
                                             supplies its own data shape at render time.
                                         </div>
                                     </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- AI step: prompt → paste → designer, all on one screen -->
+                        <template if:true={isStepAi}>
+                            <div class="slds-grid slds-gutters_large slds-wrap">
+                                <div
+                                    class="slds-col slds-size_1-of-2 slds-medium-size_1-of-2 slds-max-small-size_1-of-1"
+                                >
+                                    <div class="dg-ai-step-head">
+                                        <span class="dg-ai-step-num">1</span>
+                                        <strong>Copy your prompt</strong>
+                                        <lightning-button
+                                            label="Copy Prompt"
+                                            icon-name="utility:copy"
+                                            variant="brand"
+                                            onclick={handleCopyAiPrompt}
+                                            class="slds-var-m-left_small"
+                                        ></lightning-button>
+                                    </div>
+                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
+                                        Everything the AI needs: your {newTemplateObject} fields, DocGen's merge-tag
+                                        syntax, the PDF engine's layout rules, and your shared image assets. Paste it
+                                        into Claude, ChatGPT, Gemini, or Copilot and describe the document you want
+                                        where the prompt says so.
+                                    </p>
+                                    <pre class="dg-ai-prompt dg-ai-prompt_tall">{aiAuthoringPrompt}</pre>
+                                </div>
+                                <div
+                                    class="slds-col slds-size_1-of-2 slds-medium-size_1-of-2 slds-max-small-size_1-of-1"
+                                >
+                                    <template if:true={hasWizardAssets}>
+                                        <div class="dg-ai-step-head">
+                                            <span class="dg-ai-step-num">2</span>
+                                            <strong>Your shared image assets</strong>
+                                        </div>
+                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
+                                            Already included in the prompt — the AI can place these. Click a tag to copy
+                                            it.
+                                        </p>
+                                        <div class="dg-ai-asset-chips">
+                                            <template for:each={wizardAssets} for:item="asset">
+                                                <button
+                                                    key={asset.id}
+                                                    type="button"
+                                                    class="dg-tag-chip"
+                                                    data-tag={asset.mergeTag}
+                                                    onclick={handleAssetTagCopy}
+                                                    title={asset.name}
+                                                >
+                                                    {asset.mergeTag}
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <div class="dg-ai-step-head slds-var-m-top_medium">
+                                        <span class="dg-ai-step-num">{aiPasteStepNum}</span>
+                                        <strong>Paste the HTML it returns</strong>
+                                    </div>
+                                    <textarea
+                                        class="dg-ai-paste"
+                                        placeholder="Paste the complete HTML file your AI assistant returned (starts with <!DOCTYPE html>)..."
+                                        onchange={handleAiPasteChange}
+                                        spellcheck="false"
+                                    ></textarea>
+                                    <template if:true={isRecordDataSource}>
+                                        <template if:true={newTemplateObject}>
+                                            <div class="slds-var-m-top_small">
+                                                <lightning-record-picker
+                                                    label="Sample Record (optional)"
+                                                    object-api-name={newTemplateObject}
+                                                    value={newTemplateSampleRecordId}
+                                                    onchange={handleSampleRecordChange}
+                                                    placeholder="Pick a record to preview with real data..."
+                                                >
+                                                </lightning-record-picker>
+                                            </div>
+                                        </template>
+                                    </template>
+                                    <div class="slds-var-m-top_small">
+                                        <lightning-button
+                                            variant="brand"
+                                            label="Create &amp; Open Designer"
+                                            icon-name="utility:magicwand"
+                                            onclick={handleAiCreateFromPaste}
+                                            disabled={isAutoCreating}
+                                        ></lightning-button>
+                                        <template if:true={isAutoCreating}>
+                                            <lightning-spinner
+                                                alternative-text="Creating..."
+                                                size="small"
+                                                class="slds-var-m-left_small"
+                                            ></lightning-spinner>
+                                        </template>
+                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                            Pasted HTML is staged as the template body and opens in the visual designer.
+                                            Nothing pasted yet? That's fine — the designer opens empty and the prompt
+                                            stays available there.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </template>
@@ -1136,7 +1308,7 @@
                             >
                             </lightning-button>
 
-                            <template if:false={isStep3}>
+                            <template if:false={hideWizardFooterNext}>
                                 <lightning-button label="Next" variant="brand" onclick={handleNextStep}>
                                 </lightning-button>
                             </template>
@@ -1235,158 +1407,163 @@
                         </div>
                     </template>
                     <template if:true={designerHasTemplate}>
-                        <div class="dg-designer-toolbar">
-                            <div class="dg-designer-toolbar__title">
-                                <lightning-icon icon-name="utility:brush" size="small"></lightning-icon>
-                                <span class="slds-text-heading_small">{designerTitle}</span>
-                            </div>
-                            <template if:true={isRealObject}>
-                                <div class="dg-designer-toolbar__sample">
-                                    <lightning-record-picker
-                                        label="Sample Record"
-                                        variant="label-hidden"
-                                        object-api-name={editTemplateObject}
-                                        value={editTemplateTestRecordId}
-                                        onchange={handleEditTestRecordChange}
-                                        placeholder="Sample record for previews..."
-                                    >
-                                    </lightning-record-picker>
+                        <div class="dg-designer-chrome">
+                            <div class="dg-designer-toolbar">
+                                <div class="dg-designer-toolbar__title">
+                                    <lightning-icon icon-name="utility:brush" size="small"></lightning-icon>
+                                    <span class="slds-text-heading_small">{designerTitle}</span>
                                 </div>
-                                <lightning-button
-                                    label="Generate Sample"
-                                    icon-name="utility:page"
-                                    onclick={handleTestGenerate}
-                                    disabled={editGenerateSampleDisabled}
-                                ></lightning-button>
-                                <template if:true={isLoadingVersions}>
-                                    <lightning-spinner alternative-text="Working..." size="small"></lightning-spinner>
+                                <template if:true={isRealObject}>
+                                    <div class="dg-designer-toolbar__sample">
+                                        <lightning-record-picker
+                                            label="Sample Record"
+                                            variant="label-hidden"
+                                            object-api-name={editTemplateObject}
+                                            value={editTemplateTestRecordId}
+                                            onchange={handleEditTestRecordChange}
+                                            placeholder="Sample record for previews..."
+                                        >
+                                        </lightning-record-picker>
+                                    </div>
+                                    <lightning-button
+                                        label="Generate Sample"
+                                        icon-name="utility:page"
+                                        onclick={handleTestGenerate}
+                                        disabled={editGenerateSampleDisabled}
+                                    ></lightning-button>
+                                    <template if:true={isLoadingVersions}>
+                                        <lightning-spinner
+                                            alternative-text="Working..."
+                                            size="small"
+                                        ></lightning-spinner>
+                                    </template>
                                 </template>
-                            </template>
-                            <div class="dg-designer-toolbar__actions">
-                                <lightning-button
-                                    variant="brand"
-                                    label="Save as New Version"
-                                    icon-name="utility:save"
-                                    onclick={handleSaveAndClose}
-                                ></lightning-button>
-                                <lightning-button
-                                    label="Back to Templates"
-                                    icon-name="utility:back"
-                                    onclick={handleCloseDesigner}
-                                    class="slds-var-m-left_x-small"
-                                ></lightning-button>
+                                <div class="dg-designer-toolbar__actions">
+                                    <lightning-button
+                                        variant="brand"
+                                        label="Save as New Version"
+                                        icon-name="utility:save"
+                                        onclick={handleSaveAndClose}
+                                    ></lightning-button>
+                                    <lightning-button
+                                        label="Back to Templates"
+                                        icon-name="utility:back"
+                                        onclick={handleCloseDesigner}
+                                        class="slds-var-m-left_x-small"
+                                    ></lightning-button>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="dg-html-editor-statusbar">
-                            <div class="dg-mode-seg" role="tablist" aria-label="Editor mode">
-                                <button
-                                    class={visualModeBtnClass}
-                                    onclick={handleSelectVisualMode}
-                                    title="Edit the document as it renders — click anywhere and type"
-                                >
-                                    Visual
-                                </button>
-                                <button
-                                    class={sourceModeBtnClass}
-                                    onclick={handleSelectSourceMode}
-                                    title="Edit the raw HTML with a live full-page preview below"
-                                >
-                                    Source
-                                </button>
-                            </div>
-                            <template if:true={selectionContextLabel}>
-                                <span class="dg-context-label">{selectionContextLabel}</span>
-                            </template>
-                            <span class={htmlEditorStatusClass}>{htmlEditorStatusText}</span>
-                            <span class="dg-fmt-label">Page</span>
-                            <select
-                                class="dg-page-select"
-                                data-field="size"
-                                onchange={handlePageSetupChange}
-                                title="Page size"
-                            >
-                                <option value="Letter">Letter</option>
-                                <option value="Legal">Legal</option>
-                                <option value="A4">A4</option>
-                                <option value="Custom">Custom…</option>
-                            </select>
-                            <template if:false={isCustomPageSize}>
+                            <div class="dg-html-editor-statusbar">
+                                <div class="dg-mode-seg" role="tablist" aria-label="Editor mode">
+                                    <button
+                                        class={visualModeBtnClass}
+                                        onclick={handleSelectVisualMode}
+                                        title="Edit the document as it renders — click anywhere and type"
+                                    >
+                                        Visual
+                                    </button>
+                                    <button
+                                        class={sourceModeBtnClass}
+                                        onclick={handleSelectSourceMode}
+                                        title="Edit the raw HTML with a live full-page preview below"
+                                    >
+                                        Source
+                                    </button>
+                                </div>
+                                <template if:true={selectionContextLabel}>
+                                    <span class="dg-context-label">{selectionContextLabel}</span>
+                                </template>
+                                <span class={htmlEditorStatusClass}>{htmlEditorStatusText}</span>
+                                <span class="dg-fmt-label">Page</span>
                                 <select
                                     class="dg-page-select"
-                                    data-field="orient"
+                                    data-field="size"
                                     onchange={handlePageSetupChange}
-                                    title="Orientation"
+                                    title="Page size"
                                 >
-                                    <option value="portrait">Portrait</option>
-                                    <option value="landscape">Landscape</option>
+                                    <option value="Letter">Letter</option>
+                                    <option value="Legal">Legal</option>
+                                    <option value="A4">A4</option>
+                                    <option value="Custom">Custom…</option>
                                 </select>
-                            </template>
-                            <template if:true={isCustomPageSize}>
-                                <input
-                                    type="number"
-                                    class="dg-page-input"
-                                    data-field="customW"
-                                    min="1"
-                                    max="200"
-                                    step="0.25"
+                                <template if:false={isCustomPageSize}>
+                                    <select
+                                        class="dg-page-select"
+                                        data-field="orient"
+                                        onchange={handlePageSetupChange}
+                                        title="Orientation"
+                                    >
+                                        <option value="portrait">Portrait</option>
+                                        <option value="landscape">Landscape</option>
+                                    </select>
+                                </template>
+                                <template if:true={isCustomPageSize}>
+                                    <input
+                                        type="number"
+                                        class="dg-page-input"
+                                        data-field="customW"
+                                        min="1"
+                                        max="200"
+                                        step="0.25"
+                                        onchange={handlePageSetupChange}
+                                        title="Page width in inches"
+                                    />
+                                    <span class="dg-fmt-label">×</span>
+                                    <input
+                                        type="number"
+                                        class="dg-page-input"
+                                        data-field="customH"
+                                        min="1"
+                                        max="200"
+                                        step="0.25"
+                                        onchange={handlePageSetupChange}
+                                        title="Page height in inches"
+                                    />
+                                    <span class="dg-fmt-label">in</span>
+                                </template>
+                                <select
+                                    class="dg-page-select"
+                                    data-field="margin"
                                     onchange={handlePageSetupChange}
-                                    title="Page width in inches"
-                                />
-                                <span class="dg-fmt-label">×</span>
-                                <input
-                                    type="number"
-                                    class="dg-page-input"
-                                    data-field="customH"
-                                    min="1"
-                                    max="200"
-                                    step="0.25"
-                                    onchange={handlePageSetupChange}
-                                    title="Page height in inches"
-                                />
-                                <span class="dg-fmt-label">in</span>
-                            </template>
-                            <select
-                                class="dg-page-select"
-                                data-field="margin"
-                                onchange={handlePageSetupChange}
-                                title="Page margins"
-                            >
-                                <option value="0.5">0.5&quot; margins</option>
-                                <option value="0.75">0.75&quot; margins</option>
-                                <option value="1">1&quot; margins</option>
-                                <option value="custom">Custom…</option>
-                            </select>
-                            <template if:true={isCustomMargin}>
-                                <input
-                                    type="number"
-                                    class="dg-page-input"
-                                    data-field="customMargin"
-                                    min="0"
-                                    max="10"
-                                    step="0.05"
-                                    onchange={handlePageSetupChange}
-                                    title="Margin in inches"
-                                />
-                                <span class="dg-fmt-label">in</span>
-                            </template>
-                            <lightning-button
-                                label="Format Code"
-                                icon-name="utility:magicwand"
-                                variant="base"
-                                data-target="body"
-                                onclick={handleFormatHtml}
-                                title="Pretty-print the HTML: indent nested tags without touching text or merge tags."
-                                class="slds-var-m-left_small"
-                            ></lightning-button>
-                            <lightning-button
-                                label="Reload"
-                                icon-name="utility:refresh"
-                                variant="base"
-                                onclick={handleReloadHtmlBodyEditor}
-                                title="Replace the editor contents with the currently staged body (or the saved body if nothing is staged). Discards unapplied edits."
-                                class="slds-var-m-left_small"
-                            ></lightning-button>
+                                    title="Page margins"
+                                >
+                                    <option value="0.5">0.5&quot; margins</option>
+                                    <option value="0.75">0.75&quot; margins</option>
+                                    <option value="1">1&quot; margins</option>
+                                    <option value="custom">Custom…</option>
+                                </select>
+                                <template if:true={isCustomMargin}>
+                                    <input
+                                        type="number"
+                                        class="dg-page-input"
+                                        data-field="customMargin"
+                                        min="0"
+                                        max="10"
+                                        step="0.05"
+                                        onchange={handlePageSetupChange}
+                                        title="Margin in inches"
+                                    />
+                                    <span class="dg-fmt-label">in</span>
+                                </template>
+                                <lightning-button
+                                    label="Format Code"
+                                    icon-name="utility:magicwand"
+                                    variant="base"
+                                    data-target="body"
+                                    onclick={handleFormatHtml}
+                                    title="Pretty-print the HTML: indent nested tags without touching text or merge tags."
+                                    class="slds-var-m-left_small"
+                                ></lightning-button>
+                                <lightning-button
+                                    label="Reload"
+                                    icon-name="utility:refresh"
+                                    variant="base"
+                                    onclick={handleReloadHtmlBodyEditor}
+                                    title="Replace the editor contents with the currently staged body (or the saved body if nothing is staged). Discards unapplied edits."
+                                    class="slds-var-m-left_small"
+                                ></lightning-button>
+                            </div>
                         </div>
 
                         <div class="dg-designer-layout">

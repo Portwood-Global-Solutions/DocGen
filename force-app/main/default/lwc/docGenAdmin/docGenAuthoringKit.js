@@ -460,6 +460,14 @@ export function buildAiPrompt(shape, options) {
             );
         }
     }
+    const assets = opts.assets || [];
+    if (assets.length) {
+        lines.push('');
+        lines.push('SHARED IMAGE ASSETS (already stored in Salesforce — reference by tag, do NOT invent image URLs):');
+        for (const a of assets) {
+            lines.push(`  - ${a.mergeTag} — ${a.name}. Place as e.g. <td style="width:120pt">${a.mergeTag}</td>.`);
+        }
+    }
     lines.push('');
     lines.push('WHAT I WANT THIS DOCUMENT TO BE:');
     lines.push(

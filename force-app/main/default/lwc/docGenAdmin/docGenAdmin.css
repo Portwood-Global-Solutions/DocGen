@@ -567,15 +567,28 @@
 }
 
 /* --- Full-screen Designer tab --- */
+/* Sticky glass chrome: toolbar + statusbar stay at hand while the page scrolls. */
+.dg-designer-chrome {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid #e2e0ef;
+    border-top: 3px solid #7c3aed;
+    border-radius: 0 0 12px 12px;
+    padding: 6px 12px 6px 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 6px 18px rgba(28, 20, 68, 0.08);
+}
+
 .dg-designer-toolbar {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 10px;
-    padding: 10px 14px;
-    background: #fff;
-    border: 1px solid #d8dde6;
-    border-radius: 10px;
+    padding: 4px 0 6px 0;
+    border-bottom: 1px solid #edeaf7;
 }
 
 .dg-designer-toolbar__title {
@@ -616,9 +629,20 @@
 
 .dg-designer-rail {
     flex: 0 0 340px;
-    max-height: calc(100vh - 290px);
+    position: sticky;
+    top: 106px;
+    align-self: flex-start;
+    max-height: calc(100vh - 130px);
     overflow-y: auto;
     padding-right: 2px;
+}
+
+/* Statusbar inside the sticky chrome: tighter, no extra margins. */
+.dg-designer-chrome .dg-html-editor-statusbar {
+    margin-bottom: 0;
+    padding-top: 6px;
+    flex-wrap: wrap;
+    gap: 4px;
 }
 
 .dg-rail-section-label {
@@ -654,33 +678,51 @@
 
 /* --- Visual-mode format bar --- */
 .dg-format-bar {
+    position: sticky;
+    top: 100px;
+    z-index: 30;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 4px;
     padding: 6px 10px;
-    background: #fff;
-    border: 1px solid #d8dde6;
-    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid #e2e0ef;
+    border-radius: 10px;
     margin-bottom: 6px;
+    box-shadow: 0 4px 14px rgba(28, 20, 68, 0.07);
 }
 
 .dg-fmt-btn {
     min-width: 28px;
     height: 26px;
     border: 1px solid #d8dde6;
-    border-radius: 5px;
+    border-radius: 6px;
     background: #fff;
     cursor: pointer;
     font-size: 0.8rem;
     color: #16325c;
     padding: 0 6px;
     font-family: inherit;
+    transition:
+        background 0.12s ease,
+        border-color 0.12s ease,
+        transform 0.12s ease,
+        box-shadow 0.12s ease;
 }
 
 .dg-fmt-btn:hover {
     background: #f4f2ff;
-    border-color: #c9b8f5;
+    border-color: #b49aef;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.18);
+}
+
+.dg-fmt-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
 }
 
 .dg-fmt-btn_word {
@@ -889,4 +931,77 @@
     padding: 0 4px;
     margin-left: 4px;
     flex: 0 0 auto;
+}
+
+/* --- AI wizard step: prompt → assets → paste --- */
+.dg-ai-step-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px 0;
+    font-size: 0.95rem;
+}
+
+.dg-ai-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #7c3aed;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.8rem;
+    flex: 0 0 auto;
+}
+
+.dg-ai-prompt_tall {
+    max-height: 420px;
+    overflow: auto;
+}
+
+.dg-ai-asset-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.dg-ai-paste {
+    width: 100%;
+    height: 260px;
+    font-family: 'SF Mono', Consolas, Menlo, monospace;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    border: 1px solid #d8dde6;
+    border-radius: 8px;
+    padding: 10px;
+    resize: vertical;
+    background: #fff;
+    box-sizing: border-box;
+}
+
+.dg-ai-paste:focus {
+    outline: none;
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+/* Designer canvas backdrop: soft depth behind the paper sheet. */
+.dg-visual-host.dg-designer-size {
+    background: radial-gradient(ellipse at 50% 0%, #eceef4 0%, #dde1ea 70%, #d4d9e4 100%);
+    border-color: #d3d0e6;
+}
+
+.dg-starter-card-obj {
+    margin-left: auto;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #7c3aed;
+    background: #f4f2ff;
+    border: 1px solid #ddd3f7;
+    border-radius: 10px;
+    padding: 1px 8px;
+    white-space: nowrap;
 }
