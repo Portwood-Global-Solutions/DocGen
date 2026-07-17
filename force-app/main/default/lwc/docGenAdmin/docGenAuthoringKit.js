@@ -934,7 +934,7 @@ export function buildTagPalette(shape) {
         aggregateItems.push({
             key: rel + '_count',
             label: 'Count of ' + humanizeField(rel),
-            snippet: '{COUNT:' + rel + '.Id}',
+            snippet: '{COUNT:' + rel + '}',
             title: 'Number of ' + humanizeField(rel) + ' records — goes OUTSIDE the loop'
         });
         sections.push({
@@ -1240,7 +1240,7 @@ export function buildTagPalette(shape) {
             {
                 key: 'count',
                 label: 'COUNT of children',
-                snippet: '{COUNT:Relationship.Id}',
+                snippet: '{COUNT:Relationship}',
                 title: 'Number of child records'
             }
         );
