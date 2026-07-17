@@ -1262,16 +1262,43 @@
                                 <option value="Letter">Letter</option>
                                 <option value="Legal">Legal</option>
                                 <option value="A4">A4</option>
+                                <option value="Custom">Custom…</option>
                             </select>
-                            <select
-                                class="dg-page-select"
-                                data-field="orient"
-                                onchange={handlePageSetupChange}
-                                title="Orientation"
-                            >
-                                <option value="portrait">Portrait</option>
-                                <option value="landscape">Landscape</option>
-                            </select>
+                            <template if:false={isCustomPageSize}>
+                                <select
+                                    class="dg-page-select"
+                                    data-field="orient"
+                                    onchange={handlePageSetupChange}
+                                    title="Orientation"
+                                >
+                                    <option value="portrait">Portrait</option>
+                                    <option value="landscape">Landscape</option>
+                                </select>
+                            </template>
+                            <template if:true={isCustomPageSize}>
+                                <input
+                                    type="number"
+                                    class="dg-page-input"
+                                    data-field="customW"
+                                    min="1"
+                                    max="200"
+                                    step="0.25"
+                                    onchange={handlePageSetupChange}
+                                    title="Page width in inches"
+                                />
+                                <span class="dg-fmt-label">×</span>
+                                <input
+                                    type="number"
+                                    class="dg-page-input"
+                                    data-field="customH"
+                                    min="1"
+                                    max="200"
+                                    step="0.25"
+                                    onchange={handlePageSetupChange}
+                                    title="Page height in inches"
+                                />
+                                <span class="dg-fmt-label">in</span>
+                            </template>
                             <select
                                 class="dg-page-select"
                                 data-field="margin"
@@ -1281,7 +1308,21 @@
                                 <option value="0.5">0.5&quot; margins</option>
                                 <option value="0.75">0.75&quot; margins</option>
                                 <option value="1">1&quot; margins</option>
+                                <option value="custom">Custom…</option>
                             </select>
+                            <template if:true={isCustomMargin}>
+                                <input
+                                    type="number"
+                                    class="dg-page-input"
+                                    data-field="customMargin"
+                                    min="0"
+                                    max="10"
+                                    step="0.05"
+                                    onchange={handlePageSetupChange}
+                                    title="Margin in inches"
+                                />
+                                <span class="dg-fmt-label">in</span>
+                            </template>
                             <lightning-button
                                 label="Format Code"
                                 icon-name="utility:magicwand"
@@ -1303,6 +1344,34 @@
 
                         <div class="dg-designer-layout">
                             <div class="dg-designer-canvas-col">
+                                <template if:true={pillMenu}>
+                                    <div class="dg-pill-menu" style={pillMenu.posStyle} role="menu">
+                                        <div class="dg-pill-menu-head">
+                                            <code>{pillMenu.tagText}</code>
+                                            <button class="dg-pill-menu-x" onclick={handlePillMenuClose} title="Close">
+                                                &#10005;
+                                            </button>
+                                        </div>
+                                        <template if:true={pillMenu.hasOptions}>
+                                            <template for:each={pillMenu.options} for:item="opt">
+                                                <button
+                                                    key={opt.key}
+                                                    class="dg-pill-menu-item"
+                                                    data-tag={opt.tag}
+                                                    onclick={handlePillTransform}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            </template>
+                                        </template>
+                                        <button
+                                            class="dg-pill-menu-item dg-pill-menu-remove"
+                                            onclick={handlePillRemove}
+                                        >
+                                            Remove from document
+                                        </button>
+                                    </div>
+                                </template>
                                 <template if:true={isLoadingHtmlBody}>
                                     <div class="slds-is-relative" style="height: 40px">
                                         <lightning-spinner

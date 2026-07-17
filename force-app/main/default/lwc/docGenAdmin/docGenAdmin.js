@@ -395,8 +395,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // What the caret is on ("Editing: Table cell") — answers "what am I
     // about to color?"
     @track selectionContextLabel = '';
-    // Canvas page setup, mirrored into the template's @page rule.
-    @track pageSetup = { size: 'Letter', orient: 'portrait', margin: '0.75' };
+    // Pill inspector: click a pill → formatting menu (currency, date, QR…)
+    @track pillMenu = null;
+    _activePill = null;
+    // Canvas page setup, mirrored into the template's @page rule. Custom
+    // sizes cover everything from 3x4in nametags to poster PDFs.
+    @track pageSetup = {
+        size: 'Letter',
+        orient: 'portrait',
+        margin: '0.75',
+        customW: '8.5',
+        customH: '11',
+        customMargin: '0.75'
+    };
     // Last HTML body text this session touched (upload, starter, or Apply) so
     // reopening the editor doesn't need a server round-trip.
     _lastUploadedHtmlText = null;
@@ -1263,11 +1274,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 ta.value = this.editTemplateQuery;
             }
         }
-        // Page-setup selects: LWC doesn't bind value on native <select>, so
-        // mirror state into the DOM the same way the query textareas do.
-        for (const sel of this.template.querySelectorAll('.dg-page-select')) {
+        // Page-setup controls: LWC doesn't bind value on native <select>, so
+        // mirror state into the DOM the same way the query textareas do —
+        // but never clobber a control the user is currently typing in.
+        for (const sel of this.template.querySelectorAll('.dg-page-select, .dg-page-input')) {
             const want = this.pageSetup[sel.dataset.field];
-            if (want != null && sel.value !== want) {
+            if (want != null && sel.value !== want && !sel.matches(':focus')) {
                 sel.value = want;
             }
         }
@@ -1308,6 +1320,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // Live dirty signal while typing in the page.
                         pv.addEventListener('input', () => {
                             this.htmlEditorDirty = true;
+                        });
+                        // Click a pill → its formatting menu; click elsewhere closes it.
+                        pv.addEventListener('click', (e) => {
+                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+                            if (pill) {
+                                e.preventDefault();
+                                this._openPillMenu(pill);
+                            } else {
+                                this.pillMenu = null;
+                            }
                         });
                         // Sheet dimensions follow the page setup.
                         this._applyCanvasDimensions();
@@ -4839,12 +4861,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _parsePageSetup(code) {
-        const setup = { size: 'Letter', orient: 'portrait', margin: '0.75' };
+        const setup = {
+            size: 'Letter',
+            orient: 'portrait',
+            margin: '0.75',
+            customW: '8.5',
+            customH: '11',
+            customMargin: '0.75'
+        };
         const m = /@page\s*\{([^}]*)\}/i.exec(code || '');
         if (m) {
             const body = m[1];
             const sm = /size\s*:\s*(letter|legal|a4)\s*(portrait|landscape)?/i.exec(body);
-            if (sm) {
+            const cm = /size\s*:\s*([\d.]+)\s*in\s+([\d.]+)\s*in/i.exec(body);
+            if (cm) {
+                setup.size = 'Custom';
+                setup.customW = cm[1];
+                setup.customH = cm[2];
+            } else if (sm) {
                 const raw = sm[1].toLowerCase();
                 setup.size = raw === 'a4' ? 'A4' : raw.charAt(0).toUpperCase() + raw.slice(1);
                 if (sm[2]) {
@@ -4853,10 +4887,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             const mm = /margin\s*:\s*([\d.]+)\s*in/i.exec(body);
             if (mm) {
-                setup.margin = mm[1];
+                setup.margin = ['0.5', '0.75', '1'].includes(mm[1]) ? mm[1] : 'custom';
+                setup.customMargin = mm[1];
             }
         }
         this.pageSetup = setup;
+    }
+
+    get isCustomPageSize() {
+        return this.pageSetup.size === 'Custom';
+    }
+
+    get isCustomMargin() {
+        return this.pageSetup.margin === 'custom';
     }
 
     handlePageSetupChange(event) {
@@ -4870,14 +4913,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!ta) {
             return;
         }
-        const rule =
-            '@page { size: ' +
-            this.pageSetup.size +
-            ' ' +
-            this.pageSetup.orient +
-            '; margin: ' +
-            this.pageSetup.margin +
-            'in; }';
+        const sizePart = this.isCustomPageSize
+            ? (parseFloat(this.pageSetup.customW) || 8.5) + 'in ' + (parseFloat(this.pageSetup.customH) || 11) + 'in'
+            : this.pageSetup.size + ' ' + this.pageSetup.orient;
+        const marginVal = this.isCustomMargin ? parseFloat(this.pageSetup.customMargin) || 0.75 : this.pageSetup.margin;
+        const rule = '@page { size: ' + sizePart + '; margin: ' + marginVal + 'in; }';
         let code = ta.value || '';
         if (/@page\s*\{[^}]*\}/i.test(code)) {
             code = code.replace(/@page\s*\{[^}]*\}/i, rule);
@@ -4902,11 +4942,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const widths = { Letter: 816, Legal: 816, A4: 794 };
         const heights = { Letter: 1056, Legal: 1344, A4: 1123 };
-        const w =
-            this.pageSetup.orient === 'landscape'
-                ? heights[this.pageSetup.size] || 1056
-                : widths[this.pageSetup.size] || 816;
-        const pad = Math.round(parseFloat(this.pageSetup.margin || '0.75') * 96);
+        let w;
+        if (this.isCustomPageSize) {
+            w = Math.round((parseFloat(this.pageSetup.customW) || 8.5) * 96);
+        } else {
+            w =
+                this.pageSetup.orient === 'landscape'
+                    ? heights[this.pageSetup.size] || 1056
+                    : widths[this.pageSetup.size] || 816;
+        }
+        const marginVal = this.isCustomMargin
+            ? parseFloat(this.pageSetup.customMargin) || 0.75
+            : parseFloat(this.pageSetup.margin || '0.75');
+        const pad = Math.round(marginVal * 96);
         pv.style.maxWidth = w + 'px';
         pv.style.padding = pad + 'px';
     }
@@ -5309,10 +5357,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     pill.setAttribute('data-dg-tag', 'true');
                     pill.setAttribute('contenteditable', 'false');
                     pill.textContent = part;
-                    const isStructural = /^[#/:%@]/.test(part.charAt(1));
-                    pill.style.cssText = isStructural
-                        ? 'background:#e3f5e9;border:1px solid #9fd6b1;color:#1c7a3d;border-radius:9px;padding:0 6px;font-size:0.9em;white-space:nowrap;'
-                        : 'background:#ede7fd;border:1px solid #c9b8f5;color:#5a3fc4;border-radius:9px;padding:0 6px;font-size:0.9em;white-space:nowrap;';
+                    pill.style.cssText = this._pillStyleFor(part);
                     frag.appendChild(pill);
                 } else if (part) {
                     frag.appendChild(doc.createTextNode(part));
@@ -5320,6 +5365,81 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             node.parentNode.replaceChild(frag, node);
         }
+    }
+
+    _pillStyleFor(tagText) {
+        const isStructural = /^[#/:%@*]/.test((tagText || '').charAt(1));
+        return isStructural
+            ? 'background:#e3f5e9;border:1px solid #9fd6b1;color:#1c7a3d;border-radius:9px;padding:0 6px;font-size:0.9em;white-space:nowrap;cursor:pointer;'
+            : 'background:#ede7fd;border:1px solid #c9b8f5;color:#5a3fc4;border-radius:9px;padding:0 6px;font-size:0.9em;white-space:nowrap;cursor:pointer;';
+    }
+
+    /**
+     * Pill inspector: parse the clicked pill's tag and offer one-click
+     * transformations — format suffixes, or re-render the same field as a
+     * QR code, barcode, or image.
+     */
+    _openPillMenu(pill) {
+        this._activePill = pill;
+        const raw = (pill.textContent || '').trim();
+        const inner = raw.replace(/^\{|\}$/g, '');
+        const first = inner.charAt(0);
+        let options = [];
+        let field = null;
+        if (first === '*' || first === '%') {
+            field = inner.slice(1).split(':')[0];
+        } else if (!/^[#/:@]/.test(first) && !/^(SUM|AVG|MIN|MAX|COUNT|Chart)\b/i.test(inner)) {
+            field = inner.split(':')[0];
+        }
+        if (field) {
+            options = [
+                { key: 'plain', label: 'Plain text', tag: '{' + field + '}' },
+                { key: 'currency', label: 'Currency ($1,234.00)', tag: '{' + field + ':currency}' },
+                { key: 'date_long', label: 'Date — April 17, 2026', tag: '{' + field + ':MMMM d, yyyy}' },
+                { key: 'date_short', label: 'Date — 04/17/2026', tag: '{' + field + ':MM/dd/yyyy}' },
+                { key: 'number', label: 'Number (1,234)', tag: '{' + field + ':number}' },
+                { key: 'percent', label: 'Percent (15.5%)', tag: '{' + field + ':percent}' },
+                { key: 'checkbox', label: 'Checkbox [X]/[ ]', tag: '{' + field + ':checkbox}' },
+                { key: 'label', label: 'Picklist label', tag: '{' + field + ':label}' },
+                { key: 'qr', label: 'QR code', tag: '{*' + field + ':qr:200}' },
+                { key: 'barcode', label: 'Barcode (Code 128)', tag: '{*' + field + ':code128:300x80}' },
+                { key: 'image', label: 'Image field', tag: '{%' + field + '}' }
+            ].map((o) => ({ ...o, active: o.tag === raw }));
+        }
+        // Position the menu just under the pill, relative to the canvas column.
+        const col = this.template.querySelector('.dg-designer-canvas-col');
+        const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
+        const rect = pill.getBoundingClientRect();
+        this.pillMenu = {
+            tagText: raw,
+            options,
+            hasOptions: options.length > 0,
+            posStyle:
+                'left: ' + Math.max(0, rect.left - colRect.left) + 'px; top: ' + (rect.bottom - colRect.top + 6) + 'px;'
+        };
+    }
+
+    handlePillTransform(event) {
+        const tag = event.currentTarget.dataset.tag;
+        if (this._activePill && tag) {
+            this._activePill.textContent = tag;
+            this._activePill.style.cssText = this._pillStyleFor(tag);
+            this.htmlEditorDirty = true;
+        }
+        this.pillMenu = null;
+    }
+
+    handlePillRemove() {
+        if (this._activePill) {
+            this._activePill.remove();
+            this.htmlEditorDirty = true;
+        }
+        this.pillMenu = null;
+        this._activePill = null;
+    }
+
+    handlePillMenuClose() {
+        this.pillMenu = null;
     }
 
     /** Pills back to plain merge-tag text (exit path). */
@@ -5372,6 +5492,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.showHtmlBodyVisual = false;
         this._visualOriginalCode = null;
         this._visualEnteredDom = null;
+        this.pillMenu = null;
+        this._activePill = null;
         // Landing back in Code view — make the side-by-side preview current.
         // eslint-disable-next-line @lwc/lwc/no-async-operation
         setTimeout(() => this._refreshCodePreview(), 120);

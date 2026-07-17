@@ -840,6 +840,33 @@ export function buildTagPalette(shape) {
                 });
             }
         }
+        // Charts: one click per bucketable field — {Chart:...} renders a
+        // pure-Apex PNG in PDF output; swap :bar for column/pie/donut/
+        // stacked/clustered/line/area.
+        for (const f of child.fields || []) {
+            if (f !== 'Id' && !f.includes('.')) {
+                aggregateItems.push({
+                    key: rel + '_chart_' + f,
+                    label: 'Chart: ' + humanizeField(f),
+                    snippet:
+                        '{Chart:' +
+                        rel +
+                        ':' +
+                        f +
+                        ':bar:title=' +
+                        humanizeField(rel) +
+                        ' by ' +
+                        humanizeField(f) +
+                        '}',
+                    title:
+                        'Bar chart of ' +
+                        humanizeField(rel) +
+                        ' bucketed by ' +
+                        humanizeField(f) +
+                        ' — change :bar to column, pie, donut, stacked, clustered, line, or area. Goes OUTSIDE the loop.'
+                });
+            }
+        }
         aggregateItems.push({
             key: rel + '_count',
             label: 'Count of ' + humanizeField(rel),
@@ -932,6 +959,57 @@ export function buildTagPalette(shape) {
                 label: 'Signature (Company rep)',
                 snippet: '{@Signature_Company_Representative:2:Full}',
                 title: 'Second signer, order 2'
+            }
+        ]
+    });
+
+    // Barcodes & QR — {*Field:qr} / {*Field:code128}, the only two types.
+    const codeishFields = [...(shape.baseFields || [])].filter(
+        (f) => /(number|code|sku|url|website)$/i.test(f) || /^name$/i.test(f)
+    );
+    sections.push({
+        key: 'barcodes',
+        label: 'Barcodes & QR',
+        hint: 'Code 128 and QR only. Keep QR values under ~120 characters for 1-inch prints.',
+        items: [
+            ...codeishFields.map((f) => ({
+                key: 'qr_' + f,
+                label: 'QR: ' + humanizeField(f),
+                snippet: '{*' + f + ':qr:200}',
+                title: '200px QR code of ' + humanizeField(f)
+            })),
+            {
+                key: 'qr_any',
+                label: 'QR code (any field)',
+                snippet: '{*FieldName:qr:200}',
+                title: 'Swap FieldName for one of your fields'
+            },
+            {
+                key: 'bc_any',
+                label: 'Barcode (Code 128)',
+                snippet: '{*FieldName:code128:300x80}',
+                title: 'Swap FieldName; renders a 300×80px Code 128 barcode'
+            }
+        ]
+    });
+
+    // Image tags — record image fields and org-wide shared assets.
+    sections.push({
+        key: 'imgtags',
+        label: 'Image Tags',
+        hint: 'Record images and shared assets (see the Assets tab).',
+        items: [
+            {
+                key: 'img_field',
+                label: 'Record image field',
+                snippet: '{%ImageFieldName}',
+                title: 'Renders the image stored in a field — swap ImageFieldName for your image field'
+            },
+            {
+                key: 'img_asset',
+                label: 'Shared asset (logo)',
+                snippet: '{%asset:logo}',
+                title: 'Org-wide shared asset by key — great for logos reused across templates'
             }
         ]
     });
