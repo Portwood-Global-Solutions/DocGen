@@ -6366,27 +6366,90 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const raw = (pill.textContent || '').trim();
         const inner = raw.replace(/^\{|\}$/g, '');
         const first = inner.charAt(0);
-        let options = [];
         let field = null;
         if (first === '*' || first === '%') {
             field = inner.slice(1).split(':')[0];
         } else if (!/^[#/:@]/.test(first) && !/^(SUM|AVG|MIN|MAX|COUNT|Chart)\b/i.test(inner)) {
             field = inner.split(':')[0];
         }
+        let sections = [];
         if (field) {
-            options = [
-                { key: 'plain', label: 'Plain text', tag: '{' + field + '}' },
-                { key: 'currency', label: 'Currency ($1,234.00)', tag: '{' + field + ':currency}' },
-                { key: 'date_long', label: 'Date — April 17, 2026', tag: '{' + field + ':MMMM d, yyyy}' },
-                { key: 'date_short', label: 'Date — 04/17/2026', tag: '{' + field + ':MM/dd/yyyy}' },
-                { key: 'number', label: 'Number (1,234)', tag: '{' + field + ':number}' },
-                { key: 'percent', label: 'Percent (15.5%)', tag: '{' + field + ':percent}' },
-                { key: 'checkbox', label: 'Checkbox [X]/[ ]', tag: '{' + field + ':checkbox}' },
-                { key: 'label', label: 'Picklist label', tag: '{' + field + ':label}' },
-                { key: 'qr', label: 'QR code', tag: '{*' + field + ':qr:200}' },
-                { key: 'barcode', label: 'Barcode (Code 128)', tag: '{*' + field + ':code128:300x80}' },
-                { key: 'image', label: 'Image field', tag: '{%' + field + '}' }
-            ].map((o) => ({ ...o, active: o.tag === raw }));
+            const f = field;
+            const opt = (key, label, tag) => ({
+                key,
+                label,
+                tag,
+                cls: tag === raw ? 'dg-pill-menu-item dg-pill-menu-item_active' : 'dg-pill-menu-item'
+            });
+            const cur = (code, sample) => opt('cur_' + code, code + '  ' + sample, '{' + f + ':currency:' + code + '}');
+            const dt = (pat, sample) => opt('dt_' + pat, sample, '{' + f + ':' + pat + '}');
+            sections = [
+                {
+                    key: 'text',
+                    label: 'Text',
+                    options: [
+                        opt('plain', 'Plain text', '{' + f + '}'),
+                        opt('label', 'Picklist label', '{' + f + ':label}'),
+                        opt('checkbox', 'Checkbox [X]/[ ]', '{' + f + ':checkbox}')
+                    ]
+                },
+                {
+                    key: 'currency',
+                    label: 'Currency',
+                    options: [
+                        opt('currency', "User's currency — $1,234.00", '{' + f + ':currency}'),
+                        cur('USD', '$1,234.56'),
+                        cur('EUR', '1.234,56 €'),
+                        cur('GBP', '£1,234.56'),
+                        cur('JPY', '¥1,235'),
+                        cur('CAD', 'CA$1,234.56'),
+                        cur('AUD', 'A$1,234.56'),
+                        cur('CHF', "CHF 1'234.56"),
+                        cur('CNY', '¥1,234.56'),
+                        cur('INR', '₹1,23,456.00'),
+                        cur('BRL', 'R$ 1.234,56'),
+                        cur('MXN', 'MX$1,234.56')
+                    ]
+                },
+                {
+                    key: 'dates',
+                    label: 'Dates',
+                    options: [
+                        opt('date_user', "User's locale date", '{' + f + ':date}'),
+                        dt('MMMM d, yyyy', 'April 17, 2026 — US long'),
+                        dt('MMM d, yyyy', 'Apr 17, 2026'),
+                        dt('MM/dd/yyyy', '04/17/2026 — US'),
+                        dt('dd/MM/yyyy', '17/04/2026 — UK · EU'),
+                        dt('d MMMM yyyy', '17 April 2026 — EU long'),
+                        dt('dd.MM.yyyy', '17.04.2026 — DE · CH'),
+                        dt('yyyy-MM-dd', '2026-04-17 — ISO'),
+                        dt('yyyy年M月d日', '2026年4月17日 — JP'),
+                        dt('EEEE, MMMM d, yyyy', 'Friday, April 17, 2026'),
+                        dt('MMMM yyyy', 'April 2026 — month only'),
+                        dt('MMMM d, yyyy h:mm a', 'April 17, 2026 3:45 PM')
+                    ]
+                },
+                {
+                    key: 'numbers',
+                    label: 'Numbers',
+                    options: [
+                        opt('number', 'Number — 1,234', '{' + f + ':number}'),
+                        dt('#,##0.00', '1,234.50 — two decimals'),
+                        dt('#,##0', '1,235 — whole'),
+                        dt('0.00', '1234.50 — no thousands'),
+                        opt('percent', 'Percent — 15.5%', '{' + f + ':percent}')
+                    ]
+                },
+                {
+                    key: 'other',
+                    label: 'Codes & images',
+                    options: [
+                        opt('qr', 'QR code', '{*' + f + ':qr:200}'),
+                        opt('barcode', 'Barcode (Code 128)', '{*' + f + ':code128:300x80}'),
+                        opt('image', 'Image field', '{%' + f + '}')
+                    ]
+                }
+            ];
         }
         // Position the menu just under the pill, relative to the canvas column.
         const col = this.template.querySelector('.dg-designer-canvas-col');
@@ -6394,8 +6457,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const rect = pill.getBoundingClientRect();
         this.pillMenu = {
             tagText: raw,
-            options,
-            hasOptions: options.length > 0,
+            sections,
+            hasOptions: sections.length > 0,
             posStyle:
                 'left: ' + Math.max(0, rect.left - colRect.left) + 'px; top: ' + (rect.bottom - colRect.top + 6) + 'px;'
         };

@@ -1695,16 +1695,23 @@
                                             </button>
                                         </div>
                                         <template if:true={pillMenu.hasOptions}>
-                                            <template for:each={pillMenu.options} for:item="opt">
-                                                <button
-                                                    key={opt.key}
-                                                    class="dg-pill-menu-item"
-                                                    data-tag={opt.tag}
-                                                    onclick={handlePillTransform}
-                                                >
-                                                    {opt.label}
-                                                </button>
-                                            </template>
+                                            <div class="dg-pill-menu-scroll">
+                                                <template for:each={pillMenu.sections} for:item="sec">
+                                                    <div key={sec.key}>
+                                                        <div class="dg-pill-menu-sec">{sec.label}</div>
+                                                        <template for:each={sec.options} for:item="opt">
+                                                            <button
+                                                                key={opt.key}
+                                                                class={opt.cls}
+                                                                data-tag={opt.tag}
+                                                                onclick={handlePillTransform}
+                                                            >
+                                                                {opt.label}
+                                                            </button>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
                                         </template>
                                         <button class="dg-pill-menu-item" onclick={handlePillEdit}>
                                             Edit tag&#8230; (or double-click the pill)

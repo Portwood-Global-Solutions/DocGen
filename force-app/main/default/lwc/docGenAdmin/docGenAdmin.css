@@ -1248,3 +1248,28 @@
     padding: 2px 8px;
     cursor: help;
 }
+
+.dg-pill-menu-scroll {
+    max-height: 340px;
+    overflow-y: auto;
+}
+
+.dg-pill-menu-sec {
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #9a93b5;
+    padding: 7px 10px 3px 10px;
+    border-top: 1px solid #f0eef8;
+    margin-top: 2px;
+}
+
+.dg-pill-menu-sec:first-child {
+    border-top: 0;
+}
+
+.dg-pill-menu-item_active {
+    background: #f4f2ff;
+    outline: 1px solid #c9b8f5;
+}
