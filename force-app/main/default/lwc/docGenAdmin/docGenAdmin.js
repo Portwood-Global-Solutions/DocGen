@@ -1506,7 +1506,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         });
                         // Column resize: grab a cell's right edge and drag.
                         pv.addEventListener('mousemove', (e) => this._tableResizeHover(e, pv));
-                        pv.addEventListener('mousedown', (e) => this._tableResizeStart(e, pv));
+                        pv.addEventListener('mousedown', (e) => {
+                            // Nested-contenteditable blur is unreliable — a click
+                            // outside an in-edit pill commits it explicitly, so
+                            // the user is never "caught" inside the pill.
+                            if (this._editingPill && !this._editingPill.contains(e.target) && this._finishPillEdit) {
+                                this._finishPillEdit();
+                            }
+                            this._tableResizeStart(e, pv);
+                        });
                         // Chip drops staged by the document-level drag listener
                         // execute HERE — pv listeners are the context where DOM
                         // insertion reliably works under LWS.
@@ -6381,6 +6389,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         pill.setAttribute('contenteditable', 'true');
         pill.style.borderStyle = 'dashed';
         pill.style.cursor = 'text';
+        this._editingPill = pill;
         try {
             const range = document.createRange();
             range.selectNodeContents(pill);
@@ -6391,6 +6400,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             /* selection best-effort */
         }
         const finish = () => {
+            if (this._editingPill !== pill) {
+                return; // already committed (blur + outside-click both fired)
+            }
+            this._editingPill = null;
             pill.removeEventListener('blur', finish);
             let t = (pill.textContent || '').trim();
             if (!t || t === '{}' || t === '{' || t === '}') {
@@ -6408,12 +6421,31 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             pill.setAttribute('contenteditable', 'false');
             pill.style.cssText = this._pillStyleFor(t);
             this.htmlEditorDirty = true;
+            // Park the caret AFTER the pill — leaving it inside means the next
+            // keystrokes grow the pill instead of typing beside it.
+            try {
+                const host = this.template.querySelector('.dg-visual-host');
+                const pv = host && host.querySelector('.dg-pv');
+                const r = document.createRange();
+                r.setStartAfter(pill);
+                r.collapse(true);
+                const s = window.getSelection();
+                s.removeAllRanges();
+                s.addRange(r);
+                if (pv) {
+                    pv.focus();
+                }
+            } catch (e) {
+                /* caret parking best-effort */
+            }
         };
+        this._finishPillEdit = finish;
         pill.addEventListener('blur', finish);
         pill.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' || e.key === 'Escape') {
                 e.preventDefault();
-                pill.blur();
+                e.stopPropagation();
+                finish();
             }
         });
         pill.focus();
