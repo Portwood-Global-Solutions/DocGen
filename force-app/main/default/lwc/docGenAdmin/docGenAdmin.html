@@ -1232,7 +1232,56 @@
                         </div>
 
                         <div class="dg-html-editor-statusbar">
+                            <div class="dg-mode-seg" role="tablist" aria-label="Editor mode">
+                                <button
+                                    class={visualModeBtnClass}
+                                    onclick={handleSelectVisualMode}
+                                    title="Edit the document as it renders — click anywhere and type"
+                                >
+                                    Visual
+                                </button>
+                                <button
+                                    class={sourceModeBtnClass}
+                                    onclick={handleSelectSourceMode}
+                                    title="Edit the raw HTML with a live full-page preview below"
+                                >
+                                    Source
+                                </button>
+                            </div>
+                            <template if:true={selectionContextLabel}>
+                                <span class="dg-context-label">{selectionContextLabel}</span>
+                            </template>
                             <span class={htmlEditorStatusClass}>{htmlEditorStatusText}</span>
+                            <span class="dg-fmt-label">Page</span>
+                            <select
+                                class="dg-page-select"
+                                data-field="size"
+                                onchange={handlePageSetupChange}
+                                title="Page size"
+                            >
+                                <option value="Letter">Letter</option>
+                                <option value="Legal">Legal</option>
+                                <option value="A4">A4</option>
+                            </select>
+                            <select
+                                class="dg-page-select"
+                                data-field="orient"
+                                onchange={handlePageSetupChange}
+                                title="Orientation"
+                            >
+                                <option value="portrait">Portrait</option>
+                                <option value="landscape">Landscape</option>
+                            </select>
+                            <select
+                                class="dg-page-select"
+                                data-field="margin"
+                                onchange={handlePageSetupChange}
+                                title="Page margins"
+                            >
+                                <option value="0.5">0.5&quot; margins</option>
+                                <option value="0.75">0.75&quot; margins</option>
+                                <option value="1">1&quot; margins</option>
+                            </select>
                             <lightning-button
                                 label="Format Code"
                                 icon-name="utility:magicwand"
@@ -1240,14 +1289,6 @@
                                 data-target="body"
                                 onclick={handleFormatHtml}
                                 title="Pretty-print the HTML: indent nested tags without touching text or merge tags."
-                                class="slds-var-m-left_small"
-                            ></lightning-button>
-                            <lightning-button
-                                label={visualToggleLabel}
-                                icon-name="utility:preview"
-                                variant="base"
-                                onclick={handleToggleHtmlVisual}
-                                title="See and edit the document as it renders — click anywhere and type. Your @page/style shell is never touched; structure work happens in Code."
                                 class="slds-var-m-left_small"
                             ></lightning-button>
                             <lightning-button

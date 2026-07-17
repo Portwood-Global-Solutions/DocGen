@@ -392,6 +392,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track showHtmlBodyVisual = false;
     _visualOriginalCode = null;
     _visualEnteredDom = null;
+    // What the caret is on ("Editing: Table cell") — answers "what am I
+    // about to color?"
+    @track selectionContextLabel = '';
+    // Canvas page setup, mirrored into the template's @page rule.
+    @track pageSetup = { size: 'Letter', orient: 'portrait', margin: '0.75' };
     // Last HTML body text this session touched (upload, starter, or Apply) so
     // reopening the editor doesn't need a server round-trip.
     _lastUploadedHtmlText = null;
@@ -1237,6 +1242,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // --- Wizard Logic ---
 
+    disconnectedCallback() {
+        if (this._selListenerAdded) {
+            document.removeEventListener('selectionchange', this._onSelectionChange);
+            this._selListenerAdded = false;
+        }
+    }
+
     renderedCallback() {
         // Sync native textarea DOM value with tracked property after re-render
         if (this.currentWizardStep === '2' && this.newTemplateQuery) {
@@ -1249,6 +1261,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const ta = this.template.querySelector('.edit-query-textarea');
             if (ta && ta.value !== this.editTemplateQuery) {
                 ta.value = this.editTemplateQuery;
+            }
+        }
+        // Page-setup selects: LWC doesn't bind value on native <select>, so
+        // mirror state into the DOM the same way the query textareas do.
+        for (const sel of this.template.querySelectorAll('.dg-page-select')) {
+            const want = this.pageSetup[sel.dataset.field];
+            if (want != null && sel.value !== want) {
+                sel.value = want;
             }
         }
         // Inline HTML preview: the lwc:dom="manual" host only exists after the
@@ -1285,6 +1305,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             }
                         });
                         pv.addEventListener('drop', (e) => this._handleVisualDrop(e, pv));
+                        // Live dirty signal while typing in the page.
+                        pv.addEventListener('input', () => {
+                            this.htmlEditorDirty = true;
+                        });
+                        // Sheet dimensions follow the page setup.
+                        this._applyCanvasDimensions();
+                        // Context label ("Editing: Table cell") follows the caret.
+                        if (!this._selListenerAdded) {
+                            document.addEventListener('selectionchange', this._onSelectionChange);
+                            this._selListenerAdded = true;
+                        }
                         // Snapshot AFTER pillify so "unchanged" compares
                         // like-for-like on exit.
                         this._visualEnteredDom = pv.innerHTML;
@@ -4556,6 +4587,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * state. Throws on failure — callers own the error toast.
      */
     async _processAndSaveHtmlBody(templateId, htmlText, fileName, zipImages, source) {
+        // GUARD: never stage editor-internal artifacts. If a preview-wrapped
+        // payload (scoped .dg-pv page), tag pills, or drop markers slip in —
+        // e.g. from a stale cached bundle's older code path — unwrap and
+        // strip them so the stored body is always clean template HTML.
+        htmlText = this._sanitizeStagedHtml(htmlText);
         const imagePaths = (zipImages && zipImages.imagePaths) || [];
         const imageBytes = (zipImages && zipImages.imageBytes) || [];
 
@@ -4663,6 +4699,60 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return rewritten;
     }
 
+    /**
+     * Strip every editor-internal artifact from HTML about to be staged:
+     * tag pills back to plain text, drop markers gone, and — if the text is
+     * (or contains) a scoped preview page — unwrap .dg-pv and remove the
+     * injected preview <style>. Idempotent on clean input.
+     */
+    _sanitizeStagedHtml(html) {
+        if (
+            !html ||
+            (html.indexOf('data-dg-tag') === -1 &&
+                html.indexOf('dg-pv') === -1 &&
+                html.indexOf('dg-drop-marker') === -1)
+        ) {
+            return html;
+        }
+        try {
+            const tpl = document.createElement('template');
+            tpl.innerHTML = html;
+            const root = tpl.content;
+            for (const marker of root.querySelectorAll('.dg-drop-marker')) {
+                marker.remove();
+            }
+            this._unpillifyTags(root);
+            const pv = root.querySelector('div.dg-pv');
+            if (pv) {
+                // Preview-wrapped payload: keep only the page content, minus
+                // the injected scoped stylesheet.
+                for (const styleEl of pv.querySelectorAll(':scope > style')) {
+                    styleEl.remove();
+                }
+                const inner = pv.innerHTML.trim();
+                // Preserve an original shell if one wrapped the preview; else
+                // the content becomes the document body in a minimal shell.
+                const bodyRe = /(<body\b[^>]*>)[\s\S]*?(<\/body\s*>)/i;
+                const outer = html.replace(/[\s\S]*/, ''); // placeholder, replaced below
+                void outer;
+                if (bodyRe.test(html) && !/class="dg-pv"/.test(html.split(/<body\b[^>]*>/i)[0] || '')) {
+                    return html.replace(bodyRe, (m, open, close) => open + '\n' + inner + '\n' + close);
+                }
+                return (
+                    '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<style>\n@page { size: Letter portrait; margin: 0.75in; }\nbody { font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #1a1a1a; }\n</style>\n</head>\n<body>\n' +
+                    inner +
+                    '\n</body>\n</html>\n'
+                );
+            }
+            // No pv wrapper — serialize the cleaned fragment back out.
+            const container = document.createElement('div');
+            container.appendChild(root.cloneNode(true));
+            return container.innerHTML;
+        } catch (e) {
+            return html;
+        }
+    }
+
     // --- HTML body editor (paste-back surface) ---
     get htmlBodyEditorToggleLabel() {
         return this.showHtmlBodyEditor ? 'Hide HTML Editor' : 'Edit HTML';
@@ -4711,6 +4801,114 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     get codeSplitClass() {
         return this.showHtmlBodyVisual ? 'dg-code-split slds-hide' : 'dg-code-split';
+    }
+
+    // --- Visual | Source segmented switch (persistent header, like any editor) ---
+    get visualModeBtnClass() {
+        return this.showHtmlBodyVisual
+            ? 'dg-fmt-btn dg-fmt-btn_word dg-mode-btn dg-mode-btn_active'
+            : 'dg-fmt-btn dg-fmt-btn_word dg-mode-btn';
+    }
+
+    get sourceModeBtnClass() {
+        return this.showHtmlBodyVisual
+            ? 'dg-fmt-btn dg-fmt-btn_word dg-mode-btn'
+            : 'dg-fmt-btn dg-fmt-btn_word dg-mode-btn dg-mode-btn_active';
+    }
+
+    handleSelectVisualMode() {
+        if (!this.showHtmlBodyVisual) {
+            const ta = this.template.querySelector('.dg-html-body-editor');
+            this._enterVisualMode((ta && ta.value) || '');
+        }
+    }
+
+    handleSelectSourceMode() {
+        if (this.showHtmlBodyVisual) {
+            this._exitVisualMode();
+        }
+    }
+
+    // --- Page setup: size / orientation / margins → @page rule + canvas sheet ---
+    get pageSizeChoices() {
+        return [
+            { key: 'Letter', label: 'Letter' },
+            { key: 'Legal', label: 'Legal' },
+            { key: 'A4', label: 'A4' }
+        ];
+    }
+
+    _parsePageSetup(code) {
+        const setup = { size: 'Letter', orient: 'portrait', margin: '0.75' };
+        const m = /@page\s*\{([^}]*)\}/i.exec(code || '');
+        if (m) {
+            const body = m[1];
+            const sm = /size\s*:\s*(letter|legal|a4)\s*(portrait|landscape)?/i.exec(body);
+            if (sm) {
+                const raw = sm[1].toLowerCase();
+                setup.size = raw === 'a4' ? 'A4' : raw.charAt(0).toUpperCase() + raw.slice(1);
+                if (sm[2]) {
+                    setup.orient = sm[2].toLowerCase();
+                }
+            }
+            const mm = /margin\s*:\s*([\d.]+)\s*in/i.exec(body);
+            if (mm) {
+                setup.margin = mm[1];
+            }
+        }
+        this.pageSetup = setup;
+    }
+
+    handlePageSetupChange(event) {
+        const field = event.currentTarget.dataset.field;
+        this.pageSetup = { ...this.pageSetup, [field]: event.currentTarget.value };
+        this._applyPageSetup();
+    }
+
+    _applyPageSetup() {
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        if (!ta) {
+            return;
+        }
+        const rule =
+            '@page { size: ' +
+            this.pageSetup.size +
+            ' ' +
+            this.pageSetup.orient +
+            '; margin: ' +
+            this.pageSetup.margin +
+            'in; }';
+        let code = ta.value || '';
+        if (/@page\s*\{[^}]*\}/i.test(code)) {
+            code = code.replace(/@page\s*\{[^}]*\}/i, rule);
+        } else if (/<style\b[^>]*>/i.test(code)) {
+            code = code.replace(/<style\b[^>]*>/i, (m) => m + '\n        ' + rule);
+        } else {
+            code = '<style>\n' + rule + '\n</style>\n' + code;
+        }
+        ta.value = code;
+        this._visualOriginalCode = code;
+        this.htmlEditorDirty = true;
+        this._applyCanvasDimensions();
+        this._refreshCodePreview();
+    }
+
+    /** Make the on-screen sheet match the page setup (Lucid-style canvas). */
+    _applyCanvasDimensions() {
+        const host = this.template.querySelector('.dg-visual-host');
+        const pv = host && host.querySelector('.dg-pv');
+        if (!pv) {
+            return;
+        }
+        const widths = { Letter: 816, Legal: 816, A4: 794 };
+        const heights = { Letter: 1056, Legal: 1344, A4: 1123 };
+        const w =
+            this.pageSetup.orient === 'landscape'
+                ? heights[this.pageSetup.size] || 1056
+                : widths[this.pageSetup.size] || 816;
+        const pad = Math.round(parseFloat(this.pageSetup.margin || '0.75') * 96);
+        pv.style.maxWidth = w + 'px';
+        pv.style.padding = pad + 'px';
     }
 
     // --- Format Code + Code ⇄ Preview (shared by the HTML editor and the DOCX viewer) ---
@@ -4798,6 +4996,74 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleFmtMouseDown(event) {
         event.preventDefault();
     }
+
+    /** Caret with no selection? Format the word under it — click, color, done. */
+    _expandCaretToWord() {
+        try {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount || !sel.isCollapsed || typeof sel.modify !== 'function') {
+                return;
+            }
+            const host = this.template.querySelector('.dg-visual-host');
+            const pv = host && host.querySelector('.dg-pv');
+            const anchorEl =
+                sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
+            if (pv && anchorEl && pv.contains(anchorEl)) {
+                sel.modify('move', 'backward', 'word');
+                sel.modify('extend', 'forward', 'word');
+            }
+        } catch (e) {
+            /* best effort */
+        }
+    }
+
+    /** Toolbar breadcrumb: what element is the caret inside? */
+    _onSelectionChange = () => {
+        if (!this.showHtmlBodyVisual || this.activeMainTab !== 'design') {
+            return;
+        }
+        let node = null;
+        try {
+            const sel = window.getSelection();
+            node = sel && sel.anchorNode;
+        } catch (e) {
+            return;
+        }
+        while (node && node.nodeType === 3) {
+            node = node.parentNode;
+        }
+        const host = this.template.querySelector('.dg-visual-host');
+        const pv = host && host.querySelector('.dg-pv');
+        if (!node || !pv || !pv.contains(node)) {
+            this.selectionContextLabel = '';
+            return;
+        }
+        const names = {
+            H1: 'Title',
+            H2: 'Heading',
+            H3: 'Heading',
+            P: 'Paragraph',
+            TD: 'Table cell',
+            TH: 'Header cell',
+            LI: 'List item',
+            B: 'Bold text',
+            STRONG: 'Bold text',
+            I: 'Italic text',
+            EM: 'Italic text',
+            IMG: 'Image'
+        };
+        let label = '';
+        let el = node;
+        while (el && el !== pv) {
+            const n = names[el.tagName];
+            if (n) {
+                label = n;
+                break;
+            }
+            el = el.parentElement;
+        }
+        this.selectionContextLabel = 'Editing: ' + (label || 'Page');
+    };
 
     // --- Table tools (visual mode): operate on the cell holding the caret ---
     _selectedTableCell() {
@@ -4893,6 +5159,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!cmd) {
             return;
         }
+        if (/^(bold|italic|underline|foreColor|hiliteColor|fontName|fontSize)$/.test(cmd)) {
+            this._expandCaretToWord();
+        }
         try {
             document.execCommand('styleWithCSS', false, 'true');
             const ok = document.execCommand(cmd, false, value);
@@ -4953,6 +5222,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             return;
         }
+        this._expandCaretToWord();
         try {
             document.execCommand('styleWithCSS', false, 'true');
             if (document.execCommand(cmd, false, value)) {
@@ -4989,6 +5259,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _enterVisualMode(html) {
         this._visualOriginalCode = html;
         this._visualEnteredDom = null; // captured in renderedCallback after mount
+        this._parsePageSetup(html);
         this.showHtmlBodyVisual = true;
         // Reuse the preview pipeline, but flag the write as editable so
         // renderedCallback turns the rendered page into an editor.
@@ -5005,11 +5276,28 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      */
     _pillifyTags(root) {
         const doc = root.ownerDocument || document;
+        // Repair pass: flatten any pill-inside-pill layering left behind by
+        // older bundles before wrapping anything new.
+        let nested = root.querySelectorAll('[data-dg-tag] [data-dg-tag]');
+        while (nested.length) {
+            for (const inner of nested) {
+                inner.replaceWith(doc.createTextNode(inner.textContent));
+            }
+            nested = root.querySelectorAll('[data-dg-tag] [data-dg-tag]');
+        }
         const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
         const targets = [];
         while (walker.nextNode()) {
             const node = walker.currentNode;
-            if (/\{[^{}]+\}/.test(node.nodeValue) && (!node.parentElement || node.parentElement.tagName !== 'STYLE')) {
+            const parent = node.parentElement;
+            // Never wrap inside <style>, and NEVER inside an existing pill —
+            // re-pillifying pill text nests a new layer on every insert.
+            if (
+                /\{[^{}]+\}/.test(node.nodeValue) &&
+                parent &&
+                parent.tagName !== 'STYLE' &&
+                !parent.closest('[data-dg-tag]')
+            ) {
                 targets.push(node);
             }
         }
@@ -5341,10 +5629,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.showImagePanel = true;
         await this._loadBodyIntoEditor();
         this._loadTemplateImages();
-        const body = this._lastUploadedHtmlText;
-        if (body && body.trim()) {
-            this._enterVisualMode(body);
+        let body = this._lastUploadedHtmlText;
+        if (!body || !body.trim()) {
+            // Blank template: seed a clean sheet so click-and-type just works.
+            body =
+                '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<style>\n@page { size: Letter portrait; margin: 0.75in; }\nbody { font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #1a1a1a; }\n</style>\n</head>\n<body>\n<p>Start typing your document here — or drag in blocks, tags, and images from the rail.</p>\n</body>\n</html>\n';
+            this._syncHtmlBodyEditorDom(body);
         }
+        this._enterVisualMode(body);
     }
 
     handleCloseDesigner() {
