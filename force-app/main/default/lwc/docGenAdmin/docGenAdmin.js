@@ -1341,6 +1341,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                                 this._beginPillEdit(pill);
                             }
                         });
+                        // Column resize: grab a cell's right edge and drag.
+                        pv.addEventListener('mousemove', (e) => this._tableResizeHover(e, pv));
+                        pv.addEventListener('mousedown', (e) => this._tableResizeStart(e, pv));
                         // Sheet dimensions follow the page setup.
                         this._applyCanvasDimensions();
                         // Context label ("Editing: Table cell") follows the caret.
@@ -4828,6 +4831,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (host && ta) {
             // eslint-disable-next-line @lwc/lwc/no-inner-html
             host.innerHTML = scopeHtmlForInlinePreview(ta.value || '');
+            const pv = host.querySelector('.dg-pv');
+            if (pv) {
+                // The preview sheet mirrors the page setup too.
+                this._applyCanvasDimensions(pv);
+            }
         }
     }
 
@@ -4944,29 +4952,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Make the on-screen sheet match the page setup (Lucid-style canvas). */
-    _applyCanvasDimensions() {
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
-        if (!pv) {
+    _applyCanvasDimensions(targetPv) {
+        const pvs = [];
+        if (targetPv) {
+            pvs.push(targetPv);
+        } else {
+            for (const hostSel of ['.dg-visual-host', '.dg-code-preview']) {
+                const host = this.template.querySelector(hostSel);
+                const pv = host && host.querySelector('.dg-pv');
+                if (pv) {
+                    pvs.push(pv);
+                }
+            }
+        }
+        if (!pvs.length) {
             return;
         }
         const widths = { Letter: 816, Legal: 816, A4: 794 };
         const heights = { Letter: 1056, Legal: 1344, A4: 1123 };
         let w;
+        let h;
         if (this.isCustomPageSize) {
             w = Math.round((parseFloat(this.pageSetup.customW) || 8.5) * 96);
+            h = Math.round((parseFloat(this.pageSetup.customH) || 11) * 96);
         } else {
-            w =
-                this.pageSetup.orient === 'landscape'
-                    ? heights[this.pageSetup.size] || 1056
-                    : widths[this.pageSetup.size] || 816;
+            const landscape = this.pageSetup.orient === 'landscape';
+            w = landscape ? heights[this.pageSetup.size] || 1056 : widths[this.pageSetup.size] || 816;
+            h = landscape ? widths[this.pageSetup.size] || 816 : heights[this.pageSetup.size] || 1056;
         }
         const marginVal = this.isCustomMargin
             ? parseFloat(this.pageSetup.customMargin) || 0.75
             : parseFloat(this.pageSetup.margin || '0.75');
         const pad = Math.round(marginVal * 96);
-        pv.style.maxWidth = w + 'px';
-        pv.style.padding = pad + 'px';
+        for (const pv of pvs) {
+            pv.style.maxWidth = w + 'px';
+            pv.style.width = w + 'px';
+            pv.style.minHeight = h + 'px';
+            pv.style.padding = pad + 'px';
+        }
     }
 
     // --- Format Code + Code ⇄ Preview (shared by the HTML editor and the DOCX viewer) ---
@@ -5238,6 +5261,50 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
         }
         this.htmlEditorDirty = true;
+    }
+
+    // --- Column drag-resize (grab a cell's right edge) ---
+    _resizeEdgeCell(event, pv) {
+        const cell = event.target && event.target.closest ? event.target.closest('td, th') : null;
+        if (!cell || !pv.contains(cell)) {
+            return null;
+        }
+        const rect = cell.getBoundingClientRect();
+        return event.clientX >= rect.right - 5 && event.clientX <= rect.right + 5 ? cell : null;
+    }
+
+    _tableResizeHover(event, pv) {
+        if (this._colResizing) {
+            return;
+        }
+        const cell = this._resizeEdgeCell(event, pv);
+        const hovered = event.target && event.target.closest ? event.target.closest('td, th') : null;
+        if (hovered) {
+            hovered.style.cursor = cell ? 'col-resize' : '';
+        }
+    }
+
+    _tableResizeStart(event, pv) {
+        const cell = this._resizeEdgeCell(event, pv);
+        if (!cell) {
+            return;
+        }
+        event.preventDefault();
+        this._colResizing = true;
+        const startX = event.clientX;
+        const startW = cell.getBoundingClientRect().width;
+        const doc = pv.ownerDocument || document;
+        const onMove = (ev) => {
+            cell.style.width = Math.max(24, startW + (ev.clientX - startX)) + 'px';
+        };
+        const onUp = () => {
+            doc.removeEventListener('mousemove', onMove);
+            doc.removeEventListener('mouseup', onUp);
+            this._colResizing = false;
+            this.htmlEditorDirty = true;
+        };
+        doc.addEventListener('mousemove', onMove);
+        doc.addEventListener('mouseup', onUp);
     }
 
     /** The block element (p, heading, list item, div, td) holding the caret. */
@@ -6000,15 +6067,83 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    /** Append markup to the editable visual page (visual mode only). */
+    /**
+     * Insert markup into the editable visual page — at the caret when there
+     * is one (chips keep it alive via mousedown-preventDefault), otherwise
+     * appended at the end.
+     */
     _insertIntoVisualPage(markup) {
         const host = this.template.querySelector('.dg-visual-host');
         const pv = host && host.querySelector('.dg-pv');
-        if (pv) {
-            pv.insertAdjacentHTML('beforeend', markup);
-            this._pillifyTags(pv);
-            this.htmlEditorDirty = true;
+        if (!pv) {
+            return;
         }
+        const doc = pv.ownerDocument || document;
+        const tpl = doc.createElement('template');
+        tpl.innerHTML = markup;
+        this._pillifyTags(tpl.content);
+        let inserted = false;
+        try {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount) {
+                const range = sel.getRangeAt(0);
+                let node = range.startContainer;
+                const el = node.nodeType === 3 ? node.parentElement : node;
+                if (el && pv.contains(el) && !el.closest('[data-dg-tag]')) {
+                    range.collapse(true);
+                    range.insertNode(tpl.content);
+                    inserted = true;
+                }
+            }
+        } catch (e) {
+            inserted = false;
+        }
+        if (!inserted) {
+            pv.appendChild(tpl.content);
+        }
+        this.htmlEditorDirty = true;
+    }
+
+    /** Table group's "+ Table": a styled 3-column data table at the caret. */
+    handleInsertTable() {
+        const th = 'background: #1f3a5f; color: #ffffff; text-align: left; padding: 5pt 7pt; font-size: 9.5pt';
+        const cell = 'padding: 5pt 7pt; border-bottom: 0.75pt solid #dddddd';
+        const snippet =
+            '\n<table style="width: 100%; border-collapse: collapse">' +
+            '<thead><tr>' +
+            '<th style="' +
+            th +
+            '">Column 1</th><th style="' +
+            th +
+            '">Column 2</th><th style="' +
+            th +
+            '">Column 3</th>' +
+            '</tr></thead><tbody>' +
+            '<tr><td style="' +
+            cell +
+            '">&nbsp;</td><td style="' +
+            cell +
+            '">&nbsp;</td><td style="' +
+            cell +
+            '">&nbsp;</td></tr>' +
+            '<tr><td style="' +
+            cell +
+            '">&nbsp;</td><td style="' +
+            cell +
+            '">&nbsp;</td><td style="' +
+            cell +
+            '">&nbsp;</td></tr>' +
+            '</tbody></table>\n';
+        if (this.showHtmlBodyVisual) {
+            this._insertIntoVisualPage(snippet);
+        } else {
+            this._insertAtEditorCursor(snippet);
+        }
+        this.showToast(
+            'Table added',
+            'Drag a cell edge to resize columns; use the Table tools for rows, columns, and borders.',
+            'success'
+        );
     }
 
     /** Purple insertion caret that tracks the pointer while dragging. */

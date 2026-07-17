@@ -1595,6 +1595,14 @@
                                         >
                                         <button
                                             class="dg-fmt-btn dg-fmt-btn_word"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleInsertTable}
+                                            title="Insert a 3-column table at your cursor"
+                                        >
+                                            + Table
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
                                             data-taction="rowAfter"
                                             onmousedown={handleFmtMouseDown}
                                             onclick={handleTableAction}
@@ -1765,6 +1773,7 @@
                                                         title={blk.title}
                                                         draggable="true"
                                                         ondragstart={handleTagDragStart}
+                                                        onmousedown={handleFmtMouseDown}
                                                         onclick={handleInsertTagSnippet}
                                                     >
                                                         {blk.label}
@@ -1795,6 +1804,7 @@
                                                         title={tag.title}
                                                         draggable="true"
                                                         ondragstart={handleTagDragStart}
+                                                        onmousedown={handleFmtMouseDown}
                                                         onclick={handleInsertTagSnippet}
                                                     >
                                                         {tag.label}
@@ -1856,6 +1866,7 @@
                                                     data-name={img.fileName}
                                                     draggable="true"
                                                     ondragstart={handleImageDragStart}
+                                                    onmousedown={handleFmtMouseDown}
                                                     onclick={handleInsertExistingImage}
                                                     title={img.fileName}
                                                 >
