@@ -1632,6 +1632,14 @@
                                 </button>
                                 <button
                                     class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="versions"
+                                    onclick={handlePanelToggle}
+                                    title="Load any previous version's body into the editor"
+                                >
+                                    Versions
+                                </button>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
                                     data-panel="hf"
                                     onclick={handlePanelToggle}
                                     title="Header and footer that repeat on every PDF page — with page numbers"
@@ -1774,6 +1782,96 @@
                                                 >Email hello@portwood.dev</a
                                             >
                                         </div>
+                                    </div>
+                                </template>
+                                <!-- Right-click context menu -->
+                                <template if:true={ctxMenu}>
+                                    <div class="dg-slash-menu dg-ctx-menu" style={ctxMenu.posStyle} role="menu">
+                                        <button class="dg-slash-item" onclick={handleCtxInsert}>
+                                            <span class="dg-slash-item-label">Insert&#8230;</span>
+                                            <span class="dg-slash-item-group">blocks &amp; tags</span>
+                                        </button>
+                                        <button
+                                            class="dg-slash-item"
+                                            data-cmd="bold"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleCtxFormat}
+                                        >
+                                            <span class="dg-slash-item-label"><b>Bold</b></span>
+                                        </button>
+                                        <button
+                                            class="dg-slash-item"
+                                            data-cmd="italic"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleCtxFormat}
+                                        >
+                                            <span class="dg-slash-item-label"><i>Italic</i></span>
+                                        </button>
+                                        <button
+                                            class="dg-slash-item"
+                                            data-kind="ul"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleCtxList}
+                                        >
+                                            <span class="dg-slash-item-label">&#8226; Bulleted list</span>
+                                        </button>
+                                        <button
+                                            class="dg-slash-item"
+                                            data-kind="ol"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleCtxList}
+                                        >
+                                            <span class="dg-slash-item-label">1. Numbered list</span>
+                                        </button>
+                                        <template if:true={ctxMenu.inTable}>
+                                            <div class="dg-slash-menu-head"><span>Table</span></div>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="rowAfter"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">+ Row below</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="colAfter"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">+ Column right</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="rowDel"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">&#8722; Delete row</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="colDel"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">&#8722; Delete column</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="repeatHeader"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">Repeat header each page</span>
+                                            </button>
+                                        </template>
+                                        <button
+                                            class="dg-slash-item dg-pill-menu-remove"
+                                            onclick={handleCtxDeleteBlock}
+                                        >
+                                            <span class="dg-slash-item-label">Delete this block</span>
+                                        </button>
                                     </div>
                                 </template>
                                 <template if:true={isLoadingHtmlBody}>
@@ -2283,6 +2381,33 @@
                                         </div>
                                     </template>
 
+                                    <template if:true={isPanelVersions}>
+                                        <div class="dg-image-panel">
+                                            <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                Load any version into the editor to view or branch from it. Loading
+                                                changes nothing — <strong>Save as New Version</strong> creates a new
+                                                version from whatever is loaded.
+                                            </p>
+                                            <template for:each={versions} for:item="ver">
+                                                <div key={ver.Id} class="dg-version-row">
+                                                    <div class="dg-version-meta">
+                                                        <span class={ver.activeClass}
+                                                            >{ver.VersionNumber} {ver.isActiveLabel}</span
+                                                        >
+                                                        <span class="dg-version-file">{ver.bodyCvFileName}</span>
+                                                    </div>
+                                                    <button
+                                                        class="dg-tag-chip"
+                                                        data-cvid={ver.bodyCvId}
+                                                        data-ver={ver.VersionNumber}
+                                                        onclick={handleLoadVersionIntoDesigner}
+                                                    >
+                                                        Load
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
                                     <template if:true={isPanelHf}>
                                         <div class="dg-image-panel">
                                             <p class="slds-text-body_small slds-var-m-bottom_x-small">

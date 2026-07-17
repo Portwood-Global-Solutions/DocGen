@@ -435,6 +435,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track pillMenu = null;
     // Notion-style slash-command menu: type "/" in the canvas → searchable insert palette.
     @track slashMenu = null;
+    // Right-click context menu in the canvas.
+    @track ctxMenu = null;
     _slashCtx = null;
     _slashSel = 0;
     // Floating searchable panels replace the fixed right rail: 'insert' | 'tags' | 'images' | 'watermark'.
@@ -1541,6 +1543,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             } else if (!pill) {
                                 this.pillMenu = null;
                                 this._closeSlashMenu();
+                                this.ctxMenu = null;
                             }
                         });
                         pv.addEventListener('dblclick', (e) => {
@@ -1553,6 +1556,32 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             // Word-style click-and-type: double-click empty page
                             // space starts a cursor right there.
                             this._placeCaretAtPoint(e, pv);
+                        });
+                        // Right-click: contextual menu (pill menu on pills;
+                        // insert/format/table actions elsewhere).
+                        pv.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            this._closeSlashMenu();
+                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+                            if (pill && pill.getAttribute('contenteditable') !== 'true') {
+                                this.ctxMenu = null;
+                                this._openPillMenu(pill);
+                                return;
+                            }
+                            this.pillMenu = null;
+                            this._placeCaretAtPoint(e, pv);
+                            const col = this.template.querySelector('.dg-designer-canvas-col');
+                            const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
+                            this._ctxPoint = { x: e.clientX, y: e.clientY };
+                            this.ctxMenu = {
+                                inTable: !!(e.target && e.target.closest && e.target.closest('td, th')),
+                                posStyle:
+                                    'left: ' +
+                                    Math.max(0, e.clientX - colRect.left) +
+                                    'px; top: ' +
+                                    (e.clientY - colRect.top + 4) +
+                                    'px;'
+                            };
                         });
                         // Column resize: grab a cell's right edge and drag.
                         pv.addEventListener('mousemove', (e) => this._tableResizeHover(e, pv));
@@ -6108,8 +6137,23 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const startX = event.clientX;
         const startW = cell.getBoundingClientRect().width;
         const doc = pv.ownerDocument || document;
+        // Fixed-layout tables (all Word-converted ones after the auto-fit)
+        // read column widths from <colgroup> cols and the FIRST row — writing
+        // only the grabbed cell does nothing there. Write all three.
+        const table = cell.closest('table');
+        const colIdx = Array.prototype.indexOf.call(cell.parentElement.children, cell);
+        const colEl = table ? table.querySelectorAll('colgroup col')[colIdx] : null;
+        const firstRowCell = table && table.rows.length ? table.rows[0].children[colIdx] : null;
         const onMove = (ev) => {
-            cell.style.width = Math.max(24, startW + (ev.clientX - startX)) + 'px';
+            const w = Math.max(24, startW + (ev.clientX - startX)) + 'px';
+            cell.style.width = w;
+            if (colEl) {
+                colEl.removeAttribute('width');
+                colEl.style.width = w;
+            }
+            if (firstRowCell && firstRowCell !== cell) {
+                firstRowCell.style.width = w;
+            }
         };
         const onUp = () => {
             doc.removeEventListener('mousemove', onMove);
@@ -7040,6 +7084,94 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return (this.templates || []).filter((t) => t[F.Type] === 'HTML').map((t) => ({ label: t.Name, value: t.Id }));
     }
 
+    // --- Right-click context menu handlers ---
+    handleCtxClose() {
+        this.ctxMenu = null;
+    }
+    handleCtxFormat(event) {
+        this.ctxMenu = null;
+        this.handleFormatAction(event);
+    }
+    handleCtxTable(event) {
+        this.ctxMenu = null;
+        this.handleTableAction(event);
+    }
+    handleCtxList(event) {
+        const ordered = event.currentTarget.dataset.kind === 'ol';
+        this.ctxMenu = null;
+        this._toggleListAtCaret(ordered);
+    }
+    handleCtxInsert() {
+        const pt = this._ctxPoint;
+        this.ctxMenu = null;
+        if (pt) {
+            this._openSlashMenuAtPoint(pt.x, pt.y);
+        }
+    }
+    handleCtxDeleteBlock() {
+        this.ctxMenu = null;
+        const blk = this._selectedBlockElement();
+        if (blk) {
+            blk.remove();
+            this.htmlEditorDirty = true;
+        }
+    }
+
+    /** Open the insert menu at an arbitrary point (right-click path — no typed
+     *  trigger, so executing an item skips trigger-text removal). */
+    _openSlashMenuAtPoint(x, y) {
+        this._slashQuery = '';
+        this._slashCtx = null;
+        this._slashSel = 0;
+        const col = this.template.querySelector('.dg-designer-canvas-col');
+        const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
+        this._renderSlashMenu({ left: x, bottom: y, width: 1, height: 1 }, colRect);
+    }
+
+    /** Versions panel: load any version's body into the editor (staged only
+     *  when the author saves — loading changes nothing by itself). */
+    async handleLoadVersionIntoDesigner(event) {
+        const cvId = event.currentTarget.dataset.cvid;
+        const verName = event.currentTarget.dataset.ver;
+        if (!cvId) {
+            return;
+        }
+        try {
+            const b64 = await getContentVersionBase64({ contentVersionId: cvId });
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) {
+                bytes[i] = bin.charCodeAt(i);
+            }
+            const text = new TextDecoder('utf-8').decode(bytes);
+            if (!/</.test(text.slice(0, 500))) {
+                this.showToast(
+                    'Not an HTML body',
+                    verName +
+                        ' points at a non-HTML file (e.g. the original .docx) — download it from Edit Template instead.',
+                    'warning'
+                );
+                return;
+            }
+            this.activePanel = null;
+            if (this.showHtmlBodyVisual) {
+                this._exitVisualMode();
+            }
+            this._syncHtmlBodyEditorDom(text);
+            this._lastUploadedHtmlText = text;
+            this.htmlEditorDirty = true;
+            this._enterVisualMode(text);
+            this.showToast(
+                'Loaded ' + verName,
+                'This version is now in the editor. Nothing changed yet — Save as New Version creates a NEW version from it.',
+                'success'
+            );
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Could not load version', msg, 'error');
+        }
+    }
+
     // --- Header / Footer panel (repeats on every PDF page) ---
     handleDesignerHeaderChange(event) {
         this.editTemplateHeaderHtml = event.target.value;
@@ -7209,8 +7341,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get isPanelHf() {
         return this.activePanel === 'hf';
     }
+    get isPanelVersions() {
+        return this.activePanel === 'versions';
+    }
     get showPanelSearch() {
-        return !this.isPanelWatermark && !this.isPanelHf;
+        return !this.isPanelWatermark && !this.isPanelHf && !this.isPanelVersions;
     }
     get floatPanelTitle() {
         return {
@@ -7218,7 +7353,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             tags: 'Merge tags',
             images: 'Image assets',
             watermark: 'Watermark',
-            hf: 'Header & Footer'
+            hf: 'Header & Footer',
+            versions: 'Version history'
         }[this.activePanel];
     }
     get panelSearchPlaceholder() {
@@ -7232,6 +7368,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._focusPanelSearch = !!this.activePanel;
         if (this.activePanel === 'images') {
             this._loadWizardAssets();
+        }
+        if (this.activePanel === 'versions' && this.editTemplateId) {
+            this.loadVersions(this.editTemplateId);
         }
     }
     handlePanelClose() {

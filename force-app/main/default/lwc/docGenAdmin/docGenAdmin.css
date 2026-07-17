@@ -1291,3 +1291,31 @@
     border-color: #7c3aed;
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
 }
+
+.dg-ctx-menu {
+    min-width: 220px;
+}
+
+.dg-version-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 2px;
+    border-bottom: 1px solid #f0eef8;
+}
+
+.dg-version-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.dg-version-file {
+    font-size: 0.68rem;
+    color: #9a93b5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
