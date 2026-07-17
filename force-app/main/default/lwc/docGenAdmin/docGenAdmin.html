@@ -1435,7 +1435,7 @@
             </lightning-tab>
 
             <!-- Full-screen template designer: the page is the canvas, palettes ride the rail -->
-            <lightning-tab label="Designer" value="design" onactive={handleTabActive}>
+            <lightning-tab label="Designer (Beta)" value="design" onactive={handleTabActive}>
                 <div class="slds-var-p-around_medium">
                     <template if:false={designerHasTemplate}>
                         <div class="slds-text-align_center slds-var-p-around_xx-large slds-text-color_weak">
@@ -1456,6 +1456,11 @@
                             <div class="dg-designer-toolbar">
                                 <div class="dg-designer-toolbar__title">
                                     <lightning-icon icon-name="utility:brush" size="small"></lightning-icon>
+                                    <span
+                                        class="dg-beta-chip"
+                                        title="The visual designer is in beta — rough edge? Report a Bug in the sidebar or email support@portwood.dev."
+                                        >BETA</span
+                                    >
                                     <div class="dg-designer-template-switch">
                                         <lightning-combobox
                                             variant="label-hidden"

@@ -1356,6 +1356,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /**
+     * Fit tables wider than the sheet (Word-conversion twips math, extra
+     * loop-tag cells) back onto the page: width 100% + table-layout fixed
+     * scales the authored column widths proportionally. The inline styles
+     * persist into the saved body, so the PDF is fixed too — flagged dirty
+     * and announced so the author knows their document was touched.
+     */
+    _fitOversizeTables(pv) {
+        try {
+            const cs = getComputedStyle(pv);
+            const contentW =
+                pv.getBoundingClientRect().width -
+                (parseFloat(cs.paddingLeft) || 0) -
+                (parseFloat(cs.paddingRight) || 0);
+            let fixed = 0;
+            for (const t of pv.querySelectorAll('table')) {
+                if (t.getBoundingClientRect().width > contentW + 1) {
+                    t.style.width = '100%';
+                    t.style.tableLayout = 'fixed';
+                    t.style.maxWidth = '100%';
+                    fixed++;
+                }
+            }
+            if (fixed) {
+                this.htmlEditorDirty = true;
+                this.showToast(
+                    'Table fit to page',
+                    fixed +
+                        (fixed === 1 ? ' table was' : ' tables were') +
+                        ' wider than the page and got scaled to fit — column proportions kept. Save as New Version keeps the fix.',
+                    'info'
+                );
+            }
+        } catch (e) {
+            /* best effort */
+        }
+    }
+
+    /**
      * Word-style "click and type": place the caret exactly where the user
      * double-clicked. Inside existing content the browser range is used
      * directly; in empty space below the last block, a fresh paragraph is
@@ -1595,6 +1633,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         }
                         // Sheet dimensions follow the page setup.
                         this._applyCanvasDimensions();
+                        // Word-converted tables with absolute widths can't be
+                        // tamed by max-width alone (auto layout won't shrink
+                        // below min-content) — refit them onto the sheet.
+                        this._fitOversizeTables(pv);
                         // Context label ("Editing: Table cell") follows the caret.
                         if (!this._selListenerAdded) {
                             document.addEventListener('selectionchange', this._onSelectionChange);
@@ -6853,7 +6895,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.editTemplateOutputFormat = 'PDF';
             this.showDocxHtmlViewer = false;
             // Stage the tuned HTML as the body through the standard pipeline.
-            await this._processAndSaveHtmlBody(this.editTemplateId, text, 'converted-from-word.html', null, 'editor');
+            // Keep the Word file's identity: Sales_Quote.docx → Sales_Quote.html.
+            const htmlName =
+                ((this.uploadedFileName || this.editTemplateName || 'template').replace(/\.(docx?|html?|zip)$/i, '') ||
+                    'template') + '.html';
+            await this._processAndSaveHtmlBody(this.editTemplateId, text, htmlName, null, 'editor');
             this.showHtmlBodyEditor = true;
             this._syncHtmlBodyEditorDom(text);
             await refreshApex(this.wiredTemplatesResult);

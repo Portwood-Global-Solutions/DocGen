@@ -1236,3 +1236,15 @@
     min-width: 220px;
     max-width: 300px;
 }
+
+.dg-beta-chip {
+    flex: 0 0 auto;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #fff;
+    background: linear-gradient(135deg, #7c3aed, #9f6bff);
+    border-radius: 8px;
+    padding: 2px 8px;
+    cursor: help;
+}
