@@ -719,6 +719,20 @@ export function buildBlockPalette(shape) {
                     title: 'Plain text block'
                 },
                 {
+                    key: 'blk_panel',
+                    label: 'Tinted panel',
+                    snippet:
+                        '\n<div style="background: #f2f6fc; padding: 10pt 12pt; margin: 8pt 0"><p style="margin: 0">Panel text — a soft background block for callouts, summaries, or sidebars.</p></div>\n',
+                    title: 'Light background panel — recolor it with the Cell/Fill swatches'
+                },
+                {
+                    key: 'blk_darkpanel',
+                    label: 'Dark panel',
+                    snippet:
+                        '\n<div style="background: #1f3a5f; color: #ffffff; padding: 10pt 12pt; margin: 8pt 0"><p style="margin: 0; color: #ffffff">Bold statement text on a navy panel.</p></div>\n',
+                    title: 'Navy background block with white text'
+                },
+                {
                     key: 'blk_callout',
                     label: 'Callout box',
                     snippet:

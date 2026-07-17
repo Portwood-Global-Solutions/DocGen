@@ -1317,18 +1317,28 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             }
                         });
                         pv.addEventListener('drop', (e) => this._handleVisualDrop(e, pv));
-                        // Live dirty signal while typing in the page.
+                        // Live dirty signal while typing in the page — and
+                        // type-to-pill: a completed {tag} snaps into a pill.
                         pv.addEventListener('input', () => {
                             this.htmlEditorDirty = true;
+                            this._maybePillifyTyped();
                         });
                         // Click a pill → its formatting menu; click elsewhere closes it.
+                        // Double-click a pill → edit its tag text in place.
                         pv.addEventListener('click', (e) => {
+                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+                            if (pill && pill.getAttribute('contenteditable') !== 'true') {
+                                e.preventDefault();
+                                this._openPillMenu(pill);
+                            } else if (!pill) {
+                                this.pillMenu = null;
+                            }
+                        });
+                        pv.addEventListener('dblclick', (e) => {
                             const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
                             if (pill) {
                                 e.preventDefault();
-                                this._openPillMenu(pill);
-                            } else {
-                                this.pillMenu = null;
+                                this._beginPillEdit(pill);
                             }
                         });
                         // Sheet dimensions follow the page setup.
@@ -5142,6 +5152,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const value = event.currentTarget.dataset.value || null;
         const cell = this._selectedTableCell();
         if (!cell) {
+            // Fill works everywhere: outside a table it colors the block the
+            // caret is in (paragraph, heading, list item, div panel).
+            if (action === 'cellFill') {
+                const blk = this._selectedBlockElement();
+                if (blk) {
+                    blk.style.background = value === 'transparent' ? '' : value;
+                    if (value !== 'transparent' && !blk.style.padding) {
+                        blk.style.padding = '6pt 8pt';
+                    }
+                    this.htmlEditorDirty = true;
+                    return;
+                }
+            }
             this.showToast(
                 'Click inside a table cell first',
                 'Put your cursor in the table you want to change, then use the table tools.',
@@ -5189,8 +5212,53 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
         } else if (action === 'cellFill') {
             cell.style.background = value === 'transparent' ? '' : value;
+        } else if (action === 'bordersAll') {
+            table.style.borderCollapse = 'collapse';
+            table.style.border = '1pt solid #444444';
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.border = '0.75pt solid #999999';
+            }
+        } else if (action === 'bordersOutline') {
+            table.style.borderCollapse = 'collapse';
+            table.style.border = '1pt solid #444444';
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.border = 'none';
+            }
+        } else if (action === 'bordersRows') {
+            table.style.borderCollapse = 'collapse';
+            table.style.border = 'none';
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.border = 'none';
+                c.style.borderBottom = '0.75pt solid #cccccc';
+            }
+        } else if (action === 'bordersNone') {
+            table.style.border = 'none';
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.border = 'none';
+            }
         }
         this.htmlEditorDirty = true;
+    }
+
+    /** The block element (p, heading, list item, div, td) holding the caret. */
+    _selectedBlockElement() {
+        let node = null;
+        try {
+            const sel = window.getSelection();
+            node = sel && sel.anchorNode;
+        } catch (e) {
+            return null;
+        }
+        while (node && node.nodeType === 3) {
+            node = node.parentNode;
+        }
+        const host = this.template.querySelector('.dg-visual-host');
+        const pv = host && host.querySelector('.dg-pv');
+        if (!node || !pv || !pv.contains(node) || !node.closest) {
+            return null;
+        }
+        const blk = node.closest('p, h1, h2, h3, h4, li, div, td, th');
+        return blk && pv.contains(blk) && blk !== pv ? blk : null;
     }
 
     /**
@@ -5440,6 +5508,113 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     handlePillMenuClose() {
         this.pillMenu = null;
+    }
+
+    handlePillEdit() {
+        if (this._activePill) {
+            this._beginPillEdit(this._activePill);
+        }
+        this.pillMenu = null;
+    }
+
+    /**
+     * Edit a pill's tag text in place (loop names, conditionals, modifiers —
+     * anything). Enter or clicking away commits; braces are auto-completed;
+     * an emptied pill removes itself.
+     */
+    _beginPillEdit(pill) {
+        this.pillMenu = null;
+        pill.setAttribute('contenteditable', 'true');
+        pill.style.borderStyle = 'dashed';
+        pill.style.cursor = 'text';
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(pill);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } catch (e) {
+            /* selection best-effort */
+        }
+        const finish = () => {
+            pill.removeEventListener('blur', finish);
+            let t = (pill.textContent || '').trim();
+            if (!t || t === '{}' || t === '{' || t === '}') {
+                pill.remove();
+                this.htmlEditorDirty = true;
+                return;
+            }
+            if (!t.startsWith('{')) {
+                t = '{' + t;
+            }
+            if (!t.endsWith('}')) {
+                t = t + '}';
+            }
+            pill.textContent = t;
+            pill.setAttribute('contenteditable', 'false');
+            pill.style.cssText = this._pillStyleFor(t);
+            this.htmlEditorDirty = true;
+        };
+        pill.addEventListener('blur', finish);
+        pill.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                pill.blur();
+            }
+        });
+        pill.focus();
+    }
+
+    /**
+     * Type-to-pill: when typing in the page completes a {tag} in a plain
+     * text node, snap it into a pill and put the caret right after it.
+     */
+    _maybePillifyTyped() {
+        try {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount || !sel.isCollapsed) {
+                return;
+            }
+            const node = sel.anchorNode;
+            if (!node || node.nodeType !== 3) {
+                return;
+            }
+            const parent = node.parentElement;
+            if (!parent || parent.tagName === 'STYLE' || parent.closest('[data-dg-tag]')) {
+                return;
+            }
+            const host = this.template.querySelector('.dg-visual-host');
+            const pv = host && host.querySelector('.dg-pv');
+            if (!pv || !pv.contains(node) || !/\{[^{}]+\}/.test(node.nodeValue)) {
+                return;
+            }
+            const doc = node.ownerDocument || document;
+            const frag = doc.createDocumentFragment();
+            let lastPill = null;
+            for (const part of node.nodeValue.split(/(\{[^{}]+\})/g)) {
+                if (/^\{[^{}]+\}$/.test(part)) {
+                    const pillEl = doc.createElement('span');
+                    pillEl.setAttribute('data-dg-tag', 'true');
+                    pillEl.setAttribute('contenteditable', 'false');
+                    pillEl.textContent = part;
+                    pillEl.style.cssText = this._pillStyleFor(part);
+                    frag.appendChild(pillEl);
+                    lastPill = pillEl;
+                } else if (part) {
+                    frag.appendChild(doc.createTextNode(part));
+                }
+            }
+            node.parentNode.replaceChild(frag, node);
+            if (lastPill) {
+                const r = doc.createRange();
+                r.setStartAfter(lastPill);
+                r.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(r);
+            }
+        } catch (e) {
+            /* best effort */
+        }
     }
 
     /** Pills back to plain merge-tag text (exit path). */

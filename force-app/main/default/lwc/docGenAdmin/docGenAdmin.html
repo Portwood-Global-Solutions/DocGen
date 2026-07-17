@@ -1364,6 +1364,9 @@
                                                 </button>
                                             </template>
                                         </template>
+                                        <button class="dg-pill-menu-item" onclick={handlePillEdit}>
+                                            Edit tag&#8230; (or double-click the pill)
+                                        </button>
                                         <button
                                             class="dg-pill-menu-item dg-pill-menu-remove"
                                             onclick={handlePillRemove}
@@ -1635,8 +1638,48 @@
                                         >
                                             Header Row
                                         </button>
-                                        <span class="dg-fmt-label" title="Fill the current cell's background"
-                                            >Cell</span
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Table borders">Borders</span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersAll"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Full grid — every cell outlined"
+                                        >
+                                            All
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersOutline"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Outline around the table only"
+                                        >
+                                            Outline
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersRows"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Horizontal row lines only"
+                                        >
+                                            Rows
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersNone"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="No borders"
+                                        >
+                                            None
+                                        </button>
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Fill the current cell — or, outside a table, the paragraph/panel the cursor is in"
+                                            >Fill</span
                                         >
                                         <template for:each={highlightSwatches} for:item="sw">
                                             <button
