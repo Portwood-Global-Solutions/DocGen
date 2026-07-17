@@ -53,6 +53,9 @@ import searchDataProviders from '@salesforce/apex/DocGenController.searchDataPro
 import getHtmlTemplateBody from '@salesforce/apex/DocGenController.getHtmlTemplateBody';
 import getConvertedHtmlSnapshot from '@salesforce/apex/DocGenController.getConvertedHtmlSnapshot';
 import listHtmlTemplateImages from '@salesforce/apex/DocGenController.listHtmlTemplateImages';
+import getAssets from '@salesforce/apex/DocGenController.getAssets';
+import createAsset from '@salesforce/apex/DocGenController.createAsset';
+import addAssetVersion from '@salesforce/apex/DocGenController.addAssetVersion';
 import validateDataProvider from '@salesforce/apex/DocGenController.validateDataProvider';
 
 // Schema
@@ -304,6 +307,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // HTML templates; 'file' exposes the classic Type picker for uploads.
     @track newAuthoringMode = 'starter';
     @track newStarterKey = 'report';
+    // One-click create: auto-built query + optional company logo asset
+    @track isAutoCreating = false;
+    @track newTemplateLogoName = '';
+    _logoFile = null;
     @track newTemplateSampleRecordId = '';
     @track sampleRecordData = null;
     isCreating = true;
@@ -1344,6 +1351,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // Column resize: grab a cell's right edge and drag.
                         pv.addEventListener('mousemove', (e) => this._tableResizeHover(e, pv));
                         pv.addEventListener('mousedown', (e) => this._tableResizeStart(e, pv));
+                        // Keep keystrokes OURS: Lightning binds "/" (and more)
+                        // to global shortcuts and doesn't recognize manual-DOM
+                        // contenteditable as an editing context.
+                        pv.addEventListener('keydown', (e) => e.stopPropagation());
+                        pv.addEventListener('keypress', (e) => e.stopPropagation());
+                        // Land ready-to-type: focus the page with the caret at
+                        // the first text block so the cursor is never a hunt.
+                        try {
+                            pv.focus();
+                            const first = pv.querySelector('p, h1, h2, h3, li, td');
+                            if (first) {
+                                const r = document.createRange();
+                                r.selectNodeContents(first);
+                                r.collapse(true);
+                                const s = window.getSelection();
+                                s.removeAllRanges();
+                                s.addRange(r);
+                            }
+                        } catch (e) {
+                            /* focus best-effort */
+                        }
                         // Sheet dimensions follow the page setup.
                         this._applyCanvasDimensions();
                         // Context label ("Editing: Table cell") follows the caret.
@@ -1569,6 +1597,179 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     handleStarterSelect(event) {
         this.newStarterKey = event.currentTarget.dataset.key;
+    }
+
+    handleLogoSelected(event) {
+        const file = event.target.files && event.target.files[0];
+        if (!file) {
+            return;
+        }
+        if (!/\.(png|jpe?g)$/i.test(file.name)) {
+            this.showToast('Unsupported logo', 'Use a .png or .jpg image.', 'error');
+            event.target.value = '';
+            return;
+        }
+        this._logoFile = file;
+        this.newTemplateLogoName = file.name;
+    }
+
+    /**
+     * The fluid path: name it, pick a design, click once. A sensible Query
+     * Config is auto-built from the object's describe (top fields + up to
+     * two child relationships), the template is created, the starter body
+     * attached, and the designer opens on the finished document.
+     */
+    async handleCreateAndDesign() {
+        if (!this.newTemplateName) {
+            this.showToast('Name it first', 'Give the template a name, then create.', 'error');
+            return;
+        }
+        if (this.dataSourceMode === 'record' && !this.newTemplateObject) {
+            this.showToast('Pick an object', 'Choose the Base Object this document is about.', 'error');
+            return;
+        }
+        this.isAutoCreating = true;
+        try {
+            if (this.dataSourceMode === 'record' && !(this.newTemplateQuery || '').trim()) {
+                this.newTemplateQuery = await this._buildDefaultQueryConfig(this.newTemplateObject);
+            }
+            await this.createTemplate();
+        } finally {
+            this.isAutoCreating = false;
+        }
+    }
+
+    /** Sensible default query from the object's describe — refinable later. */
+    async _buildDefaultQueryConfig(objectApiName) {
+        try {
+            const [fields, rels] = await Promise.all([
+                getObjectFields({ objectName: objectApiName }),
+                getChildRelationships({ objectName: objectApiName })
+            ]);
+            const names = (fields || []).map((f) => f.value);
+            const typeOf = {};
+            (fields || []).forEach((f) => {
+                typeOf[f.value] = f.type;
+            });
+            const PREF = [
+                'Name',
+                'Industry',
+                'Phone',
+                'Email',
+                'Website',
+                'Amount',
+                'StageName',
+                'CloseDate',
+                'Status',
+                'Title',
+                'Type',
+                'Description'
+            ];
+            const GOOD =
+                /^(STRING|CURRENCY|DOUBLE|INTEGER|PERCENT|DATE|DATETIME|EMAIL|PHONE|URL|PICKLIST|TEXTAREA|BOOLEAN)$/;
+            const SKIP =
+                /^(Id|OwnerId|CreatedById|LastModifiedById|SystemModstamp|IsDeleted|CurrencyIsoCode|Jigsaw.*|CleanStatus|PhotoUrl)$/;
+            const chosen = [];
+            for (const p of PREF) {
+                if (chosen.length < 6 && names.includes(p)) {
+                    chosen.push(p);
+                }
+            }
+            for (const f of names) {
+                if (chosen.length >= 6) {
+                    break;
+                }
+                if (!chosen.includes(f) && !SKIP.test(f) && !f.endsWith('Id') && GOOD.test(typeOf[f] || '')) {
+                    chosen.push(f);
+                }
+            }
+            if (!chosen.length) {
+                chosen.push('Name');
+            }
+            const parts = [chosen.join(', ')];
+            const RELPREF = ['Contacts', 'Opportunities', 'OpportunityLineItems', 'OrderItems', 'Cases', 'Assets'];
+            const NOISE =
+                /Histories|Feeds|Shares|Teams|ContentDocumentLinks|ProcessInstances|ActivityHistories|Emails|Events|Tasks|Notes|Attachments|DuplicateRecord|RecordAction|TopicAssign|Vote/i;
+            const picked = [];
+            for (const rp of RELPREF) {
+                const r = (rels || []).find((x) => x.value === rp);
+                if (r && picked.length < 2) {
+                    picked.push(r);
+                }
+            }
+            if (!picked.length && rels && rels.length) {
+                const r = rels.find((x) => !NOISE.test(x.value));
+                if (r) {
+                    picked.push(r);
+                }
+            }
+            for (const r of picked) {
+                try {
+                    const cf = await getObjectFields({ objectName: r.childObjectApiName });
+                    const cnames = (cf || []).map((f) => f.value);
+                    const cchosen = [];
+                    for (const p of [
+                        'Name',
+                        'FirstName',
+                        'LastName',
+                        'Email',
+                        'Title',
+                        'StageName',
+                        'Amount',
+                        'CloseDate',
+                        'Quantity',
+                        'UnitPrice',
+                        'TotalPrice',
+                        'Subject',
+                        'Status'
+                    ]) {
+                        if (cchosen.length < 4 && cnames.includes(p)) {
+                            cchosen.push(p);
+                        }
+                    }
+                    if (cchosen.length) {
+                        parts.push('(SELECT ' + cchosen.join(', ') + ' FROM ' + r.value + ')');
+                    }
+                } catch (e) {
+                    /* skip relationship */
+                }
+            }
+            return parts.join(', ');
+        } catch (e) {
+            return 'Name';
+        }
+    }
+
+    /** Wizard logo → the shared {%asset:logo} asset every template can use. */
+    async _ensureLogoAsset(templateId) {
+        if (!this._logoFile) {
+            return;
+        }
+        try {
+            const buffer = await this._logoFile.arrayBuffer();
+            const cvRes = await saveHtmlTemplateImage({
+                templateId,
+                fileName: this._logoFile.name,
+                base64Content: bytesToBase64(new Uint8Array(buffer))
+            });
+            const assets = (await getAssets()) || [];
+            let logo = assets.find((a) => a.assetKey === 'logo');
+            if (!logo) {
+                logo = await createAsset({ name: 'Company Logo', assetKey: 'logo' });
+            }
+            await addAssetVersion({ assetId: logo.id, contentVersionId: cvRes.contentVersionId });
+            this.showToast(
+                'Logo saved',
+                'Stored as the shared asset {%asset:logo} — your starter header uses it, and every future template can too.',
+                'success'
+            );
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('Logo not saved', msg + ' — you can add it later under Assets.', 'warning');
+        } finally {
+            this._logoFile = null;
+            this.newTemplateLogoName = '';
+        }
     }
 
     /** Word→HTML conversion expectation-setting, shown under the Type picker. */
@@ -3093,11 +3294,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.activeEditTab = 'document';
             this.openEditModal(newRow, 'document');
             if (authoringMode === 'starter') {
+                await this._ensureLogoAsset(record.id);
                 await this._applyStarterBody(record.id, starterKey, starterShape);
                 // Land straight in the full-screen designer with the starter open.
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
             } else if (authoringMode === 'ai') {
+                await this._ensureLogoAsset(record.id);
                 // AI path: designer opens in code view, ready for the paste-back.
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
@@ -6152,6 +6355,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const tpl = doc.createElement('template');
         tpl.innerHTML = markup;
         this._pillifyTags(tpl.content);
+        // Capture BEFORE insertion — insertNode empties the fragment.
+        const firstEl = tpl.content.firstElementChild;
         let inserted = false;
         try {
             const sel = window.getSelection();
@@ -6170,6 +6375,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         if (!inserted) {
             pv.appendChild(tpl.content);
+        }
+        // Never make the user hunt for what they just added.
+        if (firstEl && firstEl.scrollIntoView) {
+            try {
+                firstEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            } catch (e) {
+                /* best effort */
+            }
         }
         this.htmlEditorDirty = true;
     }
@@ -6498,6 +6711,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // default Type is HTML until the user picks "I Have an Existing File".
         this.newAuthoringMode = 'starter';
         this.newStarterKey = 'report';
+        this._logoFile = null;
+        this.newTemplateLogoName = '';
+        this.isAutoCreating = false;
         this.newTemplateType = 'HTML';
         this.newTemplateDesc = '';
         this.newTemplateQuery = '';

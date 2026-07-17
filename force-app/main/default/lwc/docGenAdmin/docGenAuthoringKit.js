@@ -194,6 +194,7 @@ function buildReport(shape) {
         .join('\n');
     const inner = `    <table>
         <tr>
+            <td style="width: 120pt; vertical-align: middle">{%asset:logo}</td>
             <td>
                 <h1>{Name}</h1>
                 <div class="meta">${humanizeField(shape.object)} Report</div>
@@ -218,6 +219,7 @@ ${sections}
 function buildLetter(shape) {
     const inner = `    <table>
         <tr>
+            <td style="width: 110pt; vertical-align: middle">{%asset:logo}</td>
             <td>
                 <h1 style="font-size: 14pt">Your Company Name</h1>
                 <div class="meta">123 Your Street &#8226; Your City, ST 00000 &#8226; (555) 555-0100</div>
@@ -281,6 +283,7 @@ function buildInvoice(shape) {
             : '';
     const inner = `    <table>
         <tr>
+            <td style="width: 110pt; vertical-align: middle">{%asset:logo}</td>
             <td>
                 <h1>INVOICE</h1>
                 <div class="meta">Your Company Name</div>

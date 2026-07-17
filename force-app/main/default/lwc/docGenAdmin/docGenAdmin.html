@@ -313,10 +313,37 @@
                                                 </div>
                                             </template>
                                         </div>
-                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
-                                            Your Query Config fields are merged into the design automatically — pick
-                                            data in the next step, review the HTML, done.
-                                        </p>
+                                        <div class="slds-var-m-top_small">
+                                            <label class="slds-form-element__label">Company logo (optional)</label>
+                                            <input type="file" accept=".png,.jpg,.jpeg" onchange={handleLogoSelected} />
+                                            <template if:true={newTemplateLogoName}>
+                                                <p class="slds-text-body_small slds-text-color_weak">
+                                                    {newTemplateLogoName} — saved as your shared logo, placed in the
+                                                    template header, reusable in every template.
+                                                </p>
+                                            </template>
+                                        </div>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="brand"
+                                                label="Create &amp; Open Designer"
+                                                icon-name="utility:magicwand"
+                                                onclick={handleCreateAndDesign}
+                                                disabled={isAutoCreating}
+                                            ></lightning-button>
+                                            <template if:true={isAutoCreating}>
+                                                <lightning-spinner
+                                                    alternative-text="Creating..."
+                                                    size="small"
+                                                    class="slds-var-m-left_small"
+                                                ></lightning-spinner>
+                                            </template>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                                One click: we pick sensible fields for your object automatically, build
+                                                the document, and open it in the designer. Refine fields anytime under
+                                                Query Configuration — or use Next to pick them yourself.
+                                            </p>
+                                        </div>
                                     </template>
 
                                     <!-- AI path: explain the prompt handoff -->
@@ -333,6 +360,26 @@
                                                 DocGen's merge-tag syntax, and the PDF engine's layout rules. Copy it
                                                 into Claude, ChatGPT, Gemini, or Copilot, then paste the returned HTML
                                                 into the template editor. No data leaves Salesforce unless you paste it.
+                                            </p>
+                                        </div>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="brand"
+                                                label="Create &amp; Open Designer"
+                                                icon-name="utility:magicwand"
+                                                onclick={handleCreateAndDesign}
+                                                disabled={isAutoCreating}
+                                            ></lightning-button>
+                                            <template if:true={isAutoCreating}>
+                                                <lightning-spinner
+                                                    alternative-text="Creating..."
+                                                    size="small"
+                                                    class="slds-var-m-left_small"
+                                                ></lightning-spinner>
+                                            </template>
+                                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                                One click: sensible fields are picked automatically and the designer
+                                                opens with your Copy AI Prompt ready.
                                             </p>
                                         </div>
                                     </template>
