@@ -816,6 +816,42 @@ private class DocGenHtmlTemplateTest {
         System.assert(!result.contains('<w:r>'), 'HTML output must not contain DOCX runs: ' + result);
     }
 
+    // Aggregate tags: full format-suffix surface (Dave's spec) — bare COUNT,
+    // :number, :currency, ISO+locale segments, and currency:auto=Field.
+    @IsTest
+    static void aggregateTagsSupportFullFormatSuffixes() {
+        List<Object> lines = new List<Object>{
+            new Map<String, Object>{ 'Amount' => 20000, 'UnitPrice' => 100 },
+            new Map<String, Object>{ 'Amount' => 30000, 'UnitPrice' => 155 }
+        };
+        Map<String, Object> data = new Map<String, Object>{
+            'CustomerCurrency__c' => 'EUR',
+            'Lines' => new Map<String, Object>{ 'records' => lines }
+        };
+        Test.startTest();
+        String outp = DocGenService.processXmlForTest(
+            '<p>C={COUNT:Lines}|CN={COUNT:Lines:number}|S={SUM:Lines.Amount}' +
+                '|SC={SUM:Lines.Amount:currency}|SDE={SUM:Lines.Amount:currency:EUR:de_DE}' +
+                '|AV={AVG:Lines.UnitPrice:currency}|MN={MIN:Lines.Amount:currency}' +
+                '|MX={MAX:Lines.Amount:currency:GBP}|AUTO={SUM:Lines.Amount:currency:auto=CustomerCurrency__c}</p>',
+            data,
+            'HTML'
+        );
+        Test.stopTest();
+        System.assert(outp.contains('C=2|'), 'bare COUNT: ' + outp);
+        System.assert(outp.contains('CN=2|'), 'COUNT:number: ' + outp);
+        System.assert(outp.contains('S=50000|'), 'raw SUM: ' + outp);
+        System.assert(outp.contains('SC=$50,000.00|'), 'SUM currency: ' + outp);
+        System.assert(outp.contains('SDE=50.000,00'), 'ISO+locale de_DE grouping: ' + outp);
+        System.assert(outp.contains('AV=$127.50|'), 'AVG currency: ' + outp);
+        System.assert(outp.contains('MN=$20,000.00|'), 'MIN currency: ' + outp);
+        System.assert(outp.contains('MX=£30,000.00|'), 'MAX currency GBP: ' + outp);
+        System.assert(
+            outp.contains('AUTO=') && outp.substringAfter('AUTO=').contains('€'),
+            'currency:auto=Field should use EUR: ' + outp
+        );
+    }
+
     @IsTest
     static void singleLinePlainTextEscapesXmlForHtmlTemplates() {
         Map<String, Object> data = new Map<String, Object>{ 'Name' => 'A & B <C>' };

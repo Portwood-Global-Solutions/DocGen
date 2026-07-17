@@ -427,7 +427,7 @@ export function buildAiPrompt(shape, options) {
     );
     lines.push('- Conditional: {#SomeField} shown when truthy {:else} otherwise {/SomeField}.');
     lines.push(
-        '- Aggregates: {SUM:Rel.Field}, plus AVG/MIN/MAX/COUNT — format suffixes apply, e.g. {SUM:Lines.Amount:currency}.'
+        '- Aggregates (grand totals across a child list, place OUTSIDE the loop): {SUM:Rel.Field}, {AVG:Rel.Field}, {MIN:Rel.Field}, {MAX:Rel.Field}, {COUNT:Rel} or {COUNT:Rel.Field}. All accept format suffixes: {SUM:Lines.Amount:currency}, {SUM:Lines.Amount:currency:EUR:de_DE} (ISO + locale), {SUM:Lines.Amount:currency:auto} (record currency), {COUNT:Lines:number}. The aggregated field must be in the Query Config, but does NOT need to be a rendered column.'
     );
     lines.push(
         '- Built-ins: {Today:MMMM d, yyyy}, {Now:yyyy-MM-dd HH:mm}, and running-user tags {RunningUser.Name}, {RunningUser.Email}, {RunningUser.Title}.'
