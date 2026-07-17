@@ -1861,6 +1861,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get isAuthoringFile() {
         return this.newAuthoringMode === 'file';
     }
+    get isAuthoringScratch() {
+        return this.newAuthoringMode === 'scratch';
+    }
 
     get authoringCards() {
         const defs = [
@@ -1877,6 +1880,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 badge: null,
                 icon: 'utility:einstein',
                 desc: "We assemble a ready-to-paste prompt with your fields and DocGen's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor."
+            },
+            {
+                mode: 'scratch',
+                title: 'Start From Scratch',
+                badge: null,
+                icon: 'utility:edit',
+                desc: 'A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way.'
             },
             {
                 mode: 'file',
@@ -1914,7 +1924,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         this.newAuthoringMode = mode;
-        if (mode === 'starter' || mode === 'ai') {
+        if (mode === 'starter' || mode === 'ai' || mode === 'scratch') {
             this.newTemplateType = 'HTML';
             this.newTemplateOutputFormat = 'PDF';
         } else {
@@ -3651,7 +3661,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const record = await createRecord({ apiName: DOCGEN_TEMPLATE_OBJECT.objectApiName, fields });
             this.createdTemplateId = record.id;
             this.isCreating = false;
-            if (authoringMode !== 'starter') {
+            // Only the file path needs an upload prompt — every other mode
+            // lands directly in the designer.
+            if (authoringMode === 'file') {
                 this.showToast('Success', 'Template Record created. Please upload your document.', 'success');
             }
 
@@ -3696,6 +3708,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 if (aiPastedHtml) {
                     await this._applyPastedBody(record.id, aiPastedHtml, newRow.Name);
                 }
+                this.isEditModalOpen = false;
+                await this._openDesignerSurface();
+            } else if (authoringMode === 'scratch') {
+                // Blank page — the designer seeds a clean sheet to type into.
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
             }

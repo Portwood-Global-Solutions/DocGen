@@ -449,6 +449,53 @@
                                         </div>
                                     </template>
 
+                                    <!-- Scratch path: straight to a blank designer page -->
+                                    <template if:true={isAuthoringScratch}>
+                                        <div class="slds-box slds-theme_shade" style="border-radius: 8px" role="note">
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:edit"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                You get a clean page in the visual designer. Click anywhere and type,
+                                                drag in blocks and merge tags, or press&nbsp;<code>&#96;</code>&nbsp;for
+                                                the insert menu. Your object's fields are queried automatically so every
+                                                merge tag is ready to drop in.
+                                            </p>
+                                        </div>
+                                        <template if:true={isRecordDataSource}>
+                                            <template if:true={newTemplateObject}>
+                                                <div class="slds-var-m-top_small">
+                                                    <lightning-record-picker
+                                                        label="Sample Record (optional)"
+                                                        object-api-name={newTemplateObject}
+                                                        value={newTemplateSampleRecordId}
+                                                        onchange={handleSampleRecordChange}
+                                                        placeholder="Pick a record to preview with real data..."
+                                                    >
+                                                    </lightning-record-picker>
+                                                </div>
+                                            </template>
+                                        </template>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="brand"
+                                                label="Create &amp; Open Designer"
+                                                icon-name="utility:edit"
+                                                onclick={handleCreateAndDesign}
+                                                disabled={isAutoCreating}
+                                            ></lightning-button>
+                                            <template if:true={isAutoCreating}>
+                                                <lightning-spinner
+                                                    alternative-text="Creating..."
+                                                    size="small"
+                                                    class="slds-var-m-left_small"
+                                                ></lightning-spinner>
+                                            </template>
+                                        </div>
+                                    </template>
+
                                     <!-- File path: classic Type/Output Format pickers -->
                                     <template if:true={isAuthoringFile}>
                                         <lightning-combobox
@@ -1585,15 +1632,17 @@
                                         {pdfPreviewBtnLabel}
                                     </button>
                                 </template>
-                                <lightning-button
-                                    label="Format Code"
-                                    icon-name="utility:magicwand"
-                                    variant="base"
-                                    data-target="body"
-                                    onclick={handleFormatHtml}
-                                    title="Pretty-print the HTML: indent nested tags without touching text or merge tags."
-                                    class="slds-var-m-left_small"
-                                ></lightning-button>
+                                <template if:false={showHtmlBodyVisual}>
+                                    <lightning-button
+                                        label="Format Code"
+                                        icon-name="utility:magicwand"
+                                        variant="base"
+                                        data-target="body"
+                                        onclick={handleFormatHtml}
+                                        title="Pretty-print the HTML: indent nested tags without touching text or merge tags."
+                                        class="slds-var-m-left_small"
+                                    ></lightning-button>
+                                </template>
                                 <lightning-button
                                     label="Reload"
                                     icon-name="utility:refresh"
