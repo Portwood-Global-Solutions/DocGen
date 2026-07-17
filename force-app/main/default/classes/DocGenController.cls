@@ -3939,6 +3939,66 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         }
     }
 
+    /**
+     * Designer live PDF preview: renders the caller's DRAFT HTML (unsaved
+     * editor contents) through the full merge + Blob.toPdf pipeline against a
+     * real record, without touching the template's saved versions. The result
+     * is returned as base64 for a client-side blob: iframe — nothing is stored.
+     */
+    @AuraEnabled
+    public static Map<String, Object> previewDraftPdf(Id templateId, Id recordId, String draftHtml) {
+        if (String.isBlank(draftHtml)) {
+            throw DocGenService.ahe('Nothing to preview — the editor is empty.');
+        }
+        try {
+            DocGenService.draftHtmlBodyOverride = draftHtml;
+            Map<String, Object> result = DocGenService.generatePdfBlob(templateId, recordId);
+            Blob pdfBlob = (Blob) result.get('blob');
+            // Persist as a ContentVersion so the LWC can open Salesforce's
+            // native file-preview overlay (LWS forbids blob: iframes). One
+            // preview file per template — prior previews are deleted first.
+            String previewTitle = 'dg_pdf_preview_' + templateId;
+            List<ContentVersion> old = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Title = :previewTitle AND IsLatest = TRUE
+                WITH SYSTEM_MODE
+                LIMIT 10
+            ]; // NOPMD ApexCRUDViolation — internal preview artifacts, owner-scoped cleanup
+            if (!old.isEmpty()) {
+                Set<Id> docIds = new Set<Id>();
+                for (ContentVersion c : old) {
+                    docIds.add(c.ContentDocumentId);
+                }
+                delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds]; // NOPMD ApexCRUDViolation
+            }
+            ContentVersion cv = new ContentVersion(
+                Title = previewTitle,
+                PathOnClient = 'preview.pdf',
+                VersionData = pdfBlob,
+                FirstPublishLocationId = templateId
+            );
+            DocGenFlsGuard.assertCreateable(cv, new Set<String>{ 'Title', 'PathOnClient', 'VersionData' });
+            insert cv; // NOPMD ApexCRUDViolation — guarded above
+            cv = [
+                SELECT Id, ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :cv.Id
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD ApexCRUDViolation — reading back the row just inserted
+            return new Map<String, Object>{
+                'contentVersionId' => cv.Id,
+                'contentDocumentId' => cv.ContentDocumentId,
+                'title' => (String) result.get('title')
+            };
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'PDF preview failed. Check the template HTML and sample record.');
+        } finally {
+            DocGenService.draftHtmlBodyOverride = null;
+        }
+    }
+
     /** Heap-pressure signal helper — uniform shape for runner LWC auto-fallback. */
     private static Map<String, Object> heapPressureSignal(String relationshipName) {
         return new Map<String, Object>{ 'heapPressure' => true, 'giantRelationship' => relationshipName };

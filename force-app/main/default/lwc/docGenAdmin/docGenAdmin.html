@@ -336,21 +336,19 @@
                                                 value={newTemplateLogoChoice}
                                                 options={logoChoiceOptions}
                                                 onchange={handleLogoChoiceChange}
-                                                field-level-help="Pick a shared image asset you already saved, or upload a new one. The starter header carries the logo slot either way."
+                                                field-level-help="Pick a shared image asset — the starter header carries its merge tag. Add new images under the Assets tab."
                                             ></lightning-combobox>
-                                            <template if:true={showLogoUpload}>
-                                                <div class="slds-var-m-top_x-small">
-                                                    <input
-                                                        type="file"
-                                                        accept=".png,.jpg,.jpeg"
-                                                        onchange={handleLogoSelected}
-                                                    />
-                                                </div>
+                                            <template if:true={selectedLogoPreviewUrl}>
+                                                <img
+                                                    class="dg-logo-preview"
+                                                    src={selectedLogoPreviewUrl}
+                                                    alt="Selected logo preview"
+                                                />
                                             </template>
-                                            <template if:true={newTemplateLogoName}>
+                                            <template if:true={hasNoAssetsYet}>
                                                 <p class="slds-text-body_small slds-text-color_weak">
-                                                    {newTemplateLogoName} — saved as your shared logo, placed in the
-                                                    template header, reusable in every template.
+                                                    No image assets yet — add your logo under the
+                                                    <strong>Assets</strong> tab and it becomes selectable here.
                                                 </p>
                                             </template>
                                         </div>
@@ -413,21 +411,19 @@
                                                 value={newTemplateLogoChoice}
                                                 options={logoChoiceOptions}
                                                 onchange={handleLogoChoiceChange}
-                                                field-level-help="Pick a shared image asset you already saved, or upload a new one. The AI prompt tells the assistant how to reference it."
+                                                field-level-help="Pick a shared image asset — the AI prompt tells the assistant how to reference it. Add new images under the Assets tab."
                                             ></lightning-combobox>
-                                            <template if:true={showLogoUpload}>
-                                                <div class="slds-var-m-top_x-small">
-                                                    <input
-                                                        type="file"
-                                                        accept=".png,.jpg,.jpeg"
-                                                        onchange={handleLogoSelected}
-                                                    />
-                                                </div>
+                                            <template if:true={selectedLogoPreviewUrl}>
+                                                <img
+                                                    class="dg-logo-preview"
+                                                    src={selectedLogoPreviewUrl}
+                                                    alt="Selected logo preview"
+                                                />
                                             </template>
-                                            <template if:true={newTemplateLogoName}>
+                                            <template if:true={hasNoAssetsYet}>
                                                 <p class="slds-text-body_small slds-text-color_weak">
-                                                    {newTemplateLogoName} — saved as your shared logo; the AI prompt
-                                                    will tell the assistant how to reference it.
+                                                    No image assets yet — add your logo under the
+                                                    <strong>Assets</strong> tab and it becomes selectable here.
                                                 </p>
                                             </template>
                                         </div>
@@ -1546,6 +1542,49 @@
                                     />
                                     <span class="dg-fmt-label">in</span>
                                 </template>
+                                <span class="dg-fmt-sep"></span>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="insert"
+                                    onclick={handlePanelToggle}
+                                    title="Insert blocks, sections, tables — searchable. Or just type / in the page."
+                                >
+                                    + Insert
+                                </button>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="tags"
+                                    onclick={handlePanelToggle}
+                                    title="Merge tags from your query — searchable"
+                                >
+                                    &#123;&nbsp;&#125; Tags
+                                </button>
+                                <button
+                                    class="dg-fmt-btn dg-panel-btn"
+                                    data-panel="images"
+                                    onclick={handlePanelToggle}
+                                    title="Upload and place images"
+                                >
+                                    Images
+                                </button>
+                                <template if:true={editTemplateOutputIsPdf}>
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn"
+                                        data-panel="watermark"
+                                        onclick={handlePanelToggle}
+                                        title="Full-page background image (PDF)"
+                                    >
+                                        Watermark
+                                    </button>
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn dg-pdf-preview-btn"
+                                        onclick={handlePdfPreview}
+                                        disabled={isPdfPreviewLoading}
+                                        title="Render the current draft through the REAL PDF engine with your sample record — see exactly what customers get."
+                                    >
+                                        {pdfPreviewBtnLabel}
+                                    </button>
+                                </template>
                                 <lightning-button
                                     label="Format Code"
                                     icon-name="utility:magicwand"
@@ -1597,6 +1636,40 @@
                                         >
                                             Remove from document
                                         </button>
+                                    </div>
+                                </template>
+                                <!-- Notion-style slash-command menu: type "/" in the page -->
+                                <template if:true={slashMenu}>
+                                    <div class="dg-slash-menu" style={slashMenu.posStyle} role="menu">
+                                        <div class="dg-slash-menu-head">
+                                            <span>Insert&nbsp;&#8212;&nbsp;keep typing to filter</span>
+                                            <button
+                                                class="dg-pill-menu-x"
+                                                onclick={handleSlashMenuClose}
+                                                title="Close (Esc)"
+                                            >
+                                                &#10005;
+                                            </button>
+                                        </div>
+                                        <template if:true={slashMenu.hasItems}>
+                                            <template for:each={slashMenu.items} for:item="opt">
+                                                <button
+                                                    key={opt.key}
+                                                    class={opt.itemClass}
+                                                    data-key={opt.key}
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleSlashItemClick}
+                                                >
+                                                    <span class="dg-slash-item-label">{opt.label}</span>
+                                                    <span class="dg-slash-item-group">{opt.group}</span>
+                                                </button>
+                                            </template>
+                                        </template>
+                                        <template if:false={slashMenu.hasItems}>
+                                            <div class="dg-slash-empty">
+                                                Nothing matches &#8220;{slashMenu.query}&#8221;
+                                            </div>
+                                        </template>
                                     </div>
                                 </template>
                                 <template if:true={isLoadingHtmlBody}>
@@ -2016,174 +2089,151 @@
                                 </div>
                             </div>
 
-                            <div class="dg-designer-rail">
-                                <div class="dg-rail-section-label">
-                                    <lightning-icon icon-name="utility:apps" size="xx-small"></lightning-icon>
-                                    Blocks
-                                </div>
-                                <div class="dg-tag-panel">
-                                    <template for:each={blockPaletteSections} for:item="section">
-                                        <div key={section.key} class="dg-tag-section">
-                                            <div class="dg-tag-section-label">{section.label}</div>
-                                            <template if:true={section.hint}>
-                                                <div class="dg-tag-section-hint">{section.hint}</div>
-                                            </template>
-                                            <div class="dg-tag-chips">
-                                                <template for:each={section.items} for:item="blk">
-                                                    <button
-                                                        key={blk.key}
-                                                        class="dg-tag-chip dg-block-chip"
-                                                        data-snippet={blk.snippet}
-                                                        data-kind="block"
-                                                        title={blk.title}
-                                                        draggable="true"
-                                                        ondragstart={handleTagDragStart}
-                                                        onmousedown={handleFmtMouseDown}
-                                                        onclick={handleInsertTagSnippet}
-                                                    >
-                                                        {blk.label}
-                                                    </button>
-                                                </template>
-                                            </div>
-                                        </div>
-                                    </template>
-                                </div>
-
-                                <div class="dg-rail-section-label">
-                                    <lightning-icon icon-name="utility:merge_field" size="xx-small"></lightning-icon>
-                                    Tags
-                                </div>
-                                <div class="dg-tag-panel">
-                                    <template for:each={tagPaletteSections} for:item="section">
-                                        <div key={section.key} class="dg-tag-section">
-                                            <div class="dg-tag-section-label">{section.label}</div>
-                                            <template if:true={section.hint}>
-                                                <div class="dg-tag-section-hint">{section.hint}</div>
-                                            </template>
-                                            <div class="dg-tag-chips">
-                                                <template for:each={section.items} for:item="tag">
-                                                    <button
-                                                        key={tag.key}
-                                                        class="dg-tag-chip"
-                                                        data-snippet={tag.snippet}
-                                                        title={tag.title}
-                                                        draggable="true"
-                                                        ondragstart={handleTagDragStart}
-                                                        onmousedown={handleFmtMouseDown}
-                                                        onclick={handleInsertTagSnippet}
-                                                    >
-                                                        {tag.label}
-                                                    </button>
-                                                </template>
-                                            </div>
-                                        </div>
-                                    </template>
-                                </div>
-
-                                <div class="dg-rail-section-label">
-                                    <lightning-icon icon-name="utility:image" size="xx-small"></lightning-icon>
-                                    Images
-                                </div>
-                                <div class="dg-image-panel">
-                                    <div class="dg-image-panel-head">
-                                        <span class="slds-text-body_small">
-                                            Upload once — click or drag a thumbnail onto the page. PNG or JPG (SVG
-                                            doesn't render in PDF).
-                                        </span>
-                                        <lightning-button
-                                            variant="brand"
-                                            label="Upload"
-                                            icon-name="utility:upload"
-                                            onclick={triggerInsertImagePicker}
-                                            disabled={isUploadingInsertImage}
-                                        ></lightning-button>
+                            <template if:true={showFloatPanel}>
+                                <div class="dg-float-panel">
+                                    <div class="dg-float-panel-head">
+                                        <span class="dg-float-panel-title">{floatPanelTitle}</span>
+                                        <button class="dg-pill-menu-x" onclick={handlePanelClose} title="Close">
+                                            &#10005;
+                                        </button>
                                     </div>
-                                    <input
-                                        type="file"
-                                        class="dg-insert-image-input"
-                                        accept=".png,.jpg,.jpeg,.gif,.bmp"
-                                        style="display: none"
-                                        onchange={handleInsertImageSelected}
-                                    />
-                                    <template if:true={isUploadingInsertImage}>
-                                        <div class="slds-is-relative slds-var-m-top_small" style="height: 30px">
-                                            <lightning-spinner
-                                                alternative-text="Uploading image"
-                                                size="small"
-                                            ></lightning-spinner>
-                                        </div>
+                                    <template if:false={isPanelWatermark}>
+                                        <input
+                                            type="search"
+                                            class="dg-panel-search"
+                                            placeholder={panelSearchPlaceholder}
+                                            oninput={handlePanelSearch}
+                                            autocomplete="off"
+                                        />
                                     </template>
-                                    <template if:true={isLoadingTemplateImages}>
-                                        <div class="slds-is-relative slds-var-m-top_small" style="height: 30px">
-                                            <lightning-spinner
-                                                alternative-text="Loading images"
-                                                size="small"
-                                            ></lightning-spinner>
-                                        </div>
+                                    <template if:true={isPanelInsert}>
+                                        <p class="dg-float-panel-tip">
+                                            Tip: type <code>/</code> anywhere in the page for this menu at your cursor.
+                                        </p>
+                                        <template for:each={filteredBlockSections} for:item="section">
+                                            <div key={section.key} class="dg-tag-section">
+                                                <div class="dg-tag-section-label">{section.label}</div>
+                                                <template if:true={section.hint}>
+                                                    <div class="dg-tag-section-hint">{section.hint}</div>
+                                                </template>
+                                                <div class="dg-tag-chips">
+                                                    <template for:each={section.items} for:item="blk">
+                                                        <button
+                                                            key={blk.key}
+                                                            class="dg-tag-chip dg-block-chip"
+                                                            data-snippet={blk.snippet}
+                                                            data-kind="block"
+                                                            title={blk.title}
+                                                            draggable="true"
+                                                            ondragstart={handleTagDragStart}
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleInsertTagSnippet}
+                                                        >
+                                                            {blk.label}
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
                                     </template>
-                                    <template if:true={hasTemplateImages}>
-                                        <div class="dg-image-grid">
-                                            <template for:each={templateImages} for:item="img">
-                                                <div
-                                                    key={img.contentVersionId}
-                                                    class="dg-image-thumb"
-                                                    data-url={img.url}
-                                                    data-name={img.fileName}
-                                                    draggable="true"
-                                                    ondragstart={handleImageDragStart}
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleInsertExistingImage}
-                                                    title={img.fileName}
-                                                >
-                                                    <img src={img.url} alt={img.fileName} />
-                                                    <span class="dg-image-thumb-name">{img.fileName}</span>
+                                    <template if:true={isPanelTags}>
+                                        <template for:each={filteredTagSections} for:item="section">
+                                            <div key={section.key} class="dg-tag-section">
+                                                <div class="dg-tag-section-label">{section.label}</div>
+                                                <template if:true={section.hint}>
+                                                    <div class="dg-tag-section-hint">{section.hint}</div>
+                                                </template>
+                                                <div class="dg-tag-chips">
+                                                    <template for:each={section.items} for:item="tag">
+                                                        <button
+                                                            key={tag.key}
+                                                            class="dg-tag-chip"
+                                                            data-snippet={tag.snippet}
+                                                            title={tag.title}
+                                                            draggable="true"
+                                                            ondragstart={handleTagDragStart}
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleInsertTagSnippet}
+                                                        >
+                                                            {tag.label}
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </template>
+                                    <template if:true={isPanelImages}>
+                                        <div class="dg-image-panel">
+                                            <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                Every image lives in the shared <strong>Asset Library</strong> and is
+                                                placed by merge tag — the engine renders these natively. Add or update
+                                                images under the Assets tab.
+                                            </p>
+                                            <template if:true={hasFilteredAssets}>
+                                                <div class="dg-image-grid">
+                                                    <template for:each={filteredAssets} for:item="asset">
+                                                        <div
+                                                            key={asset.id}
+                                                            class="dg-image-thumb"
+                                                            data-snippet={asset.mergeTag}
+                                                            draggable="true"
+                                                            ondragstart={handleTagDragStart}
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleInsertTagSnippet}
+                                                            title={asset.mergeTag}
+                                                        >
+                                                            <template if:true={asset.previewUrl}>
+                                                                <img src={asset.previewUrl} alt={asset.name} />
+                                                            </template>
+                                                            <span class="dg-image-thumb-name">{asset.name}</span>
+                                                            <span class="dg-asset-thumb-tag">{asset.mergeTag}</span>
+                                                        </div>
+                                                    </template>
                                                 </div>
                                             </template>
+                                            <template if:false={hasFilteredAssets}>
+                                                <p
+                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small"
+                                                >
+                                                    No matching assets — add images under the Assets tab.
+                                                </p>
+                                            </template>
                                         </div>
                                     </template>
-                                    <template if:false={hasTemplateImages}>
-                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
-                                            No images attached yet.
-                                        </p>
+
+                                    <template if:true={isPanelWatermark}>
+                                        <div class="dg-image-panel">
+                                            <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                Full-page background image behind your content (PDF output). Pre-fade
+                                                the image (~15-20% opacity over white) for a watermark look. Needs a
+                                                saved version first.
+                                            </p>
+                                            <template if:true={watermarkPreviewUrl}>
+                                                <div class="dg-watermark-preview">
+                                                    <img src={watermarkPreviewUrl} alt="Current watermark" />
+                                                    <lightning-button
+                                                        label="Remove"
+                                                        icon-name="utility:delete"
+                                                        variant="destructive-text"
+                                                        onclick={handleClearWatermark}
+                                                        disabled={isUploadingWatermark}
+                                                    ></lightning-button>
+                                                </div>
+                                            </template>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onchange={handleWatermarkFileSelected}
+                                                disabled={isUploadingWatermark}
+                                                class="slds-var-m-top_x-small"
+                                            />
+                                            <template if:true={isUploadingWatermark}>
+                                                <p class="slds-text-body_small slds-var-m-top_x-small">Uploading…</p>
+                                            </template>
+                                        </div>
                                     </template>
                                 </div>
-
-                                <template if:true={editTemplateOutputIsPdf}>
-                                    <div class="dg-rail-section-label">
-                                        <lightning-icon icon-name="utility:layers" size="xx-small"></lightning-icon>
-                                        Watermark
-                                    </div>
-                                    <div class="dg-image-panel">
-                                        <p class="slds-text-body_small slds-var-m-bottom_x-small">
-                                            Full-page background image behind your content (PDF output). Pre-fade the
-                                            image (~15-20% opacity over white) for a watermark look. Needs a saved
-                                            version first.
-                                        </p>
-                                        <template if:true={watermarkPreviewUrl}>
-                                            <div class="dg-watermark-preview">
-                                                <img src={watermarkPreviewUrl} alt="Current watermark" />
-                                                <lightning-button
-                                                    label="Remove"
-                                                    icon-name="utility:delete"
-                                                    variant="destructive-text"
-                                                    onclick={handleClearWatermark}
-                                                    disabled={isUploadingWatermark}
-                                                ></lightning-button>
-                                            </div>
-                                        </template>
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onchange={handleWatermarkFileSelected}
-                                            disabled={isUploadingWatermark}
-                                            class="slds-var-m-top_x-small"
-                                        />
-                                        <template if:true={isUploadingWatermark}>
-                                            <p class="slds-text-body_small slds-var-m-top_x-small">Uploading…</p>
-                                        </template>
-                                    </div>
-                                </template>
-                            </div>
+                            </template>
                         </div>
                     </template>
                 </div>

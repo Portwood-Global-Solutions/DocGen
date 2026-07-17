@@ -1005,3 +1005,193 @@
     padding: 1px 8px;
     white-space: nowrap;
 }
+
+/* --- Slash-command menu (type "/" in the page) --- */
+.dg-slash-menu {
+    position: absolute;
+    z-index: 60;
+    min-width: 300px;
+    max-width: 380px;
+    background: #fff;
+    border: 1px solid #e2e0ef;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(28, 20, 68, 0.18);
+    padding: 4px;
+}
+
+.dg-slash-menu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: #6b6b80;
+    padding: 4px 8px 2px 8px;
+}
+
+.dg-slash-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 7px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: #16325c;
+    text-align: left;
+}
+
+.dg-slash-item:hover,
+.dg-slash-item_active {
+    background: #f4f2ff;
+}
+
+.dg-slash-item_active {
+    outline: 1px solid #c9b8f5;
+}
+
+.dg-slash-item-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dg-slash-item-group {
+    font-size: 0.68rem;
+    color: #9a93b5;
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+.dg-slash-empty {
+    padding: 10px;
+    font-size: 0.8rem;
+    color: #6b6b80;
+}
+
+/* --- Floating searchable panel (replaces the fixed right rail) --- */
+.dg-float-panel {
+    position: fixed;
+    right: 22px;
+    top: 165px;
+    bottom: 26px;
+    width: 360px;
+    z-index: 55;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid #e2e0ef;
+    border-radius: 14px;
+    box-shadow: 0 14px 40px rgba(28, 20, 68, 0.22);
+    padding: 12px 14px;
+}
+
+.dg-float-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.dg-float-panel-title {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: #1f3a5f;
+}
+
+.dg-float-panel-tip {
+    font-size: 0.75rem;
+    color: #6b6b80;
+    margin: 0 0 8px 0;
+}
+
+.dg-float-panel-tip code {
+    background: #f4f2ff;
+    border: 1px solid #ddd3f7;
+    border-radius: 4px;
+    padding: 0 5px;
+    color: #7c3aed;
+    font-weight: 700;
+}
+
+.dg-panel-search {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #d8dde6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    margin-bottom: 10px;
+}
+
+.dg-panel-search:focus {
+    outline: none;
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.dg-panel-btn {
+    font-weight: 700;
+    color: #7c3aed;
+    border-color: #ddd3f7;
+    background: #faf9ff;
+}
+
+/* --- Live PDF preview panel --- */
+.dg-pdf-preview-panel {
+    position: fixed;
+    right: 22px;
+    top: 150px;
+    bottom: 24px;
+    width: 44vw;
+    min-width: 420px;
+    z-index: 56;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #e2e0ef;
+    border-radius: 14px;
+    box-shadow: 0 14px 40px rgba(28, 20, 68, 0.25);
+    padding: 10px 12px 12px 12px;
+}
+
+.dg-pdf-frame {
+    flex: 1 1 auto;
+    width: 100%;
+    border: 1px solid #e2e0ef;
+    border-radius: 8px;
+    background: #525659;
+}
+
+.dg-pdf-preview-btn {
+    color: #0b7a3e;
+    border-color: #bfe5cf;
+    background: #f2fbf6;
+}
+
+.dg-logo-preview {
+    display: block;
+    max-width: 160px;
+    max-height: 64px;
+    margin-top: 6px;
+    border: 1px solid #e2e0ef;
+    border-radius: 8px;
+    padding: 4px;
+    background: #fff;
+}
+
+.dg-asset-thumb-tag {
+    display: block;
+    font-family: 'SF Mono', Consolas, Menlo, monospace;
+    font-size: 0.62rem;
+    color: #0b7a3e;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

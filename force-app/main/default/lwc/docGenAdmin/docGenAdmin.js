@@ -26,6 +26,18 @@ const STARTER_OBJECTS = {
     agreement: 'Account'
 };
 
+// Flexipage-style section presets — equal-width columns, Flying Saucer safe
+// (display:table/table-cell, never flex/grid).
+const SECTION_COLUMN_PRESETS = [2, 3, 4, 6, 12];
+function columnsSectionSnippet(n) {
+    let cells = '';
+    for (let i = 0; i < n; i++) {
+        cells +=
+            '<div style="display: table-cell; vertical-align: top; padding: 0 5pt"><p>Column ' + (i + 1) + '</p></div>';
+    }
+    return '\n<div style="display: table; width: 100%; table-layout: fixed; margin: 8pt 0">' + cells + '</div>\n';
+}
+
 // Apex
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
 import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
@@ -38,6 +50,7 @@ import generateDocumentParts from '@salesforce/apex/DocGenController.generateDoc
 import getContentVersionBase64 from '@salesforce/apex/DocGenController.getContentVersionBase64';
 import getLatestContentVersionId from '@salesforce/apex/DocGenController.getLatestContentVersionId';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
+import previewDraftPdf from '@salesforce/apex/DocGenController.previewDraftPdf';
 import generatePdfAsync from '@salesforce/apex/DocGenController.generatePdfAsync';
 import getPdfSampleGenerationStatus from '@salesforce/apex/DocGenController.getPdfSampleGenerationStatus';
 import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
@@ -420,6 +433,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track selectionContextLabel = '';
     // Pill inspector: click a pill → formatting menu (currency, date, QR…)
     @track pillMenu = null;
+    // Notion-style slash-command menu: type "/" in the canvas → searchable insert palette.
+    @track slashMenu = null;
+    _slashCtx = null;
+    _slashSel = 0;
+    // Floating searchable panels replace the fixed right rail: 'insert' | 'tags' | 'images' | 'watermark'.
+    @track activePanel = null;
+    @track panelSearch = '';
+    // Live PDF preview: draft HTML → real Blob.toPdf render → blob: iframe.
+    @track pdfPreviewUrl = null;
+    @track isPdfPreviewLoading = false;
     _activePill = null;
     // Canvas page setup, mirrored into the template's @page rule. Custom
     // sizes cover everything from 3x4in nametags to poster PDFs.
@@ -1315,6 +1338,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     document.execCommand('insertText', false, '/');
                     this.htmlEditorDirty = true;
                     this._maybePillifyTyped();
+                    this._maybeOpenSlashMenu();
                 }
                 if (triesLeft > 0) {
                     // eslint-disable-next-line @lwc/lwc/no-async-operation
@@ -1353,7 +1377,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const blocks = Array.from(pv.children).filter((c) => !c.matches('style'));
             const last = blocks[blocks.length - 1];
             const belowContent = last && e.clientY > last.getBoundingClientRect().bottom + 4;
-            if (belowContent || !range || !pv.contains(range.startContainer)) {
+            // Empty container under the pointer (section column, table cell,
+            // panel div): start a paragraph inside IT, not wherever the range
+            // snapped to.
+            const under = document.elementFromPoint(e.clientX, e.clientY);
+            const container =
+                under && pv.contains(under) && under !== pv && /^(DIV|TD|TH)$/.test(under.tagName) ? under : null;
+            const rangeMissesContainer = container && (!range || !container.contains(range.startContainer));
+            if (rangeMissesContainer) {
+                const p = document.createElement('p');
+                p.appendChild(document.createElement('br'));
+                container.appendChild(p);
+                range = document.createRange();
+                range.setStart(p, 0);
+                this.htmlEditorDirty = true;
+            } else if (belowContent || !range || !pv.contains(range.startContainer)) {
                 const p = document.createElement('p');
                 p.appendChild(document.createElement('br'));
                 pv.appendChild(p);
@@ -1391,6 +1429,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const want = this.pageSetup[sel.dataset.field];
             if (want != null && sel.value !== want && !sel.matches(':focus')) {
                 sel.value = want;
+            }
+        }
+        // Searchable panel just opened — put the cursor in its search box.
+        if (this._focusPanelSearch) {
+            const inp = this.template.querySelector('.dg-panel-search');
+            if (inp) {
+                inp.focus();
+                this._focusPanelSearch = false;
             }
         }
         // Inline HTML preview: the lwc:dom="manual" host only exists after the
@@ -1432,6 +1478,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         pv.addEventListener('input', () => {
                             this.htmlEditorDirty = true;
                             this._maybePillifyTyped();
+                            // Notion-style: "/" at the caret opens the insert menu.
+                            this._maybeOpenSlashMenu();
                         });
                         // Click a pill → its formatting menu; click elsewhere closes it.
                         // Double-click a pill → edit its tag text in place.
@@ -1442,6 +1490,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                                 this._openPillMenu(pill);
                             } else if (!pill) {
                                 this.pillMenu = null;
+                                this._closeSlashMenu();
                             }
                         });
                         pv.addEventListener('dblclick', (e) => {
@@ -1472,6 +1521,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             this._canvasFocused = true;
                         });
                         pv.addEventListener('keydown', (e) => {
+                            // Open slash menu drives arrows/Enter/Escape.
+                            if (this._slashMenuKeydown(e)) {
+                                return;
+                            }
                             // Track typing recency for the "/" recovery below.
                             // Only content keys — Tab/arrows must not count, or
                             // tabbing away right after typing would false-match.
@@ -1698,14 +1751,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    /** Shared image assets shown on the AI step and named in the prompt. */
+    /** Shared image assets: the ONE image pipeline — wizard logo picker,
+     *  designer asset panel, slash menu, and the AI prompt all read this. */
     async _loadWizardAssets() {
         try {
             const assets = (await getAssets()) || [];
             this.wizardAssets = assets.map((a) => ({
                 id: a.id,
                 name: a.name,
-                mergeTag: a.mergeTag || '{%asset:' + a.assetKey + '}'
+                assetKey: a.assetKey,
+                mergeTag: a.mergeTag || '{%asset:' + a.assetKey + '}',
+                previewUrl: a.latestVersionCvId ? '/sfc/servlet.shepherd/version/download/' + a.latestVersionCvId : null
             }));
         } catch (e) {
             this.wizardAssets = [];
@@ -1884,26 +1940,28 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    /** Logo control: pick an existing shared asset or upload a new image. */
+    /** Logo control: pick from the shared asset library — the one image
+     *  pipeline. New images are added under the Assets tab. */
     get logoChoiceOptions() {
         const opts = [{ label: 'No logo', value: 'none' }];
         for (const a of this.wizardAssets || []) {
             opts.push({ label: a.name + ' — ' + a.mergeTag, value: a.id });
         }
-        opts.push({ label: 'Upload a new image…', value: 'upload' });
         return opts;
     }
 
-    get showLogoUpload() {
-        return this.newTemplateLogoChoice === 'upload';
+    get hasNoAssetsYet() {
+        return !(this.wizardAssets || []).length;
+    }
+
+    /** Thumbnail of the chosen logo asset, shown under the picker. */
+    get selectedLogoPreviewUrl() {
+        const a = (this.wizardAssets || []).find((x) => x.id === this.newTemplateLogoChoice);
+        return a ? a.previewUrl : null;
     }
 
     handleLogoChoiceChange(event) {
         this.newTemplateLogoChoice = event.detail.value;
-        if (this.newTemplateLogoChoice !== 'upload') {
-            this._logoFile = null;
-            this.newTemplateLogoName = '';
-        }
     }
 
     /** Merge tag the starter's logo slots should carry, per the user's choice. */
@@ -6346,6 +6404,83 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Leave visual mode — lossless when nothing changed. */
+    /**
+     * The full document as it stands RIGHT NOW — visual-mode edits serialized
+     * non-destructively (same clone/unpillify/body-swap as exit, without
+     * leaving visual mode), source mode read straight from the textarea.
+     */
+    _currentDraftHtml() {
+        if (this.showHtmlBodyVisual) {
+            const host = this.template.querySelector('.dg-visual-host');
+            const pv = host && host.querySelector('.dg-pv');
+            if (pv && this._visualOriginalCode != null) {
+                const clone = pv.cloneNode(true);
+                for (const styleEl of clone.querySelectorAll('style')) {
+                    styleEl.remove();
+                }
+                for (const markerEl of clone.querySelectorAll('.dg-drop-marker')) {
+                    markerEl.remove();
+                }
+                this._unpillifyTags(clone);
+                const edited = clone.innerHTML.trim();
+                const bodyRe = /(<body\b[^>]*>)[\s\S]*?(<\/body\s*>)/i;
+                return bodyRe.test(this._visualOriginalCode)
+                    ? this._visualOriginalCode.replace(bodyRe, (m, open, close) => open + '\n' + edited + '\n' + close)
+                    : edited;
+            }
+        }
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        return (ta && ta.value) || this._lastUploadedHtmlText || '';
+    }
+
+    // --- Live PDF preview (real Blob.toPdf output in a blob: iframe) ---
+    async handlePdfPreview() {
+        if (!this.editTemplateTestRecordId) {
+            this.showToast(
+                'Pick a sample record',
+                'PDF preview merges real data — choose a Sample Record in the toolbar first.',
+                'warning'
+            );
+            return;
+        }
+        const draftHtml = (this._currentDraftHtml() || '').trim();
+        if (!draftHtml) {
+            this.showToast('Nothing to preview', 'The editor is empty.', 'warning');
+            return;
+        }
+        this.isPdfPreviewLoading = true;
+        try {
+            const res = await previewDraftPdf({
+                templateId: this.editTemplateId,
+                recordId: this.editTemplateTestRecordId,
+                draftHtml
+            });
+            if (!res || !res.contentDocumentId) {
+                throw new Error('Preview returned no PDF.');
+            }
+            // LWS forbids blob: iframes, and shepherd URLs force a download —
+            // Salesforce's native file-preview overlay is the clean viewer.
+            this[NavigationMixin.Navigate]({
+                type: 'standard__namedPage',
+                attributes: { pageName: 'filePreview' },
+                state: { selectedRecordId: res.contentDocumentId }
+            });
+        } catch (err) {
+            const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
+            this.showToast('PDF preview failed', msg, 'error');
+        } finally {
+            this.isPdfPreviewLoading = false;
+        }
+    }
+
+    handleClosePdfPreview() {
+        this.pdfPreviewUrl = null;
+    }
+
+    get pdfPreviewBtnLabel() {
+        return this.isPdfPreviewLoading ? 'Rendering…' : 'PDF Preview';
+    }
+
     _exitVisualMode() {
         const host = this.template.querySelector('.dg-visual-host');
         const pv = host && host.querySelector('.dg-pv');
@@ -6646,7 +6781,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.showTagPanel = true;
         this.showImagePanel = true;
         await this._loadBodyIntoEditor();
-        this._loadTemplateImages();
+        // Asset library feeds the Images panel + slash menu + tag pills.
+        this._loadWizardAssets();
         let body = this._lastUploadedHtmlText;
         if (!body || !body.trim()) {
             // Blank template: seed a clean sheet so click-and-type just works.
@@ -6661,6 +6797,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (this.showHtmlBodyVisual) {
             this._exitVisualMode();
         }
+        this.handleClosePdfPreview();
+        this.activePanel = null;
         if (this.htmlEditorDirty || this.stagedBodySource) {
             this.showToast(
                 'Heads up',
@@ -6676,7 +6814,261 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // --- Blocks palette (drag-in layout pieces) ---
     get blockPaletteSections() {
         const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
-        return buildBlockPalette(shape);
+        const sections = buildBlockPalette(shape);
+        return [
+            {
+                key: 'sections',
+                label: 'Sections',
+                hint: 'Flexipage-style equal columns — up to 12, like a page layout.',
+                items: SECTION_COLUMN_PRESETS.map((n) => ({
+                    key: 'seccols' + n,
+                    label: n + ' columns',
+                    title: n + ' equal-width columns section',
+                    snippet: columnsSectionSnippet(n)
+                }))
+            },
+            ...sections
+        ];
+    }
+
+    // --- Floating searchable panels (replace the fixed right rail) ---
+    get showFloatPanel() {
+        return !!this.activePanel;
+    }
+    get isPanelInsert() {
+        return this.activePanel === 'insert';
+    }
+    get isPanelTags() {
+        return this.activePanel === 'tags';
+    }
+    get isPanelImages() {
+        return this.activePanel === 'images';
+    }
+    get isPanelWatermark() {
+        return this.activePanel === 'watermark';
+    }
+    get floatPanelTitle() {
+        return { insert: 'Insert blocks', tags: 'Merge tags', images: 'Image assets', watermark: 'Watermark' }[
+            this.activePanel
+        ];
+    }
+    get panelSearchPlaceholder() {
+        return this.activePanel === 'tags' ? 'Search fields, loops, charts…' : 'Search…';
+    }
+
+    handlePanelToggle(event) {
+        const p = event.currentTarget.dataset.panel;
+        this.activePanel = this.activePanel === p ? null : p;
+        this.panelSearch = '';
+        this._focusPanelSearch = !!this.activePanel;
+        if (this.activePanel === 'images') {
+            this._loadWizardAssets();
+        }
+    }
+    handlePanelClose() {
+        this.activePanel = null;
+    }
+    handlePanelSearch(event) {
+        this.panelSearch = event.target.value || '';
+    }
+
+    _filterSections(sections) {
+        const q = (this.panelSearch || '').toLowerCase().trim();
+        if (!q) {
+            return sections;
+        }
+        return sections
+            .map((s) => ({
+                ...s,
+                items: s.items.filter((it) =>
+                    (it.label + ' ' + (it.title || '') + ' ' + s.label).toLowerCase().includes(q)
+                )
+            }))
+            .filter((s) => s.items.length);
+    }
+    get filteredBlockSections() {
+        return this._filterSections(this.blockPaletteSections);
+    }
+    get filteredTagSections() {
+        return this._filterSections(this.tagPaletteSections);
+    }
+    get filteredTemplateImages() {
+        const q = (this.panelSearch || '').toLowerCase().trim();
+        const imgs = this.templateImages || [];
+        return q ? imgs.filter((i) => (i.fileName || '').toLowerCase().includes(q)) : imgs;
+    }
+    get hasFilteredTemplateImages() {
+        return this.filteredTemplateImages.length > 0;
+    }
+    /** Asset library entries for the designer panel — searchable by name/key. */
+    get filteredAssets() {
+        const q = (this.panelSearch || '').toLowerCase().trim();
+        const assets = this.wizardAssets || [];
+        return q
+            ? assets.filter((a) => (a.name + ' ' + a.assetKey + ' ' + a.mergeTag).toLowerCase().includes(q))
+            : assets;
+    }
+    get hasFilteredAssets() {
+        return this.filteredAssets.length > 0;
+    }
+
+    // --- Notion-style slash-command menu ---
+    /** Everything insertable, flattened and rankable by the "/" query. */
+    _slashCatalog() {
+        const out = [];
+        let i = 0;
+        for (const sec of this.blockPaletteSections) {
+            for (const it of sec.items) {
+                out.push({ key: 's' + i++, label: it.label, group: sec.label, snippet: it.snippet });
+            }
+        }
+        for (const sec of this.tagPaletteSections) {
+            for (const it of sec.items) {
+                out.push({ key: 's' + i++, label: it.label, group: sec.label, snippet: it.snippet });
+            }
+        }
+        for (const a of this.wizardAssets || []) {
+            out.push({ key: 's' + i++, label: a.name, group: 'Image assets', snippet: a.mergeTag });
+        }
+        return out;
+    }
+
+    _maybeOpenSlashMenu() {
+        try {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount || !sel.isCollapsed) {
+                this._closeSlashMenu();
+                return;
+            }
+            const node = sel.anchorNode;
+            if (!node || node.nodeType !== 3) {
+                this._closeSlashMenu();
+                return;
+            }
+            const host = this.template.querySelector('.dg-visual-host');
+            const pv = host && host.querySelector('.dg-pv');
+            if (!pv || !pv.contains(node) || (node.parentElement && node.parentElement.closest('[data-dg-tag]'))) {
+                this._closeSlashMenu();
+                return;
+            }
+            const upto = node.nodeValue.slice(0, sel.anchorOffset);
+            const m = upto.match(/(^|[\s ])\/([\w -]{0,30})$/);
+            if (!m) {
+                this._closeSlashMenu();
+                return;
+            }
+            const query = m[2] || '';
+            if (!this.slashMenu || this._slashQuery !== query) {
+                this._slashSel = 0;
+            }
+            this._slashQuery = query;
+            this._slashCtx = { node, slashIndex: upto.length - query.length - 1 };
+            const range = sel.getRangeAt(0).cloneRange();
+            let rect = range.getBoundingClientRect();
+            if (!rect || (!rect.width && !rect.height)) {
+                rect = (node.parentElement || pv).getBoundingClientRect();
+            }
+            const col = this.template.querySelector('.dg-designer-canvas-col');
+            const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
+            this._renderSlashMenu(rect, colRect);
+        } catch (e) {
+            this._closeSlashMenu();
+        }
+    }
+
+    _renderSlashMenu(rect, colRect) {
+        const q = (this._slashQuery || '').toLowerCase().trim();
+        const all = this._slashCatalog();
+        const scored = q ? all.filter((o) => (o.label + ' ' + o.group).toLowerCase().includes(q)) : all;
+        const items = scored.slice(0, 9);
+        if (this._slashSel >= items.length) {
+            this._slashSel = Math.max(0, items.length - 1);
+        }
+        const posStyle = rect
+            ? 'left: ' + Math.max(0, rect.left - colRect.left) + 'px; top: ' + (rect.bottom - colRect.top + 6) + 'px;'
+            : this.slashMenu
+              ? this.slashMenu.posStyle
+              : '';
+        this.slashMenu = {
+            query: this._slashQuery,
+            hasItems: items.length > 0,
+            posStyle,
+            items: items.map((o, idx) => ({
+                ...o,
+                itemClass: idx === this._slashSel ? 'dg-slash-item dg-slash-item_active' : 'dg-slash-item'
+            }))
+        };
+    }
+
+    _closeSlashMenu() {
+        if (this.slashMenu) {
+            this.slashMenu = null;
+            this._slashCtx = null;
+            this._slashSel = 0;
+        }
+    }
+
+    /** Keyboard driving for the open slash menu; returns true when consumed. */
+    _slashMenuKeydown(e) {
+        if (!this.slashMenu) {
+            return false;
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const n = this.slashMenu.items.length;
+            if (n) {
+                this._slashSel = (this._slashSel + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+                this._renderSlashMenu(null, null);
+            }
+            return true;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            this._executeSlashItem(this.slashMenu.items[this._slashSel]);
+            return true;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            this._closeSlashMenu();
+            return true;
+        }
+        return false;
+    }
+
+    handleSlashItemClick(event) {
+        const key = event.currentTarget.dataset.key;
+        const item = this.slashMenu && this.slashMenu.items.find((o) => o.key === key);
+        this._executeSlashItem(item);
+    }
+
+    handleSlashMenuClose() {
+        this._closeSlashMenu();
+    }
+
+    /** Remove the typed "/query" trigger text, then insert the chosen thing there. */
+    _executeSlashItem(item) {
+        const ctx = this._slashCtx;
+        this._closeSlashMenu();
+        if (!item) {
+            return;
+        }
+        try {
+            if (ctx && ctx.node && ctx.node.parentNode) {
+                const sel = window.getSelection();
+                const end =
+                    sel && sel.rangeCount && sel.anchorNode === ctx.node ? sel.anchorOffset : ctx.node.nodeValue.length;
+                const r = document.createRange();
+                r.setStart(ctx.node, Math.max(0, ctx.slashIndex));
+                r.setEnd(ctx.node, Math.min(end, ctx.node.nodeValue.length));
+                r.deleteContents();
+                const s = window.getSelection();
+                s.removeAllRanges();
+                s.addRange(r);
+            }
+        } catch (e) {
+            /* insertion falls back to caret/append */
+        }
+        this._insertIntoVisualPage(item.snippet);
     }
 
     // --- Tags palette (Insert Tags without memorizing syntax) ---
@@ -6861,7 +7253,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _handleVisualDrop(event, pv) {
         event.preventDefault();
         this._hideDropMarker(pv);
-        const text = event.dataTransfer && event.dataTransfer.getData('text/plain');
+        // Internal chip/thumbnail drags carry their payload in component state
+        // (_dragSnippet) — dataTransfer doesn't survive LWS reliably. External
+        // drops (text dragged from elsewhere) still read dataTransfer.
+        let text = this._dragSnippet;
+        this._dragSnippet = null;
+        if (!text) {
+            try {
+                text = event.dataTransfer && event.dataTransfer.getData('text/plain');
+            } catch (e) {
+                text = null;
+            }
+        }
         if (!text) {
             return;
         }
@@ -6893,23 +7296,33 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.htmlEditorDirty = true;
     }
 
-    /** Tag chips and image thumbnails are draggable onto the visual page. */
+    /** Tag chips and image thumbnails are draggable onto the visual page.
+     *  Payload rides in _dragSnippet (LWS-proof); dataTransfer is set too for
+     *  drops outside the canvas (e.g. into the Source textarea). */
     handleTagDragStart(event) {
         const snippet = event.currentTarget.dataset.snippet;
+        this._dragSnippet = snippet || null;
         if (snippet && event.dataTransfer) {
-            event.dataTransfer.setData('text/plain', snippet);
-            event.dataTransfer.effectAllowed = 'copy';
+            try {
+                event.dataTransfer.setData('text/plain', snippet);
+                event.dataTransfer.effectAllowed = 'copy';
+            } catch (e) {
+                /* dataTransfer best-effort */
+            }
         }
     }
 
     handleImageDragStart(event) {
         const { url, name } = event.currentTarget.dataset;
-        if (url && event.dataTransfer) {
-            event.dataTransfer.setData(
-                'text/plain',
-                '<img src="' + url + '" alt="' + (name || 'image') + '" style="width: 180px" />'
-            );
-            event.dataTransfer.effectAllowed = 'copy';
+        const snippet = url ? '<img src="' + url + '" alt="' + (name || 'image') + '" style="width: 180px" />' : null;
+        this._dragSnippet = snippet;
+        if (snippet && event.dataTransfer) {
+            try {
+                event.dataTransfer.setData('text/plain', snippet);
+                event.dataTransfer.effectAllowed = 'copy';
+            } catch (e) {
+                /* dataTransfer best-effort */
+            }
         }
     }
 

@@ -10,6 +10,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     private static String currentEntryName;
     @TestVisible
     private static String currentOutputFormat = 'Native'; // Set before processXml — PDF skips blob loading for images
+    // Designer live PDF preview: when set, HTML-template merges render this
+    // draft body instead of the saved one. See mergeTemplate().
+    public static String draftHtmlBodyOverride;
     // Signer form fields ({?key} tags): preserved verbatim during the send-time
     // merge / snapshot freeze (so the placeholder survives into the signed-doc
     // template), then resolved when the signature finalize re-render flips this
@@ -598,6 +601,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // Allow callers to force PDF output format
         if (outputFormatOverride != null) {
             outputFormat = outputFormatOverride;
+        }
+
+        // Designer live-preview: render caller-supplied draft HTML in place of
+        // the saved body (HTML templates only). One-shot — cleared by the
+        // controller in a finally block so it never leaks into a later merge.
+        if (draftHtmlBodyOverride != null && templateType == 'HTML') {
+            base64File = EncodingUtil.base64Encode(Blob.valueOf(draftHtmlBodyOverride));
         }
 
         if (base64File == null) {

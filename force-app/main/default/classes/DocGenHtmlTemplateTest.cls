@@ -824,4 +824,50 @@ private class DocGenHtmlTemplateTest {
         Test.stopTest();
         System.assertEquals('<p>A &amp; B &lt;C&gt;</p>', result, 'XML-special chars escaped');
     }
+
+    // Designer live PDF preview: draft HTML replaces the saved body for the
+    // merge, renders through the real pipeline, and never touches versions.
+    @IsTest
+    static void previewDraftPdfRendersDraftHtmlNotSavedBody() {
+        Account acct = [SELECT Id FROM Account LIMIT 1];
+        Id tmplId = createHtmlTemplate(null, null, '<html><body><p>SAVED BODY {Name}</p></body></html>');
+
+        Test.startTest();
+        Map<String, Object> result = DocGenController.previewDraftPdf(
+            tmplId,
+            acct.Id,
+            '<html><body><h1>DRAFT ONLY {Name} — {Industry}</h1></body></html>'
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, result.get('contentDocumentId'), 'Preview should return a ContentDocument Id');
+        Integer previews = [
+            SELECT COUNT()
+            FROM ContentVersion
+            WHERE Title = :('dg_pdf_preview_' + tmplId) AND IsLatest = TRUE
+        ];
+        System.assertEquals(1, previews, 'Exactly one preview file should exist');
+        String rendered = DocGenService.lastRenderedHtml;
+        System.assert(rendered.contains('DRAFT ONLY'), 'Draft body should be the rendered document: ' + rendered);
+        System.assert(rendered.contains('HTMLTpl Test Co'), 'Merge tags must resolve in the draft: ' + rendered);
+        System.assert(!rendered.contains('SAVED BODY'), 'Saved body must NOT render when a draft is supplied');
+        // The override is one-shot — cleared even on success.
+        System.assertEquals(null, DocGenService.draftHtmlBodyOverride, 'Override must be cleared after preview');
+        Integer versions = [SELECT COUNT() FROM DocGen_Template_Version__c WHERE Template__c = :tmplId];
+        System.assertEquals(1, versions, 'Preview must not create template versions');
+    }
+
+    @IsTest
+    static void previewDraftPdfRejectsEmptyDraft() {
+        Account acct = [SELECT Id FROM Account LIMIT 1];
+        Id tmplId = createHtmlTemplate(null, null, '<html><body><p>{Name}</p></body></html>');
+        Boolean threw = false;
+        try {
+            DocGenController.previewDraftPdf(tmplId, acct.Id, '   ');
+        } catch (AuraHandledException e) {
+            threw = true;
+        }
+        System.assert(threw, 'Blank draft must be rejected');
+        System.assertEquals(null, DocGenService.draftHtmlBodyOverride, 'Override must stay clear');
+    }
 }
