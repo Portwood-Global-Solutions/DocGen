@@ -1195,3 +1195,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* Ghost chip that follows the cursor during a mouse-driven drag */
+.dg-drag-ghost {
+    position: fixed;
+    z-index: 120;
+    pointer-events: none;
+    background: #7c3aed;
+    color: #fff;
+    padding: 4px 12px;
+    border-radius: 9px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    box-shadow: 0 6px 18px rgba(124, 58, 237, 0.45);
+    white-space: nowrap;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

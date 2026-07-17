@@ -1547,7 +1547,7 @@
                                     class="dg-fmt-btn dg-panel-btn"
                                     data-panel="insert"
                                     onclick={handlePanelToggle}
-                                    title="Insert blocks, sections, tables — searchable. Or just type / in the page."
+                                    title="Insert blocks, sections, tables — searchable. Or just type ` or [ in the page."
                                 >
                                     + Insert
                                 </button>
@@ -2108,7 +2108,8 @@
                                     </template>
                                     <template if:true={isPanelInsert}>
                                         <p class="dg-float-panel-tip">
-                                            Tip: type <code>/</code> anywhere in the page for this menu at your cursor.
+                                            Tip: type <code>&#96;</code> or <code>[</code> anywhere in the page for this
+                                            menu at your cursor.
                                         </p>
                                         <template for:each={filteredBlockSections} for:item="section">
                                             <div key={section.key} class="dg-tag-section">
@@ -2124,9 +2125,7 @@
                                                             data-snippet={blk.snippet}
                                                             data-kind="block"
                                                             title={blk.title}
-                                                            draggable="true"
-                                                            ondragstart={handleTagDragStart}
-                                                            onmousedown={handleFmtMouseDown}
+                                                            onmousedown={handleChipDragMouseDown}
                                                             onclick={handleInsertTagSnippet}
                                                         >
                                                             {blk.label}
@@ -2150,9 +2149,7 @@
                                                             class="dg-tag-chip"
                                                             data-snippet={tag.snippet}
                                                             title={tag.title}
-                                                            draggable="true"
-                                                            ondragstart={handleTagDragStart}
-                                                            onmousedown={handleFmtMouseDown}
+                                                            onmousedown={handleChipDragMouseDown}
                                                             onclick={handleInsertTagSnippet}
                                                         >
                                                             {tag.label}
@@ -2176,9 +2173,7 @@
                                                             key={asset.id}
                                                             class="dg-image-thumb"
                                                             data-snippet={asset.mergeTag}
-                                                            draggable="true"
-                                                            ondragstart={handleTagDragStart}
-                                                            onmousedown={handleFmtMouseDown}
+                                                            onmousedown={handleChipDragMouseDown}
                                                             onclick={handleInsertTagSnippet}
                                                             title={asset.mergeTag}
                                                         >

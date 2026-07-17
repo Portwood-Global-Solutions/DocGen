@@ -1507,6 +1507,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // Column resize: grab a cell's right edge and drag.
                         pv.addEventListener('mousemove', (e) => this._tableResizeHover(e, pv));
                         pv.addEventListener('mousedown', (e) => this._tableResizeStart(e, pv));
+                        // Chip drops staged by the document-level drag listener
+                        // execute HERE — pv listeners are the context where DOM
+                        // insertion reliably works under LWS.
+                        pv.addEventListener('mouseup', () => this._performPendingDropInsert());
                         // Keep keystrokes OURS: Lightning binds "/" (and more) to
                         // global shortcuts via a capture-phase listener high in the
                         // tree, so stopping propagation at the page is too late.
@@ -6187,12 +6191,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const parent = node.parentElement;
             // Never wrap inside <style>, and NEVER inside an existing pill —
             // re-pillifying pill text nests a new layer on every insert.
-            if (
-                /\{[^{}]+\}/.test(node.nodeValue) &&
-                parent &&
-                parent.tagName !== 'STYLE' &&
-                !parent.closest('[data-dg-tag]')
-            ) {
+            // parent === null is a FRAGMENT-ROOT text node (bare tag snippet
+            // from a chip) — those must pillify too.
+            const blocked = parent && (parent.tagName === 'STYLE' || parent.closest('[data-dg-tag]'));
+            if (/\{[^{}]+\}/.test(node.nodeValue) && !blocked) {
                 targets.push(node);
             }
         }
@@ -6952,7 +6954,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 return;
             }
             const upto = node.nodeValue.slice(0, sel.anchorOffset);
-            const m = upto.match(/(^|[\s ])\/([\w -]{0,30})$/);
+            // Trigger keys: ` or [ — "/" belongs to Lightning global search.
+            const m = upto.match(/(^|[\s ])[`[]([\w -]{0,30})$/);
             if (!m) {
                 this._closeSlashMenu();
                 return;
@@ -7086,6 +7089,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     handleInsertTagSnippet(event) {
+        // A completed mouse-drag suppresses the click that follows it.
+        if (this._suppressChipClick) {
+            this._suppressChipClick = false;
+            return;
+        }
         const snippet = event.currentTarget.dataset.snippet;
         const isBlock = event.currentTarget.dataset.kind === 'block';
         if (!snippet) {
@@ -7299,6 +7307,141 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     /** Tag chips and image thumbnails are draggable onto the visual page.
      *  Payload rides in _dragSnippet (LWS-proof); dataTransfer is set too for
      *  drops outside the canvas (e.g. into the Source textarea). */
+    // --- Mouse-driven chip drag (HTML5 DnD does not survive LWS + manual DOM) ---
+    // mousedown arms it; 7px of movement starts it (a ghost chip follows the
+    // cursor and the purple drop caret tracks the pointer); mouseup over the
+    // page inserts at that exact point. A no-movement mouseup stays a click.
+    handleChipDragMouseDown(event) {
+        // preventDefault keeps the canvas caret alive (same job the old
+        // handleFmtMouseDown did on these chips).
+        event.preventDefault();
+        const snippet = event.currentTarget.dataset.snippet;
+        if (!snippet) {
+            return;
+        }
+        this._pointerDrag = {
+            snippet,
+            label: (event.currentTarget.textContent || 'Insert').trim().slice(0, 40),
+            startX: event.clientX,
+            startY: event.clientY,
+            started: false,
+            ghost: null
+        };
+        this._onPointerDragMove = (e) => this._pointerDragMove(e);
+        this._onPointerDragUp = (e) => this._pointerDragUp(e);
+        document.addEventListener('mousemove', this._onPointerDragMove, true);
+        document.addEventListener('mouseup', this._onPointerDragUp, true);
+    }
+
+    _getVisualPv() {
+        const host = this.template.querySelector('.dg-visual-host');
+        return host && host.querySelector('.dg-pv');
+    }
+
+    _pointerDragMove(e) {
+        const d = this._pointerDrag;
+        if (!d) {
+            return;
+        }
+        if (!d.started) {
+            if (Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY) < 7) {
+                return;
+            }
+            d.started = true;
+            const g = document.createElement('div');
+            g.className = 'dg-drag-ghost';
+            g.textContent = d.label;
+            document.body.appendChild(g);
+            d.ghost = g;
+        }
+        d.ghost.style.left = e.clientX + 14 + 'px';
+        d.ghost.style.top = e.clientY + 10 + 'px';
+        const pv = this._getVisualPv();
+        if (pv) {
+            const r = pv.getBoundingClientRect();
+            const over = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+            if (over) {
+                this._showDropMarker(e, pv);
+            } else {
+                this._hideDropMarker(pv);
+            }
+        }
+        e.preventDefault();
+    }
+
+    _pointerDragUp(e) {
+        const d = this._pointerDrag;
+        this._pointerDrag = null;
+        document.removeEventListener('mousemove', this._onPointerDragMove, true);
+        document.removeEventListener('mouseup', this._onPointerDragUp, true);
+        if (!d || !d.started) {
+            return; // plain click — the chip's onclick inserts at the caret
+        }
+        if (d.ghost) {
+            d.ghost.remove();
+        }
+        // The drag consumed this gesture — swallow the click that follows a
+        // mouseup back over the chip, or it would double-insert.
+        this._suppressChipClick = true;
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            this._suppressChipClick = false;
+        }, 250);
+        const pv = this._getVisualPv();
+        if (!pv) {
+            return;
+        }
+        this._hideDropMarker(pv);
+        const r = pv.getBoundingClientRect();
+        const over = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+        if (!over) {
+            return;
+        }
+        // Document-context DOM insertion silently no-ops under LWS, so this
+        // capture-phase listener only STAGES the drop; the pv's own mouseup
+        // listener (proven context — see renderedCallback) performs it. The
+        // timeout is a safety net if that listener never fires.
+        this._pendingDropInsert = { snippet: d.snippet, x: e.clientX, y: e.clientY };
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => this._performPendingDropInsert(), 250);
+    }
+
+    /** Executes a staged chip drop: caret to the drop point, then the same
+     *  insert the chip's click handler uses. Idempotent — first caller wins. */
+    _performPendingDropInsert() {
+        const drop = this._pendingDropInsert;
+        if (!drop) {
+            return;
+        }
+        this._pendingDropInsert = null;
+        const pv = this._getVisualPv();
+        if (!pv) {
+            return;
+        }
+        try {
+            let range = null;
+            if (document.caretRangeFromPoint) {
+                range = document.caretRangeFromPoint(drop.x, drop.y);
+            } else if (document.caretPositionFromPoint) {
+                const pos = document.caretPositionFromPoint(drop.x, drop.y);
+                if (pos) {
+                    range = document.createRange();
+                    range.setStart(pos.offsetNode, pos.offset);
+                }
+            }
+            if (range && pv.contains(range.startContainer)) {
+                range.collapse(true);
+                const s = window.getSelection();
+                s.removeAllRanges();
+                s.addRange(range);
+                pv.focus();
+            }
+        } catch (err) {
+            /* caret placement best-effort — insert falls back to append */
+        }
+        this._insertIntoVisualPage(drop.snippet);
+    }
+
     handleTagDragStart(event) {
         const snippet = event.currentTarget.dataset.snippet;
         this._dragSnippet = snippet || null;
