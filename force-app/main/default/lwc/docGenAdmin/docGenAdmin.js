@@ -1563,6 +1563,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                                 this.pillMenu = null;
                                 this._closeSlashMenu();
                                 this.ctxMenu = null;
+                                // A plain click clears the cell selection —
+                                // except the mouseup that just finished the
+                                // drag-select (toolbar/right-click don't fire
+                                // a pv click, so the selection survives them).
+                                if (!this._cellSelecting) {
+                                    this._clearCellSel();
+                                }
                             }
                         });
                         pv.addEventListener('dblclick', (e) => {
@@ -1612,6 +1619,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // Column resize: grab a cell's right edge and drag.
                         pv.addEventListener('mousemove', (e) => {
                             this._imgResizeHover(e);
+                            this._cellSelMove(e, pv);
                             this._tableResizeHover(e, pv);
                         });
                         pv.addEventListener('mousedown', (e) => {
@@ -1624,6 +1632,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             if (this._imgResizeStart(e, pv)) {
                                 return;
                             }
+                            this._cellSelDown(e, pv);
                             this._tableResizeStart(e, pv);
                         });
                         // Chip drops staged by the document-level drag listener
@@ -1706,10 +1715,29 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         }
                         // Sheet dimensions follow the page setup.
                         this._applyCanvasDimensions();
+                        // WYSIWYG watermark: show the template's background
+                        // image on the sheet, faded, behind the content.
+                        if (this.watermarkPreviewUrl) {
+                            pv.style.backgroundImage =
+                                'linear-gradient(rgba(255,255,255,0.72), rgba(255,255,255,0.72)), url(' +
+                                this.watermarkPreviewUrl +
+                                ')';
+                            pv.style.backgroundSize = 'cover';
+                            pv.style.backgroundPosition = 'center';
+                            pv.style.backgroundRepeat = 'no-repeat';
+                        } else {
+                            pv.style.backgroundImage = '';
+                        }
                         // Word-converted tables with absolute widths can't be
                         // tamed by max-width alone (auto layout won't shrink
                         // below min-content) — refit them onto the sheet.
                         this._fitOversizeTables(pv);
+                        // Clean page breaks: rows never split mid-cell in PDF.
+                        for (const tr of pv.querySelectorAll('tr')) {
+                            if (!tr.style.pageBreakInside) {
+                                tr.style.pageBreakInside = 'avoid';
+                            }
+                        }
                         // Context label ("Editing: Table cell") follows the caret.
                         if (!this._selListenerAdded) {
                             document.addEventListener('selectionchange', this._onSelectionChange);
@@ -6113,7 +6141,79 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     };
 
     // --- Table tools (visual mode): operate on the cell holding the caret ---
+    // ===== Excel-style cell selection =====
+    // Drag from one cell into another to select a rectangle (purple tint).
+    // The selection SURVIVES right-clicks and toolbar clicks — Fill, Merge,
+    // and row/column ops act on it. Click outside a table to clear.
+    _cellSelDown(e, pv) {
+        const cell = e.target && e.target.closest ? e.target.closest('td, th') : null;
+        this._cellSelAnchor = cell && pv.contains(cell) ? cell : null;
+        this._cellSelecting = false;
+    }
+
+    _cellSelMove(e, pv) {
+        if (!this._cellSelAnchor || !(e.buttons & 1)) {
+            return;
+        }
+        const cell = e.target && e.target.closest ? e.target.closest('td, th') : null;
+        if (!cell || !pv.contains(cell)) {
+            return;
+        }
+        const table = this._cellSelAnchor.closest('table');
+        if (cell === this._cellSelAnchor || cell.closest('table') !== table) {
+            return;
+        }
+        // Crossed a cell boundary — this drag selects cells, not text.
+        this._cellSelecting = true;
+        try {
+            e.preventDefault();
+            const ws = window.getSelection();
+            ws.removeAllRanges();
+        } catch (err) {
+            /* best effort */
+        }
+        this._applyCellSelRect(table, this._cellSelAnchor, cell);
+    }
+
+    _applyCellSelRect(table, a, f) {
+        this._clearCellSel();
+        const rows = Array.from(table.rows);
+        const r1 = Math.min(rows.indexOf(a.parentElement), rows.indexOf(f.parentElement));
+        const r2 = Math.max(rows.indexOf(a.parentElement), rows.indexOf(f.parentElement));
+        const c1 = Math.min(a.cellIndex, f.cellIndex);
+        const c2 = Math.max(a.cellIndex, f.cellIndex);
+        const sel = [];
+        for (let r = r1; r <= r2; r++) {
+            for (let c = c1; c <= c2; c++) {
+                const el = rows[r] && rows[r].children[c];
+                if (el) {
+                    el.setAttribute('data-dg-selcell', '1');
+                    el.style.boxShadow = 'inset 0 0 0 2px #7c3aed';
+                    el.style.backgroundClip = 'padding-box';
+                    sel.push(el);
+                }
+            }
+        }
+        this._cellSel = sel;
+    }
+
+    _clearCellSel() {
+        for (const el of this._cellSel || []) {
+            try {
+                el.removeAttribute('data-dg-selcell');
+                el.style.boxShadow = '';
+                el.style.backgroundClip = '';
+            } catch (e) {
+                /* detached */
+            }
+        }
+        this._cellSel = null;
+    }
+
     _selectedTableCell() {
+        if (this._cellSel && this._cellSel.length) {
+            return this._cellSel[0];
+        }
         let node = null;
         try {
             const sel = window.getSelection();
@@ -6248,7 +6348,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 c.style.fontWeight = 'bold';
             }
         } else if (action === 'cellFill') {
-            cell.style.background = value === 'transparent' ? '' : value;
+            const targets = this._cellSel && this._cellSel.length ? this._cellSel : [cell];
+            for (const c of targets) {
+                c.style.background = value === 'transparent' ? '' : value;
+            }
         } else if (action === 'bordersAll') {
             table.style.borderCollapse = 'collapse';
             table.style.border = '1pt solid #444444';
@@ -6984,6 +7087,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _unpillifyTags(root) {
+        // Editor-only selection chrome must never reach saved HTML.
+        for (const el of root.querySelectorAll('[data-dg-selcell]')) {
+            el.removeAttribute('data-dg-selcell');
+            el.style.boxShadow = '';
+            el.style.backgroundClip = '';
+            if (!el.getAttribute('style')) {
+                el.removeAttribute('style');
+            }
+        }
         for (const pill of root.querySelectorAll('[data-dg-tag]')) {
             const attr = pill.getAttribute('data-dg-tag');
             const tag = pill.tagName === 'IMG' && attr && attr.startsWith('{') ? attr : pill.textContent;
@@ -8343,6 +8455,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * flattened into it.
      */
     _mergeCells(cell, table) {
+        // Excel-style cell selection wins when present.
+        if (this._cellSel && this._cellSel.length > 1) {
+            const a0 = this._cellSel[0];
+            const f0 = this._cellSel[this._cellSel.length - 1];
+            const t0 = a0.closest('table');
+            this._clearCellSel();
+            this._mergeRect(t0, a0, f0);
+            return;
+        }
         const sel = window.getSelection();
         let a = cell;
         let f = cell;
@@ -8378,6 +8499,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.htmlEditorDirty = true;
             return;
         }
+        this._mergeRect(table, a, f);
+    }
+
+    _mergeRect(table, a, f) {
         const rows = Array.from(table.rows);
         const r1 = Math.min(rows.indexOf(a.parentElement), rows.indexOf(f.parentElement));
         const r2 = Math.max(rows.indexOf(a.parentElement), rows.indexOf(f.parentElement));
@@ -8461,14 +8586,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             th +
             '">Column 3</th>' +
             '</tr></thead><tbody>' +
-            '<tr><td style="' +
+            '<tr style="page-break-inside: avoid"><td style="' +
             cell +
             '">&nbsp;</td><td style="' +
             cell +
             '">&nbsp;</td><td style="' +
             cell +
             '">&nbsp;</td></tr>' +
-            '<tr><td style="' +
+            '<tr style="page-break-inside: avoid"><td style="' +
             cell +
             '">&nbsp;</td><td style="' +
             cell +

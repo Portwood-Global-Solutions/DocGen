@@ -115,6 +115,7 @@ const BASE_CSS = `
         h1 { font-size: 20pt; margin: 0 0 2pt 0; color: #1f3a5f; }
         h2 { font-size: 13pt; margin: 18pt 0 6pt 0; color: #1f3a5f; border-bottom: 2pt solid #1f3a5f; padding-bottom: 3pt; }
         table { width: 100%; border-collapse: collapse; border-spacing: 0; }
+        tr { page-break-inside: avoid; }
         td, th { padding: 5pt 7pt; vertical-align: top; }
         .meta { color: #666666; font-size: 9pt; }
         .label-cell { width: 35%; font-weight: bold; color: #444444; background: #f2f4f7; border-bottom: 1pt solid #ffffff; }
@@ -160,7 +161,7 @@ ${headCells}
                 </tr>
             </thead>
             <tbody>
-                <tr>
+                <tr style="page-break-inside: avoid">
 ${cells}
                 </tr>
             </tbody>
