@@ -647,6 +647,41 @@
                                         into Claude, ChatGPT, Gemini, or Copilot and describe the document you want
                                         where the prompt says so.
                                     </p>
+                                    <div class="dg-ai-fieldbox slds-var-m-bottom_small">
+                                        <p class="slds-text-body_small slds-var-m-bottom_xx-small">
+                                            <strong>Fields in your prompt ({aiQueryFieldCount})</strong> — check more
+                                            and the prompt updates instantly. These become the merge tags the AI is
+                                            allowed to use.
+                                        </p>
+                                        <input
+                                            type="search"
+                                            class="dg-panel-search"
+                                            placeholder="Search your object's fields..."
+                                            oninput={handleAiFieldSearch}
+                                            autocomplete="off"
+                                        />
+                                        <div class="dg-ai-fieldlist">
+                                            <template for:each={aiQuerySections} for:item="qsec">
+                                                <div key={qsec.key} class="dg-tag-section">
+                                                    <div class="dg-tag-section-label">{qsec.label}</div>
+                                                    <template for:each={qsec.rows} for:item="qrow">
+                                                        <label key={qrow.key} class="dg-qf-row">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={qrow.checked}
+                                                                data-kind={qrow.kind}
+                                                                data-api={qrow.api}
+                                                                data-rel={qrow.rel}
+                                                                onchange={handleAiQueryFieldToggle}
+                                                            />
+                                                            <span class="dg-qf-label">{qrow.label}</span>
+                                                            <span class="dg-qf-api">{qrow.api}</span>
+                                                        </label>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
                                     <pre class="dg-ai-prompt dg-ai-prompt_tall">{aiAuthoringPrompt}</pre>
                                 </div>
                                 <div

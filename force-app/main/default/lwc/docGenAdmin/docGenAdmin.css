@@ -1377,3 +1377,13 @@
     gap: 4px;
     min-width: 340px;
 }
+
+.dg-ai-fieldlist {
+    max-height: 210px;
+    overflow-y: auto;
+    border: 1px solid #e2e0ef;
+    border-radius: 8px;
+    padding: 6px 8px;
+    margin-top: 6px;
+    background: #fff;
+}

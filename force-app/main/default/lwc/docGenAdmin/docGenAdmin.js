@@ -445,6 +445,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // Query panel describe cache.
     @track designerQueryMeta = null;
     _queryMetaFor = null;
+    // AI-wizard field checklist describe cache + search.
+    @track wizardQueryMeta = null;
+    _wizardQueryMetaFor = null;
+    @track aiFieldSearch = '';
     // Live PDF preview: draft HTML → real Blob.toPdf render → blob: iframe.
     @track pdfPreviewUrl = null;
     @track isPdfPreviewLoading = false;
@@ -1774,6 +1778,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 } finally {
                     this.isAutoCreating = false;
                 }
+                this._loadWizardQueryMeta();
                 this.currentWizardStep = 'ai';
                 return;
             }
@@ -2327,6 +2332,78 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             dataSourceMode: this.editTemplateObject === 'FlowJsonData' ? 'flow' : 'record',
             providerFields: (this.providerFields || []).map((f) => f.name || f)
         });
+    }
+
+    // --- AI-step field checklist (build your query before the prompt) ---
+    async _loadWizardQueryMeta() {
+        if (this._wizardQueryMetaFor === this.newTemplateObject + '|' + this.newTemplateQuery) {
+            return;
+        }
+        try {
+            const [fields, rels] = await Promise.all([
+                getObjectFields({ objectName: this.newTemplateObject }),
+                getChildRelationships({ objectName: this.newTemplateObject })
+            ]);
+            const childFieldsByRel = {};
+            const shape = extractQueryShape(this.newTemplateQuery, this.newTemplateObject);
+            await Promise.all(
+                (shape.children || []).map(async (c) => {
+                    const rel = (rels || []).find((r) => r.value === c.relationshipName);
+                    if (rel) {
+                        try {
+                            childFieldsByRel[c.relationshipName] = await getObjectFields({
+                                objectName: rel.childObjectApiName
+                            });
+                        } catch (e) {
+                            /* skip */
+                        }
+                    }
+                })
+            );
+            this._wizardQueryMetaFor = this.newTemplateObject + '|' + this.newTemplateQuery;
+            this.wizardQueryMeta = { fields: fields || [], rels: rels || [], childFieldsByRel };
+        } catch (e) {
+            this.wizardQueryMeta = null;
+        }
+    }
+
+    get aiQuerySections() {
+        return this._buildQuerySections(
+            this.newTemplateQuery,
+            this.newTemplateObject,
+            this.wizardQueryMeta,
+            this.aiFieldSearch
+        );
+    }
+
+    get aiQueryFieldCount() {
+        const shape = extractQueryShape(this.newTemplateQuery, this.newTemplateObject);
+        let n = (shape.baseFields || []).length + (shape.parentFields || []).length;
+        for (const c of shape.children || []) {
+            n += (c.fields || []).length;
+        }
+        return n;
+    }
+
+    handleAiFieldSearch(event) {
+        this.aiFieldSearch = event.target.value || '';
+    }
+
+    async handleAiQueryFieldToggle(event) {
+        const res = await this._applyQueryToggle(
+            this.newTemplateQuery,
+            this.newTemplateObject,
+            this.wizardQueryMeta,
+            event.currentTarget.dataset,
+            event.currentTarget.checked
+        );
+        if (res.childFields) {
+            this.wizardQueryMeta = {
+                ...this.wizardQueryMeta,
+                childFieldsByRel: { ...this.wizardQueryMeta.childFieldsByRel, [res.rel]: res.childFields }
+            };
+        }
+        this.newTemplateQuery = res.query;
     }
 
     handleCopyAiPrompt() {
@@ -7228,21 +7305,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    /** Sections of checkbox rows driven by describe + the CURRENT query. */
-    get designerQuerySections() {
-        const meta = this.designerQueryMeta;
-        if (!meta || !this.designerQueryEditable) {
+    /** Shared: checkbox sections from a describe meta + a V1 query string. */
+    _buildQuerySections(query, objectName, meta, search) {
+        if (!meta) {
             return [];
         }
-        const q = (this.panelSearch || '').toLowerCase().trim();
-        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+        const q = (search || '').toLowerCase().trim();
+        const shape = extractQueryShape(query, objectName);
         const baseSet = new Set((shape.baseFields || []).map((f) => f.toLowerCase()));
         const SKIP = /^(Id|IsDeleted|SystemModstamp|CurrencyIsoCode|Jigsaw.*|CleanStatus|PhotoUrl)$/;
         const match = (label, api) => !q || (label + ' ' + api).toLowerCase().includes(q);
         const sections = [];
         sections.push({
             key: 'base',
-            label: this.editTemplateObject + ' fields',
+            label: objectName + ' fields',
             rows: meta.fields
                 .filter((f) => !SKIP.test(f.value) && match(f.label, f.value))
                 .map((f) => ({
@@ -7295,14 +7371,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return sections.filter((sec) => sec.rows.length);
     }
 
-    /** One click = query updated. Rebuilds the V1 string from the shape. */
-    async handleQueryFieldToggle(event) {
-        const { kind, api, rel } = event.currentTarget.dataset;
-        const on = event.currentTarget.checked;
-        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+    /** Shared: apply a checkbox toggle to a V1 query string. Returns
+     *  { query, childFields } — childFields set when a new rel was seeded. */
+    async _applyQueryToggle(query, objectName, meta, dataset, on) {
+        const { kind, api, rel } = dataset;
+        const shape = extractQueryShape(query, objectName);
         const base = [...(shape.baseFields || [])];
         const parents = [...(shape.parentFields || [])];
         let children = (shape.children || []).map((c) => ({ rel: c.relationshipName, fields: [...c.fields] }));
+        let childFields = null;
         if (kind === 'base') {
             const idx = base.findIndex((f) => f.toLowerCase() === api.toLowerCase());
             if (on && idx === -1) {
@@ -7324,17 +7401,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
             }
         } else if (kind === 'rel' && on) {
-            // Seed the new child list with sensible fields from its describe.
             let seed = ['Name'];
             try {
-                const relMeta = (this.designerQueryMeta.rels || []).find((r) => r.value === rel);
+                const relMeta = (meta.rels || []).find((r) => r.value === rel);
                 if (relMeta) {
-                    const cf = await getObjectFields({ objectName: relMeta.childObjectApiName });
-                    this.designerQueryMeta = {
-                        ...this.designerQueryMeta,
-                        childFieldsByRel: { ...this.designerQueryMeta.childFieldsByRel, [rel]: cf || [] }
-                    };
-                    const names = (cf || []).map((f) => f.value);
+                    childFields = (await getObjectFields({ objectName: relMeta.childObjectApiName })) || [];
+                    const names = childFields.map((f) => f.value);
                     seed = ['Name', 'FirstName', 'LastName', 'Email', 'Amount', 'StageName', 'Quantity', 'UnitPrice']
                         .filter((f) => names.includes(f))
                         .slice(0, 4);
@@ -7354,7 +7426,38 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         for (const c of children) {
             parts.push('(SELECT ' + c.fields.join(', ') + ' FROM ' + c.rel + ')');
         }
-        this.editTemplateQuery = parts.join(', ');
+        return { query: parts.join(', '), childFields, rel };
+    }
+
+    /** Sections of checkbox rows driven by describe + the CURRENT query. */
+    get designerQuerySections() {
+        if (!this.designerQueryEditable) {
+            return [];
+        }
+        return this._buildQuerySections(
+            this.editTemplateQuery,
+            this.editTemplateObject,
+            this.designerQueryMeta,
+            this.panelSearch
+        );
+    }
+
+    /** One click = query updated. Rebuilds the V1 string from the shape. */
+    async handleQueryFieldToggle(event) {
+        const res = await this._applyQueryToggle(
+            this.editTemplateQuery,
+            this.editTemplateObject,
+            this.designerQueryMeta,
+            event.currentTarget.dataset,
+            event.currentTarget.checked
+        );
+        if (res.childFields) {
+            this.designerQueryMeta = {
+                ...this.designerQueryMeta,
+                childFieldsByRel: { ...this.designerQueryMeta.childFieldsByRel, [res.rel]: res.childFields }
+            };
+        }
+        this.editTemplateQuery = res.query;
     }
 
     get designerQueryFieldCount() {
