@@ -451,6 +451,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track aiFieldSearch = '';
     // AI step: which shared assets ride into the prompt (null = all).
     @track aiSelectedAssetIds = null;
+    // Step 3: the author's own description, injected into the prompt.
+    @track aiDocDescription = '';
     // Live PDF preview: draft HTML → real Blob.toPdf render → blob: iframe.
     @track pdfPreviewUrl = null;
     @track isPdfPreviewLoading = false;
@@ -2349,7 +2351,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return buildAiPrompt(shape, {
             dataSourceMode: this.dataSourceMode,
             providerFields: (this.providerFields || []).map((f) => f.name || f),
-            assets
+            assets,
+            docDescription: this.aiDocDescription
         });
     }
 
@@ -2410,6 +2413,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             n += (c.fields || []).length;
         }
         return n;
+    }
+
+    handleAiDescChange(event) {
+        this.aiDocDescription = event.target.value || '';
     }
 
     handleAiFieldSearch(event) {

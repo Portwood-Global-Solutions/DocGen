@@ -499,11 +499,14 @@
                                                     layouts (text boxes, floating images, unusual tables) may not
                                                     convert exactly. Keep Output Format&nbsp;<strong
                                                         >Native (.docx)</strong
-                                                    >&nbsp;for full fidelity, or use&nbsp;<strong
-                                                        >Start from a Design</strong
-                                                    >&nbsp;/&nbsp;<strong>Generate with AI</strong>&nbsp;/&nbsp;<strong
-                                                        >Start From Scratch</strong
-                                                    >&nbsp;for pixel-perfect PDFs.
+                                                    >&nbsp;for full fidelity, upload
+                                                    an&nbsp;<strong>HTML</strong>&nbsp;file for a pixel-perfect PDF, or
+                                                    use&nbsp;<strong>Start from a Design</strong>&nbsp;/&nbsp;<strong
+                                                        >Generate with AI</strong
+                                                    >&nbsp;/&nbsp;<strong>Start From Scratch</strong>.
+                                                    <strong>Excel</strong
+                                                    >&nbsp;and&nbsp;<strong>PowerPoint</strong>&nbsp;templates always
+                                                    generate in their native format — no conversion involved.
                                                 </p>
                                             </div>
                                         </template>
@@ -609,27 +612,13 @@
                                 >
                                     <div class="dg-ai-step-head">
                                         <span class="dg-ai-step-num">1</span>
-                                        <strong>Copy your prompt</strong>
-                                        <lightning-button
-                                            label="Copy Prompt"
-                                            icon-name="utility:copy"
-                                            variant="brand"
-                                            onclick={handleCopyAiPrompt}
-                                            class="slds-var-m-left_small"
-                                        ></lightning-button>
+                                        <strong>Pick your fields ({aiQueryFieldCount})</strong>
                                     </div>
-                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
-                                        Everything the AI needs: your {newTemplateObject} fields, DocGen's merge-tag
-                                        syntax, the PDF engine's layout rules, and your shared image assets. Paste it
-                                        into Claude, ChatGPT, Gemini, or Copilot and describe the document you want
-                                        where the prompt says so.
+                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_xx-small">
+                                        These become the merge tags the AI is allowed to use — the prompt updates as you
+                                        tick.
                                     </p>
                                     <div class="dg-ai-fieldbox slds-var-m-bottom_small">
-                                        <p class="slds-text-body_small slds-var-m-bottom_xx-small">
-                                            <strong>Fields in your prompt ({aiQueryFieldCount})</strong> — check more
-                                            and the prompt updates instantly. These become the merge tags the AI is
-                                            allowed to use.
-                                        </p>
                                         <input
                                             type="search"
                                             class="dg-panel-search"
@@ -659,20 +648,15 @@
                                             </template>
                                         </div>
                                     </div>
-                                    <pre class="dg-ai-prompt dg-ai-prompt_tall">{aiAuthoringPrompt}</pre>
-                                </div>
-                                <div
-                                    class="slds-col slds-size_1-of-2 slds-medium-size_1-of-2 slds-max-small-size_1-of-1"
-                                >
+                                    <div class="dg-ai-step-head slds-var-m-top_small">
+                                        <span class="dg-ai-step-num">2</span>
+                                        <strong>Pick your images</strong>
+                                    </div>
+                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_xx-small">
+                                        Tick the shared assets this document should use — the prompt tells the AI how to
+                                        place each one.
+                                    </p>
                                     <template if:true={hasWizardAssets}>
-                                        <div class="dg-ai-step-head">
-                                            <span class="dg-ai-step-num">2</span>
-                                            <strong>Your shared image assets</strong>
-                                        </div>
-                                        <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
-                                            Already included in the prompt — the AI can place these. Click a tag to copy
-                                            it.
-                                        </p>
                                         <div class="dg-ai-assetlist">
                                             <template for:each={aiAssetRows} for:item="asset">
                                                 <label key={asset.id} class="dg-qf-row">
@@ -695,8 +679,48 @@
                                             </template>
                                         </div>
                                     </template>
-                                    <div class="dg-ai-step-head slds-var-m-top_medium">
-                                        <span class="dg-ai-step-num">{aiPasteStepNum}</span>
+                                    <template if:false={hasWizardAssets}>
+                                        <p class="slds-text-body_small slds-text-color_weak">
+                                            No image assets yet — add them under the <strong>Assets</strong> tab and
+                                            they become selectable here.
+                                        </p>
+                                    </template>
+                                    <div class="dg-ai-step-head slds-var-m-top_small">
+                                        <span class="dg-ai-step-num">3</span>
+                                        <strong>Describe your document</strong>
+                                    </div>
+                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_xx-small">
+                                        In your own words — purpose, sections, tone, brand colors. This goes straight
+                                        into the prompt.
+                                    </p>
+                                    <textarea
+                                        class="dg-hf-ta dg-ai-desc"
+                                        spellcheck="true"
+                                        placeholder="e.g. A two-page account summary: header with our logo, key details table, open opportunities with a total row, navy and gray branding."
+                                        oninput={handleAiDescChange}
+                                    ></textarea>
+                                </div>
+                                <div
+                                    class="slds-col slds-size_1-of-2 slds-medium-size_1-of-2 slds-max-small-size_1-of-1"
+                                >
+                                    <div class="dg-ai-step-head">
+                                        <span class="dg-ai-step-num">4</span>
+                                        <strong>Copy your prompt</strong>
+                                        <lightning-button
+                                            label="Copy Prompt"
+                                            icon-name="utility:copy"
+                                            variant="brand"
+                                            onclick={handleCopyAiPrompt}
+                                            class="slds-var-m-left_small"
+                                        ></lightning-button>
+                                    </div>
+                                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
+                                        Paste it into Claude, ChatGPT, Gemini, or Copilot. It carries your fields,
+                                        images, description, and the PDF engine's layout rules.
+                                    </p>
+                                    <pre class="dg-ai-prompt">{aiAuthoringPrompt}</pre>
+                                    <div class="dg-ai-step-head slds-var-m-top_small">
+                                        <span class="dg-ai-step-num">5</span>
                                         <strong>Paste the HTML it returns</strong>
                                     </div>
                                     <textarea
@@ -705,18 +729,21 @@
                                         onchange={handleAiPasteChange}
                                         spellcheck="false"
                                     ></textarea>
+                                    <div class="dg-ai-step-head slds-var-m-top_small">
+                                        <span class="dg-ai-step-num">6</span>
+                                        <strong>Sample record (optional)</strong>
+                                    </div>
                                     <template if:true={isRecordDataSource}>
                                         <template if:true={newTemplateObject}>
-                                            <div class="slds-var-m-top_small">
-                                                <lightning-record-picker
-                                                    label="Sample Record (optional)"
-                                                    object-api-name={newTemplateObject}
-                                                    value={newTemplateSampleRecordId}
-                                                    onchange={handleSampleRecordChange}
-                                                    placeholder="Pick a record to preview with real data..."
-                                                >
-                                                </lightning-record-picker>
-                                            </div>
+                                            <lightning-record-picker
+                                                label="Sample Record"
+                                                variant="label-hidden"
+                                                object-api-name={newTemplateObject}
+                                                value={newTemplateSampleRecordId}
+                                                onchange={handleSampleRecordChange}
+                                                placeholder="Pick a record to preview with real data..."
+                                            >
+                                            </lightning-record-picker>
                                         </template>
                                     </template>
                                     <div class="slds-var-m-top_small">
@@ -736,8 +763,8 @@
                                         </template>
                                         <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
                                             Pasted HTML is staged as the template body and opens in the visual designer.
-                                            Nothing pasted yet? That's fine — the designer opens empty and the prompt
-                                            stays available there.
+                                            Nothing pasted yet? The designer opens empty and the prompt stays available
+                                            there.
                                         </p>
                                     </div>
                                 </div>

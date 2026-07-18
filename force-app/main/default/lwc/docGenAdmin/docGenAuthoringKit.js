@@ -470,9 +470,13 @@ export function buildAiPrompt(shape, options) {
     }
     lines.push('');
     lines.push('WHAT I WANT THIS DOCUMENT TO BE:');
-    lines.push(
-        '<<DESCRIBE YOUR DOCUMENT HERE: purpose, sections, tone, branding colors. Example: "A two-page account summary: header with account name and logo placeholder, key details table, then a table of open opportunities with a total row.">>'
-    );
+    if (opts.docDescription && opts.docDescription.trim()) {
+        lines.push(opts.docDescription.trim());
+    } else {
+        lines.push(
+            '<<DESCRIBE YOUR DOCUMENT HERE: purpose, sections, tone, branding colors. Example: "A two-page account summary: header with account name and logo placeholder, key details table, then a table of open opportunities with a total row.">>'
+        );
+    }
     lines.push('');
     lines.push('OUTPUT REQUIREMENTS:');
     lines.push(
