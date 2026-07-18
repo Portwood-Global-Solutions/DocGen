@@ -6364,6 +6364,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (action === 'rowBefore') {
             const clone = row.cloneNode(true);
             for (const c of clone.children) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
                 c.innerHTML = '&nbsp;';
                 c.removeAttribute('rowspan');
             }
@@ -6373,6 +6374,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 const ref = tr.children[Math.min(cellIndex, tr.children.length - 1)];
                 if (ref) {
                     const c = ref.cloneNode(false);
+                    // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
                     c.innerHTML = '&nbsp;';
                     c.removeAttribute('colspan');
                     ref.insertAdjacentElement('beforebegin', c);
@@ -8888,6 +8890,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 return;
             }
             if ((nxt.textContent || '').trim()) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
                 a.innerHTML = a.innerHTML + ' ' + nxt.innerHTML;
             }
             a.colSpan = (a.colSpan || 1) + (nxt.colSpan || 1);
@@ -8913,12 +8916,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     continue;
                 }
                 if ((el.textContent || '').trim()) {
+                    // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
                     extra += ' ' + el.innerHTML;
                 }
                 el.remove();
             }
         }
         if (extra) {
+            // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
             keep.innerHTML = keep.innerHTML + extra;
         }
         keep.colSpan = c2 - c1 + 1;
@@ -8947,6 +8952,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (style) {
                 c.setAttribute('style', style);
             }
+            // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
             c.innerHTML = '&nbsp;';
             return c;
         };

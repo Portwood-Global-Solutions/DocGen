@@ -4,7 +4,7 @@ Build polished Word and PDF documents from any Salesforce record. Author your te
 
 PowerPoint and Excel templates are also supported as **alpha-stage** formats — see [§2](#2-what-docgen-does) for what to expect.
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Support](https://portwood.dev/support)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Support](https://portwood.dev/support) · [Expert Services](https://portwood.dev/services)
 
 ---
 
