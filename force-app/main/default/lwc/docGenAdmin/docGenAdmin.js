@@ -1610,13 +1610,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             };
                         });
                         // Column resize: grab a cell's right edge and drag.
-                        pv.addEventListener('mousemove', (e) => this._tableResizeHover(e, pv));
+                        pv.addEventListener('mousemove', (e) => {
+                            this._imgResizeHover(e);
+                            this._tableResizeHover(e, pv);
+                        });
                         pv.addEventListener('mousedown', (e) => {
                             // Nested-contenteditable blur is unreliable — a click
                             // outside an in-edit pill commits it explicitly, so
                             // the user is never "caught" inside the pill.
                             if (this._editingPill && !this._editingPill.contains(e.target) && this._finishPillEdit) {
                                 this._finishPillEdit();
+                            }
+                            if (this._imgResizeStart(e, pv)) {
+                                return;
                             }
                             this._tableResizeStart(e, pv);
                         });
@@ -1886,6 +1892,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 mergeTag: a.mergeTag || '{%asset:' + a.assetKey + '}',
                 previewUrl: a.latestVersionCvId ? '/sfc/servlet.shepherd/version/download/' + a.latestVersionCvId : null
             }));
+            this._assetUrlByKey = {};
+            for (const a of this.wizardAssets) {
+                if (a.previewUrl) {
+                    this._assetUrlByKey[(a.assetKey || '').toLowerCase()] = a.previewUrl;
+                }
+            }
+            this._imagifyAssetPills();
         } catch (e) {
             this.wizardAssets = [];
         }
@@ -6274,6 +6287,47 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return event.clientX >= rect.right - 5 && event.clientX <= rect.right + 5 ? cell : null;
     }
 
+    /** Corner-drag resize for canvas images; asset tags get the new size
+     *  written back as {%asset:key:<W>x} (width-only, aspect preserved). */
+    _imgResizeHover(event) {
+        const img = event.target && event.target.tagName === 'IMG' ? event.target : null;
+        if (img) {
+            img.style.cursor = 'nwse-resize';
+        }
+    }
+
+    _imgResizeStart(event, pv) {
+        const img = event.target && event.target.tagName === 'IMG' ? event.target : null;
+        if (!img || !pv.contains(img)) {
+            return false;
+        }
+        event.preventDefault();
+        const startX = event.clientX;
+        const startW = img.getBoundingClientRect().width;
+        const doc = pv.ownerDocument || document;
+        const onMove = (ev) => {
+            const w = Math.max(24, Math.round(startW + (ev.clientX - startX)));
+            img.style.width = w + 'px';
+            img.style.height = 'auto';
+            img.style.maxWidth = '';
+        };
+        const onUp = () => {
+            doc.removeEventListener('mousemove', onMove);
+            doc.removeEventListener('mouseup', onUp);
+            const attr = img.getAttribute('data-dg-tag');
+            const m = attr && /^\{%asset:([a-z0-9-]+)/i.exec(attr);
+            if (m) {
+                const w = Math.round(img.getBoundingClientRect().width);
+                img.setAttribute('data-dg-tag', '{%asset:' + m[1] + ':' + w + 'x}');
+                img.title = img.getAttribute('data-dg-tag') + ' — drag the corner to resize';
+            }
+            this.htmlEditorDirty = true;
+        };
+        doc.addEventListener('mousemove', onMove);
+        doc.addEventListener('mouseup', onUp);
+        return true;
+    }
+
     _tableResizeHover(event, pv) {
         if (this._colResizing) {
             return;
@@ -6576,6 +6630,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const frag = doc.createDocumentFragment();
             for (const part of node.nodeValue.split(/(\{[^{}]+\})/g)) {
                 if (/^\{[^{}]+\}$/.test(part)) {
+                    const assetImg = this._assetImgFor(part, doc);
+                    if (assetImg) {
+                        frag.appendChild(assetImg);
+                        continue;
+                    }
                     const pill = doc.createElement('span');
                     pill.setAttribute('data-dg-tag', 'true');
                     pill.setAttribute('contenteditable', 'false');
@@ -6873,9 +6932,62 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Pills back to plain merge-tag text (exit path). */
+    /** WYSIWYG assets: {%asset:key} pills become the real image on canvas.
+     *  The true tag lives in data-dg-tag; save round-trips through it. */
+    _assetImgFor(tag, doc) {
+        const m = /^\{%asset:([a-z0-9-]+)(?::([^}]+))?\}$/i.exec(tag);
+        if (!m || !this._assetUrlByKey) {
+            return null;
+        }
+        const url = this._assetUrlByKey[m[1].toLowerCase()];
+        if (!url) {
+            return null;
+        }
+        const img = doc.createElement('img');
+        img.setAttribute('data-dg-tag', tag);
+        img.setAttribute('contenteditable', 'false');
+        img.src = url;
+        img.style.cssText = 'vertical-align:middle;outline:1px dashed #b8e6c9;outline-offset:2px;cursor:nwse-resize;';
+        const size = m[2];
+        if (size) {
+            const wh = /^(m?)(\d+)(px|%)?x?(m?)(\d*)(px|%)?$/i.exec(size.replace(/\s/g, ''));
+            if (wh && wh[2]) {
+                img.style.width = wh[2] + (wh[3] === '%' ? '%' : 'px');
+                if (wh[5]) {
+                    img.style.height = wh[5] + (wh[6] === '%' ? '%' : 'px');
+                }
+            }
+        } else {
+            img.style.maxWidth = '220px';
+        }
+        img.title = tag + ' — drag the corner to resize';
+        return img;
+    }
+
+    _imagifyAssetPills() {
+        try {
+            const pv = this._getVisualPv();
+            if (!pv) {
+                return;
+            }
+            const doc = pv.ownerDocument || document;
+            for (const pill of Array.from(pv.querySelectorAll('span[data-dg-tag]'))) {
+                const tag = (pill.textContent || '').trim();
+                const img = this._assetImgFor(tag, doc);
+                if (img) {
+                    pill.replaceWith(img);
+                }
+            }
+        } catch (e) {
+            /* best effort */
+        }
+    }
+
     _unpillifyTags(root) {
         for (const pill of root.querySelectorAll('[data-dg-tag]')) {
-            pill.replaceWith((root.ownerDocument || document).createTextNode(pill.textContent));
+            const attr = pill.getAttribute('data-dg-tag');
+            const tag = pill.tagName === 'IMG' && attr && attr.startsWith('{') ? attr : pill.textContent;
+            pill.replaceWith((root.ownerDocument || document).createTextNode(tag));
         }
     }
 
