@@ -725,6 +725,26 @@
     box-shadow: none;
 }
 
+/* Google-Docs-style point-size box in the format bar. */
+.dg-fmt-size-input {
+    width: 52px;
+    height: 26px;
+    border: 1px solid #d8dde6;
+    border-radius: 6px;
+    background: #fff;
+    color: #16325c;
+    font-size: 0.8rem;
+    text-align: center;
+    padding: 0 2px;
+    font-family: inherit;
+}
+
+.dg-fmt-size-input:focus {
+    outline: none;
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18);
+}
+
 /* Format applied at the caret — button reads as pressed. */
 .dg-fmt-btn.dg-fmt-on {
     background: #16325c;

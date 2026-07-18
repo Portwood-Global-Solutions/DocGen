@@ -6903,6 +6903,87 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      */
     // --- Active-format indication: B/I/U/S read as pressed at the caret ---
     @track fmtState = { bold: false, italic: false, underline: false, strike: false };
+    // Google-Docs-style size box: shows the size at the caret, sets any pt.
+    @track fmtSizePt = 11;
+
+    handleFontSizeStep(event) {
+        const dir = parseInt(event.currentTarget.dataset.szstep, 10) || 0;
+        const cur = parseFloat(this.fmtSizePt) || 11;
+        this._applyFontSizePt(Math.max(6, Math.min(96, Math.round(cur + dir))));
+    }
+
+    handleFontSizeInput(event) {
+        const v = parseFloat(event.currentTarget.value);
+        if (isNaN(v)) {
+            return;
+        }
+        // The input steals focus — put the page selection back first.
+        if (this._savedFmtRange) {
+            try {
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(this._savedFmtRange);
+            } catch (e) {
+                /* best effort */
+            }
+        }
+        this._applyFontSizePt(Math.max(6, Math.min(96, v)));
+    }
+
+    /**
+     * Exact point size on the selection. Pills take it directly; text goes
+     * through execCommand's only enlargement hook (fontSize 7) and the marker
+     * spans it creates are immediately retargeted to the requested pt.
+     */
+    _applyFontSizePt(pt) {
+        if (!this.showHtmlBodyVisual) {
+            return;
+        }
+        const host = this.template.querySelector('.dg-visual-host');
+        const pv = host && host.querySelector('.dg-pv');
+        const pills = this._pillsInSelection();
+        if (pills.length) {
+            for (const pill of pills) {
+                pill.style.fontSize = pt + 'pt';
+            }
+            this.htmlEditorDirty = true;
+        }
+        const ws = window.getSelection();
+        const hasTextSel = ws && ws.rangeCount && !ws.isCollapsed && (ws.toString() || '').trim().length > 0;
+        if (!hasTextSel) {
+            if (pills.length) {
+                this.fmtSizePt = pt;
+                return;
+            }
+            this._expandCaretToWord();
+        }
+        const isMarker = (el) => {
+            const fs = el.style.fontSize;
+            return fs === 'xxx-large' || fs === '48px';
+        };
+        const before = new Set();
+        if (pv) {
+            for (const el of pv.querySelectorAll('[style*="font-size"]')) {
+                if (isMarker(el)) {
+                    before.add(el);
+                }
+            }
+        }
+        try {
+            document.execCommand('styleWithCSS', false, 'true');
+            if (document.execCommand('fontSize', false, '7') && pv) {
+                for (const el of pv.querySelectorAll('[style*="font-size"]')) {
+                    if (isMarker(el) && !before.has(el)) {
+                        el.style.fontSize = pt + 'pt';
+                    }
+                }
+                this.htmlEditorDirty = true;
+            }
+        } catch (e) {
+            /* formatting unavailable */
+        }
+        this.fmtSizePt = pt;
+    }
 
     get boldBtnClass() {
         return this.fmtState.bold ? 'dg-fmt-btn dg-fmt-on' : 'dg-fmt-btn';
@@ -6930,10 +7011,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             const host = this.template.querySelector('.dg-visual-host');
             const pv = host && host.querySelector('.dg-pv');
+            // A single selected pill reports its own look, not its parent's.
+            const selPills = this._pillsInSelection();
+            if (selPills.length === 1) {
+                node = selPills[0];
+            }
             if (node && pv && pv.contains(node)) {
                 const cs = window.getComputedStyle(node);
                 next.bold = cs.fontWeight === 'bold' || parseInt(cs.fontWeight, 10) >= 600;
                 next.italic = cs.fontStyle === 'italic';
+                const px = parseFloat(cs.fontSize);
+                if (px) {
+                    const pt = Math.round(px * 0.75 * 2) / 2;
+                    if (pt !== this.fmtSizePt) {
+                        this.fmtSizePt = pt;
+                    }
+                }
                 // Decorations don't inherit through computed style — walk up.
                 let el = node;
                 while (el && el !== pv) {

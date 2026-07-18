@@ -2146,44 +2146,33 @@
                                         </button>
                                         <span class="dg-fmt-sep"></span>
                                         <button
-                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                            data-cmd="fontSize"
-                                            data-value="2"
+                                            class="dg-fmt-btn"
+                                            data-szstep="-1"
                                             onmousedown={handleFmtMouseDown}
-                                            onclick={handleFormatAction}
-                                            title="Small text"
+                                            onclick={handleFontSizeStep}
+                                            title="Decrease font size"
                                         >
-                                            S
+                                            &#8722;
                                         </button>
+                                        <input
+                                            class="dg-fmt-size-input"
+                                            type="number"
+                                            min="6"
+                                            max="96"
+                                            step="1"
+                                            value={fmtSizePt}
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleFontSizeInput}
+                                            title="Font size in points — highlight text (or click a merge tag) and type any size"
+                                        />
                                         <button
-                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                            data-cmd="fontSize"
-                                            data-value="3"
+                                            class="dg-fmt-btn"
+                                            data-szstep="1"
                                             onmousedown={handleFmtMouseDown}
-                                            onclick={handleFormatAction}
-                                            title="Normal text"
+                                            onclick={handleFontSizeStep}
+                                            title="Increase font size"
                                         >
-                                            M
-                                        </button>
-                                        <button
-                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                            data-cmd="fontSize"
-                                            data-value="5"
-                                            onmousedown={handleFmtMouseDown}
-                                            onclick={handleFormatAction}
-                                            title="Large text"
-                                        >
-                                            L
-                                        </button>
-                                        <button
-                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                            data-cmd="fontSize"
-                                            data-value="6"
-                                            onmousedown={handleFmtMouseDown}
-                                            onclick={handleFormatAction}
-                                            title="Extra large text"
-                                        >
-                                            XL
+                                            +
                                         </button>
                                         <span class="dg-fmt-sep"></span>
                                         <span class="dg-fmt-label" title="Text color">A</span>
