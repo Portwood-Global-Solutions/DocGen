@@ -4576,30 +4576,43 @@ public with sharing class DocGenHtmlRenderer {
      * bars so every bar edge lands on an exact integer pixel.
      */
     private static String renderLinearBarcodeHtml(String pattern, String sizeSpec) {
-        // Flying Saucer rounds absolute CSS px offsets to whole PDF points
-        // (1px = 0.75pt), so px-specified 1-2px modules pick up +-half-module
-        // rounding PER BAR — geometry chaos scanners reject. Speak points
-        // directly: every module is an INTEGER number of pt, every bar edge an
-        // integer pt offset — vector-exact in the PDF, zero rounding anywhere.
-        Integer moduleW = 1; // pt (~13.9 mil X-dimension — scanner-friendly)
-        Integer barHeight = 45; // pt
+        // Scanner-grade geometry, in the PDF's native unit (integer points —
+        // px offsets get rounded per-bar by Flying Saucer and wreck the
+        // symbol). Module width: 2pt (~27.8 mil) whenever the symbol fits the
+        // printable width, else 1pt (~13.9 mil, still above the 10 mil
+        // scanner floor). The container carries vertical margin so adjacent
+        // barcodes/content can never fuse into one unreadable blob, plus a
+        // generous default height — 1D scanners want tall bars.
+        Integer maxTotalPt = 460; // ~printable Letter width at default margins
+        Integer requestedPt = 0;
+        Integer barHeight = 60; // pt (~0.83in)
         if (String.isNotBlank(sizeSpec) && sizeSpec.toLowerCase().contains('x')) {
             List<String> dims = sizeSpec.toLowerCase().split('x');
             if (dims.size() == 2 && dims[0].trim().isNumeric() && dims[1].trim().isNumeric()) {
-                // Requested size arrives in px-ish units; honor it as a target
-                // but never let the module drop below 1pt.
-                Integer targetPt = (Integer.valueOf(dims[0].trim()) * 3) / 4;
-                moduleW = Math.max(1, targetPt / (pattern.length() + 20));
-                barHeight = Math.max(20, (Integer.valueOf(dims[1].trim()) * 3) / 4);
+                requestedPt = (Integer.valueOf(dims[0].trim()) * 3) / 4;
+                barHeight = Math.max(30, (Integer.valueOf(dims[1].trim()) * 3) / 4);
             }
         } else if (String.isNotBlank(sizeSpec) && sizeSpec.trim().isNumeric()) {
-            Integer targetPt = (Integer.valueOf(sizeSpec.trim()) * 3) / 4;
-            moduleW = Math.max(1, targetPt / (pattern.length() + 20));
+            requestedPt = (Integer.valueOf(sizeSpec.trim()) * 3) / 4;
         }
-        Integer quietPt = moduleW * 10; // >=10-module quiet zone per side
+        Integer totalModules = pattern.length() + 20; // incl. quiet zones
+        Integer moduleW = 2;
+        if (requestedPt > 0) {
+            moduleW = Math.max(1, requestedPt / totalModules);
+        }
+        // Scannability beats the requested size: prefer 2pt (~27.8 mil)
+        // modules whenever the symbol still fits the printable width.
+        if (moduleW < 2 && 2 * totalModules <= maxTotalPt) {
+            moduleW = 2;
+        }
+        // Never exceed the printable width; never go below 1pt.
+        while (moduleW > 1 && moduleW * totalModules > maxTotalPt) {
+            moduleW--;
+        }
+        Integer quietPt = moduleW * 10;
         Integer totalW = pattern.length() * moduleW + quietPt * 2;
         String html =
-            '<div style="position:relative;display:inline-block;width:' +
+            '<div style="position:relative;display:inline-block;margin:8pt 0;width:' +
             totalW +
             'pt;height:' +
             barHeight +
