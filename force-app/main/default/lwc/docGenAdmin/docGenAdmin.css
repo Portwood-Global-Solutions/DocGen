@@ -1348,3 +1348,32 @@
     color: #9a93b5;
     white-space: nowrap;
 }
+
+/* Static chrome: controls never move. The message strip is its own
+   fixed-height line; the page cluster reserves its widest state. */
+.dg-status-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    padding-top: 4px;
+}
+
+.dg-status-strip .dg-html-editor-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dg-status-strip .dg-context-label {
+    flex: 0 0 auto;
+}
+
+.dg-page-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 340px;
+}

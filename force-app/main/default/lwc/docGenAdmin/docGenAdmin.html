@@ -1530,83 +1530,80 @@
                                         Source
                                     </button>
                                 </div>
-                                <template if:true={selectionContextLabel}>
-                                    <span class="dg-context-label">{selectionContextLabel}</span>
-                                </template>
-                                <span class={htmlEditorStatusClass}>{htmlEditorStatusText}</span>
-                                <span class="dg-fmt-label">Page</span>
-                                <select
-                                    class="dg-page-select"
-                                    data-field="size"
-                                    onchange={handlePageSetupChange}
-                                    title="Page size"
-                                >
-                                    <option value="Letter">Letter</option>
-                                    <option value="Legal">Legal</option>
-                                    <option value="A4">A4</option>
-                                    <option value="Custom">Custom…</option>
-                                </select>
-                                <template if:false={isCustomPageSize}>
+                                <span class="dg-page-group"
+                                    ><span class="dg-fmt-label">Page</span>
                                     <select
                                         class="dg-page-select"
-                                        data-field="orient"
+                                        data-field="size"
                                         onchange={handlePageSetupChange}
-                                        title="Orientation"
+                                        title="Page size"
                                     >
-                                        <option value="portrait">Portrait</option>
-                                        <option value="landscape">Landscape</option>
+                                        <option value="Letter">Letter</option>
+                                        <option value="Legal">Legal</option>
+                                        <option value="A4">A4</option>
+                                        <option value="Custom">Custom…</option>
                                     </select>
-                                </template>
-                                <template if:true={isCustomPageSize}>
-                                    <input
-                                        type="number"
-                                        class="dg-page-input"
-                                        data-field="customW"
-                                        min="1"
-                                        max="200"
-                                        step="0.25"
+                                    <template if:false={isCustomPageSize}>
+                                        <select
+                                            class="dg-page-select"
+                                            data-field="orient"
+                                            onchange={handlePageSetupChange}
+                                            title="Orientation"
+                                        >
+                                            <option value="portrait">Portrait</option>
+                                            <option value="landscape">Landscape</option>
+                                        </select>
+                                    </template>
+                                    <template if:true={isCustomPageSize}>
+                                        <input
+                                            type="number"
+                                            class="dg-page-input"
+                                            data-field="customW"
+                                            min="1"
+                                            max="200"
+                                            step="0.25"
+                                            onchange={handlePageSetupChange}
+                                            title="Page width in inches"
+                                        />
+                                        <span class="dg-fmt-label">×</span>
+                                        <input
+                                            type="number"
+                                            class="dg-page-input"
+                                            data-field="customH"
+                                            min="1"
+                                            max="200"
+                                            step="0.25"
+                                            onchange={handlePageSetupChange}
+                                            title="Page height in inches"
+                                        />
+                                        <span class="dg-fmt-label">in</span>
+                                    </template>
+                                    <select
+                                        class="dg-page-select"
+                                        data-field="margin"
                                         onchange={handlePageSetupChange}
-                                        title="Page width in inches"
-                                    />
-                                    <span class="dg-fmt-label">×</span>
-                                    <input
-                                        type="number"
-                                        class="dg-page-input"
-                                        data-field="customH"
-                                        min="1"
-                                        max="200"
-                                        step="0.25"
-                                        onchange={handlePageSetupChange}
-                                        title="Page height in inches"
-                                    />
-                                    <span class="dg-fmt-label">in</span>
-                                </template>
-                                <select
-                                    class="dg-page-select"
-                                    data-field="margin"
-                                    onchange={handlePageSetupChange}
-                                    title="Page margins"
-                                >
-                                    <option value="0.5">0.5&quot; margins</option>
-                                    <option value="0.75">0.75&quot; margins</option>
-                                    <option value="1">1&quot; margins</option>
-                                    <option value="custom">Custom…</option>
-                                </select>
-                                <template if:true={isCustomMargin}>
-                                    <input
-                                        type="number"
-                                        class="dg-page-input"
-                                        data-field="customMargin"
-                                        min="0"
-                                        max="10"
-                                        step="0.05"
-                                        onchange={handlePageSetupChange}
-                                        title="Margin in inches"
-                                    />
-                                    <span class="dg-fmt-label">in</span>
-                                </template>
-                                <span class="dg-fmt-sep"></span>
-                                <button
+                                        title="Page margins"
+                                    >
+                                        <option value="0.5">0.5&quot; margins</option>
+                                        <option value="0.75">0.75&quot; margins</option>
+                                        <option value="1">1&quot; margins</option>
+                                        <option value="custom">Custom…</option>
+                                    </select>
+                                    <template if:true={isCustomMargin}>
+                                        <input
+                                            type="number"
+                                            class="dg-page-input"
+                                            data-field="customMargin"
+                                            min="0"
+                                            max="10"
+                                            step="0.05"
+                                            onchange={handlePageSetupChange}
+                                            title="Margin in inches"
+                                        />
+                                        <span class="dg-fmt-label">in</span>
+                                    </template>
+                                    <span class="dg-fmt-sep"></span> </span
+                                ><button
                                     class="dg-fmt-btn dg-panel-btn"
                                     data-panel="insert"
                                     onclick={handlePanelToggle}
@@ -1672,17 +1669,16 @@
                                         {pdfPreviewBtnLabel}
                                     </button>
                                 </template>
-                                <template if:false={showHtmlBodyVisual}>
-                                    <lightning-button
-                                        label="Format Code"
-                                        icon-name="utility:magicwand"
-                                        variant="base"
-                                        data-target="body"
-                                        onclick={handleFormatHtml}
-                                        title="Pretty-print the HTML: indent nested tags without touching text or merge tags."
-                                        class="slds-var-m-left_small"
-                                    ></lightning-button>
-                                </template>
+                                <lightning-button
+                                    label="Format Code"
+                                    icon-name="utility:magicwand"
+                                    variant="base"
+                                    data-target="body"
+                                    onclick={handleFormatHtml}
+                                    disabled={showHtmlBodyVisual}
+                                    title="Pretty-print the raw HTML (Source view only)."
+                                    class="slds-var-m-left_small"
+                                ></lightning-button>
                                 <lightning-button
                                     label="Apply Editor HTML"
                                     icon-name="utility:check"
@@ -1705,6 +1701,14 @@
                                     title="Replace the editor contents with the currently staged body (or the saved body if nothing is staged). Discards unapplied edits."
                                     class="slds-var-m-left_small"
                                 ></lightning-button>
+                            </div>
+                            <div class="dg-status-strip">
+                                <template if:true={selectionContextLabel}>
+                                    <span class="dg-context-label">{selectionContextLabel}</span>
+                                </template>
+                                <span class={htmlEditorStatusClass} title={htmlEditorStatusText}
+                                    >{htmlEditorStatusText}</span
+                                >
                             </div>
                         </div>
 
