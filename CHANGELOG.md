@@ -1,5 +1,34 @@
 # Changelog
 
+## v3.35.0 — Designer polish: pro tables, watermarks, certificate starter
+
+The visual Template Designer (Beta) graduates from "it works" to "it feels right": tables edit like a spreadsheet, watermarks upload at the strength you want and print exactly as shown, barcodes scan, and a landscape Certificate joins the starter gallery. Everything below was driven by live testing feedback within days of v3.34.
+
+### Added
+
+- **Excel-level tables** — drag any cell edge to resize columns (works on pasted and Word-converted tables too — the first grab freezes the table's real geometry into an editable colgroup); drag bottom edges for row heights; drag across cells to select a rectangle, then Fill colors all of them and Merge combines them (Split is one click after). Borders gain a thickness picker (Hairline–Heavy) and a color picker that restyle the table live. Table rows carry `page-break-inside: avoid` so a PDF page never splits mid-row.
+- **Pressed-state formatting** — Bold/Italic/Underline/Strike buttons read as pressed when the cursor sits on formatted text, so toggling off is discoverable.
+- **Scannable barcodes** — `{*Field}` barcode tags rebuilt on integer-point geometry (Blob.toPdf rounds fractional pixels, which scrambled narrow bars): Code 128 and new Code 39, verified by decoding rendered PDFs scanline-by-scanline. QR codes unchanged.
+- **Certificate / Award starter** — landscape Letter certificate with a double frame, centered recipient name, and a date + logo-seal + signature row. Selecting it sets the wizard's page fields automatically; the designer opens landscape.
+- **Watermark strength** — pick Light 15% / Medium 30% / Strong 50% / Original at upload; opacity is baked into the image client-side so the PDF matches the preview exactly.
+- **Designer surface** — Query panel (edit fields without leaving the canvas), Images panel asset delete, WYSIWYG asset images with corner-drag resize, a searchable right-click menu, Unicode-safe special characters, aggregate-tag chips with full currency/locale formatting, and a six-step Generate-with-AI flow (fields → images → describe → copy → paste → sample record).
+- **Templates list** — Created and Last Modified columns (viewer's timezone), click-to-sort headers, a result count, search by API name, a **+ New Template** button, and a start-here card when the library is empty.
+- **Get Expert Help** — portwood.dev/services link in the sidebar for teams that want templates built for them.
+
+### Fixed
+
+- **Watermarks never rendered on HTML-template PDFs** — the injection only existed on the Word conversion path; HTML templates (everything the designer creates) now get the same per-page overlay.
+- **`{%asset:key}` inside `src="..."`** (the natural header/footer logo pattern) nested a full `<img>` tag into the attribute, rendering a broken-image icon on every page — it now resolves to the image URL.
+- **Unsized header/footer images** rendered at full resolution across the whole page; they're now clamped to fit the margin box (author-sized images untouched).
+- **Certificate starters opened portrait in the designer** while printing landscape — the starter carried two `@page` rules and the designer read the wrong one. Starters emit exactly one rule and the parser follows the CSS cascade.
+- **Watermark files no longer accumulate** on generated-against records (same sweep the asset pipeline uses).
+
+Validation: RunLocalTests 1,709/0 failures, `sf code-analyzer` 0 violations, plus rendered-PDF raster proofs for barcodes, watermarks, and header images.
+
+## v3.34.0 — HTML-first template wizard + visual designer (Beta)
+
+Template creation starts over: a guided wizard with four authoring paths — **Start from a Design** (a starter gallery that drops your real merge fields into professional layouts and renders on the first click), **Generate with AI** (a ready-to-paste prompt carrying DocGen's full tag syntax), **Start From Scratch** (a blank page in the new visual designer), and classic file upload. The **visual designer (Beta)** edits templates as the rendered page: merge tags appear as draggable pills, a format bar covers text/tables/images/colors, `` ` `` opens a searchable insert menu, and Download Sample / PDF Preview show real merged output without leaving the page.
+
 ## v3.33.0 — Excel generation fixes: empty-cell corruption & multiline values
 
 Two Excel merge-engine fixes, both found and verified on a real customer fund-report workbook (4 sheets, loops on every sheet) that opened with Excel's "repaired or removed unreadable content" dialog on every generation.
