@@ -1,5 +1,22 @@
 # Changelog
 
+## v3.36.0 — Merge tags style like text: fonts, colors, exact sizes
+
+A fast follow to v3.35 focused on one thing: merge-tag pills in the visual designer now behave like the text they'll become.
+
+### Added
+
+- **Pills inherit their surroundings** — a `{Name}` tag inside a 24pt serif heading renders in 24pt serif on the canvas (previously pills forced their own small purple text). What you see is what the merged value prints.
+- **Style a tag directly** — click a pill and use the normal toolbar: bold, italic, underline, strike, text color, font family, and size all apply to the tag itself, and the styling survives save/reopen (it serializes as a styled span around the tag, so the engine merges the value inside your formatting).
+- **Google-Docs-style font size** — the S/M/L/XL presets are gone; the format bar now has a numeric point-size box with −/+ steppers. It reads the size at your cursor (a selected tag reports its own size) and sets any exact 6–96pt value on text or tags. The old presets topped out at 24pt, which is why large text could shrink but never grow back.
+
+### Fixed
+
+- **Resizing a tag could shrink it permanently** — on a tag-only selection the browser's format command stripped the tag's styling and broke it out of its styled line (the certificate `{Name}` "shrinks and won't go back" report). Tag-only selections now never touch the browser's format machinery, and mixed text+tag selections restore tag styles around it.
+- **Formatting a clicked tag silently did nothing** under Lightning Web Security — the sandboxed Selection API doesn't report the clicked pill to component code. The designer now tracks the last-clicked tag directly, so toolbar actions always find their target.
+
+Validation: live end-to-end proof in the designer (click tag → type 30 → 30pt on canvas; stepper → 31pt), `sf code-analyzer` 0 violations.
+
 ## v3.35.0 — Designer polish: pro tables, watermarks, certificate starter
 
 The visual Template Designer (Beta) graduates from "it works" to "it feels right": tables edit like a spreadsheet, watermarks upload at the strength you want and print exactly as shown, barcodes scan, and a landscape Certificate joins the starter gallery. Everything below was driven by live testing feedback within days of v3.34.

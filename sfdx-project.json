@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.35.0 — Designer polish: pro tables, watermarks, certificate starter",
-      "versionNumber": "3.35.0.NEXT",
+      "versionName": "v3.36.0 \u2014 Merge tags style like text: fonts, colors, exact sizes",
+      "versionNumber": "3.36.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.35 makes the visual Template Designer feel effortless: resize and restyle any table right on the page, pick border widths and colors, drag across cells to fill or merge them, and add scannable barcode and QR labels. Watermarks upload with a strength setting and print exactly as shown, a landscape Certificate starter joins the design gallery, and your template list now shows created and modified dates. 100% native Salesforce — no external services or callouts. Free for all users.",
-      "ancestorVersion": "3.34.0"
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.36 makes merge tags feel like real text in the visual designer: tags take on the font, size, and color of the text around them, and you can click any tag and style it directly \u2014 bold, italic, colors, fonts, and an exact point size you type in, just like Google Docs. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
+      "ancestorVersion": "3.35.0"
     }
   ],
   "name": "Portwood DocGen",
