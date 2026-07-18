@@ -1406,3 +1406,21 @@
     border-radius: 4px;
     background: #fff;
 }
+
+.dg-designer-toolbar__tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.dg-designer-toolbar__actions {
+    margin-left: 0;
+}
+
+.dg-toolbar-pdf {
+    height: 32px;
+    border-radius: 4px;
+    padding: 0 14px;
+    font-size: 0.8125rem;
+}

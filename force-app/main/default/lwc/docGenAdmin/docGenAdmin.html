@@ -1503,7 +1503,8 @@
                                         </lightning-record-picker>
                                     </div>
                                     <lightning-button
-                                        label="Generate Sample"
+                                        label="Download Sample"
+                                        title="Saves your settings, renders the ACTIVE version with this sample record, and downloads the file. For a look at unsaved edits, use PDF Preview."
                                         icon-name="utility:page"
                                         onclick={handleTestGenerate}
                                         disabled={editGenerateSampleDisabled}
@@ -1515,6 +1516,36 @@
                                         ></lightning-spinner>
                                     </template>
                                 </template>
+                                <div class="dg-designer-toolbar__tools">
+                                    <lightning-button
+                                        label="Copy AI Prompt"
+                                        icon-name="utility:copy"
+                                        onclick={handleCopyEditAiPrompt}
+                                        title="Ready-to-paste prompt (your fields + tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot."
+                                    ></lightning-button>
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn dg-pdf-preview-btn dg-toolbar-pdf"
+                                        onclick={handlePdfPreview}
+                                        disabled={isPdfPreviewLoading}
+                                        title="Render the CURRENT DRAFT through the real PDF engine with your sample record — nothing is saved."
+                                    >
+                                        {pdfPreviewBtnLabel}
+                                    </button>
+                                    <lightning-button
+                                        label="Format Code"
+                                        icon-name="utility:magicwand"
+                                        data-target="body"
+                                        onclick={handleFormatHtml}
+                                        disabled={showHtmlBodyVisual}
+                                        title="Pretty-print the raw HTML (Source view only)."
+                                    ></lightning-button>
+                                    <lightning-button
+                                        label="Reload"
+                                        icon-name="utility:refresh"
+                                        onclick={handleReloadHtmlBodyEditor}
+                                        title="Replace the editor contents with the staged body (or saved body). Discards unapplied edits."
+                                    ></lightning-button>
+                                </div>
                                 <div class="dg-designer-toolbar__actions">
                                     <lightning-button
                                         variant="brand"
@@ -1679,47 +1710,7 @@
                                     >
                                         Watermark
                                     </button>
-                                    <button
-                                        class="dg-fmt-btn dg-panel-btn dg-pdf-preview-btn"
-                                        onclick={handlePdfPreview}
-                                        disabled={isPdfPreviewLoading}
-                                        title="Render the current draft through the REAL PDF engine with your sample record — see exactly what customers get."
-                                    >
-                                        {pdfPreviewBtnLabel}
-                                    </button>
                                 </template>
-                                <lightning-button
-                                    label="Format Code"
-                                    icon-name="utility:magicwand"
-                                    variant="base"
-                                    data-target="body"
-                                    onclick={handleFormatHtml}
-                                    disabled={showHtmlBodyVisual}
-                                    title="Pretty-print the raw HTML (Source view only)."
-                                    class="slds-var-m-left_small"
-                                ></lightning-button>
-                                <lightning-button
-                                    label="Apply Editor HTML"
-                                    icon-name="utility:check"
-                                    onclick={handleApplyHtmlBody}
-                                    disabled={isApplyingHtmlBody}
-                                    title="Stage the current editor contents now. Save as New Version does this automatically."
-                                    class="slds-var-m-left_small"
-                                ></lightning-button>
-                                <lightning-button
-                                    label="Copy AI Prompt"
-                                    icon-name="utility:copy"
-                                    onclick={handleCopyEditAiPrompt}
-                                    title="Copies a ready-to-paste prompt (your fields + DocGen tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot."
-                                    class="slds-var-m-left_small"
-                                ></lightning-button>
-                                <lightning-button
-                                    label="Reload"
-                                    icon-name="utility:refresh"
-                                    onclick={handleReloadHtmlBodyEditor}
-                                    title="Replace the editor contents with the currently staged body (or the saved body if nothing is staged). Discards unapplied edits."
-                                    class="slds-var-m-left_small"
-                                ></lightning-button>
                             </div>
                             <div class="dg-status-strip">
                                 <template if:true={selectionContextLabel}>

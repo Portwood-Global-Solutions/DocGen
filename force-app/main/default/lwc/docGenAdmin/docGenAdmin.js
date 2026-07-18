@@ -3990,7 +3990,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._syncHtmlBodyEditorDom(html);
             this.showToast(
                 'Starter design attached',
-                'Review the HTML, then click "Save as New Version" to activate it. Generate Sample shows it with real data.',
+                'Review the HTML, then click "Save as New Version" to activate it. Download Sample shows it with real data.',
                 'success'
             );
         } catch (err) {
@@ -4951,7 +4951,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // eslint-disable-next-line no-await-in-loop
             await new Promise((resolve) => setTimeout(resolve, 1500));
         }
-        throw new Error('PDF generation is still running. Try Generate Sample again in a moment.');
+        throw new Error('PDF generation is still running. Try Download Sample again in a moment.');
     }
 
     async _queuePdfAcroFormPreparedBody(versionId, sourceContentVersionId) {
@@ -5036,7 +5036,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // eslint-disable-next-line no-await-in-loop
             await new Promise((resolve) => setTimeout(resolve, 1500));
         }
-        throw new Error('PDF preparation is still running. Try Generate Sample again in a moment.');
+        throw new Error('PDF preparation is still running. Try Download Sample again in a moment.');
     }
 
     _isPdfTemplateType(templateType) {
@@ -5717,7 +5717,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     /** One-line answer to "what will Save as New Version actually save?" */
     get htmlEditorStatusText() {
         if (this.htmlEditorDirty) {
-            return 'Unapplied edits — click "Apply Editor HTML" to stage them, or Reload to discard.';
+            return 'Unapplied edits — "Save as New Version" saves them; Reload discards.';
         }
         if (this.stagedBodySource === 'editor') {
             return 'Staged: your editor HTML — "Save as New Version" saves it.';
@@ -6998,7 +6998,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * Render the textarea's HTML into the inline preview div. LWS blocks
      * iframe srcdoc/document.write, so the markup goes in via innerHTML with
      * its CSS scoped to the preview container (see scopeHtmlForInlinePreview).
-     * Merge tags show literally — Generate Sample remains the real-data path.
+     * Merge tags show literally — Download Sample remains the real-data path.
      */
     _renderHtmlPreview(hostSelector, taSelector) {
         const ta = this.template.querySelector(taSelector);
