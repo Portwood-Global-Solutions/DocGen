@@ -449,6 +449,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track wizardQueryMeta = null;
     _wizardQueryMetaFor = null;
     @track aiFieldSearch = '';
+    // AI step: which shared assets ride into the prompt (null = all).
+    @track aiSelectedAssetIds = null;
     // Live PDF preview: draft HTML → real Blob.toPdf render → blob: iframe.
     @track pdfPreviewUrl = null;
     @track isPdfPreviewLoading = false;
@@ -1881,6 +1883,29 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.hasWizardAssets ? '3' : '2';
     }
 
+    get aiAssetRows() {
+        const sel = this.aiSelectedAssetIds;
+        return (this.wizardAssets || []).map((a) => ({
+            ...a,
+            selected: sel === null ? true : sel.includes(a.id)
+        }));
+    }
+
+    handleAiAssetToggle(event) {
+        const id = event.currentTarget.dataset.id;
+        const current =
+            this.aiSelectedAssetIds === null
+                ? (this.wizardAssets || []).map((a) => a.id)
+                : [...this.aiSelectedAssetIds];
+        const idx = current.indexOf(id);
+        if (idx > -1) {
+            current.splice(idx, 1);
+        } else {
+            current.push(id);
+        }
+        this.aiSelectedAssetIds = current;
+    }
+
     handleAssetTagCopy(event) {
         const tag = event.currentTarget.dataset.tag;
         if (tag) {
@@ -2319,10 +2344,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     get aiAuthoringPrompt() {
         const shape = extractQueryShape(this.newTemplateQuery, this.newTemplateObject);
+        const sel = this.aiSelectedAssetIds;
+        const assets = sel === null ? this.wizardAssets : (this.wizardAssets || []).filter((a) => sel.includes(a.id));
         return buildAiPrompt(shape, {
             dataSourceMode: this.dataSourceMode,
             providerFields: (this.providerFields || []).map((f) => f.name || f),
-            assets: this.wizardAssets
+            assets
         });
     }
 

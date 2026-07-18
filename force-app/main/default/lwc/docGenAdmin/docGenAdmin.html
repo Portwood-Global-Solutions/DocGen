@@ -389,7 +389,7 @@
                                         </div>
                                     </template>
 
-                                    <!-- AI path: name + logo here, prompt + paste on the next screen -->
+                                    <!-- AI path: name here; fields, assets, prompt and paste on the next screen -->
                                     <template if:true={isAuthoringAi}>
                                         <div class="slds-box slds-theme_shade" style="border-radius: 8px" role="note">
                                             <p class="slds-text-body_small">
@@ -398,34 +398,11 @@
                                                     size="x-small"
                                                     class="slds-var-m-right_x-small"
                                                 ></lightning-icon>
-                                                Next builds a complete prompt for you — your fields, DocGen's merge-tag
-                                                syntax, the PDF engine's layout rules, and your shared image assets.
-                                                Copy it into Claude, ChatGPT, Gemini, or Copilot, paste the HTML it
-                                                returns, and you land in the designer. No data leaves Salesforce unless
-                                                you paste it.
+                                                Next builds a complete prompt for you — pick your fields and the shared
+                                                images it should use, copy it into Claude, ChatGPT, Gemini, or Copilot,
+                                                paste the HTML it returns, and you land in the designer. No data leaves
+                                                Salesforce unless you paste it.
                                             </p>
-                                        </div>
-                                        <div class="slds-var-m-top_small">
-                                            <lightning-combobox
-                                                label="Company logo (optional)"
-                                                value={newTemplateLogoChoice}
-                                                options={logoChoiceOptions}
-                                                onchange={handleLogoChoiceChange}
-                                                field-level-help="Pick a shared image asset — the AI prompt tells the assistant how to reference it. Add new images under the Assets tab."
-                                            ></lightning-combobox>
-                                            <template if:true={selectedLogoPreviewUrl}>
-                                                <img
-                                                    class="dg-logo-preview"
-                                                    src={selectedLogoPreviewUrl}
-                                                    alt="Selected logo preview"
-                                                />
-                                            </template>
-                                            <template if:true={hasNoAssetsYet}>
-                                                <p class="slds-text-body_small slds-text-color_weak">
-                                                    No image assets yet — add your logo under the
-                                                    <strong>Assets</strong> tab and it becomes selectable here.
-                                                </p>
-                                            </template>
                                         </div>
                                         <div class="slds-var-m-top_medium">
                                             <lightning-button
@@ -443,8 +420,8 @@
                                                 ></lightning-spinner>
                                             </template>
                                             <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
-                                                Sensible fields are picked automatically — refine them anytime under
-                                                Query Configuration.
+                                                Sensible fields are picked automatically — refine them on the next
+                                                screen.
                                             </p>
                                         </div>
                                     </template>
@@ -696,18 +673,25 @@
                                             Already included in the prompt — the AI can place these. Click a tag to copy
                                             it.
                                         </p>
-                                        <div class="dg-ai-asset-chips">
-                                            <template for:each={wizardAssets} for:item="asset">
-                                                <button
-                                                    key={asset.id}
-                                                    type="button"
-                                                    class="dg-tag-chip"
-                                                    data-tag={asset.mergeTag}
-                                                    onclick={handleAssetTagCopy}
-                                                    title={asset.name}
-                                                >
-                                                    {asset.mergeTag}
-                                                </button>
+                                        <div class="dg-ai-assetlist">
+                                            <template for:each={aiAssetRows} for:item="asset">
+                                                <label key={asset.id} class="dg-qf-row">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={asset.selected}
+                                                        data-id={asset.id}
+                                                        onchange={handleAiAssetToggle}
+                                                    />
+                                                    <template if:true={asset.previewUrl}>
+                                                        <img
+                                                            class="dg-ai-asset-thumb"
+                                                            src={asset.previewUrl}
+                                                            alt={asset.name}
+                                                        />
+                                                    </template>
+                                                    <span class="dg-qf-label">{asset.name}</span>
+                                                    <span class="dg-qf-api">{asset.mergeTag}</span>
+                                                </label>
                                             </template>
                                         </div>
                                     </template>
