@@ -2185,6 +2185,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this.newTemplateSampleRecordId = null;
             }
         }
+        // Starters that declare a page setup (the landscape certificate) flip
+        // the wizard's page pickers so the record, the pickers, and the body's
+        // @page all agree from the first click.
+        const s = STARTERS.find((x) => x.key === this.newStarterKey);
+        if (s && s.page) {
+            this.newTemplatePageOrientation = s.page.orientation || 'Portrait';
+            this.newTemplatePageSize = s.page.size || 'Letter';
+            this.newTemplatePageMargins = s.page.margins || 'Default';
+        }
     }
 
     /** Logo control: pick from the shared asset library — the one image
@@ -3969,7 +3978,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // template-level overrides when source @page is present. Saving the
         // create-wizard defaults would just leave conflicting values that
         // confuse later editors.
-        if (this.newTemplateOutputFormat === 'PDF' && this.newTemplateType !== 'HTML') {
+        if (
+            this.newTemplateOutputFormat === 'PDF' &&
+            (this.newTemplateType !== 'HTML' || this.newAuthoringMode === 'starter')
+        ) {
             fields[PAGE_ORIENTATION_FIELD.fieldApiName] = this.newTemplatePageOrientation;
             fields[PAGE_SIZE_FIELD.fieldApiName] = this.newTemplatePageSize;
             fields[PAGE_MARGINS_FIELD.fieldApiName] = this.newTemplatePageMargins;
@@ -5926,7 +5938,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             customH: '11',
             customMargin: '0.75'
         };
-        const m = /@page\s*\{([^}]*)\}/i.exec(code || '');
+        // Take the LAST simple @page rule — CSS cascade means that's the one
+        // the PDF engine honors when a doc carries more than one.
+        let m = null;
+        const pageRe = /@page\s*\{([^}]*)\}/gi;
+        let hit;
+        while ((hit = pageRe.exec(code || '')) !== null) {
+            m = hit;
+        }
         if (m) {
             const body = m[1];
             const sm = /size\s*:\s*(letter|legal|a4)\s*(portrait|landscape)?/i.exec(body);
@@ -9484,6 +9503,66 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             : null;
     }
 
+    // Watermark wash: opacity is baked into the PNG's pixels client-side
+    // before upload — the PDF engine (Flying Saucer) has no CSS opacity, so
+    // pre-multiplied alpha is the only thing that renders seamlessly.
+    watermarkOpacityPct = '30';
+
+    get watermarkOpacityOptions() {
+        return [
+            { label: 'Light wash (15%)', value: '15' },
+            { label: 'Medium wash (30%)', value: '30' },
+            { label: 'Strong (50%)', value: '50' },
+            { label: 'Original image (100%)', value: '100' }
+        ].map((o) => ({ ...o, selected: o.value === this.watermarkOpacityPct }));
+    }
+
+    handleWatermarkOpacityChange(event) {
+        this.watermarkOpacityPct = event.currentTarget.value;
+    }
+
+    /** Redraws the image at the chosen opacity on a canvas → PNG base64.
+     *  100% skips the canvas so the original bytes upload untouched. */
+    async _bakeWatermarkOpacity(file, pct) {
+        const readAsBase64 = (blobOrFile) =>
+            new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const dataUrl = reader.result;
+                    const commaIdx = dataUrl.indexOf(',');
+                    resolve(commaIdx > -1 ? dataUrl.substring(commaIdx + 1) : null);
+                };
+                reader.onerror = () => reject(new Error('FileReader failed'));
+                reader.readAsDataURL(blobOrFile);
+            });
+        if (pct >= 100) {
+            return { base64: await readAsBase64(file), fileName: file.name };
+        }
+        const url = URL.createObjectURL(file);
+        try {
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = () => reject(new Error('Could not read the image'));
+                img.src = url;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.globalAlpha = pct / 100;
+            ctx.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL('image/png');
+            const commaIdx = dataUrl.indexOf(',');
+            return {
+                base64: dataUrl.substring(commaIdx + 1),
+                fileName: file.name.replace(/\.[^.]+$/, '') + '.png'
+            };
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+
     async handleWatermarkFileSelected(event) {
         const file = event.target.files && event.target.files[0];
         if (!file) {
@@ -9506,20 +9585,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         this.isUploadingWatermark = true;
         try {
-            const reader = new FileReader();
-            const base64 = await new Promise((resolve, reject) => {
-                reader.onload = () => {
-                    const dataUrl = reader.result;
-                    const commaIdx = dataUrl.indexOf(',');
-                    resolve(commaIdx > -1 ? dataUrl.substring(commaIdx + 1) : null);
-                };
-                reader.onerror = () => reject(new Error('FileReader failed'));
-                reader.readAsDataURL(file);
-            });
+            const pct = parseInt(this.watermarkOpacityPct, 10) || 100;
+            const baked = await this._bakeWatermarkOpacity(file, pct);
             const newCvId = await saveWatermarkImage({
                 versionId: active.Id,
-                fileName: file.name,
-                base64Data: base64
+                fileName: baked.fileName,
+                base64Data: baked.base64
             });
             this.editTemplateWatermarkCvId = newCvId;
             this.showToast('Success', 'Watermark uploaded.', 'success');

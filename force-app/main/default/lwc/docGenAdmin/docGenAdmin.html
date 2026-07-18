@@ -2699,6 +2699,26 @@
                                                     ></lightning-button>
                                                 </div>
                                             </template>
+                                            <div class="slds-var-m-top_x-small">
+                                                <label class="slds-form-element__label" for="wm-opacity"
+                                                    >Watermark strength</label
+                                                >
+                                                <select
+                                                    class="dg-page-select"
+                                                    title="Opacity is baked into the image on upload so the PDF matches exactly"
+                                                    onchange={handleWatermarkOpacityChange}
+                                                >
+                                                    <template for:each={watermarkOpacityOptions} for:item="opt">
+                                                        <option
+                                                            key={opt.value}
+                                                            value={opt.value}
+                                                            selected={opt.selected}
+                                                        >
+                                                            {opt.label}
+                                                        </option>
+                                                    </template>
+                                                </select>
+                                            </div>
                                             <input
                                                 type="file"
                                                 accept="image/*"
@@ -3183,6 +3203,20 @@
                                     </template>
 
                                     <div class="slds-var-m-top_medium">
+                                        <div class="slds-var-m-bottom_x-small">
+                                            <label class="slds-form-element__label">Watermark strength</label>
+                                            <select
+                                                class="dg-page-select"
+                                                title="Opacity is baked into the image on upload so the PDF matches exactly"
+                                                onchange={handleWatermarkOpacityChange}
+                                            >
+                                                <template for:each={watermarkOpacityOptions} for:item="opt">
+                                                    <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                        {opt.label}
+                                                    </option>
+                                                </template>
+                                            </select>
+                                        </div>
                                         <input
                                             type="file"
                                             data-id="watermarkFileInput"

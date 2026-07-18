@@ -390,11 +390,12 @@ function buildCertificate(shape) {
             </table>
         </div>
     </div>`;
-    return docShell(
-        'Certificate',
-        inner,
-        `
-        @page { size: Letter landscape; margin: 0.5in; }`
+    // Replace the base @page instead of appending a second rule — the PDF
+    // engine cascades to the last rule, but pickers/canvas read the doc's
+    // page rule, so there must be exactly one.
+    return docShell('Certificate', inner).replace(
+        '@page { size: Letter portrait; margin: 0.75in; }',
+        '@page { size: Letter landscape; margin: 0.5in; }'
     );
 }
 
@@ -430,7 +431,8 @@ export const STARTERS = [
         label: 'Certificate / Award',
         icon: 'utility:favorite',
         description:
-            'Landscape certificate with a double frame, centered recipient name, and a date + seal + signature row. Add your logo as the seal.'
+            'Landscape certificate with a double frame, centered recipient name, and a date + seal + signature row. Add your logo as the seal.',
+        page: { orientation: 'Landscape', size: 'Letter', margins: 'Narrow' }
     }
 ];
 
