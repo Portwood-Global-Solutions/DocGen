@@ -370,8 +370,8 @@ function buildCertificate(shape) {
             </p>
             <p style="font-size: 11pt; margin: 12pt 50pt 0 50pt">
                 has successfully completed the requirements &#8212; replace this line with what the certificate
-                recognizes. Merge any field from your Query Config, and format dates like
-                &#123;CloseDate:MMMM d, yyyy&#125;.
+                recognizes. Merge any field from your Query Config; today's date is always available as
+                &#123;Today:MMMM d, yyyy&#125;.
             </p>
             <table style="margin-top: 36pt">
                 <tr style="page-break-inside: avoid">
@@ -380,7 +380,7 @@ function buildCertificate(shape) {
                             Date &#8226; {Today:MMMM d, yyyy}
                         </div>
                     </td>
-                    <td style="width: 34%; text-align: center; vertical-align: middle">{%asset:logo}</td>
+                    <td style="width: 34%; text-align: center; vertical-align: middle">{%asset:logo:120x}</td>
                     <td style="width: 33%; text-align: center; vertical-align: bottom">
                         <div style="border-top: 1pt solid #333333; margin: 0 16pt; padding-top: 4pt" class="meta">
                             {RunningUser.Name}<br />Authorized Signature

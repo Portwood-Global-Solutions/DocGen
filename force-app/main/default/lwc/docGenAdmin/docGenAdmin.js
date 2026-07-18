@@ -4079,10 +4079,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     async _applyStarterBody(templateId, starterKey, shape, logoTag) {
         try {
             let html = buildStarterHtml(starterKey, shape);
-            // Starter bodies carry {%asset:logo} slots; an existing asset picked
-            // in the wizard swaps its own merge tag in.
+            // Starter bodies carry {%asset:logo} slots (some sized, e.g.
+            // {%asset:logo:120x}); an existing asset picked in the wizard swaps
+            // its own merge tag in, inheriting the slot's size when the chosen
+            // tag doesn't carry one.
             if (logoTag && logoTag !== '{%asset:logo}') {
-                html = html.split('{%asset:logo}').join(logoTag);
+                html = html.replace(/\{%asset:logo(:[^}]*)?\}/g, (m, size) => {
+                    const chosenHasSize = /:\d/.test(logoTag);
+                    return chosenHasSize || !size ? logoTag : logoTag.slice(0, -1) + size + '}';
+                });
             }
             const fileName = (this.selectedStarterLabelFor(starterKey) || 'Starter').replace(/[^\w]+/g, '_') + '.html';
             const bodyResult = await saveHtmlTemplateBody({ templateId, fileName, htmlContent: html });

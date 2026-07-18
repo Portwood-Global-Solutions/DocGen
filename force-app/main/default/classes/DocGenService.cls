@@ -2409,7 +2409,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             '_',
             'docgen_html_img_' +
             templateIdText +
-            '_'
+            '_',
+            // Admin-uploaded watermark (docgen_watermark_<versionId>) — the CV
+            // is published to the VERSION record, so without a record link the
+            // PDF service's shepherd fetch fails and the watermark renders as
+            // a broken (invisible) image.
+            'docgen_watermark_'
         };
 
         DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'ContentDocumentId' });
@@ -2581,7 +2586,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             WHERE
                 LinkedEntityId = :recordId
                 AND (ContentDocument.Title LIKE 'docgen_html_img_%'
-                OR ContentDocument.Title LIKE 'docgen_tmpl_img_%')
+                OR ContentDocument.Title LIKE 'docgen_tmpl_img_%'
+                OR ContentDocument.Title LIKE 'docgen_watermark_%')
             WITH SYSTEM_MODE
         ];
 
@@ -2594,6 +2600,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // Scheme 2: LWC-uploaded image of THIS template, no longer referenced.
             if (title.startsWith(templateKeyedPrefix)) {
                 staleLinks.add(link);
+                continue;
+            }
+            // Watermark scheme: docgen_watermark_<versionId>. Version-keyed to
+            // THIS template (carry-forward can key it to an older version, so
+            // membership — not active-version equality — decides scope).
+            if (title.startsWith('docgen_watermark_')) {
+                String wmVersionId = title.substring('docgen_watermark_'.length());
+                if (
+                    (wmVersionId.length() == 15 || wmVersionId.length() == 18) &&
+                    templateVersionIds.contains((Id) wmVersionId)
+                ) {
+                    staleLinks.add(link);
+                }
                 continue;
             }
             // Scheme 1 — title shape: docgen_(html|tmpl)_img_<versionId>_<...>
@@ -2667,14 +2686,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // HTML template type: documentXml is a ready-to-render HTML document —
             // skip the DOCX→HTML conversion entirely.
             if (mr.templateType == 'HTML') {
-                ensureTemplateAssetImageAccessForPdf(templateId, recordId, mr.documentXml);
                 // Admin-uploaded watermarks are injected by convertToHtml on the
-                // DOCX path — HTML templates skip that entirely, so inject here.
+                // DOCX path — HTML templates skip that entirely, so inject here,
+                // BEFORE the asset-access pass: the watermark CV needs the same
+                // record link the asset images get or the PDF fetch fails.
                 applyWatermarkOverride(templateId);
                 String htmlDoc = DocGenHtmlRenderer.injectAdminWatermarkIntoHtml(mr.documentXml);
+                ensureTemplateAssetImageAccessForPdf(templateId, recordId, htmlDoc);
                 lastRenderedHtml = htmlDoc;
                 Blob htmlPdf = Blob.toPdf(htmlDoc);
-                removeTemplateImageLinksAfterRender(templateId, recordId, mr.documentXml);
+                removeTemplateImageLinksAfterRender(templateId, recordId, htmlDoc);
                 return htmlPdf;
             }
 
@@ -4139,6 +4160,21 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         ? imageTagSpec.substringBefore(':').trim()
                         : imageTagSpec.trim();
                     if ('asset'.equalsIgnoreCase(assetTagHead)) {
+                        // Authors naturally write <img src="{%asset:logo}"> in
+                        // header/footer HTML. The tag normally expands to a FULL
+                        // <img> element — nested inside src that produces broken
+                        // markup, so in attribute context emit just the URL.
+                        if (isInsideSrcAttribute(xml, tagStartPos)) {
+                            String remainder = imageTagSpec.substringAfter(':').trim();
+                            String aKey = remainder.contains(':') ? remainder.substringBefore(':').trim() : remainder;
+                            aKey = aKey.toLowerCase();
+                            String aCvId = resolveAssetCvIds(new Set<String>{ aKey }).get(aKey);
+                            if (String.isNotBlank(aCvId)) {
+                                output += '/sfc/servlet.shepherd/version/download/' + aCvId;
+                            }
+                            cursor = tagClose + 1;
+                            continue;
+                        }
                         String assetXml = resolveAssetTagSpec(imageTagSpec);
                         if (assetXml != null) {
                             output += assetXml;
@@ -7770,6 +7806,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * True when the merge tag at tagStart sits inside an HTML src attribute
+     * (the characters immediately before it are src=" or src='). Used to emit
+     * a bare URL instead of full <img> markup in that context.
+     */
+    private static Boolean isInsideSrcAttribute(String xml, Integer tagStart) {
+        if (tagStart == null || tagStart < 5) {
+            return false;
+        }
+        String before = xml.substring(Math.max(0, tagStart - 8), tagStart).toLowerCase();
+        return before.endsWith('src="') || before.endsWith('src=\'');
+    }
+
+    /**
      * Inline placeholder for an asset tag that couldn't resolve. Visible enough
      * that an author notices the missing asset, but it never aborts generation.
      */
@@ -9463,14 +9512,50 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
         html += '</head><body>';
         if (String.isNotBlank(header) && !headerHasCounters) {
-            html += '<div class="docgen-running-header">' + header + '</div>';
+            html += '<div class="docgen-running-header">' + clampRunningImages(header) + '</div>';
         }
         if (String.isNotBlank(footer) && !footerHasCounters) {
-            html += '<div class="docgen-running-footer">' + footer + '</div>';
+            html += '<div class="docgen-running-footer">' + clampRunningImages(footer) + '</div>';
         }
         html += wrapNonLatinGlyphs(body == null ? '' : body);
         html += '</body></html>';
         return html;
+    }
+
+    /**
+     * Running header/footer images with no author sizing render at intrinsic
+     * size — a full-resolution logo overflows the margin box across the whole
+     * page. Give unsized <img> tags an explicit height (Flying Saucer's
+     * reliable sizing lever; width follows the aspect ratio). Author-sized
+     * images (width/height attribute or style) are left untouched.
+     */
+    @TestVisible
+    private static String clampRunningImages(String chrome) {
+        if (String.isBlank(chrome) || !chrome.toLowerCase().contains('<img')) {
+            return chrome;
+        }
+        Matcher m = Pattern.compile('(?i)<img\\b[^>]*>').matcher(chrome);
+        String out = '';
+        Integer last = 0;
+        while (m.find()) {
+            out += chrome.substring(last, m.start());
+            String tag = m.group();
+            Boolean sizedAttr = Pattern.compile('(?i)\\s(width|height)\\s*=').matcher(tag).find();
+            Boolean sizedStyle = Pattern.compile('(?i)style\\s*=\\s*["\'][^"\']*(width|height)\\s*:')
+                .matcher(tag)
+                .find();
+            if (!sizedAttr && !sizedStyle) {
+                if (Pattern.compile('(?i)style\\s*=\\s*["\']').matcher(tag).find()) {
+                    tag = tag.replaceFirst('(?i)style\\s*=\\s*(["\'])', 'style=$1height:0.45in;');
+                } else {
+                    tag = tag.replaceFirst('(?i)<img\\b', '<img style="height:0.45in"');
+                }
+            }
+            out += tag;
+            last = m.end();
+        }
+        out += chrome.substring(last);
+        return out;
     }
 
     // Flying Saucer's default fonts (Helvetica/Times/Courier) cover Latin-1 plus a
