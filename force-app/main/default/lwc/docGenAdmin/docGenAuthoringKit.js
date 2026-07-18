@@ -346,6 +346,58 @@ function buildAgreement(shape) {
     return docShell('Agreement', inner);
 }
 
+function buildCertificate(shape) {
+    const inner = `    <div style="border: 3pt solid #1f3a5f; padding: 6pt">
+        <div style="border: 1pt solid #c9a227; padding: 34pt 44pt; text-align: center">
+            <div class="meta" style="letter-spacing: 4pt; font-size: 9pt; color: #1f3a5f">
+                YOUR ORGANIZATION &#8226; REPLACE WITH YOUR NAME
+            </div>
+            <h1
+                style="font-family: Georgia, 'Times New Roman', serif; font-size: 30pt; margin: 16pt 0 6pt 0; color: #1f3a5f"
+            >
+                Certificate of Achievement
+            </h1>
+            <table style="width: 180pt; margin: 0 auto">
+                <tr>
+                    <td style="border-bottom: 2pt solid #c9a227; padding: 0">&nbsp;</td>
+                </tr>
+            </table>
+            <p style="margin-top: 20pt; font-style: italic; font-size: 12pt">This certifies that</p>
+            <p
+                style="font-family: Georgia, 'Times New Roman', serif; font-size: 24pt; margin: 6pt 0; color: #1f3a5f"
+            >
+                {Name}
+            </p>
+            <p style="font-size: 11pt; margin: 12pt 50pt 0 50pt">
+                has successfully completed the requirements &#8212; replace this line with what the certificate
+                recognizes. Merge any field from your Query Config, and format dates like
+                &#123;CloseDate:MMMM d, yyyy&#125;.
+            </p>
+            <table style="margin-top: 36pt">
+                <tr style="page-break-inside: avoid">
+                    <td style="width: 33%; text-align: center; vertical-align: bottom">
+                        <div style="border-top: 1pt solid #333333; margin: 0 16pt; padding-top: 4pt" class="meta">
+                            Date &#8226; {Today:MMMM d, yyyy}
+                        </div>
+                    </td>
+                    <td style="width: 34%; text-align: center; vertical-align: middle">{%asset:logo}</td>
+                    <td style="width: 33%; text-align: center; vertical-align: bottom">
+                        <div style="border-top: 1pt solid #333333; margin: 0 16pt; padding-top: 4pt" class="meta">
+                            {RunningUser.Name}<br />Authorized Signature
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>`;
+    return docShell(
+        'Certificate',
+        inner,
+        `
+        @page { size: 11in 8.5in; margin: 0.5in; }`
+    );
+}
+
 export const STARTERS = [
     {
         key: 'report',
@@ -372,10 +424,23 @@ export const STARTERS = [
         label: 'Agreement (Signature-ready)',
         icon: 'utility:signature',
         description: 'Numbered terms with a two-party e-signature block wired to DocGen signature tags.'
+    },
+    {
+        key: 'certificate',
+        label: 'Certificate / Award',
+        icon: 'utility:favorite',
+        description:
+            'Landscape certificate with a double frame, centered recipient name, and a date + seal + signature row. Add your logo as the seal.'
     }
 ];
 
-const BUILDERS = { report: buildReport, invoice: buildInvoice, letter: buildLetter, agreement: buildAgreement };
+const BUILDERS = {
+    report: buildReport,
+    invoice: buildInvoice,
+    letter: buildLetter,
+    agreement: buildAgreement,
+    certificate: buildCertificate
+};
 
 export function buildStarterHtml(starterKey, shape) {
     const builder = BUILDERS[starterKey] || buildReport;
