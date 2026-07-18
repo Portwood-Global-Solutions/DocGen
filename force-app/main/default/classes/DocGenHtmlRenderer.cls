@@ -4576,25 +4576,34 @@ public with sharing class DocGenHtmlRenderer {
      * bars so every bar edge lands on an exact integer pixel.
      */
     private static String renderLinearBarcodeHtml(String pattern, String sizeSpec) {
-        Integer moduleW = 2;
-        Integer barHeight = 50;
+        // Flying Saucer rounds absolute CSS px offsets to whole PDF points
+        // (1px = 0.75pt), so px-specified 1-2px modules pick up +-half-module
+        // rounding PER BAR — geometry chaos scanners reject. Speak points
+        // directly: every module is an INTEGER number of pt, every bar edge an
+        // integer pt offset — vector-exact in the PDF, zero rounding anywhere.
+        Integer moduleW = 1; // pt (~13.9 mil X-dimension — scanner-friendly)
+        Integer barHeight = 45; // pt
         if (String.isNotBlank(sizeSpec) && sizeSpec.toLowerCase().contains('x')) {
             List<String> dims = sizeSpec.toLowerCase().split('x');
             if (dims.size() == 2 && dims[0].trim().isNumeric() && dims[1].trim().isNumeric()) {
-                moduleW = Math.max(1, Integer.valueOf(dims[0].trim()) / (pattern.length() + 20));
-                barHeight = Math.max(20, Integer.valueOf(dims[1].trim()));
+                // Requested size arrives in px-ish units; honor it as a target
+                // but never let the module drop below 1pt.
+                Integer targetPt = (Integer.valueOf(dims[0].trim()) * 3) / 4;
+                moduleW = Math.max(1, targetPt / (pattern.length() + 20));
+                barHeight = Math.max(20, (Integer.valueOf(dims[1].trim()) * 3) / 4);
             }
         } else if (String.isNotBlank(sizeSpec) && sizeSpec.trim().isNumeric()) {
-            moduleW = Math.max(1, Integer.valueOf(sizeSpec.trim()) / (pattern.length() + 20));
+            Integer targetPt = (Integer.valueOf(sizeSpec.trim()) * 3) / 4;
+            moduleW = Math.max(1, targetPt / (pattern.length() + 20));
         }
-        Integer quietPx = moduleW * 10; // >=10-module quiet zone per side
-        Integer totalW = pattern.length() * moduleW + quietPx * 2;
+        Integer quietPt = moduleW * 10; // >=10-module quiet zone per side
+        Integer totalW = pattern.length() * moduleW + quietPt * 2;
         String html =
             '<div style="position:relative;display:inline-block;width:' +
             totalW +
-            'px;height:' +
+            'pt;height:' +
             barHeight +
-            'px;background:#fff;">';
+            'pt;background:#fff;">';
         Integer i = 0;
         while (i < pattern.length()) {
             if (pattern.substring(i, i + 1) == '1') {
@@ -4604,12 +4613,12 @@ public with sharing class DocGenHtmlRenderer {
                 }
                 html +=
                     '<span style="position:absolute;left:' +
-                    (quietPx + runStart * moduleW) +
-                    'px;top:0;width:' +
+                    (quietPt + runStart * moduleW) +
+                    'pt;top:0;width:' +
                     ((i - runStart) * moduleW) +
-                    'px;height:' +
+                    'pt;height:' +
                     barHeight +
-                    'px;background:#000;"></span>';
+                    'pt;background:#000;"></span>';
             } else {
                 i++;
             }

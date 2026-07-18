@@ -970,8 +970,12 @@ private class DocGenHtmlRendererTest {
 
             String html = DocGenHtmlRenderer.convertToHtml(xml);
 
-            System.assert(html.contains('height:80px'), 'Should use custom height 80px');
+            // pt-based renderer: 80px request → 60pt height, integer-pt bars
+            // (px-specified absolute offsets pick up Flying Saucer point
+            // rounding that breaks scanners — see renderLinearBarcodeHtml).
+            System.assert(html.contains('height:60pt'), 'Should use custom height 80px → 60pt: ' + html);
             System.assert(html.contains('display:inline-block'), 'Should render as bars');
+            System.assert(html.contains('position:absolute'), 'Bars are absolutely positioned (zero-gap)');
         }
     }
 
