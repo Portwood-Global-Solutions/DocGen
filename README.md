@@ -4,11 +4,11 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.33.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.36.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
-[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1676_passing-brightgreen)](#code-quality)
+[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1709_passing-brightgreen)](#code-quality)
 [![Coverage](https://img.shields.io/badge/Coverage-77%25-brightgreen)](#code-quality)
 [![Security](https://img.shields.io/badge/Code_Analyzer-0%2F0%2F0-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
@@ -18,10 +18,10 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 ## Install
 
 ```bash
-sf package install --package 04tVx000000qERtIAM --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000rEPpIAM --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000qjDxIAI) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000qjDxIAI)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rEPpIAM) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rEPpIAM)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -371,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.33.0 — Excel generation fixes: generated workbooks with empty styled cells no longer open with Excel’s repair prompt, and long-text values with line breaks render correctly inside spreadsheet cells**. Latest release: **v3.32.0 — host your email logo (and any email image) in Salesforce Files via Shared Assets: `{%asset:<key>}` tags now work in email templates, resolve to public image links, and stay current when you swap the image; plus logo size control and unlimited-length image URLs. v3.31.0 added configurable signing-link expiration, multi-reminder schedules, request Resend/Revoke, the finalized signed PDF attached to completion emails, and Excel child-record tables**.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.36.0 — merge tags style like text**: tags in the visual designer inherit the surrounding font, size, and color, take toolbar formatting directly, and a Google-Docs-style point-size box replaces the old size presets. Recent releases: **v3.35.0** brought Excel-level table editing (drag-resize any table, multi-cell fill/merge, border width and color pickers), watermarks that render on HTML-template PDFs with an upload-time strength setting, scan-verified barcodes, and a landscape Certificate starter; **v3.34.0** introduced the HTML-first template wizard and the visual Template Designer (Beta) — starter gallery, AI prompt kit, and a WYSIWYG page editor with merge-tag pills.
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +444,10 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.33.0 | **Latest (Released)**                   | `04tVx000000qjDxIAI` |
+| v3.36.0 | **Latest (Released)**                   | `04tVx000000rEPpIAM` |
+| v3.35.0 | Released                                | `04tVx000000rEODIA2` |
+| v3.34.0 | Released                                | `04tVx000000rEKzIAM` |
+| v3.33.0 | Released                                | `04tVx000000qjDxIAI` |
 | v3.32.0 | Released                                | `04tVx000000qZxlIAE` |
 | v3.31.0 | Released                                | `04tVx000000qZuXIAU` |
 | v3.30.0 | Released                                | `04tVx000000qERtIAM` |
