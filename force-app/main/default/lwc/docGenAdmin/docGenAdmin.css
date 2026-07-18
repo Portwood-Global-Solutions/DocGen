@@ -1424,3 +1424,44 @@
     padding: 0 14px;
     font-size: 0.8125rem;
 }
+
+/* Crisp compact toolbar: one height, one style, one line. */
+.dg-designer-toolbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+}
+
+.dg-tb-chip {
+    white-space: nowrap;
+    height: 30px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+    line-height: 28px;
+}
+
+.dg-designer-toolbar .dg-pdf-preview-btn {
+    white-space: nowrap;
+    height: 30px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+    line-height: 28px;
+}
+
+.dg-designer-toolbar__tools {
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+
+.dg-designer-toolbar__sample {
+    flex: 0 1 230px;
+    max-width: 230px;
+}
+
+.dg-designer-template-switch {
+    min-width: 190px;
+    max-width: 220px;
+}
+
+.dg-designer-toolbar__actions lightning-button button {
+    white-space: nowrap;
+}

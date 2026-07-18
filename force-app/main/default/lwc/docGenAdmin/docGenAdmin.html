@@ -1529,13 +1529,14 @@
                                         >
                                         </lightning-record-picker>
                                     </div>
-                                    <lightning-button
-                                        label="Download Sample"
-                                        title="Saves your settings, renders the ACTIVE version with this sample record, and downloads the file. For a look at unsaved edits, use PDF Preview."
-                                        icon-name="utility:page"
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn dg-tb-chip"
                                         onclick={handleTestGenerate}
                                         disabled={editGenerateSampleDisabled}
-                                    ></lightning-button>
+                                        title="Saves settings, renders the ACTIVE version with this sample record, and downloads the file. For unsaved edits use PDF Preview."
+                                    >
+                                        Download Sample
+                                    </button>
                                     <template if:true={isLoadingVersions}>
                                         <lightning-spinner
                                             alternative-text="Working..."
@@ -1544,12 +1545,13 @@
                                     </template>
                                 </template>
                                 <div class="dg-designer-toolbar__tools">
-                                    <lightning-button
-                                        label="Copy AI Prompt"
-                                        icon-name="utility:copy"
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn dg-tb-chip"
                                         onclick={handleCopyEditAiPrompt}
                                         title="Ready-to-paste prompt (your fields + tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot."
-                                    ></lightning-button>
+                                    >
+                                        Copy AI Prompt
+                                    </button>
                                     <button
                                         class="dg-fmt-btn dg-panel-btn dg-pdf-preview-btn dg-toolbar-pdf"
                                         onclick={handlePdfPreview}
@@ -1558,20 +1560,22 @@
                                     >
                                         {pdfPreviewBtnLabel}
                                     </button>
-                                    <lightning-button
-                                        label="Format Code"
-                                        icon-name="utility:magicwand"
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn dg-tb-chip"
                                         data-target="body"
                                         onclick={handleFormatHtml}
                                         disabled={showHtmlBodyVisual}
                                         title="Pretty-print the raw HTML (Source view only)."
-                                    ></lightning-button>
-                                    <lightning-button
-                                        label="Reload"
-                                        icon-name="utility:refresh"
+                                    >
+                                        Format Code
+                                    </button>
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn dg-tb-chip"
                                         onclick={handleReloadHtmlBodyEditor}
-                                        title="Replace the editor contents with the staged body (or saved body). Discards unapplied edits."
-                                    ></lightning-button>
+                                        title="Replace the editor with the staged (or saved) body. Discards unapplied edits."
+                                    >
+                                        Reload
+                                    </button>
                                 </div>
                                 <div class="dg-designer-toolbar__actions">
                                     <lightning-button
@@ -1580,13 +1584,13 @@
                                         icon-name="utility:save"
                                         onclick={handleSaveAndClose}
                                     ></lightning-button>
-                                    <lightning-button
-                                        label="Edit Template"
-                                        icon-name="utility:settings"
+                                    <button
+                                        class="dg-fmt-btn dg-panel-btn dg-tb-chip"
                                         onclick={handleEditTemplateFromDesigner}
-                                        title="Open this template's full settings — query, versions, sharing, signatures — right from here."
-                                        class="slds-var-m-left_x-small"
-                                    ></lightning-button>
+                                        title="Full settings — query, versions, sharing, signatures."
+                                    >
+                                        Edit Template
+                                    </button>
                                 </div>
                             </div>
 
@@ -1879,6 +1883,14 @@
                                             <div class="dg-slash-menu-head"><span>Table</span></div>
                                             <button
                                                 class="dg-slash-item"
+                                                data-taction="rowBefore"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">+ Row above</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
                                                 data-taction="rowAfter"
                                                 onmousedown={handleFmtMouseDown}
                                                 onclick={handleCtxTable}
@@ -1887,11 +1899,35 @@
                                             </button>
                                             <button
                                                 class="dg-slash-item"
+                                                data-taction="colBefore"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">+ Column left</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
                                                 data-taction="colAfter"
                                                 onmousedown={handleFmtMouseDown}
                                                 onclick={handleCtxTable}
                                             >
                                                 <span class="dg-slash-item-label">+ Column right</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="mergeCells"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">Merge cells</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item"
+                                                data-taction="splitCell"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">Split merged cell</span>
                                             </button>
                                             <button
                                                 class="dg-slash-item"
@@ -1916,6 +1952,14 @@
                                                 onclick={handleCtxTable}
                                             >
                                                 <span class="dg-slash-item-label">Repeat header each page</span>
+                                            </button>
+                                            <button
+                                                class="dg-slash-item dg-pill-menu-remove"
+                                                data-taction="tableDel"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleCtxTable}
+                                            >
+                                                <span class="dg-slash-item-label">Delete whole table</span>
                                             </button>
                                         </template>
                                         <button
@@ -2228,6 +2272,24 @@
                                             title="Delete the current column"
                                         >
                                             − Col
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="mergeCells"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Merge cells — select across cells (click first, shift-click last) then Merge; with just a caret, merges with the cell to the right"
+                                        >
+                                            Merge
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="splitCell"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Split a merged cell back into its grid cells"
+                                        >
+                                            Split
                                         </button>
                                         <button
                                             class="dg-fmt-btn dg-fmt-btn_word"

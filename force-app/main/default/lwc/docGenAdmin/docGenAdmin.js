@@ -6136,7 +6136,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const row = cell.parentElement;
         const table = cell.closest('table');
         const cellIndex = Array.prototype.indexOf.call(row.children, cell);
-        if (action === 'rowAfter') {
+        if (action === 'rowBefore') {
+            const clone = row.cloneNode(true);
+            for (const c of clone.children) {
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('rowspan');
+            }
+            row.insertAdjacentElement('beforebegin', clone);
+        } else if (action === 'colBefore') {
+            for (const tr of table.rows) {
+                const ref = tr.children[Math.min(cellIndex, tr.children.length - 1)];
+                if (ref) {
+                    const c = ref.cloneNode(false);
+                    c.innerHTML = '&nbsp;';
+                    c.removeAttribute('colspan');
+                    ref.insertAdjacentElement('beforebegin', c);
+                }
+            }
+        } else if (action === 'mergeCells') {
+            this._mergeCells(cell, table);
+        } else if (action === 'splitCell') {
+            this._splitCell(cell, row, table, cellIndex);
+        } else if (action === 'tableDel') {
+            table.remove();
+        } else if (action === 'rowAfter') {
             const clone = row.cloneNode(true);
             for (const c of clone.children) {
                 // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
@@ -8112,6 +8135,117 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 firstEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
             } catch (e) {
                 /* best effort */
+            }
+        }
+        this.htmlEditorDirty = true;
+    }
+
+    /**
+     * Merge cells: with a selection spanning multiple cells, merges the whole
+     * rectangle (top-left keeps colspan/rowspan + everyone's content); with a
+     * collapsed selection, merges the current cell with the one to its right.
+     * Uniform grids assumed — pre-merged regions inside the rectangle are
+     * flattened into it.
+     */
+    _mergeCells(cell, table) {
+        const sel = window.getSelection();
+        let a = cell;
+        let f = cell;
+        try {
+            if (sel && sel.anchorNode && sel.focusNode) {
+                const an = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
+                const fn = sel.focusNode.nodeType === 3 ? sel.focusNode.parentElement : sel.focusNode;
+                const ac = an && an.closest ? an.closest('td, th') : null;
+                const fc = fn && fn.closest ? fn.closest('td, th') : null;
+                if (ac && fc && table.contains(ac) && table.contains(fc)) {
+                    a = ac;
+                    f = fc;
+                }
+            }
+        } catch (e) {
+            /* selection best-effort */
+        }
+        if (a === f) {
+            const nxt = a.nextElementSibling;
+            if (!nxt) {
+                this.showToast(
+                    'Nothing to merge',
+                    'Select across the cells you want to merge (click the first, shift-click the last), or put the caret in a cell that has a neighbor to its right.',
+                    'info'
+                );
+                return;
+            }
+            if ((nxt.textContent || '').trim()) {
+                a.innerHTML = a.innerHTML + ' ' + nxt.innerHTML;
+            }
+            a.colSpan = (a.colSpan || 1) + (nxt.colSpan || 1);
+            nxt.remove();
+            this.htmlEditorDirty = true;
+            return;
+        }
+        const rows = Array.from(table.rows);
+        const r1 = Math.min(rows.indexOf(a.parentElement), rows.indexOf(f.parentElement));
+        const r2 = Math.max(rows.indexOf(a.parentElement), rows.indexOf(f.parentElement));
+        const c1 = Math.min(a.cellIndex, f.cellIndex);
+        const c2 = Math.max(a.cellIndex, f.cellIndex);
+        const keep = rows[r1].children[c1];
+        let extra = '';
+        for (let r = r1; r <= r2; r++) {
+            for (let c = c2; c >= c1; c--) {
+                const el = rows[r] && rows[r].children[c];
+                if (!el || el === keep) {
+                    continue;
+                }
+                if ((el.textContent || '').trim()) {
+                    extra += ' ' + el.innerHTML;
+                }
+                el.remove();
+            }
+        }
+        if (extra) {
+            keep.innerHTML = keep.innerHTML + extra;
+        }
+        keep.colSpan = c2 - c1 + 1;
+        keep.rowSpan = r2 - r1 + 1;
+        this.htmlEditorDirty = true;
+    }
+
+    /** Split a merged cell back into its grid cells (empties added). */
+    _splitCell(cell, row, table, cellIndex) {
+        const cs = cell.colSpan || 1;
+        const rs = cell.rowSpan || 1;
+        if (cs === 1 && rs === 1) {
+            this.showToast('Not a merged cell', 'Split only applies to cells that were merged.', 'info');
+            return;
+        }
+        const doc = cell.ownerDocument || document;
+        const mkCell = () => {
+            const c = doc.createElement(cell.tagName.toLowerCase());
+            const style = cell.getAttribute('style');
+            if (style) {
+                c.setAttribute('style', style);
+            }
+            c.innerHTML = '&nbsp;';
+            return c;
+        };
+        cell.removeAttribute('colspan');
+        cell.removeAttribute('rowspan');
+        for (let i = 1; i < cs; i++) {
+            cell.insertAdjacentElement('afterend', mkCell());
+        }
+        if (rs > 1) {
+            const rows = Array.from(table.rows);
+            const rIdx = rows.indexOf(row);
+            for (let r = rIdx + 1; r < rIdx + rs && r < rows.length; r++) {
+                const ref = rows[r].children[Math.min(cellIndex, rows[r].children.length - 1)];
+                for (let i = 0; i < cs; i++) {
+                    const c = mkCell();
+                    if (ref) {
+                        ref.insertAdjacentElement('beforebegin', c);
+                    } else {
+                        rows[r].appendChild(c);
+                    }
+                }
             }
         }
         this.htmlEditorDirty = true;
