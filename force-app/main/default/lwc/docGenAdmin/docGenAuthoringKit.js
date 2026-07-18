@@ -394,7 +394,7 @@ function buildCertificate(shape) {
         'Certificate',
         inner,
         `
-        @page { size: 11in 8.5in; margin: 0.5in; }`
+        @page { size: Letter landscape; margin: 0.5in; }`
     );
 }
 
