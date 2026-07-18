@@ -442,6 +442,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // Floating searchable panels replace the fixed right rail: 'insert' | 'tags' | 'images' | 'watermark'.
     @track activePanel = null;
     @track panelSearch = '';
+    // Query panel describe cache.
+    @track designerQueryMeta = null;
+    _queryMetaFor = null;
     // Live PDF preview: draft HTML → real Blob.toPdf render → blob: iframe.
     @track pdfPreviewUrl = null;
     @track isPdfPreviewLoading = false;
@@ -7185,6 +7188,183 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    // --- Query panel: check a field, it's in the query. ---
+    /** V1 flat-string configs only — JSON (V3/V4) configs stay in the modal. */
+    get designerQueryEditable() {
+        const q = (this.editTemplateQuery || '').trim();
+        return !q.startsWith('{') && this.editTemplateObject && this.editTemplateObject !== 'FlowJsonData';
+    }
+
+    async _loadDesignerQueryMeta() {
+        if (!this.designerQueryEditable || this._queryMetaFor === this.editTemplateObject) {
+            return;
+        }
+        try {
+            const [fields, rels] = await Promise.all([
+                getObjectFields({ objectName: this.editTemplateObject }),
+                getChildRelationships({ objectName: this.editTemplateObject })
+            ]);
+            const childFieldsByRel = {};
+            const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+            await Promise.all(
+                (shape.children || []).map(async (c) => {
+                    const rel = (rels || []).find((r) => r.value === c.relationshipName);
+                    if (rel) {
+                        try {
+                            childFieldsByRel[c.relationshipName] = await getObjectFields({
+                                objectName: rel.childObjectApiName
+                            });
+                        } catch (e) {
+                            /* skip */
+                        }
+                    }
+                })
+            );
+            this._queryMetaFor = this.editTemplateObject;
+            this.designerQueryMeta = { fields: fields || [], rels: rels || [], childFieldsByRel };
+        } catch (e) {
+            this.designerQueryMeta = null;
+        }
+    }
+
+    /** Sections of checkbox rows driven by describe + the CURRENT query. */
+    get designerQuerySections() {
+        const meta = this.designerQueryMeta;
+        if (!meta || !this.designerQueryEditable) {
+            return [];
+        }
+        const q = (this.panelSearch || '').toLowerCase().trim();
+        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+        const baseSet = new Set((shape.baseFields || []).map((f) => f.toLowerCase()));
+        const SKIP = /^(Id|IsDeleted|SystemModstamp|CurrencyIsoCode|Jigsaw.*|CleanStatus|PhotoUrl)$/;
+        const match = (label, api) => !q || (label + ' ' + api).toLowerCase().includes(q);
+        const sections = [];
+        sections.push({
+            key: 'base',
+            label: this.editTemplateObject + ' fields',
+            rows: meta.fields
+                .filter((f) => !SKIP.test(f.value) && match(f.label, f.value))
+                .map((f) => ({
+                    key: 'b_' + f.value,
+                    label: f.label,
+                    api: f.value,
+                    checked: baseSet.has(f.value.toLowerCase()),
+                    kind: 'base',
+                    rel: ''
+                }))
+        });
+        for (const c of shape.children || []) {
+            const cf = meta.childFieldsByRel[c.relationshipName] || [];
+            const inSet = new Set((c.fields || []).map((f) => f.toLowerCase()));
+            sections.push({
+                key: 'rel_' + c.relationshipName,
+                label: c.relationshipName + ' (child list)',
+                rows: cf
+                    .filter((f) => !SKIP.test(f.value) && match(f.label, f.value))
+                    .map((f) => ({
+                        key: 'c_' + c.relationshipName + '_' + f.value,
+                        label: f.label,
+                        api: f.value,
+                        checked: inSet.has(f.value.toLowerCase()),
+                        kind: 'child',
+                        rel: c.relationshipName
+                    }))
+            });
+        }
+        const inQuery = new Set((shape.children || []).map((c) => c.relationshipName));
+        const NOISE =
+            /Histories|Feeds|Shares|Teams|ContentDocumentLinks|ProcessInstances|ActivityHistories|Emails|Events|Tasks|Notes|Attachments|DuplicateRecord|RecordAction|TopicAssign|Vote/i;
+        const addable = meta.rels.filter(
+            (r) => !inQuery.has(r.value) && !NOISE.test(r.value) && match(r.label, r.value)
+        );
+        if (addable.length) {
+            sections.push({
+                key: 'addrel',
+                label: 'Add a child list',
+                rows: addable.map((r) => ({
+                    key: 'r_' + r.value,
+                    label: r.label + ' (' + r.value + ')',
+                    api: r.value,
+                    checked: false,
+                    kind: 'rel',
+                    rel: r.value
+                }))
+            });
+        }
+        return sections.filter((sec) => sec.rows.length);
+    }
+
+    /** One click = query updated. Rebuilds the V1 string from the shape. */
+    async handleQueryFieldToggle(event) {
+        const { kind, api, rel } = event.currentTarget.dataset;
+        const on = event.currentTarget.checked;
+        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+        const base = [...(shape.baseFields || [])];
+        const parents = [...(shape.parentFields || [])];
+        let children = (shape.children || []).map((c) => ({ rel: c.relationshipName, fields: [...c.fields] }));
+        if (kind === 'base') {
+            const idx = base.findIndex((f) => f.toLowerCase() === api.toLowerCase());
+            if (on && idx === -1) {
+                base.push(api);
+            } else if (!on && idx > -1) {
+                base.splice(idx, 1);
+            }
+        } else if (kind === 'child') {
+            const c = children.find((x) => x.rel === rel);
+            if (c) {
+                const idx = c.fields.findIndex((f) => f.toLowerCase() === api.toLowerCase());
+                if (on && idx === -1) {
+                    c.fields.push(api);
+                } else if (!on && idx > -1) {
+                    c.fields.splice(idx, 1);
+                }
+                if (!c.fields.length) {
+                    children = children.filter((x) => x !== c);
+                }
+            }
+        } else if (kind === 'rel' && on) {
+            // Seed the new child list with sensible fields from its describe.
+            let seed = ['Name'];
+            try {
+                const relMeta = (this.designerQueryMeta.rels || []).find((r) => r.value === rel);
+                if (relMeta) {
+                    const cf = await getObjectFields({ objectName: relMeta.childObjectApiName });
+                    this.designerQueryMeta = {
+                        ...this.designerQueryMeta,
+                        childFieldsByRel: { ...this.designerQueryMeta.childFieldsByRel, [rel]: cf || [] }
+                    };
+                    const names = (cf || []).map((f) => f.value);
+                    seed = ['Name', 'FirstName', 'LastName', 'Email', 'Amount', 'StageName', 'Quantity', 'UnitPrice']
+                        .filter((f) => names.includes(f))
+                        .slice(0, 4);
+                    if (!seed.length) {
+                        seed = [names.find((n) => n === 'Name') || names[0]].filter(Boolean);
+                    }
+                }
+            } catch (e) {
+                /* keep Name seed */
+            }
+            children.push({ rel, fields: seed });
+        }
+        if (!base.length) {
+            base.push('Name');
+        }
+        const parts = [[...base, ...parents].join(', ')];
+        for (const c of children) {
+            parts.push('(SELECT ' + c.fields.join(', ') + ' FROM ' + c.rel + ')');
+        }
+        this.editTemplateQuery = parts.join(', ');
+    }
+
+    get designerQueryFieldCount() {
+        const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+        let n = (shape.baseFields || []).length + (shape.parentFields || []).length;
+        for (const c of shape.children || []) {
+            n += (c.fields || []).length;
+        }
+        return n;
+    }
+
     // --- Header / Footer panel (repeats on every PDF page) ---
     handleDesignerHeaderChange(event) {
         this.editTemplateHeaderHtml = event.target.value;
@@ -7357,6 +7537,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get isPanelVersions() {
         return this.activePanel === 'versions';
     }
+    get isPanelQuery() {
+        return this.activePanel === 'query';
+    }
     get showPanelSearch() {
         return !this.isPanelWatermark && !this.isPanelHf && !this.isPanelVersions;
     }
@@ -7367,7 +7550,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             images: 'Image assets',
             watermark: 'Watermark',
             hf: 'Header & Footer',
-            versions: 'Version history'
+            versions: 'Version history',
+            query: 'Query fields'
         }[this.activePanel];
     }
     get panelSearchPlaceholder() {
@@ -7384,6 +7568,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         if (this.activePanel === 'versions' && this.editTemplateId) {
             this.loadVersions(this.editTemplateId);
+        }
+        if (this.activePanel === 'query') {
+            this._loadDesignerQueryMeta();
         }
     }
     handlePanelClose() {

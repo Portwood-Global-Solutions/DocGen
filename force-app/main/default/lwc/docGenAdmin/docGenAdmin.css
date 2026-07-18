@@ -1319,3 +1319,32 @@
     text-overflow: ellipsis;
     max-width: 220px;
 }
+
+.dg-qf-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 2px;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.dg-qf-row:hover {
+    background: #f4f2ff;
+}
+
+.dg-qf-label {
+    font-size: 0.8rem;
+    color: #16325c;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dg-qf-api {
+    margin-left: auto;
+    font-family: 'SF Mono', Consolas, Menlo, monospace;
+    font-size: 0.62rem;
+    color: #9a93b5;
+    white-space: nowrap;
+}
