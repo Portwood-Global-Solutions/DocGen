@@ -6702,10 +6702,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     /** Corner-drag resize for canvas images; asset tags get the new size
      *  written back as {%asset:key:<W>x} (width-only, aspect preserved). */
+    _imgCornerHit(event, img) {
+        const r = img.getBoundingClientRect();
+        return event.clientX >= r.right - 16 && event.clientY >= r.bottom - 16;
+    }
+
     _imgResizeHover(event) {
         const img = event.target && event.target.tagName === 'IMG' ? event.target : null;
         if (img) {
-            img.style.cursor = 'nwse-resize';
+            img.style.cursor = this._imgCornerHit(event, img) ? 'nwse-resize' : 'grab';
         }
     }
 
@@ -6713,6 +6718,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const img = event.target && event.target.tagName === 'IMG' ? event.target : null;
         if (!img || !pv.contains(img)) {
             return false;
+        }
+        // Body of the image = pick it up and move it; only the bottom-right
+        // corner resizes.
+        if (!this._imgCornerHit(event, img)) {
+            return this._imgMoveStart(event, img, pv);
         }
         event.preventDefault();
         const startX = event.clientX;
@@ -6735,6 +6745,63 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 img.title = img.getAttribute('data-dg-tag') + ' — drag the corner to resize';
             }
             this.htmlEditorDirty = true;
+        };
+        doc.addEventListener('mousemove', onMove);
+        doc.addEventListener('mouseup', onUp);
+        return true;
+    }
+
+    /**
+     * Google-Docs-style image move: drag the image body, a purple drop marker
+     * tracks the caret position under the pointer, release re-homes the image
+     * there. A sub-threshold drag stays a plain click (pill menu etc.).
+     */
+    _imgMoveStart(event, img, pv) {
+        event.preventDefault();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const doc = pv.ownerDocument || document;
+        let moving = false;
+        const onMove = (ev) => {
+            if (!moving && Math.abs(ev.clientX - startX) + Math.abs(ev.clientY - startY) < 6) {
+                return;
+            }
+            moving = true;
+            img.style.opacity = '0.45';
+            img.style.cursor = 'grabbing';
+            this._showDropMarker(ev, pv);
+        };
+        const onUp = (ev) => {
+            doc.removeEventListener('mousemove', onMove);
+            doc.removeEventListener('mouseup', onUp);
+            if (!moving) {
+                return;
+            }
+            this._hideDropMarker(pv);
+            img.style.opacity = '';
+            img.style.cursor = '';
+            try {
+                this._placeCaretAtPoint(ev, pv);
+                const sel = window.getSelection();
+                if (sel && sel.rangeCount) {
+                    const r = sel.getRangeAt(0);
+                    // Never drop INSIDE another pill — land after it instead.
+                    let node = r.startContainer.nodeType === 3 ? r.startContainer.parentElement : r.startContainer;
+                    const inPill = node && node.closest ? node.closest('[data-dg-tag]') : null;
+                    if (inPill && inPill !== img) {
+                        r.setStartAfter(inPill);
+                    }
+                    r.collapse(true);
+                    r.insertNode(img);
+                    r.setStartAfter(img);
+                    r.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                    this.htmlEditorDirty = true;
+                }
+            } catch (e) {
+                /* keep the image where it was */
+            }
         };
         doc.addEventListener('mousemove', onMove);
         doc.addEventListener('mouseup', onUp);
@@ -7580,6 +7647,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      */
     _beginPillEdit(pill) {
         this.pillMenu = null;
+        // Image pills have no text — editing one as text committed '' and
+        // DELETED the image. Swap the img for a text pill showing its tag,
+        // edit that, and the commit re-imagifies asset tags below.
+        if (pill.tagName === 'IMG') {
+            const imgTag = pill.getAttribute('data-dg-tag') || '';
+            const doc = pill.ownerDocument || document;
+            const span = doc.createElement('span');
+            span.setAttribute('data-dg-tag', 'true');
+            span.setAttribute('contenteditable', 'false');
+            span.textContent = imgTag;
+            span.style.cssText = this._pillStyleFor(imgTag);
+            pill.replaceWith(span);
+            pill = span;
+        }
         pill.setAttribute('contenteditable', 'true');
         pill.style.borderStyle = 'dashed';
         pill.style.cursor = 'text';
@@ -7615,6 +7696,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             pill.setAttribute('contenteditable', 'false');
             pill.style.cssText = this._pillStyleFor(t);
             this.htmlEditorDirty = true;
+            // An asset tag goes back to being a real image on the canvas.
+            if (/^\{%asset:/i.test(t)) {
+                this._imagifyAssetPills();
+            }
             // Park the caret AFTER the pill — leaving it inside means the next
             // keystrokes grow the pill instead of typing beside it.
             try {

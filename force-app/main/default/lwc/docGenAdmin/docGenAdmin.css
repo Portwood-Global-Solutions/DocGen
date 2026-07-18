@@ -677,9 +677,17 @@
 }
 
 /* --- Visual-mode format bar --- */
+/* The canvas column owns the scroll — the page never scrolls the toolbar
+   away. Height leaves room for LEX chrome + designer toolbar rows. */
+.dg-designer-canvas-col {
+    max-height: calc(100vh - 330px);
+    min-height: 420px;
+    overflow-y: auto;
+}
+
 .dg-format-bar {
     position: sticky;
-    top: 100px;
+    top: 0;
     z-index: 30;
     display: flex;
     align-items: center;
