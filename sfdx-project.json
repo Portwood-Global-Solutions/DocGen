@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.36.0 \u2014 Merge tags style like text: fonts, colors, exact sizes",
+      "versionName": "v3.36.0 — Merge tags style like text: fonts, colors, exact sizes",
       "versionNumber": "3.36.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.36 makes merge tags feel like real text in the visual designer: tags take on the font, size, and color of the text around them, and you can click any tag and style it directly \u2014 bold, italic, colors, fonts, and an exact point size you type in, just like Google Docs. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.36 makes merge tags feel like real text in the visual designer: tags take on the font, size, and color of the text around them, and you can click any tag and style it directly — bold, italic, colors, fonts, and an exact point size you type in, just like Google Docs. 100% native Salesforce — no external services or callouts. Free for all users.",
       "ancestorVersion": "3.35.0"
     }
   ],
@@ -200,6 +200,7 @@
     "Portwood DocGen Managed@3.32.0-1": "04tVx000000qZxlIAE",
     "Portwood DocGen Managed@3.33.0-1": "04tVx000000qjDxIAI",
     "Portwood DocGen Managed@3.34.0-1": "04tVx000000rEKzIAM",
-    "Portwood DocGen Managed@3.35.0-1": "04tVx000000rEODIA2"
+    "Portwood DocGen Managed@3.35.0-1": "04tVx000000rEODIA2",
+    "Portwood DocGen Managed@3.36.0-1": "04tVx000000rEPpIAM"
   }
 }
