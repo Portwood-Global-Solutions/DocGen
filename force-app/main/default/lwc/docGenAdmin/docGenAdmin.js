@@ -6982,6 +6982,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._toggleListAtCaret(cmd === 'insertOrderedList');
             return;
         }
+        // Merge-tag pills in the selection take the format directly —
+        // execCommand can't reach inside contenteditable=false atoms.
+        const selPills = this._pillsInSelection();
+        if (selPills.length && this._applyFormatToPills(cmd, value, selPills)) {
+            this.htmlEditorDirty = true;
+            const ws = window.getSelection();
+            const hasTextSel = ws && ws.rangeCount && !ws.isCollapsed && (ws.toString() || '').trim().length > 0;
+            if (!hasTextSel) {
+                this._refreshFmtState();
+                return;
+            }
+        }
         if (
             /^(bold|italic|underline|strikeThrough|superscript|subscript|foreColor|hiliteColor|fontName|fontSize)$/.test(
                 cmd
@@ -7049,6 +7061,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 );
             }
             return;
+        }
+        const pillTargets = this._pillsInSelection();
+        if (pillTargets.length && this._applyFormatToPills(cmd, value, pillTargets)) {
+            this.htmlEditorDirty = true;
+            const ws = window.getSelection();
+            const hasTextSel = ws && ws.rangeCount && !ws.isCollapsed && (ws.toString() || '').trim().length > 0;
+            if (!hasTextSel) {
+                return;
+            }
         }
         this._expandCaretToWord();
         try {
@@ -7151,10 +7172,77 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _pillStyleFor(tagText) {
+        // Chrome only (tint + border) — font family/size/color/weight INHERIT
+        // from the surrounding text, so a pill inside a 24pt serif heading
+        // reads exactly like the value will print.
         const isStructural = /^[#/:%@*]/.test((tagText || '').charAt(1));
         return isStructural
-            ? 'background:#e3f5e9;border:1px solid #9fd6b1;color:#1c7a3d;border-radius:9px;padding:0 6px;font-size:0.9em;white-space:nowrap;cursor:pointer;'
-            : 'background:#ede7fd;border:1px solid #c9b8f5;color:#5a3fc4;border-radius:9px;padding:0 6px;font-size:0.9em;white-space:nowrap;cursor:pointer;';
+            ? 'background:#e3f5e9;border:1px solid #9fd6b1;border-radius:9px;padding:0 6px;white-space:nowrap;cursor:pointer;'
+            : 'background:#ede7fd;border:1px solid #c9b8f5;border-radius:9px;padding:0 6px;white-space:nowrap;cursor:pointer;';
+    }
+
+    /** Pills whose box intersects the current selection (text pills only). */
+    _pillsInSelection() {
+        const host = this.template.querySelector('.dg-visual-host');
+        const pv = host && host.querySelector('.dg-pv');
+        if (!pv) {
+            return [];
+        }
+        let sel = null;
+        try {
+            sel = window.getSelection();
+        } catch (e) {
+            return [];
+        }
+        if (!sel || !sel.rangeCount) {
+            return [];
+        }
+        const range = sel.getRangeAt(0);
+        const out = [];
+        for (const pill of pv.querySelectorAll('[data-dg-tag]')) {
+            if (pill.tagName === 'IMG') {
+                continue;
+            }
+            try {
+                if (range.intersectsNode(pill)) {
+                    out.push(pill);
+                }
+            } catch (e) {
+                /* detached */
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Toolbar formatting applied straight onto pills — merge tags are
+     * contenteditable=false atoms, so execCommand skips them. The styles
+     * survive serialization (see _unpillifyTags).
+     */
+    _applyFormatToPills(cmd, value, pills) {
+        const sizePx = { 1: '10px', 2: '13px', 3: '16px', 4: '18px', 5: '24px', 6: '32px', 7: '48px' };
+        let handled = true;
+        for (const pill of pills) {
+            const st = pill.style;
+            if (cmd === 'bold') {
+                st.fontWeight = st.fontWeight === 'bold' ? '' : 'bold';
+            } else if (cmd === 'italic') {
+                st.fontStyle = st.fontStyle === 'italic' ? '' : 'italic';
+            } else if (cmd === 'underline') {
+                st.textDecorationLine = st.textDecorationLine === 'underline' ? '' : 'underline';
+            } else if (cmd === 'strikeThrough') {
+                st.textDecorationLine = st.textDecorationLine === 'line-through' ? '' : 'line-through';
+            } else if (cmd === 'foreColor') {
+                st.color = value || '';
+            } else if (cmd === 'fontName') {
+                st.fontFamily = value || '';
+            } else if (cmd === 'fontSize') {
+                st.fontSize = sizePx[value] || '';
+            } else {
+                handled = false;
+            }
+        }
+        return handled;
     }
 
     /**
@@ -7164,6 +7252,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      */
     _openPillMenu(pill) {
         this._activePill = pill;
+        // Select the pill so the main toolbar (B/I/size/color/font) targets it.
+        try {
+            const doc = pill.ownerDocument || document;
+            const r = doc.createRange();
+            r.selectNode(pill);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(r);
+        } catch (e) {
+            /* best effort */
+        }
         const raw = (pill.textContent || '').trim();
         const inner = raw.replace(/^\{|\}$/g, '');
         const first = inner.charAt(0);
@@ -7496,8 +7595,43 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         for (const pill of root.querySelectorAll('[data-dg-tag]')) {
             const attr = pill.getAttribute('data-dg-tag');
+            const doc = root.ownerDocument || document;
             const tag = pill.tagName === 'IMG' && attr && attr.startsWith('{') ? attr : pill.textContent;
-            pill.replaceWith((root.ownerDocument || document).createTextNode(tag));
+            // User formatting applied to the pill (the chrome in _pillStyleFor
+            // never sets these props) rides out as a styled span so the merged
+            // value prints with it.
+            const st = pill.style;
+            const kept = [];
+            if (pill.tagName !== 'IMG') {
+                if (st.fontWeight) kept.push(['font-weight', st.fontWeight]);
+                if (st.fontStyle) kept.push(['font-style', st.fontStyle]);
+                if (st.textDecorationLine) kept.push(['text-decoration', st.textDecorationLine]);
+                if (st.color) kept.push(['color', st.color]);
+                if (st.fontFamily) kept.push(['font-family', st.fontFamily]);
+                if (st.fontSize) kept.push(['font-size', st.fontSize]);
+            }
+            if (!kept.length) {
+                pill.replaceWith(doc.createTextNode(tag));
+                continue;
+            }
+            const parent = pill.parentElement;
+            const parentIsWrapper =
+                parent && parent.tagName === 'SPAN' && parent.childNodes.length === 1 && parent.getAttribute('style');
+            if (parentIsWrapper) {
+                // Round-trip case: merge into the existing wrapper instead of
+                // nesting a new span every save.
+                for (const [prop, val] of kept) {
+                    parent.style.setProperty(prop, val);
+                }
+                pill.replaceWith(doc.createTextNode(tag));
+            } else {
+                const wrap = doc.createElement('span');
+                for (const [prop, val] of kept) {
+                    wrap.style.setProperty(prop, val);
+                }
+                wrap.textContent = tag;
+                pill.replaceWith(wrap);
+            }
         }
     }
 
