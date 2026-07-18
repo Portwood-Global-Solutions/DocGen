@@ -1611,6 +1611,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                                 this._openPillMenu(pill);
                             } else if (!pill) {
                                 this.pillMenu = null;
+                                this._activePill = null;
                                 this._closeSlashMenu();
                                 this.ctxMenu = null;
                                 // A plain click clears the cell selection —
@@ -6942,21 +6943,34 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const host = this.template.querySelector('.dg-visual-host');
         const pv = host && host.querySelector('.dg-pv');
         const pills = this._pillsInSelection();
+        for (const pill of pills) {
+            pill.style.fontSize = pt + 'pt';
+        }
         if (pills.length) {
-            for (const pill of pills) {
-                pill.style.fontSize = pt + 'pt';
-            }
             this.htmlEditorDirty = true;
         }
-        const ws = window.getSelection();
-        const hasTextSel = ws && ws.rangeCount && !ws.isCollapsed && (ws.toString() || '').trim().length > 0;
-        if (!hasTextSel) {
-            if (pills.length) {
-                this.fmtSizePt = pt;
-                return;
+        // Pill-only selection: done. execCommand would strip the size we just
+        // set and tear the pill out of its styled ancestor.
+        if (!this._selectionHasNonPillText()) {
+            if (!pills.length) {
+                this._expandCaretToWord();
+                if (!this._selectionHasNonPillText()) {
+                    this.fmtSizePt = pt;
+                    return;
+                }
+                this._execFontSizeOnSelection(pt, pv, []);
             }
-            this._expandCaretToWord();
+            this.fmtSizePt = pt;
+            return;
         }
+        this._execFontSizeOnSelection(pt, pv, pills);
+        this.fmtSizePt = pt;
+    }
+
+    /** The exact-size trick for real text: fontSize 7 as a marker, retargeted
+     *  to the requested pt. Pills in a mixed selection get their styles
+     *  snapshot-restored around it. */
+    _execFontSizeOnSelection(pt, pv, pills) {
         const isMarker = (el) => {
             const fs = el.style.fontSize;
             return fs === 'xxx-large' || fs === '48px';
@@ -6969,6 +6983,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
             }
         }
+        const pillSnap = pills.map((pillEl) => [pillEl, pillEl.style.cssText]);
         try {
             document.execCommand('styleWithCSS', false, 'true');
             if (document.execCommand('fontSize', false, '7') && pv) {
@@ -6979,10 +6994,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
                 this.htmlEditorDirty = true;
             }
+            for (const [pillEl, css] of pillSnap) {
+                pillEl.style.cssText = css;
+            }
         } catch (e) {
             /* formatting unavailable */
         }
-        this.fmtSizePt = pt;
     }
 
     get boldBtnClass() {
@@ -7076,13 +7093,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         // Merge-tag pills in the selection take the format directly —
-        // execCommand can't reach inside contenteditable=false atoms.
+        // execCommand can't reach inside contenteditable=false atoms, and on a
+        // pill-only selection it MANGLES the pill (strips inline styles, breaks
+        // it out of its styled ancestor). Never let a pill-only selection near
+        // execCommand.
         const selPills = this._pillsInSelection();
         if (selPills.length && this._applyFormatToPills(cmd, value, selPills)) {
             this.htmlEditorDirty = true;
-            const ws = window.getSelection();
-            const hasTextSel = ws && ws.rangeCount && !ws.isCollapsed && (ws.toString() || '').trim().length > 0;
-            if (!hasTextSel) {
+            if (!this._selectionHasNonPillText()) {
                 this._refreshFmtState();
                 return;
             }
@@ -7092,11 +7110,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 cmd
             )
         ) {
-            this._expandCaretToWord();
+            if (!this._selectionHasNonPillText()) {
+                this._expandCaretToWord();
+            }
         }
+        // Mixed text+pill selection: execCommand may strip the pills' inline
+        // styles while wrapping the text — snapshot and restore them.
+        const pillSnap = selPills.map((pillEl) => [pillEl, pillEl.style.cssText]);
         try {
             document.execCommand('styleWithCSS', false, 'true');
             const ok = document.execCommand(cmd, false, value);
+            for (const [pillEl, css] of pillSnap) {
+                pillEl.style.cssText = css;
+            }
             if (ok) {
                 this.htmlEditorDirty = true;
                 this._refreshFmtState();
@@ -7158,17 +7184,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const pillTargets = this._pillsInSelection();
         if (pillTargets.length && this._applyFormatToPills(cmd, value, pillTargets)) {
             this.htmlEditorDirty = true;
-            const ws = window.getSelection();
-            const hasTextSel = ws && ws.rangeCount && !ws.isCollapsed && (ws.toString() || '').trim().length > 0;
-            if (!hasTextSel) {
+            if (!this._selectionHasNonPillText()) {
                 return;
             }
         }
-        this._expandCaretToWord();
+        if (!this._selectionHasNonPillText()) {
+            this._expandCaretToWord();
+        }
+        const pillCssSnap = pillTargets.map((pillEl) => [pillEl, pillEl.style.cssText]);
         try {
             document.execCommand('styleWithCSS', false, 'true');
             if (document.execCommand(cmd, false, value)) {
                 this.htmlEditorDirty = true;
+            }
+            for (const [pillEl, css] of pillCssSnap) {
+                pillEl.style.cssText = css;
             }
         } catch (e) {
             /* ignore */
@@ -7274,6 +7304,33 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             : 'background:#ede7fd;border:1px solid #c9b8f5;border-radius:9px;padding:0 6px;white-space:nowrap;cursor:pointer;';
     }
 
+    /**
+     * True only when the selection contains editable text OUTSIDE pills.
+     * sel.toString() lies here — a selected pill contributes its tag text,
+     * which sent pill-only selections down the execCommand path where the
+     * browser strips the pill's inline styles and restructures around it.
+     */
+    _selectionHasNonPillText() {
+        let sel = null;
+        try {
+            sel = window.getSelection();
+        } catch (e) {
+            return false;
+        }
+        if (!sel || !sel.rangeCount || sel.isCollapsed) {
+            return false;
+        }
+        try {
+            const frag = sel.getRangeAt(0).cloneContents();
+            for (const pillEl of frag.querySelectorAll('[data-dg-tag]')) {
+                pillEl.remove();
+            }
+            return (frag.textContent || '').trim().length > 0;
+        } catch (e) {
+            return false;
+        }
+    }
+
     /** Pills whose box intersects the current selection (text pills only). */
     _pillsInSelection() {
         const host = this.template.querySelector('.dg-visual-host');
@@ -7296,13 +7353,29 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (pill.tagName === 'IMG') {
                 continue;
             }
+            let hit = false;
             try {
-                if (range.intersectsNode(pill)) {
-                    out.push(pill);
-                }
+                hit = sel.containsNode(pill, true);
             } catch (e) {
-                /* detached */
+                hit = false;
             }
+            if (!hit) {
+                try {
+                    hit = range.intersectsNode(pill);
+                } catch (e) {
+                    /* LWS can refuse cross-realm Range checks */
+                }
+            }
+            if (hit) {
+                out.push(pill);
+            }
+        }
+        // The last-clicked pill is ALWAYS a target, even when the sandboxed
+        // Selection API won't report it (LWS realm quirk observed live:
+        // main-world selection shows the pill, component-realm checks come
+        // back empty). Cleared when the user clicks elsewhere on the page.
+        if (this._activePill && this._activePill.isConnected && out.indexOf(this._activePill) === -1) {
+            out.push(this._activePill);
         }
         return out;
     }
