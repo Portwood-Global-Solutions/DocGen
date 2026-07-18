@@ -1144,7 +1144,7 @@ export function buildTagPalette(shape) {
     sections.push({
         key: 'barcodes',
         label: 'Barcodes & QR',
-        hint: 'Code 128 and QR only. Keep QR values under ~120 characters for 1-inch prints.',
+        hint: 'QR, Code 128, and Code 39. Keep QR values under ~120 characters for 1-inch prints.',
         items: [
             ...codeishFields.map((f) => ({
                 key: 'qr_' + f,
@@ -1163,6 +1163,12 @@ export function buildTagPalette(shape) {
                 label: 'Barcode (Code 128)',
                 snippet: '{*FieldName:code128:300x80}',
                 title: 'Swap FieldName; renders a 300×80px Code 128 barcode'
+            },
+            {
+                key: 'bc39_any',
+                label: 'Barcode (Code 39)',
+                snippet: '{*FieldName:code39:300x80}',
+                title: 'Swap FieldName; Code 39 — uppercase letters, digits, and -. $/+% only'
             }
         ]
     });

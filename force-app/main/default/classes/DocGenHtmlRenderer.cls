@@ -4508,7 +4508,7 @@ public with sharing class DocGenHtmlRenderer {
         if (barcodeType == 'qr') {
             html = renderQrHtml(pattern, sizeSpec);
         } else {
-            html = renderCode128Html(pattern, sizeSpec);
+            html = renderLinearBarcodeHtml(pattern, sizeSpec);
         }
 
         String before = text.substring(0, startIdx);
@@ -4558,37 +4558,61 @@ public with sharing class DocGenHtmlRenderer {
             } else if (barcodeType == 'qr') {
                 result += renderQrHtml(pattern, sizeSpec);
             } else {
-                result += renderCode128Html(pattern, sizeSpec);
+                result += renderLinearBarcodeHtml(pattern, sizeSpec);
             }
             cursor = endIdx + 2;
         }
         return result;
     }
 
-    /** Renders Code 128 as inline CSS bars. */
-    private static String renderCode128Html(String pattern, String sizeSpec) {
-        // Parse size: "300x80" or default
-        Integer barWidth = 1;
+    /**
+     * Renders a 1D barcode (Code 128 / Code 39) as absolutely-positioned bars —
+     * the same zero-gap technique renderQrHtml uses. The old per-module
+     * inline-block spans accumulated Flying Saucer sub-pixel rounding between
+     * spans, which distorted bar widths enough that scanners rejected the
+     * symbol (QR survived because its modules are 2D and chunky). Also adds
+     * the spec-required quiet zone (>=10 modules each side) on a white
+     * background, and run-length merges consecutive black modules into single
+     * bars so every bar edge lands on an exact integer pixel.
+     */
+    private static String renderLinearBarcodeHtml(String pattern, String sizeSpec) {
+        Integer moduleW = 2;
         Integer barHeight = 50;
-        if (String.isNotBlank(sizeSpec) && sizeSpec.contains('x')) {
-            List<String> dims = sizeSpec.split('x');
+        if (String.isNotBlank(sizeSpec) && sizeSpec.toLowerCase().contains('x')) {
+            List<String> dims = sizeSpec.toLowerCase().split('x');
             if (dims.size() == 2 && dims[0].trim().isNumeric() && dims[1].trim().isNumeric()) {
-                barWidth = Math.max(1, Integer.valueOf(dims[0].trim()) / pattern.length());
-                barHeight = Integer.valueOf(dims[1].trim());
+                moduleW = Math.max(1, Integer.valueOf(dims[0].trim()) / (pattern.length() + 20));
+                barHeight = Math.max(20, Integer.valueOf(dims[1].trim()));
             }
+        } else if (String.isNotBlank(sizeSpec) && sizeSpec.trim().isNumeric()) {
+            moduleW = Math.max(1, Integer.valueOf(sizeSpec.trim()) / (pattern.length() + 20));
         }
-
-        String html = '<div style="display:inline-block;white-space:nowrap;line-height:0;">';
-        for (Integer i = 0; i < pattern.length(); i++) {
-            String color = pattern.substring(i, i + 1) == '1' ? '#000' : '#fff';
-            html +=
-                '<span style="display:inline-block;width:' +
-                barWidth +
-                'px;height:' +
-                barHeight +
-                'px;background:' +
-                color +
-                ';"></span>';
+        Integer quietPx = moduleW * 10; // >=10-module quiet zone per side
+        Integer totalW = pattern.length() * moduleW + quietPx * 2;
+        String html =
+            '<div style="position:relative;display:inline-block;width:' +
+            totalW +
+            'px;height:' +
+            barHeight +
+            'px;background:#fff;">';
+        Integer i = 0;
+        while (i < pattern.length()) {
+            if (pattern.substring(i, i + 1) == '1') {
+                Integer runStart = i;
+                while (i < pattern.length() && pattern.substring(i, i + 1) == '1') {
+                    i++;
+                }
+                html +=
+                    '<span style="position:absolute;left:' +
+                    (quietPx + runStart * moduleW) +
+                    'px;top:0;width:' +
+                    ((i - runStart) * moduleW) +
+                    'px;height:' +
+                    barHeight +
+                    'px;background:#000;"></span>';
+            } else {
+                i++;
+            }
         }
         html += '</div>';
         return html;

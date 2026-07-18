@@ -210,6 +210,55 @@ public class BarcodeGenerator {
     // Reed-Solomon error correction over GF(256)
     private static final Integer QR_GF_POLY = 285; // x^8 + x^4 + x^3 + x^2 + 1
 
+    // Code 39: char → 9-element pattern (bars/spaces alternating, starting
+    // with a bar; 'w' = wide (3 modules), 'n' = narrow (1)). ISO/IEC 16388.
+    private static final Map<String, String> CODE39 = new Map<String, String>{
+        '0' => 'nnnwwnwnn',
+        '1' => 'wnnwnnnnw',
+        '2' => 'nnwwnnnnw',
+        '3' => 'wnwwnnnnn',
+        '4' => 'nnnwwnnnw',
+        '5' => 'wnnwwnnnn',
+        '6' => 'nnwwwnnnn',
+        '7' => 'nnnwnnwnw',
+        '8' => 'wnnwnnwnn',
+        '9' => 'nnwwnnwnn',
+        'A' => 'wnnnnwnnw',
+        'B' => 'nnwnnwnnw',
+        'C' => 'wnwnnwnnn',
+        'D' => 'nnnnwwnnw',
+        'E' => 'wnnnwwnnn',
+        'F' => 'nnwnwwnnn',
+        'G' => 'nnnnnwwnw',
+        'H' => 'wnnnnwwnn',
+        'I' => 'nnwnnwwnn',
+        'J' => 'nnnnwwwnn',
+        'K' => 'wnnnnnnww',
+        'L' => 'nnwnnnnww',
+        'M' => 'wnwnnnnwn',
+        'N' => 'nnnnwnnww',
+        'O' => 'wnnnwnnwn',
+        'P' => 'nnwnwnnwn',
+        'Q' => 'nnnnnnwww',
+        'R' => 'wnnnnnwwn',
+        'S' => 'nnwnnnwwn',
+        'T' => 'nnnnwnwwn',
+        'U' => 'wwnnnnnnw',
+        'V' => 'nwwnnnnnw',
+        'W' => 'wwwnnnnnn',
+        'X' => 'nwnnwnnnw',
+        'Y' => 'wwnnwnnnn',
+        'Z' => 'nwwnwnnnn',
+        '-' => 'nwnnnnwnw',
+        '.' => 'wwnnnnwnn',
+        ' ' => 'nwwnnnwnn',
+        '$' => 'nwnwnwnnn',
+        '/' => 'nwnwnnnwn',
+        '+' => 'nwnnnwnwn',
+        '%' => 'nnnwnwnwn',
+        '*' => 'nwnnwnwnn'
+    };
+
     public static String getPattern(String value, String barcodeType) {
         if (String.isBlank(value)) {
             return null;
@@ -217,10 +266,42 @@ public class BarcodeGenerator {
         if (barcodeType == 'qr') {
             return buildQrPattern(value);
         }
+        if (barcodeType == 'code39') {
+            return buildCode39Pattern(value);
+        }
         if (barcodeType == null || barcodeType == 'code128') {
             return buildCode128Pattern(value);
         }
         return null;
+    }
+
+    /**
+     * Code 39 pattern: uppercases input, replaces unsupported characters with
+     * '-'. Elements alternate bar/space starting with a bar; characters are
+     * separated by a narrow space; * start/stop guards added automatically.
+     */
+    private static String buildCode39Pattern(String value) {
+        String v = '*' + value.toUpperCase() + '*';
+        String pattern = '';
+        for (Integer i = 0; i < v.length(); i++) {
+            String ch = v.substring(i, i + 1);
+            String enc = CODE39.get(ch);
+            if (enc == null && i > 0 && i < v.length() - 1) {
+                enc = CODE39.get('-');
+            }
+            if (enc == null) {
+                continue;
+            }
+            for (Integer e = 0; e < enc.length(); e++) {
+                Integer width = enc.substring(e, e + 1) == 'w' ? 3 : 1;
+                String bit = Math.mod(e, 2) == 0 ? '1' : '0';
+                pattern += bit.repeat(width);
+            }
+            if (i < v.length() - 1) {
+                pattern += '0'; // inter-character narrow space
+            }
+        }
+        return pattern;
     }
 
     /**

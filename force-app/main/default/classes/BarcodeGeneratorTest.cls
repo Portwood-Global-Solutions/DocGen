@@ -220,4 +220,42 @@ private class BarcodeGeneratorTest {
             System.assert(rows[rows.size() - 1].startsWith('1111111'), 'Bottom-left finder pattern missing');
         }
     }
+
+    @IsTest
+    static void testCode39PatternMatchesSpec() {
+        // '*A*' — start guard, A, stop guard, narrow inter-character spaces.
+        // Reference binaries verified against ISO/IEC 16388 encodings.
+        String p = BarcodeGenerator.getPattern('A', 'code39');
+        String star = '100010111011101';
+        String a = '111010100010111';
+        System.assertEquals(star + '0' + a + '0' + star, p, 'Code 39 *A* pattern');
+    }
+
+    @IsTest
+    static void testCode39UppercasesAndSubstitutes() {
+        System.assertEquals(
+            BarcodeGenerator.getPattern('ab', 'code39'),
+            BarcodeGenerator.getPattern('AB', 'code39'),
+            'Lowercase input uppercased'
+        );
+        System.assertEquals(
+            BarcodeGenerator.getPattern('A_B', 'code39'),
+            BarcodeGenerator.getPattern('A-B', 'code39'),
+            'Unsupported characters substitute as dash'
+        );
+    }
+
+    @IsTest
+    static void testCode128PatternStructure() {
+        // start(11) + N data symbols (11 each) + check(11) + stop(13)
+        String p = BarcodeGenerator.getPattern('ABC-12345', 'code128');
+        System.assertEquals(11 + 9 * 11 + 11 + 13, p.length(), 'Code 128 module count');
+        System.assert(p.startsWith('11010010000'), 'Start B');
+        System.assert(p.endsWith('1100011101011'), 'Stop + termination');
+    }
+
+    @IsTest
+    static void testUnknownTypeReturnsNull() {
+        System.assertEquals(null, BarcodeGenerator.getPattern('X', 'ean13'), 'Unknown symbology rejected');
+    }
 }

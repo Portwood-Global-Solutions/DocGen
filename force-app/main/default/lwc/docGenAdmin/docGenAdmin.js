@@ -6550,6 +6550,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     options: [
                         opt('qr', 'QR code', '{*' + f + ':qr:200}'),
                         opt('barcode', 'Barcode (Code 128)', '{*' + f + ':code128:300x80}'),
+                        opt('barcode39', 'Barcode (Code 39)', '{*' + f + ':code39:300x80}'),
                         opt('image', 'Image field', '{%' + f + '}')
                     ]
                 }
