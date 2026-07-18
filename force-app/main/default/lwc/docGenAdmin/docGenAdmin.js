@@ -1678,6 +1678,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             this._cellSelDown(e, pv);
                             this._tableResizeStart(e, pv);
                         });
+                        // Caret moved (typing, clicking, arrow keys) — update
+                        // which format buttons read as pressed.
+                        pv.addEventListener('keyup', () => this._refreshFmtState());
+                        pv.addEventListener('mouseup', () => {
+                            // After the click's selection settles.
+                            setTimeout(() => this._refreshFmtState(), 0);
+                        });
                         // Chip drops staged by the document-level drag listener
                         // execute HERE — pv listeners are the context where DOM
                         // insertion reliably works under LWS.
@@ -6415,32 +6422,111 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             for (const c of targets) {
                 c.style.background = value === 'transparent' ? '' : value;
             }
-        } else if (action === 'bordersAll') {
-            table.style.borderCollapse = 'collapse';
-            table.style.border = '1pt solid #444444';
-            for (const c of table.querySelectorAll('td, th')) {
-                c.style.border = '0.75pt solid #999999';
-            }
-        } else if (action === 'bordersOutline') {
-            table.style.borderCollapse = 'collapse';
-            table.style.border = '1pt solid #444444';
-            for (const c of table.querySelectorAll('td, th')) {
-                c.style.border = 'none';
-            }
-        } else if (action === 'bordersRows') {
-            table.style.borderCollapse = 'collapse';
-            table.style.border = 'none';
-            for (const c of table.querySelectorAll('td, th')) {
-                c.style.border = 'none';
-                c.style.borderBottom = '0.75pt solid #cccccc';
-            }
-        } else if (action === 'bordersNone') {
-            table.style.border = 'none';
-            for (const c of table.querySelectorAll('td, th')) {
-                c.style.border = 'none';
-            }
+        } else if (
+            action === 'bordersAll' ||
+            action === 'bordersOutline' ||
+            action === 'bordersRows' ||
+            action === 'bordersNone'
+        ) {
+            this._lastBorderMode = action;
+            this._applyBorders(action, table);
         }
         this.htmlEditorDirty = true;
+    }
+
+    // --- Table borders: style presets x width x color, selection-aware ---
+    @track _borderPrefs = { width: '0.75', color: '#666666' };
+    _lastBorderMode = 'bordersAll';
+
+    get borderWidthOptions() {
+        return [
+            { value: '0.5', label: 'Hairline' },
+            { value: '0.75', label: 'Thin' },
+            { value: '1', label: 'Medium' },
+            { value: '1.5', label: 'Thick' },
+            { value: '2.25', label: 'Heavy' }
+        ].map((o) => ({ ...o, selected: o.value === this._borderPrefs.width }));
+    }
+
+    get borderColorValue() {
+        return this._borderPrefs.color;
+    }
+
+    _applyBorders(mode, table) {
+        const line = this._borderPrefs.width + 'pt solid ' + this._borderPrefs.color;
+        // A multi-cell drag selection scopes All/None to just those cells.
+        const selCells = this._cellSel && this._cellSel.length > 1 ? this._cellSel : null;
+        if (mode === 'bordersAll') {
+            table.style.borderCollapse = 'collapse';
+            if (selCells) {
+                for (const c of selCells) {
+                    c.style.border = line;
+                }
+            } else {
+                table.style.border = line;
+                for (const c of table.querySelectorAll('td, th')) {
+                    c.style.border = line;
+                }
+            }
+        } else if (mode === 'bordersOutline') {
+            table.style.borderCollapse = 'collapse';
+            table.style.border = line;
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.border = 'none';
+            }
+        } else if (mode === 'bordersRows') {
+            table.style.borderCollapse = 'collapse';
+            table.style.border = 'none';
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.border = 'none';
+                c.style.borderBottom = line;
+            }
+        } else if (mode === 'bordersNone') {
+            if (selCells) {
+                for (const c of selCells) {
+                    c.style.border = 'none';
+                }
+            } else {
+                table.style.border = 'none';
+                for (const c of table.querySelectorAll('td, th')) {
+                    c.style.border = 'none';
+                }
+            }
+        }
+    }
+
+    handleBorderWidthChange(event) {
+        this._borderPrefs = { ...this._borderPrefs, width: event.currentTarget.value };
+        this._reapplyBorders();
+    }
+
+    handleBorderColorChange(event) {
+        this._borderPrefs = { ...this._borderPrefs, color: event.currentTarget.value };
+        this._reapplyBorders();
+    }
+
+    /** Width/color changed — restyle the table under the cursor live, using
+     *  whichever border style was applied last. */
+    _reapplyBorders() {
+        if (!this.showHtmlBodyVisual) {
+            return;
+        }
+        let cell = this._selectedTableCell();
+        if (!cell && this._savedFmtRange) {
+            try {
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(this._savedFmtRange);
+            } catch (e) {
+                /* best effort */
+            }
+            cell = this._selectedTableCell();
+        }
+        const table = cell && cell.closest('table');
+        if (table) {
+            this._applyBorders(this._lastBorderMode || 'bordersAll', table);
+            this.htmlEditorDirty = true;
+        }
     }
 
     // --- Column drag-resize (grab a cell's right edge) ---
@@ -6779,6 +6865,72 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * styleWithCSS makes execCommand emit inline CSS spans — exactly the
      * flat, Flying Saucer-safe styling the PDF engine renders.
      */
+    // --- Active-format indication: B/I/U/S read as pressed at the caret ---
+    @track fmtState = { bold: false, italic: false, underline: false, strike: false };
+
+    get boldBtnClass() {
+        return this.fmtState.bold ? 'dg-fmt-btn dg-fmt-on' : 'dg-fmt-btn';
+    }
+    get italicBtnClass() {
+        return this.fmtState.italic ? 'dg-fmt-btn dg-fmt-on' : 'dg-fmt-btn';
+    }
+    get underlineBtnClass() {
+        return this.fmtState.underline ? 'dg-fmt-btn dg-fmt-on' : 'dg-fmt-btn';
+    }
+    get strikeBtnClass() {
+        return this.fmtState.strike ? 'dg-fmt-btn dg-fmt-on' : 'dg-fmt-btn';
+    }
+
+    _refreshFmtState() {
+        if (!this.showHtmlBodyVisual) {
+            return;
+        }
+        const next = { bold: false, italic: false, underline: false, strike: false };
+        try {
+            const sel = window.getSelection();
+            let node = sel && sel.anchorNode;
+            while (node && node.nodeType === 3) {
+                node = node.parentNode;
+            }
+            const host = this.template.querySelector('.dg-visual-host');
+            const pv = host && host.querySelector('.dg-pv');
+            if (node && pv && pv.contains(node)) {
+                const cs = window.getComputedStyle(node);
+                next.bold = cs.fontWeight === 'bold' || parseInt(cs.fontWeight, 10) >= 600;
+                next.italic = cs.fontStyle === 'italic';
+                // Decorations don't inherit through computed style — walk up.
+                let el = node;
+                while (el && el !== pv) {
+                    const dcs = window.getComputedStyle(el);
+                    const deco = dcs.textDecorationLine || dcs.textDecoration || '';
+                    if (deco.indexOf('underline') !== -1 || el.tagName === 'U') {
+                        next.underline = true;
+                    }
+                    if (
+                        deco.indexOf('line-through') !== -1 ||
+                        el.tagName === 'S' ||
+                        el.tagName === 'STRIKE' ||
+                        el.tagName === 'DEL'
+                    ) {
+                        next.strike = true;
+                    }
+                    el = el.parentElement;
+                }
+            }
+        } catch (e) {
+            /* leave defaults */
+        }
+        const cur = this.fmtState;
+        if (
+            cur.bold !== next.bold ||
+            cur.italic !== next.italic ||
+            cur.underline !== next.underline ||
+            cur.strike !== next.strike
+        ) {
+            this.fmtState = next;
+        }
+    }
+
     handleFormatAction(event) {
         if (!this.showHtmlBodyVisual) {
             return;
@@ -6806,6 +6958,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const ok = document.execCommand(cmd, false, value);
             if (ok) {
                 this.htmlEditorDirty = true;
+                this._refreshFmtState();
             } else if (cmd !== 'undo' && cmd !== 'redo') {
                 this.showToast(
                     'Select some text first',

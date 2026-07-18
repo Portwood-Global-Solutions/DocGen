@@ -347,8 +347,8 @@ function buildAgreement(shape) {
 }
 
 function buildCertificate(shape) {
-    const inner = `    <div style="border: 3pt solid #1f3a5f; padding: 6pt">
-        <div style="border: 1pt solid #c9a227; padding: 34pt 44pt; text-align: center">
+    const inner = `    <div style="border: 3pt solid #1f3a5f; padding: 6pt; min-height: 516pt">
+        <div style="border: 1pt solid #c9a227; padding: 34pt 44pt; text-align: center; min-height: 446pt">
             <div class="meta" style="letter-spacing: 4pt; font-size: 9pt; color: #1f3a5f">
                 YOUR ORGANIZATION &#8226; REPLACE WITH YOUR NAME
             </div>

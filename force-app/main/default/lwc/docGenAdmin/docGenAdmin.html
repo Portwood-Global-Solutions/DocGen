@@ -2020,7 +2020,7 @@
                                 <template if:true={showHtmlBodyVisual}>
                                     <div class="dg-format-bar" role="toolbar" aria-label="Text formatting">
                                         <button
-                                            class="dg-fmt-btn"
+                                            class={boldBtnClass}
                                             data-cmd="bold"
                                             onmousedown={handleFmtMouseDown}
                                             onclick={handleFormatAction}
@@ -2029,7 +2029,7 @@
                                             <b>B</b>
                                         </button>
                                         <button
-                                            class="dg-fmt-btn"
+                                            class={italicBtnClass}
                                             data-cmd="italic"
                                             onmousedown={handleFmtMouseDown}
                                             onclick={handleFormatAction}
@@ -2038,7 +2038,7 @@
                                             <i>I</i>
                                         </button>
                                         <button
-                                            class="dg-fmt-btn"
+                                            class={underlineBtnClass}
                                             data-cmd="underline"
                                             onmousedown={handleFmtMouseDown}
                                             onclick={handleFormatAction}
@@ -2047,7 +2047,7 @@
                                             <u>U</u>
                                         </button>
                                         <button
-                                            class="dg-fmt-btn"
+                                            class={strikeBtnClass}
                                             data-cmd="strikeThrough"
                                             onmousedown={handleFmtMouseDown}
                                             onclick={handleFormatAction}
@@ -2377,6 +2377,26 @@
                                         >
                                             None
                                         </button>
+                                        <select
+                                            class="dg-page-select"
+                                            title="Border thickness — restyles the table under the cursor"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleBorderWidthChange}
+                                        >
+                                            <template for:each={borderWidthOptions} for:item="opt">
+                                                <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                    {opt.label}
+                                                </option>
+                                            </template>
+                                        </select>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            title="Border color — restyles the table under the cursor"
+                                            value={borderColorValue}
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleBorderColorChange}
+                                        />
                                         <span
                                             class="dg-fmt-label"
                                             title="Fill the current cell — or, outside a table, the paragraph/panel the cursor is in"
