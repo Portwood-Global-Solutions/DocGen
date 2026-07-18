@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.35.0 \u2014 Designer polish: pro tables, watermarks, certificate starter",
+      "versionName": "v3.35.0 — Designer polish: pro tables, watermarks, certificate starter",
       "versionNumber": "3.35.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.35 makes the visual Template Designer feel effortless: resize and restyle any table right on the page, pick border widths and colors, drag across cells to fill or merge them, and add scannable barcode and QR labels. Watermarks upload with a strength setting and print exactly as shown, a landscape Certificate starter joins the design gallery, and your template list now shows created and modified dates. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.35 makes the visual Template Designer feel effortless: resize and restyle any table right on the page, pick border widths and colors, drag across cells to fill or merge them, and add scannable barcode and QR labels. Watermarks upload with a strength setting and print exactly as shown, a landscape Certificate starter joins the design gallery, and your template list now shows created and modified dates. 100% native Salesforce — no external services or callouts. Free for all users.",
       "ancestorVersion": "3.34.0"
     }
   ],
@@ -199,6 +199,7 @@
     "Portwood DocGen Managed@3.31.0-1": "04tVx000000qZuXIAU",
     "Portwood DocGen Managed@3.32.0-1": "04tVx000000qZxlIAE",
     "Portwood DocGen Managed@3.33.0-1": "04tVx000000qjDxIAI",
-    "Portwood DocGen Managed@3.34.0-1": "04tVx000000rEKzIAM"
+    "Portwood DocGen Managed@3.34.0-1": "04tVx000000rEKzIAM",
+    "Portwood DocGen Managed@3.35.0-1": "04tVx000000rEODIA2"
   }
 }
