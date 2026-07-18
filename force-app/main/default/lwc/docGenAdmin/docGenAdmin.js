@@ -195,24 +195,41 @@ const F = {
 };
 
 const COLUMNS = [
-    { label: 'Category', fieldName: F.Category, initialWidth: 150 },
-    { label: 'Name', fieldName: 'Name' },
-    { label: 'Type', fieldName: F.Type, initialWidth: 100 },
-    { label: 'Output Format', fieldName: F.OutputFormat, initialWidth: 120 },
-    { label: 'Base Object', fieldName: 'displayBaseObject' },
+    { label: 'Category', fieldName: F.Category, sortable: true, initialWidth: 130 },
+    { label: 'Name', fieldName: 'Name', sortable: true, wrapText: true, initialWidth: 220 },
+    { label: 'Type', fieldName: F.Type, sortable: true, initialWidth: 90 },
+    { label: 'Format', fieldName: F.OutputFormat, sortable: true, initialWidth: 95 },
+    { label: 'Base Object', fieldName: 'displayBaseObject', sortable: true, initialWidth: 150 },
     {
         label: 'Status',
         fieldName: 'activeLabel',
+        sortable: true,
         initialWidth: 90,
         cellAttributes: { class: { fieldName: 'activeClass' } }
     },
     {
         label: 'Default',
         fieldName: 'defaultLabel',
-        initialWidth: 80,
+        initialWidth: 75,
         cellAttributes: { class: { fieldName: 'defaultClass' } }
     },
-    { label: 'Description', fieldName: F.Desc },
+    {
+        label: 'Created',
+        fieldName: 'CreatedDate',
+        type: 'date',
+        sortable: true,
+        initialWidth: 110,
+        typeAttributes: { year: 'numeric', month: 'short', day: 'numeric' }
+    },
+    {
+        label: 'Last Modified',
+        fieldName: 'LastModifiedDate',
+        type: 'date',
+        sortable: true,
+        initialWidth: 125,
+        typeAttributes: { year: 'numeric', month: 'short', day: 'numeric' }
+    },
+    { label: 'Description', fieldName: F.Desc, wrapText: true },
     {
         type: 'action',
         typeAttributes: {
@@ -1228,20 +1245,45 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    templateSortedBy;
+    templateSortedDirection = 'asc';
+
     get filteredTemplates() {
-        if (!this.searchKey) return this.templates;
-        const lowerKey = this.searchKey.toLowerCase();
-        return this.templates.filter(
-            (t) =>
-                (t.Name && t.Name.toLowerCase().includes(lowerKey)) ||
-                (t[F.Category] && t[F.Category].toLowerCase().includes(lowerKey)) ||
-                (t[F.BaseObject] && t[F.BaseObject].toLowerCase().includes(lowerKey)) ||
-                (t.displayBaseObject && t.displayBaseObject.toLowerCase().includes(lowerKey)) ||
-                (t[F.Type] && t[F.Type].toLowerCase().includes(lowerKey)) ||
-                (t[F.OutputFormat] && t[F.OutputFormat].toLowerCase().includes(lowerKey)) ||
-                (t[F.Desc] && t[F.Desc].toLowerCase().includes(lowerKey)) ||
-                (t.Id && t.Id.toLowerCase().includes(lowerKey))
-        );
+        let rows = this.templates;
+        if (this.searchKey) {
+            const lowerKey = this.searchKey.toLowerCase();
+            rows = rows.filter(
+                (t) =>
+                    (t.Name && t.Name.toLowerCase().includes(lowerKey)) ||
+                    (t[F.Category] && t[F.Category].toLowerCase().includes(lowerKey)) ||
+                    (t[F.BaseObject] && t[F.BaseObject].toLowerCase().includes(lowerKey)) ||
+                    (t.displayBaseObject && t.displayBaseObject.toLowerCase().includes(lowerKey)) ||
+                    (t[F.Type] && t[F.Type].toLowerCase().includes(lowerKey)) ||
+                    (t[F.OutputFormat] && t[F.OutputFormat].toLowerCase().includes(lowerKey)) ||
+                    (t[F.Desc] && t[F.Desc].toLowerCase().includes(lowerKey)) ||
+                    (t[F.ApiName] && t[F.ApiName].toLowerCase().includes(lowerKey)) ||
+                    (t.Id && t.Id.toLowerCase().includes(lowerKey))
+            );
+        }
+        if (this.templateSortedBy) {
+            const key = this.templateSortedBy;
+            const dir = this.templateSortedDirection === 'asc' ? 1 : -1;
+            rows = [...rows].sort(
+                (a, b) => String(a[key] ?? '').localeCompare(String(b[key] ?? ''), undefined, { numeric: true }) * dir
+            );
+        }
+        return rows;
+    }
+
+    get templateCountLabel() {
+        const total = (this.templates || []).length;
+        const shown = (this.filteredTemplates || []).length;
+        return shown === total ? total + ' templates' : shown + ' of ' + total + ' templates';
+    }
+
+    handleTemplateSort(event) {
+        this.templateSortedBy = event.detail.fieldName;
+        this.templateSortedDirection = event.detail.sortDirection;
     }
 
     handleRefresh() {

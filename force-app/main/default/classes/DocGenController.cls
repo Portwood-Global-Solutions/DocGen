@@ -2366,6 +2366,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Prefill_Signer_Email__c,
                 API_Name__c,
                 Default_Email_Message__c,
+                CreatedDate,
+                LastModifiedDate,
                 (SELECT ContentDocumentId FROM ContentDocumentLinks ORDER BY ContentDocument.CreatedDate DESC LIMIT 1)
             FROM DocGen_Template__c
             WITH SYSTEM_MODE
