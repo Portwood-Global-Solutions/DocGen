@@ -7810,6 +7810,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * (the characters immediately before it are src=" or src='). Used to emit
      * a bare URL instead of full <img> markup in that context.
      */
+    @TestVisible
     private static Boolean isInsideSrcAttribute(String xml, Integer tagStart) {
         if (tagStart == null || tagStart < 5) {
             return false;

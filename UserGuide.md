@@ -206,13 +206,20 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 
 ### 5.1 Creating a template
 
-1. Open the DocGen app → **My Templates** tab → **+ New Template**.
-2. Pick a template type: **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), **PDF** (`.pdf`, _testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx`, _alpha_).
-3. Pick a base object (Account, Opportunity, Case, any custom object). The picker ranks **standard objects first** — when an org has many namespaced custom objects whose names contain `Account`, `Opportunity`, etc. (common with payment processors and managed packages), the standard `Opportunity` always appears at the top of the list with a green **Standard** pill. Up to 50 matches render with a scroll.
-4. Upload your file containing `{FieldName}` merge tags.
-5. Configure the query — which fields, which child relationships (see [§6](#6-query-builder)).
-6. Choose the default **output format** (PDF or the native format).
-7. Save.
+Open the DocGen app → **My Templates** → the **Create New** tab. The wizard offers four authoring paths:
+
+- **Start from a Design** (recommended) — pick a professional starter (Record Report, Invoice / Line Items, Business Letter, signature-ready Agreement, landscape Certificate / Award). Your object's real merge fields are injected automatically and the template renders on the first click. Starters that need a specific page setup bring it along — the Certificate creates a landscape Letter page with 0.5" margins without you touching anything.
+- **Generate with AI** — a six-step flow: pick your fields, pick your images, describe the document in your own words, copy the assembled prompt (it carries DocGen's full tag syntax and the PDF engine's CSS rules), paste it into Claude / ChatGPT / Copilot, then paste the returned HTML back. The result opens in the designer.
+- **Start From Scratch** — a blank page in the visual designer.
+- **I Have an Existing File** — upload **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), fillable **PDF** (_testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx`, _alpha_) containing `{FieldName}` merge tags.
+
+Every path also asks for:
+
+1. A **Template Name** (and optionally an API Name and Category under Advanced options).
+2. A **base object** (Account, Opportunity, Case, any custom object). The picker ranks **standard objects first** — when an org has many namespaced custom objects whose names contain `Account`, `Opportunity`, etc. (common with payment processors and managed packages), the standard `Opportunity` always appears at the top of the list with a green **Standard** pill. Up to 50 matches render with a scroll.
+3. The query — which fields, which child relationships (see [§6](#6-query-builder)). On the design/AI paths a field checklist builds it for you.
+4. The default **output format** (PDF or the native format).
+5. An optional **Sample Record**, so previews and Download Sample show real data.
 
 **Output formats by template type:**
 
@@ -263,6 +270,34 @@ Important notes while the feature is in testing:
 ### 5.1.1 API Name — a stable key for automation (v3.28+)
 
 Every template has an optional **API Name** — a unique developer key like `Opp_Close_Summary`. Flows reference it via the **Template API Name** input on the DocGen actions instead of a record Id, so automations survive sandbox→production deploys with nothing to remap. Letters, numbers, and underscores; must start with a letter; must be unique when set; existing templates work fine with it blank.
+
+### 5.1.2 The Visual Designer (Beta)
+
+HTML templates open in a full WYSIWYG designer — the page you see is the page that renders. Merge tags appear as purple pills (loop and section markers in green) that move and delete as single objects, so tag syntax can't be half-mangled while editing.
+
+![The visual designer on a landscape certificate — page pickers, format toolbar, merge-tag pills](docs/images/userguide/designer-landscape-certificate.png)
+
+**Around the canvas:**
+
+- **Toolbar** — Download Sample (rendered PDF with your sample record), Copy AI Prompt, PDF Preview, Format Code, Reload, **Save as New Version** (the one way to activate your edits), and Edit Template (jumps to the settings modal).
+- **Page setup** — size, orientation, and margins pickers write a clean `@page` rule into your document. If your HTML declares its own `@page`, the engine defers to it.
+- **Panels** — `+ Insert` (blocks, tables, charts, barcodes, special characters — or press `` ` `` anywhere on the page), `{} Tags` (your query's merge fields as clickable chips), Images (the shared Asset Library), Query (edit fields without leaving the designer), Versions, Header/Footer, and Watermark.
+
+**Text formatting:** bold/italic/underline/strike (the buttons read as _pressed_ when your cursor sits on formatted text — click again to unformat), super/subscript, lists, alignment, four text sizes, text and highlight colors, three font families, Unicode-safe special characters, undo/redo.
+
+**Tables — Excel-level editing:**
+
+- **Drag any cell edge** to resize columns (the neighbor gives way, so the table keeps its footprint); drag a bottom edge to change row heights. This works on _any_ table — pasted, Word-converted, or hand-written — not just designer-inserted ones.
+- **Drag across cells** to select a rectangle (purple outline). Fill colors every selected cell; Merge combines them (and leaves the merged cell selected so Split is one click away).
+- Add/remove rows and columns, header rows, repeat-header for multi-page tables.
+- **Borders** — All / Outline / Rows / None styles, plus a thickness picker (Hairline to Heavy) and a border color; changing either restyles the table under your cursor live.
+- Rows carry `page-break-inside: avoid` automatically, so a PDF page never splits mid-row.
+
+**Images:** assets render as real images on the canvas (drag a corner to resize — the size is written back into the merge tag). In header/footer HTML you can write `<img src="{%asset:logo}">` and DocGen substitutes the image URL; unsized header/footer images are automatically clamped to fit the margin box.
+
+**Watermark:** upload a background image on the Watermark panel and pick a **strength** (Light 15% / Medium 30% / Strong 50% / Original). The opacity is baked into the image at upload, so the PDF and the canvas preview match exactly. Requires a saved version first (the file attaches to the version record).
+
+**Right-click** anywhere on the page for a searchable menu of every insert and table action.
 
 Where you'll see it (v3.29+):
 

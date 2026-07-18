@@ -906,4 +906,62 @@ private class DocGenHtmlTemplateTest {
         System.assert(threw, 'Blank draft must be rejected');
         System.assertEquals(null, DocGenService.draftHtmlBodyOverride, 'Override must stay clear');
     }
+
+    // --- Running header/footer image clamp (v3.35) ---
+
+    @IsTest
+    static void clampRunningImagesSizesOnlyUnsizedImgs() {
+        // Unsized img gains an explicit height so the margin box isn't overflowed.
+        String unsized = '<img src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
+        String outp = DocGenService.clampRunningImages(unsized);
+        System.assert(outp.contains('style="height:0.45in"'), 'Unsized img must get an explicit height: ' + outp);
+
+        // Author-sized images stay exactly as written.
+        String widthAttr = '<img width="120" src="/x.png">';
+        System.assertEquals(widthAttr, DocGenService.clampRunningImages(widthAttr), 'width attr must be untouched');
+        String styled = '<img style="width:1in" src="/x.png">';
+        System.assertEquals(styled, DocGenService.clampRunningImages(styled), 'styled width must be untouched');
+
+        // An existing style attr WITHOUT sizing gets the height injected into it.
+        String styledNoSize = '<img style="border:1pt solid #000" src="/x.png">';
+        String outp2 = DocGenService.clampRunningImages(styledNoSize);
+        System.assert(
+            outp2.contains('style="height:0.45in;border:1pt solid #000"'),
+            'Height must join the existing style attr: ' + outp2
+        );
+
+        // No imgs — passthrough.
+        System.assertEquals('<p>hi</p>', DocGenService.clampRunningImages('<p>hi</p>'), 'No-img chrome untouched');
+        System.assertEquals(null, DocGenService.clampRunningImages(null), 'Null-safe');
+    }
+
+    @IsTest
+    static void isInsideSrcAttributeDetectsAttributeContext() {
+        String inSrc = '<img src="{%asset:logo}">';
+        System.assert(
+            DocGenService.isInsideSrcAttribute(inSrc, inSrc.indexOf('{')),
+            'Tag right after src=\" is attribute context'
+        );
+        String inSrcSingle = '<img src=\'{%asset:logo}\'>';
+        System.assert(
+            DocGenService.isInsideSrcAttribute(inSrcSingle, inSrcSingle.indexOf('{')),
+            'Single-quoted src is attribute context'
+        );
+        String body = '<p>{%asset:logo}</p>';
+        System.assert(
+            !DocGenService.isInsideSrcAttribute(body, body.indexOf('{')),
+            'Body placement is NOT attribute context'
+        );
+        System.assert(!DocGenService.isInsideSrcAttribute('{x}', 0), 'Start of string is not attribute context');
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfClampsHeaderImages() {
+        String hdr = '<img src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
+        String outp = DocGenService.wrapHtmlForPdf('<p>x</p>', null, hdr, null);
+        System.assert(
+            outp.contains('docgen-running-header"><img style="height:0.45in"'),
+            'Header images must be clamped inside the running element: ' + outp
+        );
+    }
 }

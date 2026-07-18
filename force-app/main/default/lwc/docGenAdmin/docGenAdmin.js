@@ -1286,6 +1286,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.templateSortedDirection = event.detail.sortDirection;
     }
 
+    get hasNoTemplates() {
+        return this._samplesChecked && (this.templates || []).length === 0;
+    }
+
+    handleGoToCreate() {
+        this.activeMainTab = 'new_template';
+    }
+
     handleRefresh() {
         return refreshApex(this.wiredTemplatesResult);
     }
@@ -1768,8 +1776,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // WYSIWYG watermark: show the template's background
                         // image on the sheet, faded, behind the content.
                         if (this.watermarkPreviewUrl) {
+                            // Light veil only — uploaded watermarks already carry
+                            // their baked opacity, so the canvas should match the PDF.
                             pv.style.backgroundImage =
-                                'linear-gradient(rgba(255,255,255,0.72), rgba(255,255,255,0.72)), url(' +
+                                'linear-gradient(rgba(255,255,255,0.25), rgba(255,255,255,0.25)), url(' +
                                 this.watermarkPreviewUrl +
                                 ')';
                             pv.style.backgroundSize = 'cover';
@@ -6188,9 +6198,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             /* best effort */
         }
         const names = {
-            H1: 'Title',
-            H2: 'Heading',
-            H3: 'Heading',
+            H1: 'Heading 1',
+            H2: 'Heading 2',
+            H3: 'Heading 3',
             P: 'Paragraph',
             TD: 'Table cell',
             TH: 'Header cell',

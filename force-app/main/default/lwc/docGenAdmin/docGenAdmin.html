@@ -1437,6 +1437,15 @@
                         </div>
                         <div class="slds-col slds-var-p-left_medium">
                             <lightning-button
+                                icon-name="utility:add"
+                                onclick={handleGoToCreate}
+                                label="New Template"
+                                title="Create a new template"
+                                variant="brand"
+                                class="slds-var-m-right_small"
+                            >
+                            </lightning-button>
+                            <lightning-button
                                 icon-name="utility:upload"
                                 onclick={handleImportClick}
                                 label="Import Template"
@@ -1466,6 +1475,21 @@
                         </div>
                     </template>
                     <template if:false={isInstallingSamples}>
+                        <template if:true={hasNoTemplates}>
+                            <div class="slds-box slds-theme_shade slds-text-align_center slds-var-m-bottom_medium">
+                                <p class="slds-text-heading_small slds-var-m-bottom_x-small">
+                                    Start with your first template
+                                </p>
+                                <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_small">
+                                    Pick a professional starter design and generate a real PDF on the first click.
+                                </p>
+                                <lightning-button
+                                    label="Create a Template"
+                                    variant="brand"
+                                    onclick={handleGoToCreate}
+                                ></lightning-button>
+                            </div>
+                        </template>
                         <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_x-small">
                             {templateCountLabel}
                         </p>
