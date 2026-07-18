@@ -1494,6 +1494,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 fta.value = this.editTemplateFooterHtml || '';
             }
         }
+        // Right-click menu just opened — cursor into its search box.
+        if (this._focusCtxSearch && this.ctxMenu) {
+            const ci = this.template.querySelector('.dg-ctx-search');
+            if (ci) {
+                ci.focus();
+                this._focusCtxSearch = false;
+            }
+        }
         // Searchable panel just opened — put the cursor in its search box.
         if (this._focusPanelSearch) {
             const inp = this.template.querySelector('.dg-panel-search');
@@ -1584,6 +1592,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             const col = this.template.querySelector('.dg-designer-canvas-col');
                             const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
                             this._ctxPoint = { x: e.clientX, y: e.clientY };
+                            try {
+                                const cs = window.getSelection();
+                                this._ctxRange = cs && cs.rangeCount ? cs.getRangeAt(0).cloneRange() : null;
+                            } catch (err) {
+                                this._ctxRange = null;
+                            }
+                            this._focusCtxSearch = true;
                             this.ctxMenu = {
                                 inTable: !!(e.target && e.target.closest && e.target.closest('td, th')),
                                 posStyle:
@@ -7236,6 +7251,74 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     // --- Right-click context menu handlers ---
+    /** Type-to-search inside the right-click menu — the full command catalog. */
+    handleCtxSearch(event) {
+        const q = (event.target.value || '').toLowerCase().trim();
+        if (!q) {
+            this.ctxMenu = { ...this.ctxMenu, query: '', items: null };
+            return;
+        }
+        const terms = q.split(/\s+/).filter(Boolean);
+        const items = this._slashCatalog()
+            .filter((o) => {
+                const hay = (o.label + ' ' + o.group + ' ' + (o.keywords || '')).toLowerCase();
+                return terms.every((t) => hay.includes(t));
+            })
+            .slice(0, 9);
+        this.ctxMenu = { ...this.ctxMenu, query: q, items };
+    }
+
+    handleCtxSearchKeydown(event) {
+        event.stopPropagation();
+        if (event.key === 'Escape') {
+            this.ctxMenu = null;
+        } else if (event.key === 'Enter' && this.ctxMenu && this.ctxMenu.items && this.ctxMenu.items.length) {
+            this._runCtxItem(this.ctxMenu.items[0]);
+        }
+    }
+
+    handleCtxSearchedItemClick(event) {
+        const key = event.currentTarget.dataset.key;
+        const item = this.ctxMenu && this.ctxMenu.items ? this.ctxMenu.items.find((o) => o.key === key) : null;
+        this._runCtxItem(item);
+    }
+
+    _runCtxItem(item) {
+        this.ctxMenu = null;
+        if (!item) {
+            return;
+        }
+        // Restore the caret captured at right-click (the search box stole focus).
+        try {
+            const pv = this._getVisualPv();
+            if (pv && this._ctxRange) {
+                pv.focus();
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(this._ctxRange);
+            }
+        } catch (e) {
+            /* best effort — insert falls back to append */
+        }
+        if (item.cmd) {
+            if (item.cmd === 'ul' || item.cmd === 'ol') {
+                this._toggleListAtCaret(item.cmd === 'ol');
+            } else if (item.cmd === 'table') {
+                this.handleInsertTable();
+            } else {
+                try {
+                    document.execCommand('styleWithCSS', false, false);
+                } catch (e) {
+                    /* best effort */
+                }
+                document.execCommand(item.cmd, false, null);
+            }
+            this.htmlEditorDirty = true;
+            return;
+        }
+        this._insertIntoVisualPage(item.snippet);
+    }
+
     handleCtxClose() {
         this.ctxMenu = null;
     }

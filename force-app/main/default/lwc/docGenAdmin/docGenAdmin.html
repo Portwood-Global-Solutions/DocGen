@@ -1843,131 +1843,154 @@
                                 <!-- Right-click context menu -->
                                 <template if:true={ctxMenu}>
                                     <div class="dg-slash-menu dg-ctx-menu" style={ctxMenu.posStyle} role="menu">
-                                        <button class="dg-slash-item" onclick={handleCtxInsert}>
-                                            <span class="dg-slash-item-label">Insert&#8230;</span>
-                                            <span class="dg-slash-item-group">blocks &amp; tags</span>
-                                        </button>
-                                        <button
-                                            class="dg-slash-item"
-                                            data-cmd="bold"
-                                            onmousedown={handleFmtMouseDown}
-                                            onclick={handleCtxFormat}
-                                        >
-                                            <span class="dg-slash-item-label"><b>Bold</b></span>
-                                        </button>
-                                        <button
-                                            class="dg-slash-item"
-                                            data-cmd="italic"
-                                            onmousedown={handleFmtMouseDown}
-                                            onclick={handleCtxFormat}
-                                        >
-                                            <span class="dg-slash-item-label"><i>Italic</i></span>
-                                        </button>
-                                        <button
-                                            class="dg-slash-item"
-                                            data-kind="ul"
-                                            onmousedown={handleFmtMouseDown}
-                                            onclick={handleCtxList}
-                                        >
-                                            <span class="dg-slash-item-label">&#8226; Bulleted list</span>
-                                        </button>
-                                        <button
-                                            class="dg-slash-item"
-                                            data-kind="ol"
-                                            onmousedown={handleFmtMouseDown}
-                                            onclick={handleCtxList}
-                                        >
-                                            <span class="dg-slash-item-label">1. Numbered list</span>
-                                        </button>
-                                        <template if:true={ctxMenu.inTable}>
-                                            <div class="dg-slash-menu-head"><span>Table</span></div>
-                                            <button
-                                                class="dg-slash-item"
-                                                data-taction="rowBefore"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
-                                            >
-                                                <span class="dg-slash-item-label">+ Row above</span>
+                                        <input
+                                            type="search"
+                                            class="dg-panel-search dg-ctx-search"
+                                            placeholder="Type to search every command..."
+                                            oninput={handleCtxSearch}
+                                            onkeydown={handleCtxSearchKeydown}
+                                            autocomplete="off"
+                                        />
+                                        <template if:true={ctxMenu.items}>
+                                            <template for:each={ctxMenu.items} for:item="opt">
+                                                <button
+                                                    key={opt.key}
+                                                    class="dg-slash-item"
+                                                    data-key={opt.key}
+                                                    onclick={handleCtxSearchedItemClick}
+                                                >
+                                                    <span class="dg-slash-item-label">{opt.label}</span>
+                                                    <span class="dg-slash-item-group">{opt.group}</span>
+                                                </button>
+                                            </template>
+                                        </template>
+                                        <template if:false={ctxMenu.items}>
+                                            <button class="dg-slash-item" onclick={handleCtxInsert}>
+                                                <span class="dg-slash-item-label">Insert&#8230;</span>
+                                                <span class="dg-slash-item-group">blocks &amp; tags</span>
                                             </button>
                                             <button
                                                 class="dg-slash-item"
-                                                data-taction="rowAfter"
+                                                data-cmd="bold"
                                                 onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
+                                                onclick={handleCtxFormat}
                                             >
-                                                <span class="dg-slash-item-label">+ Row below</span>
+                                                <span class="dg-slash-item-label"><b>Bold</b></span>
                                             </button>
                                             <button
                                                 class="dg-slash-item"
-                                                data-taction="colBefore"
+                                                data-cmd="italic"
                                                 onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
+                                                onclick={handleCtxFormat}
                                             >
-                                                <span class="dg-slash-item-label">+ Column left</span>
+                                                <span class="dg-slash-item-label"><i>Italic</i></span>
                                             </button>
                                             <button
                                                 class="dg-slash-item"
-                                                data-taction="colAfter"
+                                                data-kind="ul"
                                                 onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
+                                                onclick={handleCtxList}
                                             >
-                                                <span class="dg-slash-item-label">+ Column right</span>
+                                                <span class="dg-slash-item-label">&#8226; Bulleted list</span>
                                             </button>
                                             <button
                                                 class="dg-slash-item"
-                                                data-taction="mergeCells"
+                                                data-kind="ol"
                                                 onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
+                                                onclick={handleCtxList}
                                             >
-                                                <span class="dg-slash-item-label">Merge cells</span>
+                                                <span class="dg-slash-item-label">1. Numbered list</span>
                                             </button>
-                                            <button
-                                                class="dg-slash-item"
-                                                data-taction="splitCell"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
-                                            >
-                                                <span class="dg-slash-item-label">Split merged cell</span>
-                                            </button>
-                                            <button
-                                                class="dg-slash-item"
-                                                data-taction="rowDel"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
-                                            >
-                                                <span class="dg-slash-item-label">&#8722; Delete row</span>
-                                            </button>
-                                            <button
-                                                class="dg-slash-item"
-                                                data-taction="colDel"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
-                                            >
-                                                <span class="dg-slash-item-label">&#8722; Delete column</span>
-                                            </button>
-                                            <button
-                                                class="dg-slash-item"
-                                                data-taction="repeatHeader"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
-                                            >
-                                                <span class="dg-slash-item-label">Repeat header each page</span>
-                                            </button>
+                                            <template if:true={ctxMenu.inTable}>
+                                                <div class="dg-slash-menu-head"><span>Table</span></div>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="rowBefore"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">+ Row above</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="rowAfter"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">+ Row below</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="colBefore"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">+ Column left</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="colAfter"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">+ Column right</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="mergeCells"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">Merge cells</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="splitCell"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">Split merged cell</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="rowDel"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">&#8722; Delete row</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="colDel"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">&#8722; Delete column</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item"
+                                                    data-taction="repeatHeader"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">Repeat header each page</span>
+                                                </button>
+                                                <button
+                                                    class="dg-slash-item dg-pill-menu-remove"
+                                                    data-taction="tableDel"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleCtxTable}
+                                                >
+                                                    <span class="dg-slash-item-label">Delete whole table</span>
+                                                </button>
+                                            </template>
                                             <button
                                                 class="dg-slash-item dg-pill-menu-remove"
-                                                data-taction="tableDel"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleCtxTable}
+                                                onclick={handleCtxDeleteBlock}
                                             >
-                                                <span class="dg-slash-item-label">Delete whole table</span>
+                                                <span class="dg-slash-item-label">Delete this block</span>
                                             </button>
                                         </template>
-                                        <button
-                                            class="dg-slash-item dg-pill-menu-remove"
-                                            onclick={handleCtxDeleteBlock}
-                                        >
-                                            <span class="dg-slash-item-label">Delete this block</span>
-                                        </button>
                                     </div>
                                 </template>
                                 <template if:true={isLoadingHtmlBody}>
