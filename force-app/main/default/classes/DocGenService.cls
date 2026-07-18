@@ -2668,8 +2668,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // skip the DOCX→HTML conversion entirely.
             if (mr.templateType == 'HTML') {
                 ensureTemplateAssetImageAccessForPdf(templateId, recordId, mr.documentXml);
-                lastRenderedHtml = mr.documentXml;
-                Blob htmlPdf = Blob.toPdf(mr.documentXml);
+                // Admin-uploaded watermarks are injected by convertToHtml on the
+                // DOCX path — HTML templates skip that entirely, so inject here.
+                applyWatermarkOverride(templateId);
+                String htmlDoc = DocGenHtmlRenderer.injectAdminWatermarkIntoHtml(mr.documentXml);
+                lastRenderedHtml = htmlDoc;
+                Blob htmlPdf = Blob.toPdf(htmlDoc);
                 removeTemplateImageLinksAfterRender(templateId, recordId, mr.documentXml);
                 return htmlPdf;
             }

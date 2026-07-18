@@ -59,6 +59,117 @@ public with sharing class DocGenHtmlRenderer {
     // extracted from the template's headers — first-class watermarks beat
     // embedded ones because the admin controlled both the size and the image.
     public static String overrideWatermarkCvId;
+
+    /**
+     * Injects the admin-uploaded watermark into a ready-to-render HTML document.
+     * HTML templates (Type__c = 'HTML') skip convertToHtml entirely, so the DOCX
+     * watermark path never runs for them — this is the HTML-path equivalent.
+     * Emits the same position:fixed full-page overlay the DOCX path uses:
+     * Flying Saucer repeats fixed elements on every page and ignores @page
+     * background-size, so the overlay is the mechanism that actually renders.
+     * Page dimensions come from the template's page-setup overrides when set,
+     * otherwise from the HTML's own @page size declaration, defaulting to Letter.
+     */
+    public static String injectAdminWatermarkIntoHtml(String html) {
+        if (String.isBlank(overrideWatermarkCvId) || String.isBlank(html)) {
+            return html;
+        }
+        Decimal pgW = 8.5;
+        Decimal pgH = 11.0;
+        if (String.isNotBlank(orientationOverride) || String.isNotBlank(pageSizeOverride)) {
+            Map<String, Decimal> dims = parsePageDimensions(html);
+            pgW = dims.get('pageWidth');
+            pgH = dims.get('pageHeight');
+        } else {
+            List<Decimal> cssDims = parseCssPageSizeInches(html);
+            if (cssDims != null) {
+                pgW = cssDims[0];
+                pgH = cssDims[1];
+            }
+        }
+        String safeOverride = sanitizeCssUrlToken(overrideWatermarkCvId);
+        String adminSrc = '/sfc/servlet.shepherd/version/download/' + safeOverride;
+        Decimal halfW = (pgW / 2).setScale(3);
+        Decimal halfH = (pgH / 2).setScale(3);
+        String overlay =
+            '<div class="docgen-watermark" style="position:fixed;top:50%;left:50%;' +
+            'margin-left:-' +
+            halfW +
+            'in;margin-top:-' +
+            halfH +
+            'in;z-index:0;pointer-events:none;">' +
+            '<img src="' +
+            adminSrc +
+            '" style="width:' +
+            pgW +
+            'in;height:' +
+            pgH +
+            'in;"/></div>';
+        Matcher bodyOpen = Pattern.compile('(?is)<body\\b[^>]*>').matcher(html);
+        if (bodyOpen.find()) {
+            return html.substring(0, bodyOpen.end()) + overlay + html.substring(bodyOpen.end());
+        }
+        return overlay + html;
+    }
+
+    /**
+     * Parses `@page { size: ... }` from source CSS into inches. Handles explicit
+     * two-value sizes with in/mm/cm/pt/px units and the Letter/A4/Legal keywords
+     * with an optional `landscape` modifier. Returns null when the HTML declares
+     * no usable size (caller falls back to Letter portrait).
+     */
+    private static List<Decimal> parseCssPageSizeInches(String html) {
+        Matcher pageBlock = Pattern.compile('(?is)@page[^\\{]*\\{([^\\}]*)\\}').matcher(html);
+        if (!pageBlock.find()) {
+            return null;
+        }
+        Matcher sz = Pattern.compile('(?i)size\\s*:\\s*([^;\\}]+)').matcher(pageBlock.group(1));
+        if (!sz.find()) {
+            return null;
+        }
+        String val = sz.group(1).trim().toLowerCase();
+        Boolean landscape = val.contains('landscape');
+        Decimal w = null;
+        Decimal h = null;
+        Matcher num = Pattern.compile('([0-9]*\\.?[0-9]+)\\s*(in|mm|cm|pt|px)').matcher(val);
+        List<Decimal> nums = new List<Decimal>();
+        while (num.find()) {
+            Decimal v = Decimal.valueOf(num.group(1));
+            String unit = num.group(2);
+            if (unit == 'mm') {
+                v = v / 25.4;
+            } else if (unit == 'cm') {
+                v = v / 2.54;
+            } else if (unit == 'pt') {
+                v = v / 72;
+            } else if (unit == 'px') {
+                v = v / 96;
+            }
+            nums.add(v);
+        }
+        if (nums.size() >= 2) {
+            w = nums[0];
+            h = nums[1];
+        } else if (val.contains('a4')) {
+            w = 8.268;
+            h = 11.693;
+        } else if (val.contains('legal')) {
+            w = 8.5;
+            h = 14;
+        } else if (val.contains('letter')) {
+            w = 8.5;
+            h = 11;
+        }
+        if (w == null || h == null) {
+            return null;
+        }
+        if (landscape && h > w) {
+            Decimal t = w;
+            w = h;
+            h = t;
+        }
+        return new List<Decimal>{ w.setScale(3), h.setScale(3) };
+    }
     // #28 async-safe fallback: map of table-style-name → border CSS, pre-extracted in admin
     // context and cached in Signature_Data__c. Checked by resolveTableStyleBorder BEFORE
     // parsing stylesXml, so queueables running as Automated Process (which can't access

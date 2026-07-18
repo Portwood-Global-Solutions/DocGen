@@ -1599,6 +1599,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             const col = this.template.querySelector('.dg-designer-canvas-col');
                             const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
                             this._ctxPoint = { x: e.clientX, y: e.clientY };
+                            this._ctxCell = e.target && e.target.closest ? e.target.closest('td, th') : null;
                             try {
                                 const cs = window.getSelection();
                                 this._ctxRange = cs && cs.rangeCount ? cs.getRangeAt(0).cloneRange() : null;
@@ -6152,7 +6153,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _cellSelMove(e, pv) {
-        if (!this._cellSelAnchor || !(e.buttons & 1)) {
+        if (this._colResizing || !this._cellSelAnchor || !(e.buttons & 1)) {
             return;
         }
         const cell = e.target && e.target.closest ? e.target.closest('td, th') : null;
@@ -6227,10 +6228,23 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const host = this.template.querySelector('.dg-visual-host');
         const pv = host && host.querySelector('.dg-pv');
         if (!node || !pv || !pv.contains(node) || !node.closest) {
+            const host2 = this.template.querySelector('.dg-visual-host');
+            const pv2 = host2 && host2.querySelector('.dg-pv');
+            if (this._ctxCell && this._ctxCell.isConnected && pv2 && pv2.contains(this._ctxCell)) {
+                return this._ctxCell;
+            }
             return null;
         }
         const cell = node.closest('td, th');
-        return cell && pv.contains(cell) ? cell : null;
+        if (cell && pv.contains(cell)) {
+            return cell;
+        }
+        // Right-click doesn't reliably move the caret under LWS — fall back
+        // to the cell the context menu was opened on.
+        if (this._ctxCell && this._ctxCell.isConnected && pv.contains(this._ctxCell)) {
+            return this._ctxCell;
+        }
+        return null;
     }
 
     handleTableAction(event) {
@@ -6284,7 +6298,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } else if (action === 'mergeCells') {
             this._mergeCells(cell, table);
         } else if (action === 'splitCell') {
-            this._splitCell(cell, row, table, cellIndex);
+            // The clicked/first-selected cell may not be the merged one — find
+            // the merged cell anywhere in the selection.
+            const merged = (this._cellSel || []).find((c) => (c.colSpan || 1) > 1 || (c.rowSpan || 1) > 1) || cell;
+            const mRow = merged.parentElement;
+            const mTable = merged.closest('table');
+            const mIdx = Array.prototype.indexOf.call(mRow.children, merged);
+            this._clearCellSel();
+            this._splitCell(merged, mRow, mTable, mIdx);
         } else if (action === 'tableDel') {
             table.remove();
         } else if (action === 'rowAfter') {
@@ -6382,12 +6403,136 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // --- Column drag-resize (grab a cell's right edge) ---
     _resizeEdgeCell(event, pv) {
+        const info = this._resizeEdgeInfo(event, pv);
+        return info && info.kind === 'col' ? info.cell : null;
+    }
+
+    /** Which resize handle (if any) the pointer is over: a column boundary
+     *  (right edge of a cell) or a row boundary (bottom edge). */
+    _resizeEdgeInfo(event, pv) {
         const cell = event.target && event.target.closest ? event.target.closest('td, th') : null;
         if (!cell || !pv.contains(cell)) {
             return null;
         }
         const rect = cell.getBoundingClientRect();
-        return event.clientX >= rect.right - 5 && event.clientX <= rect.right + 5 ? cell : null;
+        if (event.clientX >= rect.right - 5 && event.clientX <= rect.right + 5) {
+            return { kind: 'col', cell };
+        }
+        if (event.clientY >= rect.bottom - 4 && event.clientY <= rect.bottom + 4) {
+            return { kind: 'row', cell };
+        }
+        return null;
+    }
+
+    /** The visual column index a cell starts at (colspan-aware). */
+    _colIndexForCell(cell) {
+        let idx = 0;
+        let el = cell.previousElementSibling;
+        while (el) {
+            idx += el.colSpan || 1;
+            el = el.previousElementSibling;
+        }
+        return idx;
+    }
+
+    /**
+     * Make ANY table resizable — pasted, Word-converted, hand-authored.
+     * Measures the real on-screen column widths, freezes them into a
+     * <colgroup> of px-width <col>s + table-layout:fixed (pure CSS 2.1 —
+     * exactly what Flying Saucer honors in the PDF), and clears authored
+     * per-cell widths that would fight the colgroup. Returns the <col> list.
+     */
+    _normalizeTableForResize(table) {
+        let colCount = 0;
+        for (const tr of table.rows) {
+            let n = 0;
+            for (const c of tr.children) {
+                n += c.colSpan || 1;
+            }
+            colCount = Math.max(colCount, n);
+        }
+        if (!colCount) {
+            return [];
+        }
+        // Best reference row: full column count, no spans.
+        let ref = null;
+        for (const tr of table.rows) {
+            if (tr.children.length === colCount) {
+                let clean = true;
+                for (const c of tr.children) {
+                    if ((c.colSpan || 1) !== 1) {
+                        clean = false;
+                        break;
+                    }
+                }
+                if (clean) {
+                    ref = tr;
+                    break;
+                }
+            }
+        }
+        const widths = [];
+        if (ref) {
+            for (const c of ref.children) {
+                widths.push(Math.max(24, Math.round(c.getBoundingClientRect().width)));
+            }
+        } else {
+            // Every row has spans — spread each spanning cell's width evenly.
+            const acc = new Array(colCount).fill(0);
+            for (const tr of table.rows) {
+                let k = 0;
+                for (const c of tr.children) {
+                    const span = c.colSpan || 1;
+                    const w = c.getBoundingClientRect().width / span;
+                    for (let i = 0; i < span && k + i < colCount; i++) {
+                        acc[k + i] = Math.max(acc[k + i], w);
+                    }
+                    k += span;
+                }
+            }
+            for (const w of acc) {
+                widths.push(Math.max(24, Math.round(w) || 24));
+            }
+        }
+        const tableW = Math.round(table.getBoundingClientRect().width);
+        const doc = table.ownerDocument || document;
+        let cg = null;
+        for (const child of table.children) {
+            if (child.tagName === 'COLGROUP') {
+                cg = child;
+                break;
+            }
+        }
+        if (cg && cg.querySelectorAll('col').length !== colCount) {
+            cg.remove();
+            cg = null;
+        }
+        if (!cg) {
+            cg = doc.createElement('colgroup');
+            for (let i = 0; i < colCount; i++) {
+                cg.appendChild(doc.createElement('col'));
+            }
+            table.insertBefore(cg, table.firstChild);
+        }
+        const cols = Array.from(cg.querySelectorAll('col'));
+        cols.forEach((col, i) => {
+            col.removeAttribute('width');
+            col.style.width = widths[i] + 'px';
+        });
+        table.style.tableLayout = 'fixed';
+        table.style.width = tableW + 'px';
+        table.style.maxWidth = '100%';
+        // Authored cell widths beat/fight the colgroup — clear them so the
+        // colgroup is the single source of column geometry from here on.
+        for (const tr of table.rows) {
+            for (const c of tr.children) {
+                c.removeAttribute('width');
+                if (c.style && c.style.width) {
+                    c.style.width = '';
+                }
+            }
+        }
+        return cols;
     }
 
     /** Corner-drag resize for canvas images; asset tags get the new size
@@ -6435,41 +6580,63 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (this._colResizing) {
             return;
         }
-        const cell = this._resizeEdgeCell(event, pv);
+        const info = this._resizeEdgeInfo(event, pv);
         const hovered = event.target && event.target.closest ? event.target.closest('td, th') : null;
         if (hovered) {
-            hovered.style.cursor = cell ? 'col-resize' : '';
+            hovered.style.cursor = info ? (info.kind === 'col' ? 'col-resize' : 'row-resize') : '';
         }
     }
 
     _tableResizeStart(event, pv) {
-        const cell = this._resizeEdgeCell(event, pv);
-        if (!cell) {
+        const info = this._resizeEdgeInfo(event, pv);
+        if (!info) {
             return;
         }
         event.preventDefault();
         this._colResizing = true;
-        const startX = event.clientX;
-        const startW = cell.getBoundingClientRect().width;
         const doc = pv.ownerDocument || document;
-        // Fixed-layout tables (all Word-converted ones after the auto-fit)
-        // read column widths from <colgroup> cols and the FIRST row — writing
-        // only the grabbed cell does nothing there. Write all three.
-        const table = cell.closest('table');
-        const colIdx = Array.prototype.indexOf.call(cell.parentElement.children, cell);
-        const colEl = table ? table.querySelectorAll('colgroup col')[colIdx] : null;
-        const firstRowCell = table && table.rows.length ? table.rows[0].children[colIdx] : null;
-        const onMove = (ev) => {
-            const w = Math.max(24, startW + (ev.clientX - startX)) + 'px';
-            cell.style.width = w;
-            if (colEl) {
-                colEl.removeAttribute('width');
-                colEl.style.width = w;
+        let onMove;
+        if (info.kind === 'row') {
+            const row = info.cell.parentElement;
+            const startY = event.clientY;
+            const startH = row.getBoundingClientRect().height;
+            onMove = (ev) => {
+                row.style.height = Math.max(12, Math.round(startH + (ev.clientY - startY))) + 'px';
+            };
+        } else {
+            // Any table becomes resizable on first grab — colgroup + fixed
+            // layout frozen from the measured on-screen geometry.
+            const cell = info.cell;
+            const table = cell.closest('table');
+            const cols = this._normalizeTableForResize(table);
+            const kRight = this._colIndexForCell(cell) + (cell.colSpan || 1) - 1;
+            const colA = cols[kRight];
+            const colB = cols[kRight + 1] || null;
+            if (!colA) {
+                this._colResizing = false;
+                return;
             }
-            if (firstRowCell && firstRowCell !== cell) {
-                firstRowCell.style.width = w;
-            }
-        };
+            const startX = event.clientX;
+            const wA = parseFloat(colA.style.width) || 24;
+            const wB = colB ? parseFloat(colB.style.width) || 24 : 0;
+            const tableStartW = parseFloat(table.style.width) || table.getBoundingClientRect().width;
+            onMove = (ev) => {
+                const dx = ev.clientX - startX;
+                if (colB) {
+                    // Move the boundary: left column grows, right one gives
+                    // way — the table keeps its footprint (Canva/Excel feel).
+                    const total = wA + wB;
+                    const a = Math.round(Math.max(24, Math.min(total - 24, wA + dx)));
+                    colA.style.width = a + 'px';
+                    colB.style.width = total - a + 'px';
+                } else {
+                    // Last column: the table itself grows or shrinks.
+                    const a = Math.round(Math.max(24, wA + dx));
+                    colA.style.width = a + 'px';
+                    table.style.width = Math.round(tableStartW + (a - wA)) + 'px';
+                }
+            };
+        }
         const onUp = () => {
             doc.removeEventListener('mousemove', onMove);
             doc.removeEventListener('mouseup', onUp);
@@ -8527,6 +8694,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         keep.colSpan = c2 - c1 + 1;
         keep.rowSpan = r2 - r1 + 1;
+        // Excel behavior: the merged cell stays selected, so Split (or Fill)
+        // right after Merge just works.
+        this._clearCellSel();
+        keep.setAttribute('data-dg-selcell', '1');
+        keep.style.boxShadow = 'inset 0 0 0 2px #7c3aed';
+        this._cellSel = [keep];
         this.htmlEditorDirty = true;
     }
 

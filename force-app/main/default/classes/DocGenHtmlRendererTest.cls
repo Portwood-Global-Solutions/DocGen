@@ -2569,6 +2569,63 @@ private class DocGenHtmlRendererTest {
     }
 
     @IsTest
+    static void injectAdminWatermark_htmlTemplate_overlayAfterBodyOpen() {
+        DocGenHtmlRenderer.overrideWatermarkCvId = '068000000000999';
+        try {
+            String html = '<html><head><style>@page { size: A4 landscape; }</style></head><body><p>Hi</p></body></html>';
+            String out = DocGenHtmlRenderer.injectAdminWatermarkIntoHtml(html);
+            System.assert(
+                out.contains('<body><div class="docgen-watermark"'),
+                'Overlay must be injected right after <body> — got: ' + out
+            );
+            System.assert(out.contains('068000000000999'), 'Overlay must reference the watermark CV');
+            // A4 landscape: 11.693in wide x 8.268in tall
+            System.assert(out.contains('width:11.693in'), 'A4 landscape width expected — got: ' + out);
+            System.assert(out.contains('height:8.268in'), 'A4 landscape height expected');
+            System.assert(out.contains('position:fixed'), 'Overlay must be position:fixed so it repeats every page');
+        } finally {
+            DocGenHtmlRenderer.overrideWatermarkCvId = null;
+        }
+    }
+
+    @IsTest
+    static void injectAdminWatermark_noWatermarkOrNoBody_safe() {
+        String html = '<html><body><p>Hi</p></body></html>';
+        System.assertEquals(
+            html,
+            DocGenHtmlRenderer.injectAdminWatermarkIntoHtml(html),
+            'No override set — HTML must pass through untouched'
+        );
+        DocGenHtmlRenderer.overrideWatermarkCvId = '068000000000999';
+        try {
+            // Explicit two-value size wins over keywords; no <body> tag → prepend
+            String bare = '<div>@page is elsewhere</div>';
+            String out = DocGenHtmlRenderer.injectAdminWatermarkIntoHtml(bare);
+            System.assert(out.startsWith('<div class="docgen-watermark"'), 'Overlay prepends when no body tag');
+            System.assert(out.contains('width:8.5in'), 'Defaults to Letter portrait when no @page size');
+            String sized = '<html><head><style>@page { size: 8.5in 14in; margin: 0.5in; }</style></head><body>x</body></html>';
+            String out2 = DocGenHtmlRenderer.injectAdminWatermarkIntoHtml(sized);
+            System.assert(out2.contains('width:8.500in'), 'Explicit inch width honored — got: ' + out2);
+            System.assert(out2.contains('height:14.000in'), 'Explicit inch height honored');
+            // Page-setup overrides beat source @page
+            DocGenHtmlRenderer.pageSizeOverride = 'Legal';
+            DocGenHtmlRenderer.orientationOverride = 'Landscape';
+            try {
+                String out3 = DocGenHtmlRenderer.injectAdminWatermarkIntoHtml(sized);
+                System.assert(
+                    out3.contains('width:14in') || out3.contains('width:14.0in'),
+                    'Legal landscape width from override — got: ' + out3
+                );
+            } finally {
+                DocGenHtmlRenderer.pageSizeOverride = null;
+                DocGenHtmlRenderer.orientationOverride = null;
+            }
+        } finally {
+            DocGenHtmlRenderer.overrideWatermarkCvId = null;
+        }
+    }
+
+    @IsTest
     static void numericEntities_decimalAndHex_decodeToUnicode() {
         String input = 'Em&#8212;dash, middle&#183;dot, hex&#x2014;dash, curly&#8220;quote&#8221;.';
         String output = DocGenHtmlRenderer.unescapeXmlEntities(input);
