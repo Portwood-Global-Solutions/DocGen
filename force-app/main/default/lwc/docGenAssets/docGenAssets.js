@@ -8,6 +8,8 @@ import getAssets from '@salesforce/apex/DocGenController.getAssets';
 import createAsset from '@salesforce/apex/DocGenController.createAsset';
 import checkAssetKey from '@salesforce/apex/DocGenController.checkAssetKey';
 import addAssetVersion from '@salesforce/apex/DocGenController.addAssetVersion';
+import deleteAsset from '@salesforce/apex/DocGenController.deleteAsset';
+import LightningConfirm from 'lightning/confirm';
 import renameAsset from '@salesforce/apex/DocGenController.renameAsset';
 import setAssetCategory from '@salesforce/apex/DocGenController.setAssetCategory';
 import deactivateAsset from '@salesforce/apex/DocGenController.deactivateAsset';
@@ -81,7 +83,8 @@ const COLUMNS = [
                 { label: 'Upload New Version', name: 'uploadVersion' },
                 { label: 'Edit', name: 'rename' },
                 { label: 'Preview', name: 'preview' },
-                { label: 'Deactivate', name: 'deactivate' }
+                { label: 'Deactivate', name: 'deactivate' },
+                { label: 'Delete', name: 'delete' }
             ]
         }
     }
@@ -257,6 +260,8 @@ export default class DocGenAssets extends LightningElement {
             }
         } else if (actionName === 'deactivate') {
             await this.handleDeactivate(row);
+        } else if (actionName === 'delete') {
+            await this.handleDelete(row);
         }
     }
 
@@ -476,6 +481,31 @@ export default class DocGenAssets extends LightningElement {
             await refreshApex(this.wiredAssetsResult);
         } catch (error) {
             this.showToast('Error deactivating asset', this.errMsg(error), 'error');
+        }
+    }
+
+    // ===== Delete =====
+
+    async handleDelete(row) {
+        const ok = await LightningConfirm.open({
+            message:
+                'Permanently delete "' +
+                row.name +
+                '" and its image files? Any template still using ' +
+                row.mergeTag +
+                ' will show a missing-asset placeholder. This cannot be undone — Deactivate is the reversible option.',
+            label: 'Delete asset',
+            theme: 'error'
+        });
+        if (!ok) {
+            return;
+        }
+        try {
+            await deleteAsset({ assetId: row.id });
+            this.showToast('Deleted', '"' + row.name + '" and its files are gone.', 'success');
+            await refreshApex(this.wiredAssetsResult);
+        } catch (error) {
+            this.showToast('Error deleting asset', this.errMsg(error), 'error');
         }
     }
 

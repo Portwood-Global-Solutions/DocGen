@@ -7656,4 +7656,40 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe(e, 'Error deactivating asset.');
         }
     }
+
+    /**
+     * Permanently deletes a shared asset AND its linked image files. Any
+     * template still referencing {%asset:<key>} renders the missing-asset
+     * placeholder afterwards — the LWC confirms with the admin before calling.
+     */
+    @AuraEnabled
+    public static void deleteAsset(Id assetId) {
+        if (assetId == null) {
+            throw DocGenService.ahe('Asset Id is required.');
+        }
+        if (!Schema.sObjectType.DocGen_Asset__c.isDeletable()) {
+            throw DocGenService.ahe('Insufficient access to delete assets.');
+        }
+        try {
+            Set<Id> docIds = new Set<Id>();
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (ContentDocumentLink cdl : [
+                SELECT ContentDocumentId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :assetId
+                WITH SYSTEM_MODE
+            ]) {
+                // NOPMD ApexCRUDViolation — internal asset-file plumbing behind the isDeletable gate above
+                docIds.add(cdl.ContentDocumentId);
+            }
+            if (!docIds.isEmpty()) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                delete [SELECT Id FROM ContentDocument WHERE Id IN :docIds]; // NOPMD ApexCRUDViolation — asset image files, owner-admin cleanup
+            }
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.delete(assetId, AccessLevel.SYSTEM_MODE);
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error deleting asset.');
+        }
+    }
 }

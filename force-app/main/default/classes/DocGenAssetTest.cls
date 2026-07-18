@@ -227,6 +227,39 @@ private class DocGenAssetTest {
     }
 
     @IsTest
+    static void deleteAssetRemovesRecordAndLinkedFiles() {
+        Map<String, Object> created = DocGenController.createAsset('Doomed Logo', 'doomed-logo');
+        Id assetId = (Id) created.get('id');
+        ContentVersion cv = new ContentVersion(
+            Title = 'doomed-v1',
+            PathOnClient = 'doomed-v1.png',
+            VersionData = FAKE_PNG
+        );
+        insert cv;
+        Id cvId = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1].Id;
+        DocGenController.addAssetVersion(assetId, cvId);
+        Id docId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cvId LIMIT 1].ContentDocumentId;
+
+        Test.startTest();
+        DocGenController.deleteAsset(assetId);
+        Test.stopTest();
+
+        System.assertEquals(0, [SELECT COUNT() FROM DocGen_Asset__c WHERE Id = :assetId], 'Asset record deleted');
+        System.assertEquals(
+            0,
+            [SELECT COUNT() FROM ContentDocument WHERE Id = :docId],
+            'Linked image file deleted with the asset'
+        );
+        Boolean threw = false;
+        try {
+            DocGenController.deleteAsset(null);
+        } catch (AuraHandledException e) {
+            threw = true;
+        }
+        System.assert(threw, 'Null asset Id rejected');
+    }
+
+    @IsTest
     static void setAssetCategorySetsClearsAndLists() {
         Map<String, Object> created = DocGenController.createAsset('Header Logo', 'header-logo');
         Id assetId = (Id) created.get('id');
