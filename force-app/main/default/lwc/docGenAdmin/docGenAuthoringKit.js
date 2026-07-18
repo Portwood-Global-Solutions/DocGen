@@ -838,6 +838,64 @@ export function buildBlockPalette(shape) {
             '</tr></table>\n',
         title: 'E-signature areas for both parties, wired to DocGen signing'
     });
+    // Special characters — the UserGuide set, all covered by the PDF
+    // engine's Arial Unicode fallback. Text glyphs only: color emoji
+    // (\u2705 etc.) are dropped by Flying Saucer.
+    const CHARS = [
+        ['\u2713', 'Check mark', 'check tick yes done'],
+        ['\u2717', 'Cross mark', 'cross x no fail reject'],
+        ['\u2611', 'Checked box', 'checkbox checked ballot done'],
+        ['\u2610', 'Empty box', 'checkbox unchecked ballot todo'],
+        ['\u2612', 'X-ed box', 'checkbox rejected ballot'],
+        ['\u2022', 'Bullet', 'bullet dot point'],
+        ['\u25aa', 'Small square', 'bullet square marker'],
+        ['\u2013', 'En dash', 'dash range en'],
+        ['\u2014', 'Em dash', 'dash em break'],
+        ['\u2026', 'Ellipsis', 'ellipsis dots more'],
+        ['\u2192', 'Arrow right', 'arrow right next'],
+        ['\u2190', 'Arrow left', 'arrow left back'],
+        ['\u2191', 'Arrow up', 'arrow up'],
+        ['\u2193', 'Arrow down', 'arrow down'],
+        ['\u2194', 'Arrow both', 'arrow both leftright'],
+        ['\u00a7', 'Section sign', 'section legal paragraph law'],
+        ['\u00b6', 'Pilcrow', 'paragraph pilcrow'],
+        ['\u00a9', 'Copyright', 'copyright legal'],
+        ['\u00ae', 'Registered', 'registered trademark legal'],
+        ['\u2122', 'Trademark', 'trademark tm legal'],
+        ['\u2020', 'Dagger', 'dagger footnote'],
+        ['\u00b0', 'Degree', 'degree temperature angle'],
+        ['\u00d7', 'Multiply', 'multiply times x math'],
+        ['\u00f7', 'Divide', 'divide math'],
+        ['\u00b1', 'Plus-minus', 'plus minus tolerance math'],
+        ['\u2264', 'Less or equal', 'less equal math'],
+        ['\u2265', 'Greater or equal', 'greater equal math'],
+        ['\u2248', 'Approximately', 'approx math tilde'],
+        ['\u00bd', 'One half', 'half fraction'],
+        ['\u00bc', 'One quarter', 'quarter fraction'],
+        ['\u00be', 'Three quarters', 'fraction'],
+        ['\u20ac', 'Euro sign', 'euro currency money'],
+        ['\u00a3', 'Pound sign', 'pound sterling currency money'],
+        ['\u00a5', 'Yen sign', 'yen yuan currency money'],
+        ['\u00a2', 'Cent sign', 'cent currency money'],
+        ['\u20b9', 'Rupee sign', 'rupee currency money'],
+        ['\u2605', 'Star filled', 'star rating'],
+        ['\u2606', 'Star outline', 'star rating empty'],
+        ['\u25b6', 'Triangle right', 'triangle play pointer'],
+        ['\u00ab', 'Left guillemet', 'quote guillemet french'],
+        ['\u00bb', 'Right guillemet', 'quote guillemet french']
+    ];
+    sections.push({
+        key: 'chars',
+        label: 'Special characters',
+        hint: 'Unicode-safe in PDF output. Click to insert at your cursor.',
+        items: CHARS.map((c) => ({
+            key: 'ch_' + c[0].charCodeAt(0),
+            label: c[0] + '  ' + c[1],
+            snippet: c[0],
+            title: c[1] + ' — ' + c[2]
+        }))
+    });
+
     sections.push({
         key: 'blk_ready',
         label: 'Ready-made',
