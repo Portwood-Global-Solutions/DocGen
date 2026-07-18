@@ -58,27 +58,21 @@ If the release update page looks like it might already be enabled but the button
 
 ### Step 4 — Make your first template
 
-1. **App Launcher → DocGen** (search "DocGen" if it's not pinned).
-2. Click **+ New Template**.
-3. Fill in:
-    - **Name**: "My First Account Brief"
-    - **Type**: Word
-    - **Base Object**: Account
-    - **Output Format**: PDF
-4. Upload a `.docx` file. If you don't have one ready, paste this into a blank Word doc and save as `account-brief.docx`:
+1. **App Launcher → DocGen** (search "DocGen" if it's not pinned). You land on the **Template Library**.
+2. On the **Create New** tab, choose how you want to build. **Start from a Design** is the recommended path — pick a professional starter layout and your template renders on the very first click, no file authoring needed:
 
-    ```
-    Account Brief — {Name}
+    ![The Create New wizard with the starter gallery — Record Report, Invoice, Business Letter, Agreement, and Certificate designs](docs/images/userguide/wizard-starters.png)
+    - **Start from a Design** — a starter gallery (Record Report, Invoice / Line Items, Business Letter, signature-ready Agreement, landscape Certificate / Award). Your object's real merge fields are dropped in automatically.
+    - **Generate with AI** — DocGen assembles a ready-to-paste prompt (your fields + the full tag syntax + PDF rendering constraints). Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns back into the wizard.
+    - **Start From Scratch** — a blank page in the visual designer. Click anywhere and type; hit `` ` `` for the insert menu.
+    - **I Have an Existing File** — upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain.
 
-    Industry: {Industry}
-    Annual Revenue: {AnnualRevenue:currency}
-    Owner: {Owner.Name}
+3. Give it a **Template Name** (e.g. "My First Account Brief"), pick a **Starter Design**, optionally choose a company logo from your Asset Library and a **Sample Record** for live previews, then click **Create & Open Designer**.
+4. The **visual designer** opens on your document — a WYSIWYG page where merge fields appear as purple pills, tables resize by dragging cell edges, and the toolbar covers text formatting, tables, borders, images, and page setup. Edit anything (or nothing), then click **Save as New Version** to activate it:
 
-    Prepared by {RunningUser.Name} on {Today:MMMM d, yyyy}.
-    ```
+    ![The visual designer editing a template — format toolbar, merge-tag pills, WYSIWYG page canvas](docs/images/userguide/designer-certificate.png)
 
-5. In the query builder, add `Industry`, `AnnualRevenue`, and `Owner.Name` to the selected fields.
-6. Click **Save**.
+5. Click **Download Sample** in the designer toolbar to see the rendered PDF with your sample record's real data — before you ever leave the page.
 
 ### Step 5 — Generate
 
@@ -87,7 +81,11 @@ If the release update page looks like it might already be enabled but the button
 3. Pick **My First Account Brief** → click **Generate**.
 4. The PDF appears in the record's **Files** related list, and downloads to your browser.
 
-🎉 **You've now done the full lifecycle.** Real templates layer on richer content — child loops for tables (e.g., line items), images, conditional sections, e-signatures — all using the same merge-tag patterns. The rest of this guide covers each capability with worked examples.
+🎉 **You've now done the full lifecycle.** Real templates layer on richer content — child loops for tables (e.g., line items), images, conditional sections, charts, barcodes, e-signatures — all using the same merge-tag patterns. Your growing library lives on the **Your Templates** tab (searchable, sortable, with created/modified dates):
+
+![The Your Templates list — search, sortable columns, created and last-modified dates](docs/images/userguide/templates-list.png)
+
+The rest of this guide covers each capability with worked examples.
 
 > **Stuck?** The most common first-time issue is the runner not showing on the page layout. Edit the page → drag in the **DocGen Runner** component → save. If you see "Insufficient privileges," confirm Step 2 — the perm set assignment.
 
