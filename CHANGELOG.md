@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.37.0 — One visual query builder everywhere + first-class images
+
+### Added
+
+- **The visual query builder is now the query surface everywhere** — the designer's Query panel opens it in a wide flyout, and the Generate-with-AI step builds its query in it (replacing the checkbox field list). Same builder as Edit Template → Query Configuration: walk from the base object into fields, parent lookups (any depth, to SOQL's 5-hop ceiling), and related lists with per-child Tag name / Filter / Sort / Limit. The AI prompt updates live as you build, and templates whose config is a V3 tree open straight into the builder when edited.
+- **First-class images in the designer** — drag an image's body to move it anywhere in the text flow (a drop marker tracks the pointer); drag the bottom-right corner to resize; click it and use Left / Center / Right to align; **double-click to edit its tag** (`{%asset:logo:120x}`) and an asset tag becomes the rendered image again on commit.
+- **The toolbar can't scroll away** — the designer canvas owns the scroll (Google-Docs style), so the format bar stays fixed above the page.
+- **AI creation flows top-to-bottom** — the six steps stack vertically, giving the query builder and prompt boxes the full page width.
+
+### Fixed
+
+- **Double-clicking an image then clicking out deleted it** — image pills entered text-edit mode with no text, so the commit handler removed them. They now swap to an editable tag pill and re-imagify on commit.
+- **Query checklists couldn't traverse parents** (interim fix now superseded by the visual builder everywhere).
+
+LWC-only release — no server-side changes.
+
 ## v3.36.0 — Merge tags style like text: fonts, colors, exact sizes
 
 A fast follow to v3.35 focused on one thing: merge-tag pills in the visual designer now behave like the text they'll become.

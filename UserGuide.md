@@ -209,7 +209,7 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 Open the DocGen app → **My Templates** → the **Create New** tab. The wizard offers four authoring paths:
 
 - **Start from a Design** (recommended) — pick a professional starter (Record Report, Invoice / Line Items, Business Letter, signature-ready Agreement, landscape Certificate / Award). Your object's real merge fields are injected automatically and the template renders on the first click. Starters that need a specific page setup bring it along — the Certificate creates a landscape Letter page with 0.5" margins without you touching anything.
-- **Generate with AI** — a six-step flow: pick your fields, pick your images, describe the document in your own words, copy the assembled prompt (it carries DocGen's full tag syntax and the PDF engine's CSS rules), paste it into Claude / ChatGPT / Copilot, then paste the returned HTML back. The result opens in the designer.
+- **Generate with AI** — a six-step flow, top to bottom on one page: build your query in the full visual builder (fields, parent lookups, related lists with filters), pick your images, describe the document in your own words, copy the assembled prompt (it carries DocGen's full tag syntax and the PDF engine's CSS rules), paste it into Claude / ChatGPT / Copilot, then paste the returned HTML back. The prompt updates live as you build. The result opens in the designer.
 - **Start From Scratch** — a blank page in the visual designer.
 - **I Have an Existing File** — upload **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), fillable **PDF** (_testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx`, _alpha_) containing `{FieldName}` merge tags.
 
@@ -293,7 +293,11 @@ HTML templates open in a full WYSIWYG designer — the page you see is the page 
 - **Borders** — All / Outline / Rows / None styles, plus a thickness picker (Hairline to Heavy) and a border color; changing either restyles the table under your cursor live.
 - Rows carry `page-break-inside: avoid` automatically, so a PDF page never splits mid-row.
 
-**Images:** assets render as real images on the canvas (drag a corner to resize — the size is written back into the merge tag). In header/footer HTML you can write `<img src="{%asset:logo}">` and DocGen substitutes the image URL; unsized header/footer images are automatically clamped to fit the margin box.
+**Images:** assets render as real images on the canvas. Drag the image body to move it anywhere in the text flow (a drop marker tracks your pointer); drag the bottom-right corner to resize (the size is written back into the merge tag); click it and use Left / Center / Right to align it; double-click it to edit the underlying tag (`{%asset:logo:120x}`) by hand. In header/footer HTML you can write `<img src="{%asset:logo}">` and DocGen substitutes the image URL; unsized header/footer images are automatically clamped to fit the margin box.
+
+**Query panel:** the designer's Query button opens the full visual query builder (see [§6.4](#64-using-the-visual-builder)) in a wide flyout — walk from the base object into fields, parent lookups, and related lists without leaving the designer. Changes flow straight into the tag palettes.
+
+**The canvas owns the scroll** — the toolbar stays fixed above the page while the document scrolls, Google-Docs style.
 
 **Watermark:** upload a background image on the Watermark panel and pick a **strength** (Light 15% / Medium 30% / Strong 50% / Original). The opacity is baked into the image at upload, so the PDF and the canvas preview match exactly. Requires a saved version first (the file attaches to the version record).
 
@@ -981,7 +985,7 @@ Preferred. Tree of nodes — each node is one SOQL query, stitched into the pare
 
 ### 6.4 Using the visual builder
 
-The Command Hub template wizard uses the **`docGenColumnBuilder`** LWC — tab-per-object layout with a tree visualization. Newer templates are V3 by default.
+The visual query builder walks your schema like a tree: start from the base object, tick fields (blue pills), climb into **+ parent lookup**, and expand **+ related list** child sections — each child with its own Tag name, Filter (WHERE), Sort by, and Limit. It writes a V3 config. As of v3.37 the same builder appears everywhere a query gets built: **Edit Template → Query Configuration**, the **designer's Query panel**, and the **Generate-with-AI** step.
 
 **Multi-hop parent traversal (v1.97+).** On any object's `parentFields` panel, expand a lookup and the builder now recurses into the parent's lookup tree — for example, on an Opportunity tab, expand `Account` → `Parent` → `Owner` → pick `Name`, and the resulting merge tag is `{Account.Parent.Owner.Name}`. The recursion is capped at 5 hops to keep schema-load latency bounded. Each hop loads its target object's fields lazily on expand. Use this when the data you need lives more than one lookup away from the base object and you don't want to compose `parentFields` paths by hand.
 
