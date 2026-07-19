@@ -894,6 +894,22 @@ private class DocGenHtmlTemplateTest {
     }
 
     @IsTest
+    static void previewDraftPdfDataReturnsBase64WithoutPersisting() {
+        Account acct = [SELECT Id FROM Account LIMIT 1];
+        Id tmplId = createHtmlTemplate(null, null, '<html><body><p>{Name}</p></body></html>');
+        Map<String, Object> res = DocGenController.previewDraftPdfData(
+            tmplId,
+            acct.Id,
+            '<html><body><p>{Name} draft</p></body></html>'
+        );
+        System.assert(res.containsKey('base64'), 'Data preview must return base64');
+        System.assert(String.isNotBlank((String) res.get('base64')), 'base64 must be non-empty');
+        System.assertEquals(null, DocGenService.draftHtmlBodyOverride, 'Override must be cleared after preview');
+        Integer previews = [SELECT COUNT() FROM ContentVersion WHERE Title LIKE 'dg_pdf_preview_%'];
+        System.assertEquals(0, previews, 'Data preview must not persist a preview file');
+    }
+
+    @IsTest
     static void previewDraftPdfRejectsEmptyDraft() {
         Account acct = [SELECT Id FROM Account LIMIT 1];
         Id tmplId = createHtmlTemplate(null, null, '<html><body><p>{Name}</p></body></html>');

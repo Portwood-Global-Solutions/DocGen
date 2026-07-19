@@ -51,6 +51,7 @@ import getContentVersionBase64 from '@salesforce/apex/DocGenController.getConten
 import getLatestContentVersionId from '@salesforce/apex/DocGenController.getLatestContentVersionId';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import previewDraftPdf from '@salesforce/apex/DocGenController.previewDraftPdf';
+import previewDraftPdfData from '@salesforce/apex/DocGenController.previewDraftPdfData';
 import generatePdfAsync from '@salesforce/apex/DocGenController.generatePdfAsync';
 import getPdfSampleGenerationStatus from '@salesforce/apex/DocGenController.getPdfSampleGenerationStatus';
 import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
@@ -7978,22 +7979,60 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.showToast('Nothing to preview', 'The editor is empty.', 'warning');
             return;
         }
+        // A ready-but-unopened preview from the last render: open it in THIS
+        // click (synchronous = never popup-blocked), then reset.
+        if (this._pendingPreviewUrl) {
+            const readyWin = window.open(this._pendingPreviewUrl, '_blank');
+            if (readyWin) {
+                this._pendingPreviewUrl = null;
+                this.pdfPreviewReady = false;
+            }
+            return;
+        }
         this.isPdfPreviewLoading = true;
         try {
-            const res = await previewDraftPdf({
+            const res = await previewDraftPdfData({
                 templateId: this.editTemplateId,
                 recordId: this.editTemplateTestRecordId,
                 draftHtml
             });
-            if (!res || !res.contentDocumentId) {
+            if (res && res.base64) {
+                const raw = atob(res.base64);
+                const bytes = new Uint8Array(raw.length);
+                for (let i = 0; i < raw.length; i++) {
+                    bytes[i] = raw.charCodeAt(i);
+                }
+                const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+                // Usually still inside the click's activation window, so this
+                // opens directly. (LWS neuters a pre-opened window's proxy —
+                // document.write/location are silent no-ops — so the tab must
+                // be opened WITH its URL.)
+                const win = window.open(url, '_blank');
+                if (!win) {
+                    // Popup blocked: arm the button for a synchronous open.
+                    this._pendingPreviewUrl = url;
+                    this.pdfPreviewReady = true;
+                    this.showToast(
+                        'Preview ready',
+                        'Your PDF is rendered — click "Open preview" to view it.',
+                        'success'
+                    );
+                }
+                return;
+            }
+            // Too large for the Aura payload — ContentVersion + native viewer.
+            const res2 = await previewDraftPdf({
+                templateId: this.editTemplateId,
+                recordId: this.editTemplateTestRecordId,
+                draftHtml
+            });
+            if (!res2 || !res2.contentDocumentId) {
                 throw new Error('Preview returned no PDF.');
             }
-            // LWS forbids blob: iframes, and shepherd URLs force a download —
-            // Salesforce's native file-preview overlay is the clean viewer.
             this[NavigationMixin.Navigate]({
                 type: 'standard__namedPage',
                 attributes: { pageName: 'filePreview' },
-                state: { selectedRecordId: res.contentDocumentId }
+                state: { selectedRecordId: res2.contentDocumentId }
             });
         } catch (err) {
             const msg = err && err.body && err.body.message ? err.body.message : (err && err.message) || String(err);
@@ -8007,7 +8046,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.pdfPreviewUrl = null;
     }
 
+    @track pdfPreviewReady = false;
+
     get pdfPreviewBtnLabel() {
+        if (this.pdfPreviewReady) {
+            return 'Open preview \u2197';
+        }
         return this.isPdfPreviewLoading ? 'Rendering…' : 'PDF Preview';
     }
 

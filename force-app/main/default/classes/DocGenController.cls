@@ -3942,10 +3942,45 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * Draft PDF preview as base64 — no ContentVersion persisted. The LWC opens
+     * a new tab on a blob: URL (top-level navigation, which LWS allows; only
+     * blob: IFRAMES are blocked). PDFs too large for the Aura payload ceiling
+     * signal tooLarge and the caller falls back to previewDraftPdf's
+     * ContentVersion + native file-preview path.
+     */
+    @AuraEnabled
+    public static Map<String, Object> previewDraftPdfData(Id templateId, Id recordId, String draftHtml) {
+        if (String.isBlank(draftHtml)) {
+            throw DocGenService.ahe('Nothing to preview — the editor is empty.');
+        }
+        try {
+            DocGenService.draftHtmlBodyOverride = draftHtml;
+            Map<String, Object> result = DocGenService.generatePdfBlob(templateId, recordId);
+            Blob pdfBlob = (Blob) result.get('blob');
+            // ~6MB AuraEnabled response ceiling; base64 inflates 4/3.
+            if (pdfBlob.size() > 4000000) {
+                return new Map<String, Object>{ 'tooLarge' => true };
+            }
+            return new Map<String, Object>{
+                'base64' => EncodingUtil.base64Encode(pdfBlob),
+                'title' => (String) result.get('title')
+            };
+        } catch (AuraHandledException ahe) {
+            throw ahe;
+        } catch (Exception e) {
+            throw DocGenService.ahe('Preview failed: ' + e.getMessage());
+        } finally {
+            DocGenService.draftHtmlBodyOverride = null;
+        }
+    }
+
+    /**
      * Designer live PDF preview: renders the caller's DRAFT HTML (unsaved
      * editor contents) through the full merge + Blob.toPdf pipeline against a
-     * real record, without touching the template's saved versions. The result
-     * is returned as base64 for a client-side blob: iframe — nothing is stored.
+     * real record, without touching the template's saved versions. Persists a
+     * ContentVersion for Salesforce's native file-preview overlay — the
+     * fallback when previewDraftPdfData can't be used (popup blocked, PDF too
+     * large for the Aura payload).
      */
     @AuraEnabled
     public static Map<String, Object> previewDraftPdf(Id templateId, Id recordId, String draftHtml) {
