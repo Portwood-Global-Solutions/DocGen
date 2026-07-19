@@ -62,12 +62,12 @@ import exportTemplate from '@salesforce/apex/DocGenController.exportTemplate';
 import importTemplate from '@salesforce/apex/DocGenController.importTemplate';
 import cloneTemplate from '@salesforce/apex/DocGenController.cloneTemplate';
 import getObjectFields from '@salesforce/apex/DocGenController.getObjectFields';
+import getParentRelationships from '@salesforce/apex/DocGenController.getParentRelationships';
 // #161 — updateable-only field list for writeback-target dropdowns (Signer Inputs tab).
 // New Apex method (backend agent); if not yet deployed, QA deploys — import/usage is wired here.
 import getUpdateableObjectFields from '@salesforce/apex/DocGenController.getUpdateableObjectFields';
 import getObjectOptions from '@salesforce/apex/DocGenController.getObjectOptions';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
-import getParentRelationships from '@salesforce/apex/DocGenController.getParentRelationships';
 import previewRecordData from '@salesforce/apex/DocGenController.previewRecordData';
 import saveWatermarkImage from '@salesforce/apex/DocGenController.saveWatermarkImage';
 import clearWatermarkImage from '@salesforce/apex/DocGenController.clearWatermarkImage';
@@ -2501,12 +2501,26 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         try {
-            const [fields, rels] = await Promise.all([
+            const [fields, rels, parentRels] = await Promise.all([
                 getObjectFields({ objectName: this.newTemplateObject }),
-                getChildRelationships({ objectName: this.newTemplateObject })
+                getChildRelationships({ objectName: this.newTemplateObject }),
+                getParentRelationships({ objectName: this.newTemplateObject })
             ]);
             const childFieldsByRel = {};
+            const parentFieldsByRel = {};
             const shape = extractQueryShape(this.newTemplateQuery, this.newTemplateObject);
+            await Promise.all(
+                this._parentRelsInQuery(shape).map(async (prel) => {
+                    const r = (parentRels || []).find((x) => x.value === prel);
+                    if (r) {
+                        try {
+                            parentFieldsByRel[prel] = await getObjectFields({ objectName: r.targetObject });
+                        } catch (e) {
+                            /* skip */
+                        }
+                    }
+                })
+            );
             await Promise.all(
                 (shape.children || []).map(async (c) => {
                     const rel = (rels || []).find((r) => r.value === c.relationshipName);
@@ -2522,7 +2536,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 })
             );
             this._wizardQueryMetaFor = this.newTemplateObject + '|' + this.newTemplateQuery;
-            this.wizardQueryMeta = { fields: fields || [], rels: rels || [], childFieldsByRel };
+            this.wizardQueryMeta = {
+                fields: fields || [],
+                rels: rels || [],
+                parentRels: parentRels || [],
+                childFieldsByRel,
+                parentFieldsByRel
+            };
         } catch (e) {
             this.wizardQueryMeta = null;
         }
@@ -2566,6 +2586,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.wizardQueryMeta = {
                 ...this.wizardQueryMeta,
                 childFieldsByRel: { ...this.wizardQueryMeta.childFieldsByRel, [res.rel]: res.childFields }
+            };
+        }
+        if (res.parentFields) {
+            this.wizardQueryMeta = {
+                ...this.wizardQueryMeta,
+                parentFieldsByRel: { ...(this.wizardQueryMeta.parentFieldsByRel || {}), [res.rel]: res.parentFields }
             };
         }
         this.newTemplateQuery = res.query;
@@ -8447,12 +8473,26 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         try {
-            const [fields, rels] = await Promise.all([
+            const [fields, rels, parentRels] = await Promise.all([
                 getObjectFields({ objectName: this.editTemplateObject }),
-                getChildRelationships({ objectName: this.editTemplateObject })
+                getChildRelationships({ objectName: this.editTemplateObject }),
+                getParentRelationships({ objectName: this.editTemplateObject })
             ]);
             const childFieldsByRel = {};
+            const parentFieldsByRel = {};
             const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+            await Promise.all(
+                this._parentRelsInQuery(shape).map(async (prel) => {
+                    const r = (parentRels || []).find((x) => x.value === prel);
+                    if (r) {
+                        try {
+                            parentFieldsByRel[prel] = await getObjectFields({ objectName: r.targetObject });
+                        } catch (e) {
+                            /* skip */
+                        }
+                    }
+                })
+            );
             await Promise.all(
                 (shape.children || []).map(async (c) => {
                     const rel = (rels || []).find((r) => r.value === c.relationshipName);
@@ -8468,13 +8508,31 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 })
             );
             this._queryMetaFor = this.editTemplateObject;
-            this.designerQueryMeta = { fields: fields || [], rels: rels || [], childFieldsByRel };
+            this.designerQueryMeta = {
+                fields: fields || [],
+                rels: rels || [],
+                parentRels: parentRels || [],
+                childFieldsByRel,
+                parentFieldsByRel
+            };
         } catch (e) {
             this.designerQueryMeta = null;
         }
     }
 
     /** Shared: checkbox sections from a describe meta + a V1 query string. */
+    /** Parent rels referenced by the query's dot-path fields (first segment). */
+    _parentRelsInQuery(shape) {
+        const rels = new Set();
+        for (const pf of shape.parentFields || []) {
+            const seg = pf.split('.')[0];
+            if (seg) {
+                rels.add(seg);
+            }
+        }
+        return [...rels];
+    }
+
     _buildQuerySections(query, objectName, meta, search) {
         if (!meta) {
             return [];
@@ -8499,6 +8557,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     rel: ''
                 }))
         });
+        // Parent records already traversed by the query (Account.Name, ...):
+        // one section per lookup, checkboxes emit dot-paths.
+        const parentFieldSet = new Set((shape.parentFields || []).map((f) => f.toLowerCase()));
+        const parentFieldsByRel = meta.parentFieldsByRel || {};
+        for (const prel of this._parentRelsInQuery(shape)) {
+            const pf = parentFieldsByRel[prel] || [];
+            sections.push({
+                key: 'prel_' + prel,
+                label: prel + ' (parent record)',
+                rows: pf
+                    .filter((f) => !SKIP.test(f.value) && match(f.label, prel + '.' + f.value))
+                    .map((f) => ({
+                        key: 'p_' + prel + '_' + f.value,
+                        label: f.label,
+                        api: f.value,
+                        checked: parentFieldSet.has((prel + '.' + f.value).toLowerCase()),
+                        kind: 'parent',
+                        rel: prel
+                    }))
+            });
+        }
         for (const c of shape.children || []) {
             const cf = meta.childFieldsByRel[c.relationshipName] || [];
             const inSet = new Set((c.fields || []).map((f) => f.toLowerCase()));
@@ -8523,6 +8602,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const addable = meta.rels.filter(
             (r) => !inQuery.has(r.value) && !NOISE.test(r.value) && match(r.label, r.value)
         );
+        const parentsInQuery = new Set(this._parentRelsInQuery(shape));
+        const addableParents = (meta.parentRels || []).filter(
+            (r) => !parentsInQuery.has(r.value) && match(r.label, r.value)
+        );
+        if (addableParents.length) {
+            sections.push({
+                key: 'addparent',
+                label: 'Add parent fields (lookups)',
+                rows: addableParents.map((r) => ({
+                    key: 'pr_' + r.value,
+                    label: r.label + ' (' + r.value + '.\u2026)',
+                    api: r.value,
+                    checked: false,
+                    kind: 'prel',
+                    rel: r.value
+                }))
+            });
+        }
         if (addable.length) {
             sections.push({
                 key: 'addrel',
@@ -8549,6 +8646,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const parents = [...(shape.parentFields || [])];
         let children = (shape.children || []).map((c) => ({ rel: c.relationshipName, fields: [...c.fields] }));
         let childFields = null;
+        let parentFields = null;
         if (kind === 'base') {
             const idx = base.findIndex((f) => f.toLowerCase() === api.toLowerCase());
             if (on && idx === -1) {
@@ -8568,6 +8666,28 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 if (!c.fields.length) {
                     children = children.filter((x) => x !== c);
                 }
+            }
+        } else if (kind === 'parent') {
+            const path = rel + '.' + api;
+            const idx = parents.findIndex((f) => f.toLowerCase() === path.toLowerCase());
+            if (on && idx === -1) {
+                parents.push(path);
+            } else if (!on && idx > -1) {
+                parents.splice(idx, 1);
+            }
+        } else if (kind === 'prel' && on) {
+            const relMeta = (meta.parentRels || []).find((r) => r.value === rel);
+            if (relMeta) {
+                try {
+                    parentFields = (await getObjectFields({ objectName: relMeta.targetObject })) || [];
+                } catch (e) {
+                    parentFields = [];
+                }
+            }
+            if (!parents.some((f) => f.toLowerCase() === (rel + '.name').toLowerCase())) {
+                const names = (parentFields || []).map((f) => f.value);
+                const seed = names.includes('Name') ? 'Name' : names[0] || 'Name';
+                parents.push(rel + '.' + seed);
             }
         } else if (kind === 'rel' && on) {
             let seed = ['Name'];
@@ -8595,7 +8715,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         for (const c of children) {
             parts.push('(SELECT ' + c.fields.join(', ') + ' FROM ' + c.rel + ')');
         }
-        return { query: parts.join(', '), childFields, rel };
+        return { query: parts.join(', '), childFields, parentFields, rel };
     }
 
     /** Sections of checkbox rows driven by describe + the CURRENT query. */
@@ -8624,6 +8744,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.designerQueryMeta = {
                 ...this.designerQueryMeta,
                 childFieldsByRel: { ...this.designerQueryMeta.childFieldsByRel, [res.rel]: res.childFields }
+            };
+        }
+        if (res.parentFields) {
+            this.designerQueryMeta = {
+                ...this.designerQueryMeta,
+                parentFieldsByRel: { ...(this.designerQueryMeta.parentFieldsByRel || {}), [res.rel]: res.parentFields }
             };
         }
         this.editTemplateQuery = res.query;
