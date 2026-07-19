@@ -501,6 +501,12 @@ export function buildAiPrompt(shape, options) {
         '- Built-ins: {Today:MMMM d, yyyy}, {Now:yyyy-MM-dd HH:mm}, and running-user tags {RunningUser.Name}, {RunningUser.Email}, {RunningUser.Title}.'
     );
     lines.push(
+        '- Barcodes & QR codes (rendered server-side as crisp vectors — no fonts, no external services, no <img>): {*FieldName} = QR code of the field value; {*FieldName:qr:200} = QR at 200px; {*FieldName:code128} and {*FieldName:code39} = linear barcodes (add :WxH like {*Serial__c:code128:300x80} to size). QR handles URLs and long text and survives low print quality best; Code 128/39 suit short IDs and serials. Place the tag alone in its own cell/block with white space around it — do not shrink below the default or scanners will struggle. Any queried field works, e.g. {*Id}, {*Name}, {*Tracking_Number__c}.'
+    );
+    lines.push(
+        '- Charts (aggregate a child list into bars, place OUTSIDE loops): {#ChartBucket:Rel:Field} {key} {count} {percent} {/ChartBucket} groups child records by Field and repeats the body per bucket — style it as CSS bars (a <div> whose width uses {percent}). Keep charts CSS-only; no SVG or canvas.'
+    );
+    lines.push(
         '- E-signature placeholders (only if asked for a signable document): {@Signature_RoleName:1:Full}, {@Signature_RoleName:1:Date}.'
     );
     lines.push('');
