@@ -1133,6 +1133,11 @@
     padding: 12px 14px;
 }
 
+/* Query panel hosts the full visual query builder — give it room. */
+.dg-float-panel_wide {
+    width: min(960px, calc(100vw - 60px));
+}
+
 .dg-float-panel-head {
     display: flex;
     align-items: center;

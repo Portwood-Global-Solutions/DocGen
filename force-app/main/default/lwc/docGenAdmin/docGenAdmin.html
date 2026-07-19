@@ -2453,7 +2453,7 @@
                             </div>
 
                             <template if:true={showFloatPanel}>
-                                <div class="dg-float-panel">
+                                <div class={floatPanelClass}>
                                     <div class="dg-float-panel-head">
                                         <span class="dg-float-panel-title">{floatPanelTitle}</span>
                                         <button class="dg-pill-menu-x" onclick={handlePanelClose} title="Close">
@@ -2561,37 +2561,24 @@
 
                                     <template if:true={isPanelQuery}>
                                         <div class="dg-image-panel">
-                                            <template if:true={designerQueryEditable}>
+                                            <template if:true={designerQueryTreeAvailable}>
                                                 <p class="slds-text-body_small slds-var-m-bottom_x-small">
-                                                    Checked = in this template's query ({designerQueryFieldCount}
-                                                    fields). Changes apply to the tag palettes immediately and save with
+                                                    Build the query visually — start from {editTemplateObject} and walk
+                                                    into fields, parent lookups, and related lists. Changes apply to the
+                                                    tag palettes immediately and save with
                                                     <strong>Save as New Version</strong>.
                                                 </p>
-                                                <template for:each={designerQuerySections} for:item="qsec">
-                                                    <div key={qsec.key} class="dg-tag-section">
-                                                        <div class="dg-tag-section-label">{qsec.label}</div>
-                                                        <template for:each={qsec.rows} for:item="qrow">
-                                                            <label key={qrow.key} class="dg-qf-row">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={qrow.checked}
-                                                                    data-kind={qrow.kind}
-                                                                    data-api={qrow.api}
-                                                                    data-rel={qrow.rel}
-                                                                    data-target={qrow.target}
-                                                                    onchange={handleQueryFieldToggle}
-                                                                />
-                                                                <span class="dg-qf-label">{qrow.label}</span>
-                                                                <span class="dg-qf-api">{qrow.api}</span>
-                                                            </label>
-                                                        </template>
-                                                    </div>
-                                                </template>
+                                                <c-doc-gen-tree-builder
+                                                    selected-object={editTemplateObject}
+                                                    query-config={editTemplateQuery}
+                                                    onconfigchange={handleEditConfigChange}
+                                                >
+                                                </c-doc-gen-tree-builder>
                                             </template>
-                                            <template if:false={designerQueryEditable}>
+                                            <template if:false={designerQueryTreeAvailable}>
                                                 <p class="slds-text-body_small slds-text-color_weak">
-                                                    This template uses an advanced query configuration (JSON or Flow
-                                                    data) — edit it under
+                                                    This template's data comes from an Apex provider or Flow JSON —
+                                                    manage it under
                                                     <strong>Edit Template &#8594; Query Configuration</strong>.
                                                 </p>
                                             </template>

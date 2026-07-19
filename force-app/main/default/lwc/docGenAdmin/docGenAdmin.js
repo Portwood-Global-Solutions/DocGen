@@ -8987,7 +8987,32 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.activePanel === 'query';
     }
     get showPanelSearch() {
-        return !this.isPanelWatermark && !this.isPanelHf && !this.isPanelVersions;
+        // The query panel's tree builder brings its own search box.
+        return !this.isPanelWatermark && !this.isPanelHf && !this.isPanelVersions && !this.isPanelQuery;
+    }
+
+    /** The query panel hosts the full visual builder — give it real width. */
+    get floatPanelClass() {
+        return this.isPanelQuery ? 'dg-float-panel dg-float-panel_wide' : 'dg-float-panel';
+    }
+
+    /** The visual builder works for SOQL-backed templates (V1 string or V3
+     *  tree). Apex-provider (V4) and Flow-JSON templates manage data in the
+     *  Edit modal instead. */
+    get designerQueryTreeAvailable() {
+        if (!this.editTemplateObject || this.editTemplateObject === 'FlowJsonData') {
+            return false;
+        }
+        const q = (this.editTemplateQuery || '').trim();
+        if (q.startsWith('{')) {
+            try {
+                const cfg = JSON.parse(q);
+                return cfg && cfg.v === 3;
+            } catch (e) {
+                return false;
+            }
+        }
+        return true;
     }
     get floatPanelTitle() {
         return {
