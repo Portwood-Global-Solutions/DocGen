@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.38.0 \u2014 Instant PDF previews + a smarter AI prompt",
+      "versionName": "v3.38.0 — Instant PDF previews + a smarter AI prompt",
       "versionNumber": "3.38.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.38 makes PDF Preview instant: your draft opens in a new browser tab in the native PDF viewer \u2014 nothing saved to Files. The AI creation prompt now teaches image sizing, barcodes, QR codes, and charts, and points your AI assistant at the full DocGen documentation. On the canvas, QR and barcode tags show at their true printed size, row heights drag smoothly, and saved HTML stays clean of editor artifacts. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.38 makes PDF Preview instant: your draft opens in a new browser tab in the native PDF viewer — nothing saved to Files. The AI creation prompt now teaches image sizing, barcodes, QR codes, and charts, and points your AI assistant at the full DocGen documentation. On the canvas, QR and barcode tags show at their true printed size, row heights drag smoothly, and saved HTML stays clean of editor artifacts. 100% native Salesforce — no external services or callouts. Free for all users.",
       "ancestorVersion": "3.37.0"
     }
   ],
@@ -202,6 +202,7 @@
     "Portwood DocGen Managed@3.34.0-1": "04tVx000000rEKzIAM",
     "Portwood DocGen Managed@3.35.0-1": "04tVx000000rEODIA2",
     "Portwood DocGen Managed@3.36.0-1": "04tVx000000rEPpIAM",
-    "Portwood DocGen Managed@3.37.0-1": "04tVx000000rEknIAE"
+    "Portwood DocGen Managed@3.37.0-1": "04tVx000000rEknIAE",
+    "Portwood DocGen Managed@3.38.0-1": "04tVx000000rEmPIAU"
   }
 }
