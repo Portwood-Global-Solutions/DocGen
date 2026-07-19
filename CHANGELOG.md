@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.38.0 — Instant PDF previews + a smarter AI prompt
+
+### Added
+
+- **PDF Preview opens live in a new tab** — the rendered draft streams back as data, becomes a `blob:` URL, and opens in the browser's native PDF viewer (thumbnails, zoom, print, download). Nothing is written to Files for normal-size previews; PDFs over ~4MB transparently fall back to the previous file-preview path. If a popup blocker intervenes, the button arms as "Open preview" for a guaranteed one-click open.
+- **The AI prompt now covers the whole engine** — explicit image-sizing rules (`{%asset:key:160x}` tokens, px-per-inch guidance, the unsized-image warning), barcode and QR syntax (`{*Field:qr:95}`, `code128`/`code39` with sizing, which format to pick, scannability placement), the `{#ChartBucket}` CSS-bars pattern, and a closing pointer to the full public UserGuide for anything the cheat sheet doesn't answer.
+- **Canvas parity for barcodes** — QR and barcode tags render as placeholder boxes at their declared print size on the designer canvas, so a ticket with a 95px QR lays out on screen the way it prints.
+- **Row heights drag smoothly** — the whole row boundary (±4px) is now a resize handle; previously only the sliver above the line worked.
+
+### Fixed
+
+- **Editor artifacts leaked into saved HTML** — hover-cursor styles (`cursor: row-resize` and friends) and Lightning's `lwc-*` scoping attributes are now scrubbed from every save.
+
+Validation: new Apex test for the data-mode preview (base64 returned, nothing persisted); blob-tab flow verified live in-browser on a real merged certificate.
+
 ## v3.37.0 — One visual query builder everywhere + first-class images
 
 ### Added

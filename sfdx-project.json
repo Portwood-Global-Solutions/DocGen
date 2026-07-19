@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.37.0 — One visual query builder everywhere + first-class images",
-      "versionNumber": "3.37.0.NEXT",
+      "versionName": "v3.38.0 \u2014 Instant PDF previews + a smarter AI prompt",
+      "versionNumber": "3.38.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.37 puts the visual query builder everywhere you build a document — the designer and the AI creation flow now use the same click-to-build tree as template setup, with parent lookups, related lists, and filters. Images in the designer are now first-class: drag them exactly where you want, resize from the corner, align left/center/right, and double-click to edit their tag. The toolbar stays put while your document scrolls. 100% native Salesforce — no external services or callouts. Free for all users.",
-      "ancestorVersion": "3.36.0"
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.38 makes PDF Preview instant: your draft opens in a new browser tab in the native PDF viewer \u2014 nothing saved to Files. The AI creation prompt now teaches image sizing, barcodes, QR codes, and charts, and points your AI assistant at the full DocGen documentation. On the canvas, QR and barcode tags show at their true printed size, row heights drag smoothly, and saved HTML stays clean of editor artifacts. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
+      "ancestorVersion": "3.37.0"
     }
   ],
   "name": "Portwood DocGen",
