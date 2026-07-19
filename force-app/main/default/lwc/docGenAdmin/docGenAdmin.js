@@ -4341,12 +4341,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // a provider-backed template land in the right mode immediately.
             this.editUseApexProvider = false;
             this._clearApexProviderState();
+            this.editUseVisualBuilder = false;
             try {
                 const cfg = row[F.QueryConfig] ? JSON.parse(row[F.QueryConfig]) : null;
                 if (cfg && cfg.v === 4 && cfg.provider) {
                     this.editUseApexProvider = true;
                     this.editUseVisualBuilder = false;
                     this._validateAndLoadProviderFields(cfg.provider);
+                } else if (cfg && cfg.v === 3) {
+                    // Tree-built config: open the visual builder directly —
+                    // raw V3 JSON in the manual box helps no one.
+                    this.editUseVisualBuilder = true;
                 }
             } catch (e) {
                 /* not JSON — manual or v1 */
