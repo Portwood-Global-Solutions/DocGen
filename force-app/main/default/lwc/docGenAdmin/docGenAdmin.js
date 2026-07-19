@@ -2507,20 +2507,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 getParentRelationships({ objectName: this.newTemplateObject })
             ]);
             const childFieldsByRel = {};
-            const parentFieldsByRel = {};
             const shape = extractQueryShape(this.newTemplateQuery, this.newTemplateObject);
-            await Promise.all(
-                this._parentRelsInQuery(shape).map(async (prel) => {
-                    const r = (parentRels || []).find((x) => x.value === prel);
-                    if (r) {
-                        try {
-                            parentFieldsByRel[prel] = await getObjectFields({ objectName: r.targetObject });
-                        } catch (e) {
-                            /* skip */
-                        }
-                    }
-                })
-            );
+            const { parentFieldsByRel, parentRelsByPath } = await this._prefetchParentMeta(shape, parentRels);
             await Promise.all(
                 (shape.children || []).map(async (c) => {
                     const rel = (rels || []).find((r) => r.value === c.relationshipName);
@@ -2541,7 +2529,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 rels: rels || [],
                 parentRels: parentRels || [],
                 childFieldsByRel,
-                parentFieldsByRel
+                parentFieldsByRel,
+                parentRelsByPath
             };
         } catch (e) {
             this.wizardQueryMeta = null;
@@ -2591,7 +2580,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (res.parentFields) {
             this.wizardQueryMeta = {
                 ...this.wizardQueryMeta,
-                parentFieldsByRel: { ...(this.wizardQueryMeta.parentFieldsByRel || {}), [res.rel]: res.parentFields }
+                parentFieldsByRel: { ...(this.wizardQueryMeta.parentFieldsByRel || {}), [res.rel]: res.parentFields },
+                parentRelsByPath: {
+                    ...(this.wizardQueryMeta.parentRelsByPath || {}),
+                    [res.rel]: res.parentRelsForPath || []
+                }
             };
         }
         this.newTemplateQuery = res.query;
@@ -8479,20 +8472,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 getParentRelationships({ objectName: this.editTemplateObject })
             ]);
             const childFieldsByRel = {};
-            const parentFieldsByRel = {};
             const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
-            await Promise.all(
-                this._parentRelsInQuery(shape).map(async (prel) => {
-                    const r = (parentRels || []).find((x) => x.value === prel);
-                    if (r) {
-                        try {
-                            parentFieldsByRel[prel] = await getObjectFields({ objectName: r.targetObject });
-                        } catch (e) {
-                            /* skip */
-                        }
-                    }
-                })
-            );
+            const { parentFieldsByRel, parentRelsByPath } = await this._prefetchParentMeta(shape, parentRels);
             await Promise.all(
                 (shape.children || []).map(async (c) => {
                     const rel = (rels || []).find((r) => r.value === c.relationshipName);
@@ -8513,7 +8494,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 rels: rels || [],
                 parentRels: parentRels || [],
                 childFieldsByRel,
-                parentFieldsByRel
+                parentFieldsByRel,
+                parentRelsByPath
             };
         } catch (e) {
             this.designerQueryMeta = null;
@@ -8521,16 +8503,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Shared: checkbox sections from a describe meta + a V1 query string. */
-    /** Parent rels referenced by the query's dot-path fields (first segment). */
+    /** Every relationship path the query's dot-path fields traverse, at every
+     *  depth, shallow-first: Account.Owner.Name -> ['Account','Account.Owner']. */
     _parentRelsInQuery(shape) {
         const rels = new Set();
         for (const pf of shape.parentFields || []) {
-            const seg = pf.split('.')[0];
-            if (seg) {
-                rels.add(seg);
+            const segs = pf.split('.');
+            for (let i = 1; i < segs.length; i++) {
+                rels.add(segs.slice(0, i).join('.'));
             }
         }
-        return [...rels];
+        return [...rels].sort((a, b) => a.split('.').length - b.split('.').length);
+    }
+
+    /** Field lists + onward lookups for every parent path in the query —
+     *  resolved hop by hop so any depth reloads correctly. */
+    async _prefetchParentMeta(shape, baseParentRels) {
+        const parentFieldsByRel = {};
+        const parentRelsByPath = {};
+        for (const path of this._parentRelsInQuery(shape)) {
+            const segs = path.split('.');
+            const upPath = segs.slice(0, -1).join('.');
+            const relsList = segs.length === 1 ? baseParentRels || [] : parentRelsByPath[upPath] || [];
+            const r = relsList.find((x) => x.value === segs[segs.length - 1]);
+            if (!r) {
+                continue;
+            }
+            try {
+                const [flds, prels] = await Promise.all([
+                    getObjectFields({ objectName: r.targetObject }),
+                    getParentRelationships({ objectName: r.targetObject })
+                ]);
+                parentFieldsByRel[path] = flds || [];
+                parentRelsByPath[path] = prels || [];
+            } catch (e) {
+                /* skip */
+            }
+        }
+        return { parentFieldsByRel, parentRelsByPath };
     }
 
     _buildQuerySections(query, objectName, meta, search) {
@@ -8554,29 +8564,49 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     api: f.value,
                     checked: baseSet.has(f.value.toLowerCase()),
                     kind: 'base',
-                    rel: ''
+                    rel: '',
+                    target: ''
                 }))
         });
         // Parent records already traversed by the query (Account.Name, ...):
         // one section per lookup, checkboxes emit dot-paths.
         const parentFieldSet = new Set((shape.parentFields || []).map((f) => f.toLowerCase()));
         const parentFieldsByRel = meta.parentFieldsByRel || {};
+        const parentRelsByPath = meta.parentRelsByPath || {};
+        const pathsInQuery = new Set(this._parentRelsInQuery(shape));
         for (const prel of this._parentRelsInQuery(shape)) {
             const pf = parentFieldsByRel[prel] || [];
-            sections.push({
-                key: 'prel_' + prel,
-                label: prel + ' (parent record)',
-                rows: pf
-                    .filter((f) => !SKIP.test(f.value) && match(f.label, prel + '.' + f.value))
-                    .map((f) => ({
-                        key: 'p_' + prel + '_' + f.value,
-                        label: f.label,
-                        api: f.value,
-                        checked: parentFieldSet.has((prel + '.' + f.value).toLowerCase()),
-                        kind: 'parent',
-                        rel: prel
-                    }))
-            });
+            const rows = pf
+                .filter((f) => !SKIP.test(f.value) && match(f.label, prel + '.' + f.value))
+                .map((f) => ({
+                    key: 'p_' + prel + '_' + f.value,
+                    label: f.label,
+                    api: f.value,
+                    checked: parentFieldSet.has((prel + '.' + f.value).toLowerCase()),
+                    kind: 'parent',
+                    rel: prel,
+                    target: ''
+                }));
+            // Keep going up: this parent's own lookups (tree-builder style),
+            // until SOQL's 5-hop relationship ceiling.
+            if (prel.split('.').length < 5) {
+                for (const r of parentRelsByPath[prel] || []) {
+                    const nested = prel + '.' + r.value;
+                    if (pathsInQuery.has(nested) || !match(r.label, nested)) {
+                        continue;
+                    }
+                    rows.push({
+                        key: 'pr_' + nested,
+                        label: '\u2191 ' + r.label + ' (' + nested + '.\u2026)',
+                        api: r.value,
+                        checked: false,
+                        kind: 'prel',
+                        rel: nested,
+                        target: r.targetObject
+                    });
+                }
+            }
+            sections.push({ key: 'prel_' + prel, label: prel + ' (parent record)', rows });
         }
         for (const c of shape.children || []) {
             const cf = meta.childFieldsByRel[c.relationshipName] || [];
@@ -8592,7 +8622,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         api: f.value,
                         checked: inSet.has(f.value.toLowerCase()),
                         kind: 'child',
-                        rel: c.relationshipName
+                        rel: c.relationshipName,
+                        target: ''
                     }))
             });
         }
@@ -8616,7 +8647,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     api: r.value,
                     checked: false,
                     kind: 'prel',
-                    rel: r.value
+                    rel: r.value,
+                    target: r.targetObject
                 }))
             });
         }
@@ -8630,7 +8662,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     api: r.value,
                     checked: false,
                     kind: 'rel',
-                    rel: r.value
+                    rel: r.value,
+                    target: ''
                 }))
             });
         }
@@ -8640,13 +8673,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     /** Shared: apply a checkbox toggle to a V1 query string. Returns
      *  { query, childFields } — childFields set when a new rel was seeded. */
     async _applyQueryToggle(query, objectName, meta, dataset, on) {
-        const { kind, api, rel } = dataset;
+        const { kind, api, rel, target } = dataset;
         const shape = extractQueryShape(query, objectName);
         const base = [...(shape.baseFields || [])];
         const parents = [...(shape.parentFields || [])];
         let children = (shape.children || []).map((c) => ({ rel: c.relationshipName, fields: [...c.fields] }));
         let childFields = null;
         let parentFields = null;
+        let parentRelsForPath = null;
         if (kind === 'base') {
             const idx = base.findIndex((f) => f.toLowerCase() === api.toLowerCase());
             if (on && idx === -1) {
@@ -8676,10 +8710,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 parents.splice(idx, 1);
             }
         } else if (kind === 'prel' && on) {
-            const relMeta = (meta.parentRels || []).find((r) => r.value === rel);
-            if (relMeta) {
+            if (target) {
                 try {
-                    parentFields = (await getObjectFields({ objectName: relMeta.targetObject })) || [];
+                    const [flds, prels] = await Promise.all([
+                        getObjectFields({ objectName: target }),
+                        getParentRelationships({ objectName: target })
+                    ]);
+                    parentFields = flds || [];
+                    parentRelsForPath = prels || [];
                 } catch (e) {
                     parentFields = [];
                 }
@@ -8715,7 +8753,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         for (const c of children) {
             parts.push('(SELECT ' + c.fields.join(', ') + ' FROM ' + c.rel + ')');
         }
-        return { query: parts.join(', '), childFields, parentFields, rel };
+        return { query: parts.join(', '), childFields, parentFields, parentRelsForPath, rel };
     }
 
     /** Sections of checkbox rows driven by describe + the CURRENT query. */
@@ -8749,7 +8787,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (res.parentFields) {
             this.designerQueryMeta = {
                 ...this.designerQueryMeta,
-                parentFieldsByRel: { ...(this.designerQueryMeta.parentFieldsByRel || {}), [res.rel]: res.parentFields }
+                parentFieldsByRel: { ...(this.designerQueryMeta.parentFieldsByRel || {}), [res.rel]: res.parentFields },
+                parentRelsByPath: {
+                    ...(this.designerQueryMeta.parentRelsByPath || {}),
+                    [res.rel]: res.parentRelsForPath || []
+                }
             };
         }
         this.editTemplateQuery = res.query;
