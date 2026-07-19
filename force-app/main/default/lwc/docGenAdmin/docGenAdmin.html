@@ -788,33 +788,26 @@
                                 </div>
                                 <div style="display: flex; align-items: center; gap: 16px">
                                     <template if:false={useApexProvider}>
-                                        <template if:false={queryIsV3}>
-                                            <span></span>
-                                        </template>
-                                    </template>
-                                    <template if:false={useApexProvider}>
-                                        <template if:true={queryIsV3}>
-                                            <a
-                                                href="javascript:void(0)"
-                                                onclick={toggleVisualBuilder}
-                                                style="
-                                                    font-size: 0.82rem;
-                                                    color: #7c3aed;
-                                                    text-decoration: none;
-                                                    display: flex;
-                                                    align-items: center;
-                                                    gap: 4px;
-                                                "
-                                            >
-                                                <lightning-icon
-                                                    icon-name={visualBuilderToggleIcon}
-                                                    size="xx-small"
-                                                    style="--sds-c-icon-color-foreground-default: #7c3aed"
-                                                ></lightning-icon>
-                                                <template if:false={useVisualBuilder}>Open tree builder</template>
-                                                <template if:true={useVisualBuilder}>Switch to manual query</template>
-                                            </a>
-                                        </template>
+                                        <a
+                                            href="javascript:void(0)"
+                                            onclick={toggleVisualBuilder}
+                                            style="
+                                                font-size: 0.82rem;
+                                                color: #7c3aed;
+                                                text-decoration: none;
+                                                display: flex;
+                                                align-items: center;
+                                                gap: 4px;
+                                            "
+                                        >
+                                            <lightning-icon
+                                                icon-name={visualBuilderToggleIcon}
+                                                size="xx-small"
+                                                style="--sds-c-icon-color-foreground-default: #7c3aed"
+                                            ></lightning-icon>
+                                            <template if:false={useVisualBuilder}>Try our visual builder</template>
+                                            <template if:true={useVisualBuilder}>Switch to manual query</template>
+                                        </a>
                                     </template>
                                     <a
                                         href="javascript:void(0)"
@@ -3272,32 +3265,30 @@
                                     <template if:false={isEditFlowDataSource}>
                                         <div style="display: flex; align-items: center; gap: 16px">
                                             <template if:false={editUseApexProvider}>
-                                                <template if:true={editQueryIsV3}>
-                                                    <a
-                                                        href="javascript:void(0)"
-                                                        onclick={toggleEditVisualBuilder}
-                                                        style="
-                                                            font-size: 0.82rem;
-                                                            color: #7c3aed;
-                                                            text-decoration: none;
-                                                            display: flex;
-                                                            align-items: center;
-                                                            gap: 4px;
-                                                        "
+                                                <a
+                                                    href="javascript:void(0)"
+                                                    onclick={toggleEditVisualBuilder}
+                                                    style="
+                                                        font-size: 0.82rem;
+                                                        color: #7c3aed;
+                                                        text-decoration: none;
+                                                        display: flex;
+                                                        align-items: center;
+                                                        gap: 4px;
+                                                    "
+                                                >
+                                                    <lightning-icon
+                                                        icon-name={editVisualBuilderToggleIcon}
+                                                        size="xx-small"
+                                                        style="--sds-c-icon-color-foreground-default: #7c3aed"
+                                                    ></lightning-icon>
+                                                    <template if:false={editUseVisualBuilder}
+                                                        >Try our visual builder</template
                                                     >
-                                                        <lightning-icon
-                                                            icon-name={editVisualBuilderToggleIcon}
-                                                            size="xx-small"
-                                                            style="--sds-c-icon-color-foreground-default: #7c3aed"
-                                                        ></lightning-icon>
-                                                        <template if:false={editUseVisualBuilder}
-                                                            >Open tree builder</template
-                                                        >
-                                                        <template if:true={editUseVisualBuilder}
-                                                            >Switch to manual query</template
-                                                        >
-                                                    </a>
-                                                </template>
+                                                    <template if:true={editUseVisualBuilder}
+                                                        >Switch to manual query</template
+                                                    >
+                                                </a>
                                             </template>
                                             <a
                                                 href="javascript:void(0)"

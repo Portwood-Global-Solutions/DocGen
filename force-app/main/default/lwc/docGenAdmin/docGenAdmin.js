@@ -2703,19 +2703,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    /** The tree builder is only offered for configs that NEED it (V3 JSON).
-     *  Plain queries use the create-path builder: textarea + suggestions +
-     *  the live pills preview. */
-    get queryIsV3() {
-        const q = (this.newTemplateQuery || '').trim();
-        return q.startsWith('{') && q.includes('"v":3');
-    }
-
-    get editQueryIsV3() {
-        const q = (this.editTemplateQuery || '').trim();
-        return (q.startsWith('{') && q.includes('"v":3')) || this.editUseVisualBuilder;
-    }
-
     toggleEditApexProvider() {
         this.editUseApexProvider = !this.editUseApexProvider;
         if (this.editUseApexProvider) {
@@ -4354,17 +4341,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // a provider-backed template land in the right mode immediately.
             this.editUseApexProvider = false;
             this._clearApexProviderState();
-            this.editUseVisualBuilder = false;
             try {
                 const cfg = row[F.QueryConfig] ? JSON.parse(row[F.QueryConfig]) : null;
                 if (cfg && cfg.v === 4 && cfg.provider) {
                     this.editUseApexProvider = true;
                     this.editUseVisualBuilder = false;
                     this._validateAndLoadProviderFields(cfg.provider);
-                } else if (cfg && cfg.v === 3) {
-                    // Tree-built config: raw JSON in the manual box helps no
-                    // one — open the tree so it stays editable.
-                    this.editUseVisualBuilder = true;
                 }
             } catch (e) {
                 /* not JSON — manual or v1 */
