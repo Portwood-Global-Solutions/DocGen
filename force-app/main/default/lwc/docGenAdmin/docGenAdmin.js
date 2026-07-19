@@ -6616,6 +6616,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (event.clientY >= rect.bottom - 4 && event.clientY <= rect.bottom + 4) {
             return { kind: 'row', cell };
         }
+        // Just BELOW a boundary the pointer is on the next cell's top — grab
+        // the previous row so the whole boundary (±4px) is a handle.
+        if (event.clientY <= rect.top + 4) {
+            const row = cell.parentElement;
+            const prev = row && row.previousElementSibling;
+            if (prev && prev.tagName === 'TR' && prev.cells && prev.cells.length) {
+                return { kind: 'row', cell: prev.cells[0] };
+            }
+        }
         return null;
     }
 
@@ -7399,6 +7408,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     pill.setAttribute('contenteditable', 'false');
                     pill.textContent = part;
                     pill.style.cssText = this._pillStyleFor(part);
+                    this._sizeBarcodePill(pill, part);
                     frag.appendChild(pill);
                 } else if (part) {
                     frag.appendChild(doc.createTextNode(part));
@@ -7406,6 +7416,35 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             node.parentNode.replaceChild(frag, node);
         }
+    }
+
+    /** Barcode/QR pills occupy their rendered footprint on the canvas so the
+     *  page's proportions match the PDF ({*Id:qr:95} = a 95px square, not a
+     *  small chip). Placeholder box only — the real code renders in the PDF. */
+    _sizeBarcodePill(pill, tagText) {
+        const m = /^\{\*([^:}]+)(?::(qr|code128|code39))?(?::(\d+)(?:x(\d+))?)?\}$/i.exec((tagText || '').trim());
+        if (!m) {
+            return;
+        }
+        const kind = (m[2] || 'qr').toLowerCase();
+        let w;
+        let h;
+        if (kind === 'qr') {
+            w = parseInt(m[3], 10) || 120;
+            h = w;
+        } else {
+            w = parseInt(m[3], 10) || 280;
+            h = parseInt(m[4], 10) || 60;
+        }
+        pill.style.display = 'inline-block';
+        pill.style.width = w + 'px';
+        pill.style.height = h + 'px';
+        pill.style.lineHeight = h + 'px';
+        pill.style.textAlign = 'center';
+        pill.style.overflow = 'hidden';
+        pill.style.fontSize = '10px';
+        pill.style.background = 'repeating-linear-gradient(90deg, #e6e2f5 0 3px, #f6f4fc 3px 6px)';
+        pill.style.borderStyle = 'dashed';
     }
 
     _pillStyleFor(tagText) {
@@ -7891,6 +7930,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 el.removeAttribute('style');
             }
         }
+        // Hover-cursor styles (col/row-resize, grab) and LWC's scoping
+        // attributes are editor residue — scrub both from the whole tree.
+        for (const el of root.querySelectorAll('*')) {
+            if (el.style && el.style.cursor) {
+                el.style.cursor = '';
+                if (!el.getAttribute('style')) {
+                    el.removeAttribute('style');
+                }
+            }
+            for (const attr of [...el.attributes]) {
+                if (attr.name.startsWith('lwc-')) {
+                    el.removeAttribute(attr.name);
+                }
+            }
+        }
         for (const pill of root.querySelectorAll('[data-dg-tag]')) {
             const attr = pill.getAttribute('data-dg-tag');
             const doc = root.ownerDocument || document;
@@ -7900,7 +7954,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // value prints with it.
             const st = pill.style;
             const kept = [];
-            if (pill.tagName !== 'IMG') {
+            // Barcode pills carry placeholder-box styling (size, 10px label) —
+            // none of it is user formatting; never serialize it.
+            const isBarcodePill = (tag || '').trim().startsWith('{*');
+            if (pill.tagName !== 'IMG' && !isBarcodePill) {
                 if (st.fontWeight) kept.push(['font-weight', st.fontWeight]);
                 if (st.fontStyle) kept.push(['font-style', st.fontStyle]);
                 if (st.textDecorationLine) kept.push(['text-decoration', st.textDecorationLine]);
