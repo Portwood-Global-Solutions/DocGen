@@ -618,36 +618,13 @@
                                         These become the merge tags the AI is allowed to use — the prompt updates as you
                                         tick.
                                     </p>
-                                    <div class="dg-ai-fieldbox slds-var-m-bottom_small">
-                                        <input
-                                            type="search"
-                                            class="dg-panel-search"
-                                            placeholder="Search your object's fields..."
-                                            oninput={handleAiFieldSearch}
-                                            autocomplete="off"
-                                        />
-                                        <div class="dg-ai-fieldlist">
-                                            <template for:each={aiQuerySections} for:item="qsec">
-                                                <div key={qsec.key} class="dg-tag-section">
-                                                    <div class="dg-tag-section-label">{qsec.label}</div>
-                                                    <template for:each={qsec.rows} for:item="qrow">
-                                                        <label key={qrow.key} class="dg-qf-row">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={qrow.checked}
-                                                                data-kind={qrow.kind}
-                                                                data-api={qrow.api}
-                                                                data-rel={qrow.rel}
-                                                                data-target={qrow.target}
-                                                                onchange={handleAiQueryFieldToggle}
-                                                            />
-                                                            <span class="dg-qf-label">{qrow.label}</span>
-                                                            <span class="dg-qf-api">{qrow.api}</span>
-                                                        </label>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
+                                    <div class="slds-var-m-bottom_small">
+                                        <c-doc-gen-tree-builder
+                                            selected-object={newTemplateObject}
+                                            query-config={newTemplateQuery}
+                                            onconfigchange={handleConfigChange}
+                                        >
+                                        </c-doc-gen-tree-builder>
                                     </div>
                                     <div class="dg-ai-step-head slds-var-m-top_small">
                                         <span class="dg-ai-step-num">2</span>
