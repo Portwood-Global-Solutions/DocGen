@@ -533,8 +533,18 @@ export function buildAiPrompt(shape, options) {
         lines.push('');
         lines.push('SHARED IMAGE ASSETS (already stored in Salesforce — reference by tag, do NOT invent image URLs):');
         for (const a of assets) {
-            lines.push(`  - ${a.mergeTag} — ${a.name}. Place as e.g. <td style="width:120pt">${a.mergeTag}</td>.`);
+            const sizedExample = a.mergeTag.replace(/\}$/, ':160x}');
+            lines.push(
+                `  - ${a.mergeTag} — ${a.name}. Example placement: <td style="width:170pt">${sizedExample}</td>.`
+            );
         }
+        lines.push('  IMAGE SIZING (critical — an unsized image renders at full resolution and can swallow the page):');
+        lines.push(
+            '  ALWAYS put a size token INSIDE the tag: {%asset:key:160x} = 160px wide (height auto), {%asset:key:x80} = 80px tall, {%asset:key:200x80} = exact 200x80px. Pick px sizes for print: ~96px per inch (a 1.5in logo = 144x).'
+        );
+        lines.push(
+            '  Do NOT rely on CSS width/height on the tag or a wrapper to size these images — the size token is what the PDF engine honors. CSS on the surrounding cell only reserves layout space.'
+        );
     }
     lines.push('');
     lines.push('WHAT I WANT THIS DOCUMENT TO BE:');
