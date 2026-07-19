@@ -1609,6 +1609,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             if (pill && pill.getAttribute('contenteditable') !== 'true') {
                                 e.preventDefault();
                                 this._openPillMenu(pill);
+                            } else if (!pill && e.target && e.target.tagName === 'IMG') {
+                                // Plain body image: toolbar target (align etc.)
+                                // without a pill menu.
+                                this._activePill = e.target;
+                                this.pillMenu = null;
                             } else if (!pill) {
                                 this.pillMenu = null;
                                 this._activePill = null;
@@ -7158,6 +7163,23 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (cmd === 'insertUnorderedList' || cmd === 'insertOrderedList') {
             this._toggleListAtCaret(cmd === 'insertOrderedList');
             return;
+        }
+        // Alignment on a clicked image: align the block that holds it —
+        // pure text-align, CSS 2.1-safe, exactly what the PDF engine honors.
+        if (/^justify(Left|Center|Right)$/.test(cmd)) {
+            const target = this._activePill;
+            if (target && target.isConnected && target.tagName === 'IMG') {
+                const dir = cmd === 'justifyLeft' ? 'left' : cmd === 'justifyRight' ? 'right' : 'center';
+                const blk =
+                    target.parentElement && target.parentElement.closest
+                        ? target.parentElement.closest('p, div, h1, h2, h3, h4, td, th, li')
+                        : null;
+                if (blk) {
+                    blk.style.textAlign = dir;
+                    this.htmlEditorDirty = true;
+                    return;
+                }
+            }
         }
         // Merge-tag pills in the selection take the format directly —
         // execCommand can't reach inside contenteditable=false atoms, and on a
