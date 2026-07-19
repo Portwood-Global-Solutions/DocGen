@@ -4,7 +4,7 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.36.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.37.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
@@ -18,10 +18,10 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 ## Install
 
 ```bash
-sf package install --package 04tVx000000rEPpIAM --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000rEknIAE --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rEPpIAM) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rEPpIAM)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rEknIAE) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rEknIAE)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -371,7 +371,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.36.0 — merge tags style like text**: tags in the visual designer inherit the surrounding font, size, and color, take toolbar formatting directly, and a Google-Docs-style point-size box replaces the old size presets. Recent releases: **v3.35.0** brought Excel-level table editing (drag-resize any table, multi-cell fill/merge, border width and color pickers), watermarks that render on HTML-template PDFs with an upload-time strength setting, scan-verified barcodes, and a landscape Certificate starter; **v3.34.0** introduced the HTML-first template wizard and the visual Template Designer (Beta) — starter gallery, AI prompt kit, and a WYSIWYG page editor with merge-tag pills.
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.37.0 — one visual query builder everywhere**: the click-to-build query tree now powers the designer's Query panel and the Generate-with-AI step (parent lookups at any depth, filtered related lists, live-updating AI prompt), and designer images are first-class — drag to place, corner-resize, align, double-click to edit the tag. Before that: **v3.36.0 — merge tags style like text**: tags in the visual designer inherit the surrounding font, size, and color, take toolbar formatting directly, and a Google-Docs-style point-size box replaces the old size presets. Recent releases: **v3.35.0** brought Excel-level table editing (drag-resize any table, multi-cell fill/merge, border width and color pickers), watermarks that render on HTML-template PDFs with an upload-time strength setting, scan-verified barcodes, and a landscape Certificate starter; **v3.34.0** introduced the HTML-first template wizard and the visual Template Designer (Beta) — starter gallery, AI prompt kit, and a WYSIWYG page editor with merge-tag pills.
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +444,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.36.0 | **Latest (Released)**                   | `04tVx000000rEPpIAM` |
+| v3.37.0 | **Latest (Released)**                   | `04tVx000000rEknIAE` |
+| v3.36.0 | Released                                | `04tVx000000rEPpIAM` |
 | v3.35.0 | Released                                | `04tVx000000rEODIA2` |
 | v3.34.0 | Released                                | `04tVx000000rEKzIAM` |
 | v3.33.0 | Released                                | `04tVx000000qjDxIAI` |
