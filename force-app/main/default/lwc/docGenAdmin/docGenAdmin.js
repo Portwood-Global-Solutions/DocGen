@@ -6983,7 +6983,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
             li.innerHTML = blk.innerHTML || 'List item';
             list.appendChild(li);
-            blk.replaceWith(list);
+            this._safeReplace(blk, list);
             placeCaret(li);
         }
         this.htmlEditorDirty = true;
@@ -7376,6 +7376,28 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * be deleted whole, never half-mangled. Walks TEXT nodes only, so tags
      * inside attributes are untouched.
      */
+    /**
+     * ChildNode.replaceWith is MISSING on LWS-proxied nodes inside the
+     * MANAGED PACKAGE's namespace sandbox (fine in source-deployed orgs —
+     * which is why it passed every scratch-org test and then threw
+     * "t.replaceWith is not a function" for subscribers, hanging the
+     * designer). replaceChild via the parent works everywhere.
+     */
+    _safeReplace(node, replacement) {
+        try {
+            if (typeof node.replaceWith === 'function') {
+                node.replaceWith(replacement);
+                return;
+            }
+        } catch (e) {
+            /* fall through to replaceChild */
+        }
+        const parent = node.parentNode;
+        if (parent) {
+            parent.replaceChild(replacement, node);
+        }
+    }
+
     _pillifyTags(root) {
         const doc = root.ownerDocument || document;
         // Repair pass: flatten any pill-inside-pill layering left behind by
@@ -7383,7 +7405,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         let nested = root.querySelectorAll('[data-dg-tag] [data-dg-tag]');
         while (nested.length) {
             for (const inner of nested) {
-                inner.replaceWith(doc.createTextNode(inner.textContent));
+                this._safeReplace(inner, doc.createTextNode(inner.textContent));
             }
             nested = root.querySelectorAll('[data-dg-tag] [data-dg-tag]');
         }
@@ -7751,7 +7773,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             span.setAttribute('contenteditable', 'false');
             span.textContent = imgTag;
             span.style.cssText = this._pillStyleFor(imgTag);
-            pill.replaceWith(span);
+            this._safeReplace(pill, span);
             pill = span;
         }
         pill.setAttribute('contenteditable', 'true');
@@ -7919,7 +7941,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 const tag = (pill.textContent || '').trim();
                 const img = this._assetImgFor(tag, doc);
                 if (img) {
-                    pill.replaceWith(img);
+                    this._safeReplace(pill, img);
                 }
             }
         } catch (e) {
@@ -7973,7 +7995,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 if (st.fontSize) kept.push(['font-size', st.fontSize]);
             }
             if (!kept.length) {
-                pill.replaceWith(doc.createTextNode(tag));
+                this._safeReplace(pill, doc.createTextNode(tag));
                 continue;
             }
             const parent = pill.parentElement;
@@ -7985,14 +8007,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 for (const [prop, val] of kept) {
                     parent.style.setProperty(prop, val);
                 }
-                pill.replaceWith(doc.createTextNode(tag));
+                this._safeReplace(pill, doc.createTextNode(tag));
             } else {
                 const wrap = doc.createElement('span');
                 for (const [prop, val] of kept) {
                     wrap.style.setProperty(prop, val);
                 }
                 wrap.textContent = tag;
-                pill.replaceWith(wrap);
+                this._safeReplace(pill, wrap);
             }
         }
     }
