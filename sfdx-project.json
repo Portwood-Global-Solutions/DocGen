@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.39.0 \u2014 Designer reliability fix for subscriber orgs",
+      "versionName": "v3.39.0 — Designer reliability fix for subscriber orgs",
       "versionNumber": "3.39.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.39 is a fast reliability fix for the visual Template Designer in installed orgs: starter templates no longer freeze, switching between Visual and Source keeps your changes, and every edit saves dependably. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.39 is a fast reliability fix for the visual Template Designer in installed orgs: starter templates no longer freeze, switching between Visual and Source keeps your changes, and every edit saves dependably. 100% native Salesforce — no external services or callouts. Free for all users.",
       "ancestorVersion": "3.38.0"
     }
   ],
@@ -203,6 +203,7 @@
     "Portwood DocGen Managed@3.35.0-1": "04tVx000000rEODIA2",
     "Portwood DocGen Managed@3.36.0-1": "04tVx000000rEPpIAM",
     "Portwood DocGen Managed@3.37.0-1": "04tVx000000rEknIAE",
-    "Portwood DocGen Managed@3.38.0-1": "04tVx000000rEmPIAU"
+    "Portwood DocGen Managed@3.38.0-1": "04tVx000000rEmPIAU",
+    "Portwood DocGen Managed@3.39.0-1": "04tVx000000rGkzIAE"
   }
 }
