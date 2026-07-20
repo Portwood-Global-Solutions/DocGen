@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.39.0 — Designer reliability fix for subscriber orgs
+
+### Fixed
+
+- **The visual designer misbehaved in installed (subscriber) orgs while working perfectly in development** — Lightning Web Security's namespace sandbox for managed packages omits `ChildNode.replaceWith` on proxied DOM nodes, which the designer used in seven hot paths. Community report (thank you, Jarrod!): starter templates froze with `TypeError: t.replaceWith is not a function`, switching Visual → Source lost changes, and added elements didn't save. All DOM replacement now uses a sandbox-safe fallback.
+- **Saves decide by content, not a flag** — the designer's Save as New Version now serializes the live canvas and stages whenever content actually differs from the last staged body, so a missed input event can never silently drop edits behind a success message.
+
 ## v3.38.0 — Instant PDF previews + a smarter AI prompt
 
 ### Added

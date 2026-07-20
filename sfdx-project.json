@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.38.0 — Instant PDF previews + a smarter AI prompt",
-      "versionNumber": "3.38.0.NEXT",
+      "versionName": "v3.39.0 \u2014 Designer reliability fix for subscriber orgs",
+      "versionNumber": "3.39.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.38 makes PDF Preview instant: your draft opens in a new browser tab in the native PDF viewer — nothing saved to Files. The AI creation prompt now teaches image sizing, barcodes, QR codes, and charts, and points your AI assistant at the full DocGen documentation. On the canvas, QR and barcode tags show at their true printed size, row heights drag smoothly, and saved HTML stays clean of editor artifacts. 100% native Salesforce — no external services or callouts. Free for all users.",
-      "ancestorVersion": "3.37.0"
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.39 is a fast reliability fix for the visual Template Designer in installed orgs: starter templates no longer freeze, switching between Visual and Source keeps your changes, and every edit saves dependably. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
+      "ancestorVersion": "3.38.0"
     }
   ],
   "name": "Portwood DocGen",
