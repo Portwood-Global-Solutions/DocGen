@@ -4832,10 +4832,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         // Designer: unapplied visual/source edits fold into the staged body
         // automatically — "Save as New Version" saves what you're looking at,
-        // no separate Apply click required.
-        if (this.activeMainTab === 'design' && this.htmlEditorDirty && this.editTemplateType === 'HTML') {
+        // no separate Apply click required. The dirty FLAG is advisory only:
+        // the decision is a CONTENT comparison against the last staged body,
+        // so a missed input event can never silently drop edits (the
+        // "saved successfully but changes gone on reload" class of report).
+        if (this.activeMainTab === 'design' && this.editTemplateType === 'HTML') {
             const draft = (this._currentDraftHtml() || '').trim();
-            if (draft) {
+            const lastStaged = (this._lastUploadedHtmlText || '').trim();
+            // Whitespace-insensitive: serialize/pretty-print round-trips shift
+            // formatting without changing the document.
+            const norm = (x) => x.replace(/>\s+</g, '><').replace(/\s+/g, ' ').trim();
+            if (draft && (this.htmlEditorDirty || norm(draft) !== norm(lastStaged))) {
                 try {
                     const base = (this.uploadedFileName || 'template.html').replace(/\.(html?|zip)$/i, '');
                     await this._processAndSaveHtmlBody(this.editTemplateId, draft, base + '.html', null, 'editor');
