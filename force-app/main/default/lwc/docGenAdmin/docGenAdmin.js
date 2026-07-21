@@ -1582,6 +1582,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         pv.style.cursor = 'text';
                         // Merge tags render as friendly atomic pills.
                         this._pillifyTags(pv);
+                        // The page's scoped <style> lives INSIDE the editable —
+                        // native editing can caret next to it and delete it,
+                        // which drops the white page styling ("canvas
+                        // disappears"). Track it so keydown can steer the
+                        // caret off it and input can put it back.
+                        this._pvStyleEl = pv.querySelector('style');
                         // Drag targets: tag chips and image thumbnails drop
                         // exactly where the user points — with a live insertion
                         // marker so the drop point is never a guess.
@@ -1598,6 +1604,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // Live dirty signal while typing in the page — and
                         // type-to-pill: a completed {tag} snaps into a pill.
                         pv.addEventListener('input', () => {
+                            this._healCanvasStyle(pv);
                             this.htmlEditorDirty = true;
                             this._maybePillifyTyped();
                             // Notion-style: "/" at the caret opens the insert menu.
@@ -1718,6 +1725,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             this._canvasFocused = true;
                         });
                         pv.addEventListener('keydown', (e) => {
+                            // A top-left-corner click parks the caret at the
+                            // canvas ROOT, before the scoped <style> — there,
+                            // Space types nowhere visible and Backspace eats
+                            // the style element (the white page vanishes).
+                            // Steer the caret into real content BEFORE the
+                            // browser's default edit runs.
+                            this._normalizeRootCaret(pv);
                             // Open slash menu drives arrows/Enter/Escape.
                             if (this._slashMenuKeydown(e)) {
                                 return;
@@ -7849,6 +7863,63 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * Type-to-pill: when typing in the page completes a {tag} in a plain
      * text node, snap it into a pill and put the caret right after it.
      */
+    /**
+     * The page's scoped <style> is the canvas's first child INSIDE the
+     * contenteditable — if a native edit (select-all delete, cut, backspace
+     * from the root) removes it, the white page styling vanishes with it.
+     * Reattach it at the top whenever it goes missing.
+     */
+    _healCanvasStyle(pv) {
+        try {
+            const st = this._pvStyleEl;
+            if (st && !pv.contains(st)) {
+                pv.insertBefore(st, pv.firstChild);
+            }
+        } catch (e) {
+            /* best effort */
+        }
+    }
+
+    /**
+     * Clicking the page's top-left corner (or Ctrl+Home in some engines)
+     * collapses the selection at the canvas ROOT, at or before the scoped
+     * <style> node. From there Space inserts nothing visible and Backspace
+     * consumes the style element ("the whole white canvas disappears" —
+     * community report, Edge). Move such a caret to the start of the first
+     * real content node so native editing always acts on content.
+     */
+    _normalizeRootCaret(pv) {
+        try {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount || !sel.isCollapsed || sel.anchorNode !== pv) {
+                return;
+            }
+            const st = this._pvStyleEl;
+            const styleIdx = st && pv.contains(st) ? Array.prototype.indexOf.call(pv.childNodes, st) : -1;
+            if (sel.anchorOffset > styleIdx + 1) {
+                return;
+            }
+            let target = null;
+            for (let i = styleIdx + 1; i < pv.childNodes.length; i++) {
+                const n = pv.childNodes[i];
+                if (n.nodeType === 1 || (n.nodeType === 3 && n.nodeValue.trim())) {
+                    target = n;
+                    break;
+                }
+            }
+            if (!target) {
+                return;
+            }
+            const r = document.createRange();
+            r.setStart(target, 0);
+            r.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(r);
+        } catch (e) {
+            /* best effort */
+        }
+    }
+
     _maybePillifyTyped() {
         try {
             const sel = window.getSelection();
