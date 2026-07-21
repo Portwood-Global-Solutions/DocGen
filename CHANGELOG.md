@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.40.0 — Designer canvas stability (top-left backspace)
+
+### Fixed
+
+- **Backspace at the page's top-left corner made the whole white canvas disappear** — the page's scoped `<style>` element is the first child inside the editable canvas, and a corner click parks the caret at the canvas root next to it: from there Backspace consumed the style node (dropping the white page background, padding, and shadow) and Space typed nowhere visible. Community report (Edge, but engine-dependent — all templates affected). Two guards now make it impossible: a root-parked caret is steered into the first real content block before any edit runs, and if any editing operation still removes the style node the next input event reinserts it immediately.
+
+LWC-only release — no server-side changes. Verified live: root-caret Backspace/Space at both dangerous offsets leave the page intact and type into the first paragraph; a forced style-node deletion heals on the next keystroke.
+
 ## v3.39.0 — Designer reliability fix for subscriber orgs
 
 ### Fixed
