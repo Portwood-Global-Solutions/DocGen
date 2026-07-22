@@ -4141,10 +4141,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     async _applyStarterBody(templateId, starterKey, shape, logoTag) {
         try {
             let html = buildStarterHtml(starterKey, shape);
-            // Starter bodies carry {%asset:logo} slots (some sized, e.g.
-            // {%asset:logo:120x}); an existing asset picked in the wizard swaps
-            // its own merge tag in, inheriting the slot's size when the chosen
-            // tag doesn't carry one.
+            // Starter bodies carry SIZED {%asset:logo:Nx} slots (144x header
+            // logos, 120x on the agreement); an existing asset picked in the
+            // wizard swaps its own merge tag in, inheriting the slot's size
+            // when the chosen tag doesn't carry one.
             if (logoTag && logoTag !== '{%asset:logo}') {
                 html = html.replace(/\{%asset:logo(:[^}]*)?\}/g, (m, size) => {
                     const chosenHasSize = /:\d/.test(logoTag);
@@ -8101,16 +8101,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const host = this.template.querySelector('.dg-visual-host');
             const pv = host && host.querySelector('.dg-pv');
             if (pv && this._visualOriginalCode != null) {
-                const clone = pv.cloneNode(true);
-                for (const styleEl of clone.querySelectorAll('style')) {
-                    styleEl.remove();
-                }
-                for (const markerEl of clone.querySelectorAll('.dg-drop-marker')) {
-                    markerEl.remove();
-                }
-                this._unpillifyTags(clone);
-                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
-                const edited = clone.innerHTML.trim();
+                const edited = this._extractVisualBody(pv);
                 const bodyRe = /(<body\b[^>]*>)[\s\S]*?(<\/body\s*>)/i;
                 return bodyRe.test(this._visualOriginalCode)
                     ? this._visualOriginalCode.replace(bodyRe, (m, open, close) => open + '\n' + edited + '\n' + close)
@@ -8119,6 +8110,40 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const ta = this.template.querySelector('.dg-html-body-editor');
         return (ta && ta.value) || this._lastUploadedHtmlText || '';
+    }
+
+    /**
+     * Serialize the live visual canvas back to clean body HTML.
+     *
+     * Reads pv.innerHTML as a STRING and re-parses it inside a <template>,
+     * rather than cloning the live canvas with pv.cloneNode(true). Under the
+     * managed-package LWS namespace sandbox, cloneNode(true) silently omits
+     * nodes that native contenteditable inserted — a paragraph added with
+     * Enter, a pasted block — while the innerHTML string getter includes them.
+     * Cloning therefore dropped anything STRUCTURALLY ADDED in the visual
+     * editor (new <p>), even though edits to pre-existing blocks survived,
+     * because those pre-existing nodes were created by our own innerHTML write
+     * and so clone fine (community report: new paragraph never reaches
+     * Source/Save). The re-parsed nodes are all sandbox-owned, so
+     * _unpillifyTags / _safeReplace operate on them exactly as they do on the
+     * upload path (see _sanitizeStagedHtml, which uses the same technique).
+     */
+    _extractVisualBody(pv) {
+        const tpl = document.createElement('template');
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip of the live canvas; re-cleaned below, never cloneNode (LWS drops browser-inserted nodes)
+        tpl.innerHTML = pv.innerHTML;
+        const root = tpl.content;
+        for (const styleEl of root.querySelectorAll('style')) {
+            styleEl.remove();
+        }
+        for (const markerEl of root.querySelectorAll('.dg-drop-marker')) {
+            markerEl.remove();
+        }
+        this._unpillifyTags(root);
+        const container = document.createElement('div');
+        container.appendChild(root);
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- serialize the cleaned fragment back to a string
+        return container.innerHTML.trim();
     }
 
     // --- Live PDF preview (real Blob.toPdf output in a blob: iframe) ---
@@ -8222,17 +8247,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (this._visualEnteredDom !== null && current !== this._visualEnteredDom) {
                 // Extract the edited content: everything except the scoped
                 // <style> the preview pipeline injected, with tag pills
-                // unwrapped back to plain merge-tag text.
-                const clone = pv.cloneNode(true);
-                for (const styleEl of clone.querySelectorAll('style')) {
-                    styleEl.remove();
-                }
-                for (const markerEl of clone.querySelectorAll('.dg-drop-marker')) {
-                    markerEl.remove();
-                }
-                this._unpillifyTags(clone);
-                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
-                const edited = clone.innerHTML.trim();
+                // unwrapped back to plain merge-tag text. String round-trip,
+                // NOT cloneNode — see _extractVisualBody (LWS drops
+                // browser-inserted paragraphs from a cloned canvas).
+                const edited = this._extractVisualBody(pv);
                 // Swap ONLY the body content back into the original document —
                 // head/styles/@page are untouched by design.
                 const bodyRe = /(<body\b[^>]*>)[\s\S]*?(<\/body\s*>)/i;

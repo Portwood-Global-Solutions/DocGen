@@ -195,7 +195,7 @@ function buildReport(shape) {
         .join('\n');
     const inner = `    <table>
         <tr>
-            <td style="width: 120pt; vertical-align: middle">{%asset:logo}</td>
+            <td style="width: 120pt; vertical-align: middle">{%asset:logo:144x}</td>
             <td>
                 <h1>{Name}</h1>
                 <div class="meta">${humanizeField(shape.object)} Report</div>
@@ -220,7 +220,7 @@ ${sections}
 function buildLetter(shape) {
     const inner = `    <table>
         <tr>
-            <td style="width: 110pt; vertical-align: middle">{%asset:logo}</td>
+            <td style="width: 110pt; vertical-align: middle">{%asset:logo:144x}</td>
             <td>
                 <h1 style="font-size: 14pt">Your Company Name</h1>
                 <div class="meta">123 Your Street &#8226; Your City, ST 00000 &#8226; (555) 555-0100</div>
@@ -284,7 +284,7 @@ function buildInvoice(shape) {
             : '';
     const inner = `    <table>
         <tr>
-            <td style="width: 110pt; vertical-align: middle">{%asset:logo}</td>
+            <td style="width: 110pt; vertical-align: middle">{%asset:logo:144x}</td>
             <td>
                 <h1>INVOICE</h1>
                 <div class="meta">Your Company Name</div>
@@ -1338,8 +1338,8 @@ export function buildTagPalette(shape) {
             {
                 key: 'img_asset',
                 label: 'Shared asset (logo)',
-                snippet: '{%asset:logo}',
-                title: 'Org-wide shared asset by key — great for logos reused across templates'
+                snippet: '{%asset:logo:144x}',
+                title: 'Org-wide shared asset by key — great for logos reused across templates. The :144x sizes it to ~1.5in wide (edit or drop the token to taste).'
             }
         ]
     });

@@ -94,6 +94,7 @@ All three checks MUST pass before release. No exceptions.
 sf apex run --target-org <org> -f scripts/e2e-01-permissions.apex
 sf apex run --target-org <org> -f scripts/e2e-02-template-crud.apex
 sf apex run --target-org <org> -f scripts/e2e-03-generate-pdf.apex
+sf apex run --target-org <org> -f scripts/e2e-03b-page-setup.apex
 sf apex run --target-org <org> -f scripts/e2e-04-generate-docx.apex
 sf apex run --target-org <org> -f scripts/e2e-05-generate-bulk.apex
 sf apex run --target-org <org> -f scripts/e2e-06-signatures.apex
@@ -105,7 +106,7 @@ sf apex run --target-org <org> -f scripts/e2e-07-syntax4.apex
 sf apex run --target-org <org> -f scripts/e2e-08-cleanup.apex
 ```
 
-Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03–06b depend on 02, 07-syntax1/2/3/4 standalone (use `processXmlForTest`), 08 cleans up. Note for new scripts: anonymous Apex cannot catch a thrown `AuraHandledException` (uncatchable LimitException) — negative-path assertions on `@AuraEnabled` guard methods belong in unit tests, not e2e.
+Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03/03b–06b depend on 02, 07-syntax1/2/3/4 standalone (use `processXmlForTest`), 08 cleans up. **03b is split out of 03** because each full `generateDocument` costs ~10 SOQL and the combined generations exceeded the 100-SOQL synchronous limit in one anonymous transaction — a governor-limit throw prints NO summary line, so watch for a script that emits no `PASS: N` at all, not just a non-zero FAIL. Note for new scripts: anonymous Apex cannot catch a thrown `AuraHandledException` (uncatchable LimitException) — negative-path assertions on `@AuraEnabled` guard methods belong in unit tests, not e2e.
 
 When fixing a parser-level bug, add a regression assertion in `e2e-07-syntax1` or `e2e-07-syntax2` that exercises the offending pattern via `processXmlForTest`. Each script must stay under 18,000 chars (Anonymous Apex limit is 20,000).
 
@@ -146,3 +147,4 @@ Several subsystems are tightly coupled and easy to break with surgical fixes —
 - **HTML templates and `Blob.toPdf` rendering** — Flying Saucer is essentially **CSS 2.1** plus a small CSS 3 subset. `display: flex`/`grid`, `gap`, `linear-gradient(...)`, `calc(...)`, CSS variables, and most CSS 3 layout features are silently ignored — the page renders but layout collapses to default block flow. When troubleshooting "the PDF looks wrong," first check whether the source HTML uses any of these and rewrite to `<table>`-based layout + solid colors. Also: when both the engine `<style>` (built from `Page_Size__c`/`Page_Orientation__c`/`Custom_Margins__c` template fields) and the source HTML's own `<style>` declare `@page`, you get a conflict — recommend authors clear the template page fields when their source CSS already specifies `@page`. Issues #60 and #71 both live here.
 - **Query Config formats** (V1 flat string, V3 node tree) — V3's `processChildNodes` and V1's `stitchGrandchildren` reproduce similar patterns; bug fixes often need to land in both (see #67).
 - **Watermarks, font handling, command hub** — light traffic, but the test coverage is sparse, so verify visually after edits.
+- **Visual Designer DOM under LWS namespace sandbox** (`docGenAdmin.js`) — in a managed-package install (NOT development), Lightning Web Security's per-namespace sandbox distorts DOM nodes the browser's native `contenteditable` inserts. Two facets bit us: `ChildNode.replaceWith` is missing on proxied nodes (v3.39, fixed with `_safeReplace`), and `cloneNode(true)` silently omits browser-inserted nodes (v3.41 — new paragraphs/blocks vanished on Save/Source; fixed by serializing from the canvas's live `innerHTML` STRING via `_extractVisualBody`, never a cloned node tree). Rule: to read the canvas back to HTML, go through the `innerHTML` string + a `<template>` parse (as the upload path already does), never `cloneNode`/`replaceWith` on the live distorted tree. This class of bug is invisible in dev/scratch orgs — only a namespaced package-install (or namespaced scratch org) reproduces it.
