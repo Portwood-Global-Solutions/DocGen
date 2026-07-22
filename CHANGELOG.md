@@ -1,5 +1,15 @@
 # Changelog
 
+## v3.43.0 — Button-builder access hardening
+
+### Fixed / Changed
+
+- **Least-privilege access model for the button builder.** As shipped in v3.42.0 the builder's Apex controller (`DocGenButtonAdminController`) wasn't granted in any permission set — so the Command Hub Buttons tab was actually unusable in an installed org — and its only gate was the general `DocGen_Admin` permission set, which doesn't imply the right to write metadata. Now:
+    - A new **`DocGen Button Manager`** permission set is the _only_ grant for the builder. Assign it **deliberately and separately** from DocGen Admin to the specific administrators who should manage record-page buttons.
+    - The **Buttons tab hides itself** unless the user _also_ holds the platform **Customize Application** (or **Modify Metadata Through Metadata API Functions**) permission — the permission the Metadata API deploy genuinely requires. The package does **not**, and should not, grant that; it stays with your Salesforce admins.
+    - `saveButtonConfig` enforces the same metadata permission with a clear message instead of a cryptic Metadata API failure.
+    - The runtime one-click button (clicking a configured button to generate a document) is **unchanged** — still available via DocGen User / Admin / Quick Action.
+
 ## v3.42.0 — Group-by tables, button builder UI + record types, historical PIN bypass
 
 ### Added
