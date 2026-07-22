@@ -1,6 +1,7 @@
 import { LightningElement, track, wire } from 'lwc';
 import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
 import getOrgId from '@salesforce/apex/DocGenController.getOrgId';
+import canManageButtons from '@salesforce/apex/DocGenButtonAdminController.canManageButtons';
 import DOCGEN_LOGO from '@salesforce/resourceUrl/DocGenLogo';
 
 export default class DocGenCommandHub extends LightningElement {
@@ -11,8 +12,23 @@ export default class DocGenCommandHub extends LightningElement {
     @track bannerDismissed = false;
     @track activeSection = 'templates';
     @track isLoaded = false;
+    // The Buttons tab is shown only to users who have the DocGen_Button_Manager
+    // permission set (needed to call canManageButtons at all) AND the platform
+    // metadata-write permission the builder's Metadata API deploy requires. A
+    // user without class access gets a rejected promise → tab stays hidden.
+    @track showButtonsTab = false;
 
     _wiredTemplates;
+
+    connectedCallback() {
+        canManageButtons()
+            .then((allowed) => {
+                this.showButtonsTab = allowed === true;
+            })
+            .catch(() => {
+                this.showButtonsTab = false;
+            });
+    }
 
     @wire(getOrgId)
     wiredOrgId({ data }) {
@@ -63,6 +79,9 @@ export default class DocGenCommandHub extends LightningElement {
     }
     get isButtons() {
         return this.activeSection === 'buttons';
+    }
+    get showButtonsSection() {
+        return this.activeSection === 'buttons' && this.showButtonsTab;
     }
     get isEmail() {
         return this.activeSection === 'email';

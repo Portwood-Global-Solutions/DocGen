@@ -33,6 +33,7 @@ private class DocGenButtonAdminControllerTest {
 
     @IsTest
     static void saveButtonConfig_validDto_deployIsNoOpInTest() {
+        DocGenButtonAdminController.testMetadataOverride = true; // has metadata-write permission
         // Map param (as the LWC sends it) — sortOrder deliberately a STRING to prove
         // it no longer breaks the whole bind (the "An object is required" bug).
         Map<String, Object> cfg = new Map<String, Object>{
@@ -51,6 +52,31 @@ private class DocGenButtonAdminControllerTest {
         Test.stopTest();
 
         System.assertEquals(null, jobId, 'Metadata deploy is skipped in test context (returns null)');
+    }
+
+    @IsTest
+    static void canManageButtons_reflectsMetadataPermission() {
+        DocGenButtonAdminController.testMetadataOverride = true;
+        System.assertEquals(true, DocGenButtonAdminController.canManageButtons(), 'true with metadata permission');
+        DocGenButtonAdminController.testMetadataOverride = false;
+        System.assertEquals(false, DocGenButtonAdminController.canManageButtons(), 'false without it');
+        // Real evaluation path (querying the running user's permissions) — coverage.
+        DocGenButtonAdminController.testMetadataOverride = null;
+        System.assertNotEquals(null, DocGenButtonAdminController.canManageButtons(), 'returns a real verdict');
+    }
+
+    @IsTest
+    static void saveButtonConfig_withoutMetadataPermission_throws() {
+        DocGenButtonAdminController.testMetadataOverride = false; // lacks Customize Application
+        Boolean threw = false;
+        try {
+            DocGenButtonAdminController.saveButtonConfig(
+                new Map<String, Object>{ 'label' => 'X', 'objectApiName' => 'Account', 'templateApiName' => 'K' }
+            );
+        } catch (Exception e) {
+            threw = true;
+        }
+        System.assert(threw, 'Save must be blocked when the user cannot modify metadata');
     }
 
     @IsTest
@@ -78,6 +104,7 @@ private class DocGenButtonAdminControllerTest {
     }
 
     private static void assertThrows(Map<String, Object> cfg, String context) {
+        DocGenButtonAdminController.testMetadataOverride = true; // past the metadata gate to hit validation
         // NOTE: AuraHandledException.getMessage() returns "Script-thrown exception"
         // in test context, so we assert that a validation error is raised rather
         // than on its wording (the user-facing messages are asserted by hand-review).

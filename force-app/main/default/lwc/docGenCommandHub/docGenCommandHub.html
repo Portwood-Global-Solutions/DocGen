@@ -27,10 +27,16 @@
                     <lightning-icon icon-name="utility:image" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Assets</span>
                 </button>
-                <button class={buttonsTabClass} onclick={handleShowButtons}>
-                    <lightning-icon icon-name="utility:button_choice" size="x-small" class="nav-icon"></lightning-icon>
-                    <span>Buttons</span>
-                </button>
+                <template if:true={showButtonsTab}>
+                    <button class={buttonsTabClass} onclick={handleShowButtons}>
+                        <lightning-icon
+                            icon-name="utility:button_choice"
+                            size="x-small"
+                            class="nav-icon"
+                        ></lightning-icon>
+                        <span>Buttons</span>
+                    </button>
+                </template>
                 <button class={emailTabClass} onclick={handleShowEmail}>
                     <lightning-icon icon-name="utility:email" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Email Templates</span>
@@ -117,7 +123,7 @@
                     </template>
 
                     <!-- BUTTONS -->
-                    <template if:true={isButtons}>
+                    <template if:true={showButtonsSection}>
                         <div class="panel-header">
                             <h2>Document Buttons</h2>
                             <p>

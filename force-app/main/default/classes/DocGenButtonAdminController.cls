@@ -9,7 +9,9 @@
  *
  * Namespace-safe: the type + field API names are taken from describe tokens, so
  * the deployed fullName / field names carry the package namespace correctly in
- * subscriber orgs. All entry points are gated to the DocGen_Admin permission set.
+ * subscriber orgs. Access is gated by the DocGen_Button_Manager permission set
+ * (the only grant for this class); saves additionally require the platform
+ * "Customize Application" / "Modify Metadata" permission (see canManageButtons).
  */
 public with sharing class DocGenButtonAdminController {
     public class ButtonConfigDTO {
@@ -51,10 +53,9 @@ public with sharing class DocGenButtonAdminController {
     /** All button configs (active + inactive) for the management list. */
     @AuraEnabled(cacheable=false)
     public static List<ButtonConfigDTO> getButtonConfigs() {
-        assertAdmin();
         List<ButtonConfigDTO> out = new List<ButtonConfigDTO>();
-        // Custom metadata is admin-authored config (no row-level FLS/CRUD), and this
-        // entry point is already gated to DocGen_Admin above.
+        // Custom metadata is admin-authored config (no row-level FLS/CRUD); this
+        // class is reachable only via the DocGen_Button_Manager permission set.
         /* code-analyzer-suppress ApexCRUDViolation ApexFlsViolation */
         List<DocGen_Button__mdt> rows = [
             SELECT
@@ -71,7 +72,7 @@ public with sharing class DocGenButtonAdminController {
                 Record_Type_Developer_Names__c
             FROM DocGen_Button__mdt
             ORDER BY Object_API_Name__c, Sort_Order__c NULLS LAST, MasterLabel
-        ]; // NOPMD ApexCRUDViolation - admin-gated CMDT config read
+        ]; // NOPMD ApexCRUDViolation - button-manager-gated CMDT config read
         for (DocGen_Button__mdt c : rows) {
             ButtonConfigDTO d = new ButtonConfigDTO();
             d.developerName = c.DeveloperName;
@@ -94,11 +95,10 @@ public with sharing class DocGenButtonAdminController {
      *  or "id:<Id>" when a template has no API name. The LWC splits on the prefix. */
     @AuraEnabled(cacheable=true)
     public static List<Option> getTemplateOptions() {
-        assertAdmin();
         List<Option> out = new List<Option>();
-        // Admin-gated read of the admin's own template list for a picker; Name /
+        // Button-manager-gated read of the template list for a picker; Name /
         // API_Name are label fields. SYSTEM_MODE avoids the managed-package USER_MODE
-        // namespace pitfall (see DocGenController), and the read is permission-gated.
+        // namespace pitfall (see DocGenController); class access is the gate.
         DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Name', 'API_Name__c' });
         /* code-analyzer-suppress ApexCRUDViolation ApexFlsViolation */
         List<DocGen_Template__c> tpls = [
@@ -107,7 +107,7 @@ public with sharing class DocGenButtonAdminController {
             WHERE Is_Active__c = TRUE
             WITH SYSTEM_MODE
             ORDER BY Name
-        ]; // NOPMD ApexCRUDViolation - admin-gated template picker read
+        ]; // NOPMD ApexCRUDViolation - button-manager-gated template picker read
         for (DocGen_Template__c t : tpls) {
             Boolean hasKey = String.isNotBlank(t.API_Name__c);
             out.add(
@@ -123,7 +123,6 @@ public with sharing class DocGenButtonAdminController {
     /** Active, non-master record types for an object — the record-type checklist. */
     @AuraEnabled(cacheable=true)
     public static List<Option> getObjectRecordTypes(String objectApiName) {
-        assertAdmin();
         List<Option> out = new List<Option>();
         if (String.isBlank(objectApiName)) {
             return out;
@@ -148,7 +147,7 @@ public with sharing class DocGenButtonAdminController {
      */
     @AuraEnabled
     public static Id saveButtonConfig(Map<String, Object> cfg) {
-        assertAdmin();
+        assertCanManage();
         if (cfg == null) {
             throw new AuraHandledException('No button details were provided.');
         }
@@ -262,17 +261,50 @@ public with sharing class DocGenButtonAdminController {
         }
     }
 
-    private static void assertAdmin() {
+    /**
+     * Whether the current user can actually create/edit buttons — i.e. holds the
+     * platform metadata-write permission the Metadata API deploy requires
+     * ("Customize Application" or "Modify Metadata Through Metadata API
+     * Functions"). Reaching this method at all already implies the
+     * DocGen_Button_Manager permission set (it's the only grant for this class);
+     * this is the additional runtime gate. The Command Hub hides the Buttons tab
+     * when this returns false, and saveButtonConfig enforces it.
+     */
+    @AuraEnabled(cacheable=true)
+    public static Boolean canManageButtons() {
+        return userCanModifyMetadata();
+    }
+
+    // Test seam: force the metadata-permission verdict so tests are deterministic
+    // regardless of the running user's profile. Null = evaluate for real.
+    @TestVisible
+    private static Boolean testMetadataOverride = null;
+
+    @TestVisible
+    private static Boolean userCanModifyMetadata() {
+        if (testMetadataOverride != null) {
+            return testMetadataOverride;
+        }
         for (PermissionSetAssignment psa : [
-            SELECT PermissionSet.Name
+            SELECT PermissionSet.PermissionsCustomizeApplication, PermissionSet.PermissionsModifyMetadata
             FROM PermissionSetAssignment
             WHERE AssigneeId = :UserInfo.getUserId()
             WITH USER_MODE
         ]) {
-            if (psa.PermissionSet.Name == 'DocGen_Admin') {
-                return;
+            if (psa.PermissionSet.PermissionsCustomizeApplication || psa.PermissionSet.PermissionsModifyMetadata) {
+                return true;
             }
         }
-        throw new AuraHandledException('Only DocGen Admin users can manage document buttons.');
+        return false;
+    }
+
+    private static void assertCanManage() {
+        if (!userCanModifyMetadata()) {
+            throw new AuraHandledException(
+                'Creating or editing document buttons requires the "Customize Application" ' +
+                    '(or "Modify Metadata Through Metadata API Functions") permission. ' +
+                    'Ask your Salesforce administrator to grant it — this package cannot.'
+            );
+        }
     }
 }
