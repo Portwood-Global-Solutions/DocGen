@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.41.0 — Designer save reliability (new paragraphs) + sized starter logos",
-      "versionNumber": "3.41.0.NEXT",
+      "versionName": "v3.42.0 — Group-by tables, button builder UI + record types, historical PIN bypass",
+      "versionNumber": "3.42.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.41 makes the visual Template Designer more dependable: new paragraphs and blocks you add in Visual mode now save reliably, and the starter templates size your logo correctly out of the box. 100% native Salesforce — no external services or callouts. Free for all users.",
-      "ancestorVersion": "3.40.0"
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.42 adds automatic table grouping (a new {#GroupBy} tag renders one table per category — no manual setup), a point-and-click builder for record-page document buttons (pick the object, template, and which record types show it — no Setup required), and lets admins bypass the email PIN on previously-sent signature requests. 100% native Salesforce — no external services or callouts. Free for all users.",
+      "ancestorVersion": "3.41.0"
     }
   ],
   "name": "Portwood DocGen",
@@ -206,6 +206,7 @@
     "Portwood DocGen Managed@3.38.0-1": "04tVx000000rEmPIAU",
     "Portwood DocGen Managed@3.39.0-1": "04tVx000000rGkzIAE",
     "Portwood DocGen Managed@3.40.0-1": "04tVx000000rWrNIAU",
-    "Portwood DocGen Managed@3.41.0-1": "04tVx000000rfD7IAI"
+    "Portwood DocGen Managed@3.41.0-1": "04tVx000000rfD7IAI",
+    "Portwood DocGen Managed@3.42.0-1": "04tVx000000rj5RIAQ"
   }
 }

@@ -1,5 +1,24 @@
 # Changelog
 
+## v3.42.0 — Group-by tables, button builder UI + record types, historical PIN bypass
+
+### Added
+
+- **`{#GroupBy}` — automatic table grouping (Conga-style).** `{#GroupBy <Relationship> by <Field>} … {/GroupBy}` repeats its block once per distinct value of `<Field>` among the child records — 50 categories render 50 tables, with no hand-written loop per value. Inside the block, `{GroupName}` is the group value (the header), the inner `{#<Relationship>}…{/<Relationship>}` loops just that group's members, and `{SUM|COUNT|AVG|MIN|MAX:<Relationship>.Field}` aggregate the group. Groups render in first-seen order (control it with `ORDER BY` on the relationship); group fields may be dot-paths (`Product2.Family`). Works in Word and HTML templates. The tag is in the designer's Conditionals palette and the AI prompt.
+- **Build record-page document buttons from the UI.** A new **Buttons** tab in the Command Hub creates the one-click "generate this template" record-page buttons without visiting Setup → Custom Metadata. Pick the object, template, and (optionally) record types, plus title / output override / save-to-record / sort order; saving deploys the `DocGen_Button__mdt` config for you via the Metadata API. The list view shows every button with its object, sort order, record types, and status, with edit/deactivate inline.
+- **Record-type targeting for document buttons.** A new `Record_Type_Developer_Names__c` field on `DocGen_Button__mdt` limits a button to specific record types (comma-separated Developer Names; blank = all). Enforced both when the button list is built and at generation time, so it can't be bypassed.
+- **In-person PIN bypass for previously-sent signature requests.** The **Sign In Person** button now appears on the sender's Previous Requests list — bypass the email PIN for a request sent earlier or after a page refresh, not only on the freshly-created screen. Still `DocGen_Admin`-only and audit-logged, and it's hidden once a signer has Signed/Cancelled/Declined.
+
+### Fixed
+
+- **Editing a template could wipe its saved query (`Query_Config__c`).** A save that supplied a blank query — e.g. the visual builder momentarily emptying the config during a DOCX→HTML switch — overwrote the stored query, and because activating a version copies the version's query back onto the template, a blank could erase a good query. Blank/omitted queries are now treated as "leave unchanged" (matching the existing `API_Name__c`/`Form_Fields_Config__c` partial-save guards).
+
+### Changed
+
+- **Page layouts** — added user-facing status/config fields that were defined but off-layout (signer decline reason & reminder tracking, signature-request expiration / signing order / verification / template ids, audit verification method, job label & merge-only). Security-sensitive and internal plumbing fields deliberately remain off-layout.
+
+Validated on a namespaced scratch org: full e2e suite (13 scripts) + RunLocalTests (100%) green, Code Analyzer 0. The button builder's Metadata-API deploy is proven end-to-end in a scratch org; its namespaced (subscriber) behavior uses describe-derived type/field names and should be smoke-tested on a managed install.
+
 ## v3.41.0 — Designer save reliability (new paragraphs) + sized starter logos
 
 ### Fixed
