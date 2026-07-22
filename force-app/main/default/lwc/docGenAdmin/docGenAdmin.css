@@ -1142,13 +1142,38 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
+    /* Pin the header (with its close button) to the top of the panel so it stays
+       reachable while the panel body scrolls — negative margins + padding let the
+       opaque bar span the panel's full width and cover content sliding beneath it. */
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: -12px -14px 8px -14px;
+    padding: 10px 14px 8px 14px;
+    background: rgba(255, 255, 255, 0.98);
+    border-bottom: 1px solid #ece9f7;
+    border-radius: 14px 14px 0 0;
 }
 
 .dg-float-panel-title {
     font-weight: 800;
     font-size: 0.95rem;
     color: #1f3a5f;
+}
+
+/* Larger, clearer close target for the floating menu panel (scoped so the shared
+   pill/slash-menu close buttons keep their compact size). */
+.dg-float-panel-head .dg-pill-menu-x {
+    font-size: 1.05rem;
+    line-height: 1;
+    padding: 6px 9px;
+    border-radius: 8px;
+    color: #1f3a5f;
+}
+
+.dg-float-panel-head .dg-pill-menu-x:hover {
+    background: #f4f2ff;
+    color: #5a3fc4;
 }
 
 .dg-float-panel-tip {

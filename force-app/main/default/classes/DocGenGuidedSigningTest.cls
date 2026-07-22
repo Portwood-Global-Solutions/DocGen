@@ -50,6 +50,13 @@ private class DocGenGuidedSigningTest {
         return '[{"signerName":"Member One","signerEmail":"m1@example.com","roleName":"Member"}]';
     }
 
+    private static String signersJson2() {
+        return '[' +
+            '{"signerName":"Member One","signerEmail":"m1@example.com","roleName":"Member"},' +
+            '{"signerName":"Member Two","signerEmail":"m2@example.com","roleName":"Witness"}' +
+            ']';
+    }
+
     @IsTest
     static void createsGuidedRequestWithSentinelPlacements() {
         Id tplId = createTaggedTemplate();
@@ -372,6 +379,103 @@ private class DocGenGuidedSigningTest {
             expectedHash,
             audits[0].Document_Hash_SHA256__c,
             'Composited path must stamp the SHA-256 of the signed bytes on the audit (#187)'
+        );
+    }
+
+    @IsTest
+    static void multiSigner_uploadVerificationReturnsAllSigners() {
+        // Regression: on the guided/drawn path each signer composites onto the previous
+        // signer's PDF (a chain), so each signer's audit was stamped with the hash of the
+        // document AS OF their signing. Only the FINAL signer's hash matched the delivered
+        // file, so uploading the signed PDF to the verify page (verifyDocument, hash lookup)
+        // returned just ONE signer while the token path (verifyByRequestId) returned all. On
+        // completion we back-fill every signer's audit with the final document hash so BOTH
+        // verify paths return the full roster.
+        Id tplId = createTaggedTemplate();
+        Account a = [SELECT Id FROM Account LIMIT 1];
+        DocGenSignatureSenderController.createGuidedPdfSignatureRequest(tplId, a.Id, signersJson2(), 'Parallel', null);
+
+        List<DocGen_Signer__c> signers = [
+            SELECT Id, Secure_Token__c, Signature_Request__c, Signer_Email__c
+            FROM DocGen_Signer__c
+            WHERE Signature_Request__r.Template__c = :tplId
+            ORDER BY Signer_Email__c ASC
+        ];
+        System.assertEquals(2, signers.size(), 'Two signers created');
+        for (DocGen_Signer__c s : signers) {
+            s.PIN_Verified_At__c = System.now();
+        }
+        update signers;
+        Id requestId = signers[0].Signature_Request__c;
+
+        // Distinct bytes per signing step so the intermediate and final hashes differ.
+        String intermediateB64 = EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.4 signer-one only'));
+        String finalB64 = EncodingUtil.base64Encode(Blob.valueOf('%PDF-1.4 both signers plus certificate'));
+        String intermediateHash = EncodingUtil.convertToHex(
+            Crypto.generateDigest('SHA-256', EncodingUtil.base64Decode(intermediateB64))
+        );
+        String finalHash = EncodingUtil.convertToHex(
+            Crypto.generateDigest('SHA-256', EncodingUtil.base64Decode(finalB64))
+        );
+
+        Test.startTest();
+        // Signer one signs first — request stays In Progress (one signer remains).
+        DocGenSignatureController.SavePdfSignatureResult r1 = DocGenSignatureController.saveCompositedSignedPdf(
+            signers[0].Secure_Token__c,
+            intermediateB64,
+            true,
+            '1.1.1.1',
+            'JUnit/1.0',
+            null
+        );
+        System.assertEquals(false, r1.isComplete, 'First signer does not complete the request');
+        // Signer two completes — triggers the audit-hash back-fill.
+        DocGenSignatureController.SavePdfSignatureResult r2 = DocGenSignatureController.saveCompositedSignedPdf(
+            signers[1].Secure_Token__c,
+            finalB64,
+            true,
+            '2.2.2.2',
+            'JUnit/1.0',
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, r2.isComplete, 'Second signer completes the request');
+
+        // Both signers' audits now carry the SAME final document hash.
+        List<DocGen_Signature_Audit__c> audits = [
+            SELECT Signer_Name__c, Document_Hash_SHA256__c
+            FROM DocGen_Signature_Audit__c
+            WHERE Signature_Request__c = :requestId AND Signer_Name__c != 'SYSTEM'
+        ];
+        System.assertEquals(2, audits.size(), 'One audit per signer');
+        for (DocGen_Signature_Audit__c au : audits) {
+            System.assertEquals(
+                finalHash,
+                au.Document_Hash_SHA256__c,
+                'Every signer audit must carry the final document hash after completion: ' + au.Signer_Name__c
+            );
+        }
+
+        // Uploading the delivered PDF (final hash) now returns BOTH signers — the bug was
+        // that this returned only the last signer.
+        List<DocGenAuthenticatorController.VerificationResult> byUpload = DocGenAuthenticatorController.verifyDocument(
+            finalHash
+        );
+        System.assertEquals(
+            2,
+            byUpload.size(),
+            'verifyDocument(finalHash) must return every signer, not just the last one'
+        );
+
+        // The pre-completion intermediate hash was overwritten and no longer resolves.
+        List<DocGenAuthenticatorController.VerificationResult> byIntermediate = DocGenAuthenticatorController.verifyDocument(
+            intermediateHash
+        );
+        System.assertEquals(
+            0,
+            byIntermediate.size(),
+            'Intermediate composite hash must no longer match after back-fill'
         );
     }
 

@@ -1870,16 +1870,6 @@
                         });
                     }
 
-                    function sha256Hex(bytes) {
-                        if (!window.crypto || !crypto.subtle) return Promise.resolve(null);
-                        return crypto.subtle.digest('SHA-256', bytes).then(function (buf) {
-                            var a = new Uint8Array(buf);
-                            var h = '';
-                            for (var i = 0; i < a.length; i++) h += ('0' + a[i].toString(16)).slice(-2);
-                            return h;
-                        });
-                    }
-
                     // Build a timestamp matching the server audit format
                     // ('MMMM d, yyyy h:mm a z') so the completing signer's cert line reads
                     // consistently with the other signers' server-formatted lines (no
@@ -1918,8 +1908,8 @@
                         }
                     }
 
-                    // Append a Certificate of Completion page (audit roster + document hash).
-                    function addCertificatePage(doc, helv, helvBold, cert, hashHex, meStamp) {
+                    // Append a Certificate of Completion page (audit roster + verify pointer).
+                    function addCertificatePage(doc, helv, helvBold, cert, meStamp) {
                         var rgb = PDFLib.rgb;
                         var gray = rgb(0.44, 0.43, 0.42);
                         var brand = rgb(0.005, 0.27, 0.52);
@@ -2028,16 +2018,49 @@
                             y -= 9;
                         }
                         y -= 6;
-                        if (hashHex) {
-                            page.drawText('Document hash (SHA-256):', { x: 54, y: y, size: 9, font: helvBold });
-                            y -= 12;
-                            page.drawText(hashHex, { x: 54, y: y, size: 7.5, font: helv, color: gray });
-                            y -= 20;
-                        }
+                        // Integrity + verification pointer. We intentionally do NOT print a
+                        // raw SHA-256 on the certificate: the authoritative hash is of the
+                        // FINAL delivered PDF (computed server-side in saveCompositedSignedPdf,
+                        // stored on the audit record, and checked by the verify page's
+                        // file-drop). A page inside the PDF cannot contain the final file's own
+                        // hash, so printing a pre-certificate hash would show a value that never
+                        // matches the delivered file — misleading. Point the recipient at the
+                        // verify page instead, which confirms the file's hash directly.
                         page.drawText(
                             'This certificate evidences an electronic signature under the US ESIGN Act and UETA.',
                             { x: 54, y: y, size: 8, font: helv, color: gray }
                         );
+                        y -= 14;
+                        page.drawText(
+                            'The SHA-256 hash of the signed PDF is recorded in a tamper-evident audit record.',
+                            { x: 54, y: y, size: 8, font: helv, color: gray }
+                        );
+                        if (cert && cert.verifyUrl) {
+                            y -= 16;
+                            page.drawText('Verify this document at:', {
+                                x: 54,
+                                y: y,
+                                size: 8,
+                                font: helvBold,
+                                color: gray
+                            });
+                            y -= 12;
+                            page.drawText(String(cert.verifyUrl), {
+                                x: 54,
+                                y: y,
+                                size: 7.5,
+                                font: helv,
+                                color: brand
+                            });
+                            y -= 12;
+                            page.drawText('Drop the PDF you received at that link to confirm its integrity.', {
+                                x: 54,
+                                y: y,
+                                size: 7.5,
+                                font: helv,
+                                color: gray
+                            });
+                        }
                     }
 
                     // Composite ALL captured fields (drawn images + typed text + dates) onto
@@ -2380,16 +2403,17 @@
                                         });
                                         return chain.then(function () {
                                             var iAmCompleting = cert && cert.othersAllSigned;
-                                            if (!iAmCompleting) {
-                                                return doc.save();
+                                            if (iAmCompleting) {
+                                                // Final signer: append the Certificate of Completion
+                                                // page. The authoritative integrity hash is computed
+                                                // server-side over the FINAL bytes in
+                                                // saveCompositedSignedPdf and stored on the audit
+                                                // record; the cert links to the verify page rather
+                                                // than printing an in-file hash that could never
+                                                // match the delivered file.
+                                                addCertificatePage(doc, helv, helvBold, cert, capStamp);
                                             }
-                                            // Final signer: hash the signed content, then append cert.
-                                            return doc.save().then(function (preBytes) {
-                                                return sha256Hex(preBytes).then(function (hashHex) {
-                                                    addCertificatePage(doc, helv, helvBold, cert, hashHex, capStamp);
-                                                    return doc.save();
-                                                });
-                                            });
+                                            return doc.save();
                                         });
                                     });
                                 });

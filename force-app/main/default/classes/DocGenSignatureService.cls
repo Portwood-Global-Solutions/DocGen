@@ -108,38 +108,7 @@ public without sharing class DocGenSignatureService {
         Map<String, Object> formValues
     ) {
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
-        String siteUrl = settings.Experience_Site_Url__c;
-        if (String.isBlank(siteUrl)) {
-            try {
-                // v2.0.1 — per-field FLS enforcement on SOQL reads (the "Apex SOQL
-                // USER_MODE Missing" finding category). DocGenFlsGuard.assertAccessible
-                // calls Schema.SObjectField.getDescribe().isAccessible() on every field
-                // the SELECT lists; throws DocGenException with the offending field name
-                // before any query runs. SYSTEM_MODE on the SOQL sidesteps the
-                // package-build @TestSetup FLS-propagation issue documented in
-                // DocGenFlsGuard.cls.
-                DocGenFlsGuard.assertAccessible(Site.sObjectType, new Set<String>{ 'Status' });
-                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-                List<Site> sites = [SELECT Id FROM Site WHERE Status = 'Active' WITH SYSTEM_MODE LIMIT 1];
-                if (!sites.isEmpty()) {
-                    DocGenFlsGuard.assertAccessible(
-                        SiteDetail.sObjectType,
-                        new Set<String>{ 'SecureUrl', 'DurableId' }
-                    );
-                    /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
-                    SiteDetail sd = [
-                        SELECT SecureUrl
-                        FROM SiteDetail
-                        WHERE DurableId = :sites[0].Id
-                        WITH SYSTEM_MODE
-                        LIMIT 1
-                    ];
-                    siteUrl = sd.SecureUrl;
-                }
-            } catch (Exception e) {
-                // Site query may fail in some contexts
-            }
-        }
+        String siteUrl = resolveSiteUrl(settings);
 
         String brandColor = String.isNotBlank(settings.Signature_Email_Brand_Color__c)
             ? settings.Signature_Email_Brand_Color__c
@@ -364,24 +333,18 @@ public without sharing class DocGenSignatureService {
         // Verification footer
         html += '<tr><td colspan="2" style="padding-top:16px;font-size:8pt;color:#706e6b;">';
         html += 'This document was electronically signed using ' + companyName.escapeHtml4() + '. ';
-        html += 'The SHA-256 hash of this PDF is stored in a tamper-evident audit record with field history tracking enabled. ';
-        if (String.isNotBlank(siteUrl)) {
-            if (siteUrl.endsWith('/')) {
-                siteUrl = siteUrl.substring(0, siteUrl.length() - 1);
-            }
-            String ns = DocGenSignatureService.class.getName().substringBefore('.');
-            String verifyPage = (String.isNotBlank(ns) && ns != 'DocGenSignatureService')
-                ? '/apex/' + ns + '__DocGenVerify'
-                : '/apex/DocGenVerify';
-            // SECURITY: the verification link carries the request's unguessable
-            // Secure_Token__c, not the enumerable record Id. The endpoint
-            // (verifyByRequestId) requires this 64-hex token before returning any
-            // signer audit data. Only emit the link when the token is present.
-            String verifyToken = lookupRequestVerificationToken(requestId);
-            if (String.isNotBlank(verifyToken)) {
-                String verifyUrl = siteUrl + verifyPage + '?token=' + verifyToken;
-                html += 'Verify at: ' + verifyUrl.escapeHtml4();
-            }
+        // Legal attestation — kept identical to the drawn/guided certificate
+        // (DocGenSignaturePdf.page addCertificatePage) so both signing paths emit the
+        // same statement. See docs/certificate-unification-plan.md.
+        html += 'This certificate evidences an electronic signature under the US ESIGN Act and UETA. ';
+        html += 'The SHA-256 hash of the signed PDF is stored in a tamper-evident audit record with field history tracking enabled. ';
+        // SECURITY: the verify link carries the request's unguessable Secure_Token__c,
+        // not the enumerable record Id. buildVerifyUrl returns null (link omitted) when
+        // no Site URL is configured or the token is absent — document-upload
+        // verification on DocGenVerify still works without the link.
+        String verifyUrl = buildVerifyUrl(requestId, siteUrl);
+        if (String.isNotBlank(verifyUrl)) {
+            html += 'Verify this document at: ' + verifyUrl.escapeHtml4();
         }
         html += '</td></tr>';
 
@@ -424,6 +387,74 @@ public without sharing class DocGenSignatureService {
      * null when absent (e.g. legacy requests created before this hotfix) — the
      * caller then omits the link, leaving document-upload verification intact.
      */
+    /**
+     * Resolves the public Salesforce Site base URL used for certificate verify links:
+     * the configured DocGen_Settings__c.Experience_Site_Url__c, else the first Active
+     * Site's SecureUrl. Returns null when neither is available (the caller then omits
+     * the verify link). SYSTEM_MODE sidesteps the guest/@TestSetup FLS-propagation
+     * issue documented in DocGenFlsGuard.cls.
+     */
+    private static String resolveSiteUrl(DocGen_Settings__c settings) {
+        String siteUrl = settings != null ? settings.Experience_Site_Url__c : null;
+        if (String.isBlank(siteUrl)) {
+            try {
+                DocGenFlsGuard.assertAccessible(Site.sObjectType, new Set<String>{ 'Status' });
+                /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                List<Site> sites = [SELECT Id FROM Site WHERE Status = 'Active' WITH SYSTEM_MODE LIMIT 1];
+                if (!sites.isEmpty()) {
+                    DocGenFlsGuard.assertAccessible(
+                        SiteDetail.sObjectType,
+                        new Set<String>{ 'SecureUrl', 'DurableId' }
+                    );
+                    /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
+                    SiteDetail sd = [
+                        SELECT SecureUrl
+                        FROM SiteDetail
+                        WHERE DurableId = :sites[0].Id
+                        WITH SYSTEM_MODE
+                        LIMIT 1
+                    ];
+                    siteUrl = sd.SecureUrl;
+                }
+            } catch (Exception e) {
+                // Site query may fail in some contexts — verify link is then omitted.
+            }
+        }
+        return siteUrl;
+    }
+
+    /**
+     * Builds the namespace-aware certificate verify-page URL for a request:
+     * {siteUrl}/apex/[ns__]DocGenVerify?token={request Secure_Token__c}. Both signing
+     * paths use this so the typed/server certificate and the drawn/guided certificate
+     * (DocGenSignaturePdf.page, surfaced via getSignatureCertificate) carry the SAME
+     * verify link. Returns null when no Site URL is configured or the request has no
+     * token (legacy requests) — document-upload verification on DocGenVerify still
+     * works without a printed link. See docs/certificate-unification-plan.md.
+     */
+    public static String buildVerifyUrl(Id requestId) {
+        return buildVerifyUrl(requestId, resolveSiteUrl(DocGen_Settings__c.getOrgDefaults()));
+    }
+
+    /**
+     * Overload for callers that already resolved the Site URL (avoids a second
+     * Site/SiteDetail query within buildVerificationBlockHtml).
+     */
+    public static String buildVerifyUrl(Id requestId, String siteUrl) {
+        if (String.isBlank(siteUrl)) {
+            return null;
+        }
+        if (siteUrl.endsWith('/')) {
+            siteUrl = siteUrl.substring(0, siteUrl.length() - 1);
+        }
+        String ns = DocGenSignatureService.class.getName().substringBefore('.');
+        String verifyPage = (String.isNotBlank(ns) && ns != 'DocGenSignatureService')
+            ? '/apex/' + ns + '__DocGenVerify'
+            : '/apex/DocGenVerify';
+        String verifyToken = lookupRequestVerificationToken(requestId);
+        return String.isNotBlank(verifyToken) ? siteUrl + verifyPage + '?token=' + verifyToken : null;
+    }
+
     private static String lookupRequestVerificationToken(Id requestId) {
         if (requestId == null) {
             return null;

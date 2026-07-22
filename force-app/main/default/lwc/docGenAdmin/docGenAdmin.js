@@ -1372,6 +1372,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             document.removeEventListener('mousedown', this._onDocMouseDown, true);
             this._docMouseListenerAdded = false;
         }
+        this._disableFloatPanelChrome();
     }
 
     /**
@@ -9262,9 +9263,76 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (this.activePanel === 'query') {
             this._loadDesignerQueryMeta();
         }
+        if (this.activePanel) {
+            this._enableFloatPanelChrome();
+        } else {
+            this._disableFloatPanelChrome();
+        }
     }
     handlePanelClose() {
         this.activePanel = null;
+        this._disableFloatPanelChrome();
+    }
+
+    /**
+     * The floating menu panel (Insert / Tags / Images / Query / Versions /
+     * Header-Footer / Watermark) is position:fixed. A static top offset slides
+     * under the Salesforce tab bar in taller chrome (console / NPSP navigation),
+     * hiding the panel header and its close button. While a panel is open we (a)
+     * pin its top just below the ACTUAL designer chrome — measured live so it
+     * adapts to any org's chrome height — and (b) let Escape close it. The header
+     * is also made sticky in CSS so the close X stays reachable without scrolling.
+     */
+    _enableFloatPanelChrome() {
+        this._positionFloatPanel();
+        if (this._panelChromeBound) {
+            return;
+        }
+        if (!this._onPanelKeydown) {
+            this._onPanelKeydown = (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.handlePanelClose();
+                }
+            };
+        }
+        if (!this._onPanelReflow) {
+            this._onPanelReflow = () => this._positionFloatPanel();
+        }
+        document.addEventListener('keydown', this._onPanelKeydown, true);
+        window.addEventListener('resize', this._onPanelReflow);
+        document.addEventListener('scroll', this._onPanelReflow, true);
+        this._panelChromeBound = true;
+    }
+
+    _disableFloatPanelChrome() {
+        if (!this._panelChromeBound) {
+            return;
+        }
+        document.removeEventListener('keydown', this._onPanelKeydown, true);
+        window.removeEventListener('resize', this._onPanelReflow);
+        document.removeEventListener('scroll', this._onPanelReflow, true);
+        this._panelChromeBound = false;
+    }
+
+    _positionFloatPanel() {
+        if (this._reflowQueued) {
+            return;
+        }
+        this._reflowQueued = true;
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        requestAnimationFrame(() => {
+            this._reflowQueued = false;
+            const panel = this.template.querySelector('.dg-float-panel');
+            const chrome = this.template.querySelector('.dg-designer-chrome');
+            if (!panel || !chrome) {
+                return;
+            }
+            const bottom = chrome.getBoundingClientRect().bottom;
+            // Keep a sane floor so a mis-measured/absent chrome never parks the
+            // panel off-screen; +8px leaves a small gap under the chrome.
+            panel.style.top = Math.max(56, Math.round(bottom) + 8) + 'px';
+        });
     }
     handlePanelSearch(event) {
         this.panelSearch = event.target.value || '';
