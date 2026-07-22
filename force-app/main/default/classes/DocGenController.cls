@@ -2425,7 +2425,30 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Type__c = (String) fields.get('Type__c');
             template.Base_Object_API__c = (String) fields.get('Base_Object_API__c');
             template.Description__c = (String) fields.get('Description__c');
-            template.Query_Config__c = (String) fields.get('Query_Config__c');
+            // Query_Config: a blank or omitted value means "leave the stored query
+            // unchanged", never "clear it". A designer save that momentarily emptied
+            // the query (e.g. the visual builder re-emitting mid-format-switch) must
+            // not wipe it — and because activateVersion copies the version's query
+            // back onto the template (see setActiveVersion), a blank persisted here
+            // would erase a good query on the next activation. Genuine query edits
+            // always arrive non-blank. (Community report: DOCX->HTML lost the query.)
+            String incomingQuery = (String) fields.get('Query_Config__c');
+            String existingQuery;
+            if (templateId != null) {
+                /* code-analyzer-suppress ApexFlsViolation */
+                List<DocGen_Template__c> qCur = [
+                    SELECT Query_Config__c
+                    FROM DocGen_Template__c
+                    WHERE Id = :templateId
+                    WITH SYSTEM_MODE
+                    LIMIT 1
+                ];
+                if (!qCur.isEmpty()) {
+                    existingQuery = qCur[0].Query_Config__c;
+                }
+            }
+            String effectiveQuery = String.isNotBlank(incomingQuery) ? incomingQuery : existingQuery;
+            template.Query_Config__c = effectiveQuery;
             // Signer form-field config (dedicated carrier, separate from Query_Config__c
             // so it survives single-object templates whose Query_Config__c is a flat
             // field-list string). Only set when present so partial saves don't clear it.
@@ -2653,7 +2676,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
                 DocGen_Template_Version__c version = new DocGen_Template_Version__c();
                 version.Template__c = templateId;
-                version.Query_Config__c = (String) fields.get('Query_Config__c');
+                // Same blank-safe rule as the template above — inherit the stored
+                // query when the save omits it, so activating this version can never
+                // wipe the template's query.
+                version.Query_Config__c = effectiveQuery;
                 version.Content_Version_Id__c = cvId;
                 version.Is_Active__c = true;
 

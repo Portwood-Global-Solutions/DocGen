@@ -477,6 +477,19 @@
                                             </p>
                                         </div>
                                         <div class="slds-col slds-no-flex">
+                                            <template if:true={signer.canVerifyInPerson}>
+                                                <lightning-button
+                                                    icon-name="utility:identity"
+                                                    label="Sign In Person"
+                                                    title="Verify this signer's identity in person and bypass email PIN. Admin-only; recorded in the audit log."
+                                                    variant="neutral"
+                                                    class="slds-var-m-right_xx-small"
+                                                    data-signer-id={signer.signerId}
+                                                    data-signer-name={signer.signerName}
+                                                    onclick={handleSignInPerson}
+                                                >
+                                                </lightning-button>
+                                            </template>
                                             <lightning-button
                                                 icon-name="utility:copy"
                                                 label="Copy"

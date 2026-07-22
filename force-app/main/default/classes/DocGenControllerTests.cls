@@ -235,6 +235,103 @@ private class DocGenControllerTests {
         }
     }
 
+    // saveTemplate — a blank Query_Config__c must not wipe the stored query.
+    // The visual builder can momentarily emit an empty config (e.g. mid
+    // DOCX->HTML switch); a blank in the save payload means "unchanged", not
+    // "clear it" — critical because activating a version copies the version's
+    // query back onto the template, so a persisted blank would erase it.
+    // (Community report: converting DOCX->HTML lost the JSON query.)
+    @IsTest
+    static void testSaveTemplateBlankQueryConfigDoesNotWipeValue() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            String v3 =
+                '{"v":3,"root":"Opportunity","nodes":[' +
+                '{"id":"n0","object":"Opportunity","fields":["Name"],"parentFields":["Account.Name"],"parentNode":null,"lookupField":null,"relationshipName":null},' +
+                '{"id":"n1","object":"OpportunityLineItem","fields":["TotalPrice"],"parentFields":["Product2.Name"],"parentNode":"n0","lookupField":"OpportunityId","relationshipName":"OpportunityLineItems"}]}';
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+            tpl.Query_Config__c = v3;
+            update tpl;
+
+            Map<String, Object> fields = new Map<String, Object>{
+                'Id' => tpl.Id,
+                'Name' => 'Renamed Template',
+                'Category__c' => 'Legal',
+                'Type__c' => 'Word',
+                'Base_Object_API__c' => 'Account',
+                'Description__c' => 'Updated description',
+                'Query_Config__c' => '',
+                'Output_Format__c' => 'PDF'
+            };
+
+            Test.startTest();
+            DocGenController.saveTemplate(fields, false, null);
+            Test.stopTest();
+
+            DocGen_Template__c updated = [SELECT Name, Query_Config__c FROM DocGen_Template__c WHERE Id = :tpl.Id];
+            System.assertEquals('Renamed Template', updated.Name, 'Other fields should still save');
+            System.assertEquals(
+                v3,
+                updated.Query_Config__c,
+                'A blank Query_Config__c in the save payload must leave the stored query unchanged'
+            );
+
+            // A real value still updates the query.
+            String v3b = '{"v":3,"root":"Account","nodes":[{"id":"n0","object":"Account","fields":["Name"],"parentFields":[],"parentNode":null,"lookupField":null,"relationshipName":null}]}';
+            fields.put('Query_Config__c', v3b);
+            DocGenController.saveTemplate(fields, false, null);
+            updated = [SELECT Query_Config__c FROM DocGen_Template__c WHERE Id = :tpl.Id];
+            System.assertEquals(
+                v3b,
+                updated.Query_Config__c,
+                'A non-blank Query_Config__c must still update the query'
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // {#GroupBy <Relationship> by <Field>} — Conga-style table grouping: one
+    // block per distinct field value, first-seen order, per-group members +
+    // aggregates. Parser-level; exercised via processXmlForTest.
+    // -----------------------------------------------------------------------
+    @IsTest
+    static void testGroupByRendersOneBlockPerDistinctValue() {
+        Map<String, Object> data = new Map<String, Object>{
+            'Name' => 'Acme',
+            'Items' => new List<Object>{
+                new Map<String, Object>{ 'Cat' => new Map<String, Object>{ 'Family' => 'Software' }, 'Amt' => 100 },
+                new Map<String, Object>{ 'Cat' => new Map<String, Object>{ 'Family' => 'Hardware' }, 'Amt' => 500 },
+                new Map<String, Object>{ 'Cat' => new Map<String, Object>{ 'Family' => 'Software' }, 'Amt' => 200 }
+            }
+        };
+        String tpl = '{#GroupBy Items by Cat.Family}[{GroupName}:{#Items}{Amt} {/Items}sum={SUM:Items.Amt}]{/GroupBy}';
+
+        Test.startTest();
+        String out = DocGenService.processXmlForTest(tpl, data);
+        Test.stopTest();
+
+        System.assertEquals(
+            '[Software:100 200 sum=300][Hardware:500 sum=500]',
+            out,
+            'GroupBy: one block per distinct value (first-seen order) with per-group members and SUM'
+        );
+
+        // Absent/empty relationship renders nothing.
+        System.assertEquals(
+            '',
+            DocGenService.processXmlForTest('{#GroupBy Missing by X}[{GroupName}]{/GroupBy}', data),
+            'An absent relationship renders no groups'
+        );
+
+        // Malformed (missing "by") throws a helpful error.
+        try {
+            DocGenService.processXmlForTest('{#GroupBy Items}[x]{/GroupBy}', data);
+            System.assert(false, 'Expected malformed {#GroupBy} to throw');
+        } catch (Exception e) {
+            System.assert(e.getMessage().containsIgnoreCase('GroupBy'), 'Error names GroupBy: ' + e.getMessage());
+        }
+    }
+
     // -----------------------------------------------------------------------
     // saveTemplate (update with version creation)
     // -----------------------------------------------------------------------

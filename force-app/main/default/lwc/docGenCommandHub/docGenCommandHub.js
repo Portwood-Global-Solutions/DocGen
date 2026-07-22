@@ -61,6 +61,9 @@ export default class DocGenCommandHub extends LightningElement {
     get isAssets() {
         return this.activeSection === 'assets';
     }
+    get isButtons() {
+        return this.activeSection === 'buttons';
+    }
     get isEmail() {
         return this.activeSection === 'email';
     }
@@ -78,6 +81,9 @@ export default class DocGenCommandHub extends LightningElement {
     }
     get assetsTabClass() {
         return this.activeSection === 'assets' ? 'tab-active' : '';
+    }
+    get buttonsTabClass() {
+        return this.activeSection === 'buttons' ? 'tab-active' : '';
     }
     get emailTabClass() {
         return this.activeSection === 'email' ? 'tab-active' : '';
@@ -97,6 +103,9 @@ export default class DocGenCommandHub extends LightningElement {
     }
     handleShowAssets() {
         this.activeSection = 'assets';
+    }
+    handleShowButtons() {
+        this.activeSection = 'buttons';
     }
     handleShowEmail() {
         this.activeSection = 'email';

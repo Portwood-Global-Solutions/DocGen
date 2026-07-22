@@ -493,6 +493,9 @@ export function buildAiPrompt(shape, options) {
     lines.push(
         '- Child loop: {#RelationshipName} ... {/RelationshipName} repeats the block per child record; child fields are bare inside the loop. If the tags sit inside a table row, the whole <tr> repeats — put {#Rel} in the first cell and {/Rel} in the last cell of the data row. Use a real <thead> for column headers. Nested loops are supported.'
     );
+    lines.push(
+        '- Group into separate tables/sections by a field value: {#GroupBy RelationshipName by GroupField} ... {/GroupBy} repeats its whole block once per DISTINCT value of GroupField among the child records (first-seen order; dot-paths like Product2.Family allowed). Inside the block, {GroupName} is that group’s value (use it as the header), the inner {#RelationshipName}...{/RelationshipName} loops only that group’s members, and {SUM|COUNT|AVG:RelationshipName.Field} totals just that group. Ideal when the user wants "a table per <type/category>" without knowing the values in advance.'
+    );
     lines.push('- Conditional: {#SomeField} shown when truthy {:else} otherwise {/SomeField}.');
     lines.push(
         '- Aggregates (grand totals across a child list, place OUTSIDE the loop): {SUM:Rel.Field}, {AVG:Rel.Field}, {MIN:Rel.Field}, {MAX:Rel.Field}, {COUNT:Rel} or {COUNT:Rel.Field}. All accept format suffixes: {SUM:Lines.Amount:currency}, {SUM:Lines.Amount:currency:EUR:de_DE} (ISO + locale), {SUM:Lines.Amount:currency:auto} (record currency), {COUNT:Lines:number}. The aggregated field must be in the Query Config, but does NOT need to be a rendered column.'
@@ -1377,6 +1380,13 @@ export function buildTagPalette(shape) {
             label: 'If — AND / OR / NOT',
             snippet: "{#IF (Amount > 1000 AND StageName == 'Closed Won') OR Type == 'Renewal'}...{/IF}",
             title: 'Combine with AND, OR, NOT and parentheses'
+        },
+        {
+            key: 'groupby',
+            label: 'Group into tables (by field)',
+            snippet:
+                '{#GroupBy ChildRelationship by GroupField}\n<h3>{GroupName}</h3>\n<table>{#ChildRelationship}<tr><td>{Field}</td></tr>{/ChildRelationship}</table>\nSubtotal: {SUM:ChildRelationship.Field}\n{/GroupBy}',
+            title: 'One table per distinct value of GroupField — {GroupName} is the group header; the inner {#ChildRelationship} loops that group and {SUM:...} totals it. Great for "a table per type".'
         },
         {
             key: 'checkbox',

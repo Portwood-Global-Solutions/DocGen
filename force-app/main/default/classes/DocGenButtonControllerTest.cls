@@ -230,4 +230,97 @@ private class DocGenButtonControllerTest {
         );
         System.assertNotEquals(null, dto.errorMessage, 'A user-facing error message should be returned');
     }
+
+    // ---------------------------------------------------------------------
+    // Record-type matching
+    // ---------------------------------------------------------------------
+
+    @IsTest
+    static void matchesRecordType_blankConfig_matchesAll() {
+        DocGen_Button__mdt c = cfg('X', OBJ, UserInfo.getUserId(), true);
+        // Record_Type_Developer_Names__c left blank.
+        System.assertEquals(true, DocGenButtonController.matchesRecordType(c, 'AnyType'), 'blank = all record types');
+        System.assertEquals(
+            true,
+            DocGenButtonController.matchesRecordType(c, null),
+            'blank matches a record with no RT'
+        );
+    }
+
+    @IsTest
+    static void matchesRecordType_listSemantics() {
+        DocGen_Button__mdt c = cfg('X', OBJ, UserInfo.getUserId(), true);
+        c.Record_Type_Developer_Names__c = 'Standard_Invoice, Credit_Note';
+        System.assertEquals(true, DocGenButtonController.matchesRecordType(c, 'Credit_Note'), 'listed name matches');
+        System.assertEquals(
+            true,
+            DocGenButtonController.matchesRecordType(c, 'standard_invoice'),
+            'match is case-insensitive'
+        );
+        System.assertEquals(
+            false,
+            DocGenButtonController.matchesRecordType(c, 'Quote'),
+            'unlisted name does not match'
+        );
+        System.assertEquals(
+            false,
+            DocGenButtonController.matchesRecordType(c, null),
+            'a record with no RT never matches a config that names specific ones'
+        );
+    }
+
+    @IsTest
+    static void getButtons_filtersByRecordType() {
+        DocGen_Button__mdt all = cfg('All_RTs', OBJ, UserInfo.getUserId(), true); // blank RT → every record type
+        DocGen_Button__mdt needsRt = cfg('Needs_RT', OBJ, UserInfo.getUserId(), true);
+        needsRt.Record_Type_Developer_Names__c = 'Some_Record_Type';
+        DocGenButtonController.configOverride = new List<DocGen_Button__mdt>{ all, needsRt };
+
+        Test.startTest();
+        // User has no record types, so getButtons should hide the config that names one.
+        List<DocGenButtonController.ButtonOption> opts = DocGenButtonController.getButtons(UserInfo.getUserId());
+        Test.stopTest();
+
+        System.assertEquals(1, opts.size(), 'Only the all-record-types config should show for a record with no RT');
+        System.assertEquals('All_RTs', opts[0].developerName, 'The blank-RT config is the one that shows');
+    }
+
+    @IsTest
+    static void generate_recordTypeMismatch_returnsError() {
+        DocGenButtonController.generator = new MockGenerator();
+        DocGen_Button__mdt needsRt = cfg('Needs_RT', OBJ, UserInfo.getUserId(), true);
+        needsRt.Record_Type_Developer_Names__c = 'Some_Record_Type';
+        DocGenButtonController.configOverride = new List<DocGen_Button__mdt>{ needsRt };
+
+        Test.startTest();
+        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(
+            UserInfo.getUserId(),
+            'Needs_RT'
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, dto.success, 'A record-type mismatch must block generation');
+        System.assert(dto.errorMessage.contains('record type'), 'Expected a record-type error: ' + dto.errorMessage);
+    }
+
+    @IsTest
+    static void generate_objectMismatch_returnsError() {
+        DocGenButtonController.generator = new MockGenerator();
+        DocGen_Button__mdt contactCfg = cfg('Contact_Doc', 'Contact', UserInfo.getUserId(), true);
+        DocGenButtonController.configOverride = new List<DocGen_Button__mdt>{ contactCfg };
+
+        Test.startTest();
+        // Invoke a Contact-configured button against a User record.
+        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(
+            UserInfo.getUserId(),
+            'Contact_Doc'
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, dto.success, 'An object mismatch must block generation');
+        System.assert(
+            dto.errorMessage.contains('Contact'),
+            'Expected an object-mismatch error naming the configured object: ' + dto.errorMessage
+        );
+    }
 }

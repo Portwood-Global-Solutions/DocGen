@@ -1385,6 +1385,18 @@ private class DocGenSignatureTests {
         System.assert(results.size() >= 1);
         Map<String, Object> first = results[0];
         System.assertNotEquals(null, first.get('signers'));
+        // 3.42 — each signer carries its record Id + in-person-verify eligibility
+        // so the PIN-bypass action works for historical requests, not just the
+        // freshly-created result list.
+        List<Object> signerList = (List<Object>) first.get('signers');
+        System.assert(!signerList.isEmpty(), 'The request should expose its signers');
+        Map<String, Object> firstSigner = (Map<String, Object>) signerList[0];
+        System.assertNotEquals(null, firstSigner.get('signerId'), 'Signer map must carry the record Id for PIN bypass');
+        System.assertEquals(
+            true,
+            firstSigner.get('canVerifyInPerson'),
+            'A not-yet-signed signer should be eligible for in-person verification'
+        );
     }
 
     @isTest

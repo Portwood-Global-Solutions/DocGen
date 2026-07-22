@@ -131,7 +131,11 @@ public with sharing class DocGenButtonController {
             return options;
         }
         String objectApiName = recordId.getSObjectType().getDescribe().getName();
+        String rtDevName = recordTypeDevName(recordId);
         for (DocGen_Button__mdt cfg : loadConfigs(objectApiName)) {
+            if (!matchesRecordType(cfg, rtDevName)) {
+                continue;
+            }
             ButtonOption opt = new ButtonOption();
             opt.developerName = cfg.DeveloperName;
             opt.label = String.isNotBlank(cfg.MasterLabel) ? cfg.MasterLabel : cfg.DeveloperName;
@@ -149,6 +153,26 @@ public with sharing class DocGenButtonController {
             if (cfg == null) {
                 throw new DocGenButtonException(
                     'No active DocGen Button configuration named "' + configDeveloperName + '".'
+                );
+            }
+            // Enforce the object + record-type match here too — getButtons hides a
+            // mismatched button, but generate is directly callable, so the display
+            // filter alone can be bypassed.
+            String recObject = recordId.getSObjectType().getDescribe().getName();
+            if (String.isNotBlank(cfg.Object_API_Name__c) && cfg.Object_API_Name__c != recObject) {
+                throw new DocGenButtonException(
+                    'DocGen Button "' +
+                        configDeveloperName +
+                        '" is configured for ' +
+                        cfg.Object_API_Name__c +
+                        ' records, not ' +
+                        recObject +
+                        '.'
+                );
+            }
+            if (!matchesRecordType(cfg, recordTypeDevName(recordId))) {
+                throw new DocGenButtonException(
+                    'DocGen Button "' + configDeveloperName + '" is not available for this record\'s record type.'
                 );
             }
             if (String.isBlank(cfg.Template_Id__c) && String.isBlank(cfg.Template_API_Name__c)) {
@@ -262,6 +286,58 @@ public with sharing class DocGenButtonController {
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
+
+    /** Developer name of the record's RecordType, or null when the object has no
+     *  record types or the record is on the master type. Guards the describe so a
+     *  dynamic query never runs against an object without a RecordTypeId field. */
+    @TestVisible
+    private static String recordTypeDevName(Id recordId) {
+        if (recordId == null) {
+            return null;
+        }
+        Schema.DescribeSObjectResult d = recordId.getSObjectType().getDescribe();
+        if (!d.fields.getMap().containsKey('RecordTypeId')) {
+            return null;
+        }
+        // AccessLevel.USER_MODE enforces object + FLS at runtime; the read is
+        // limited to RecordType.DeveloperName on the record the user is acting on.
+        // Graph Engine can't resolve fields inside a dynamic query string, so it
+        // false-positives ApexFlsViolation here — suppress with the runtime guard
+        // documented above.
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<SObject> rows = Database.query(
+            'SELECT RecordType.DeveloperName FROM ' + d.getName() + ' WHERE Id = :recordId LIMIT 1',
+            AccessLevel.USER_MODE
+        );
+        if (rows.isEmpty()) {
+            return null;
+        }
+        SObject rt = rows[0].getSObject('RecordType');
+        return rt == null ? null : (String) rt.get('DeveloperName');
+    }
+
+    /** True when the config applies to the record's record type. A blank
+     *  Record_Type_Developer_Names__c means "all record types" (backward
+     *  compatible). Otherwise the record's record-type developer name must appear
+     *  in the comma-separated list (case-insensitive); a record with no record
+     *  type never matches a config that names specific ones. */
+    @TestVisible
+    private static Boolean matchesRecordType(DocGen_Button__mdt cfg, String rtDevName) {
+        String allowed = cfg == null ? null : cfg.Record_Type_Developer_Names__c;
+        if (String.isBlank(allowed)) {
+            return true;
+        }
+        if (String.isBlank(rtDevName)) {
+            return false;
+        }
+        for (String name : allowed.split(',')) {
+            if (name.trim().equalsIgnoreCase(rtDevName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @TestVisible
     private static List<DocGen_Button__mdt> loadConfigs(String objectApiName) {
         if (configOverride != null) {
@@ -284,7 +360,8 @@ public with sharing class DocGenButtonController {
                 Output_Format_Override__c,
                 Document_Title__c,
                 Active__c,
-                Sort_Order__c
+                Sort_Order__c,
+                Record_Type_Developer_Names__c
             FROM DocGen_Button__mdt
             WHERE Active__c = TRUE AND Object_API_Name__c = :objectApiName
             WITH SYSTEM_MODE
@@ -312,7 +389,8 @@ public with sharing class DocGenButtonController {
                 Save_To_Record__c,
                 Output_Format_Override__c,
                 Document_Title__c,
-                Active__c
+                Active__c,
+                Record_Type_Developer_Names__c
             FROM DocGen_Button__mdt
             WHERE DeveloperName = :developerName AND Active__c = TRUE
             WITH SYSTEM_MODE

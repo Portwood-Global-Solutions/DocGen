@@ -1,0 +1,218 @@
+<template>
+    <div class="slds-card slds-var-p-around_medium">
+        <div class="slds-grid slds-grid_vertical-align-center slds-var-m-bottom_small">
+            <div class="slds-col">
+                <h2 class="slds-text-heading_small">Record-Page Document Buttons</h2>
+                <p class="slds-text-body_small slds-text-color_weak">
+                    Create one-click "generate document" buttons for a record page — no Setup required. Choose the
+                    object, template, and (optionally) which record types the button appears for.
+                </p>
+            </div>
+            <div class="slds-col slds-no-flex">
+                <lightning-button
+                    variant="brand"
+                    label={newLabel}
+                    icon-name="utility:add"
+                    onclick={handleToggleForm}
+                ></lightning-button>
+            </div>
+        </div>
+
+        <div class="slds-box slds-box_xx-small slds-theme_shade slds-text-body_small slds-var-m-bottom_medium">
+            <lightning-icon icon-name="utility:info" size="xx-small" class="slds-var-m-right_xx-small"></lightning-icon>
+            <strong>Two steps to a working button:</strong>
+            <ol class="slds-list_ordered slds-var-m-left_medium slds-var-m-top_xxx-small">
+                <li>Create the button below (object, template, and — optionally — record types).</li>
+                <li>
+                    Add it to the record page. In <strong>Setup → Object Manager →</strong> your object
+                    <strong> → Buttons, Links, and Actions → New Action</strong>: set
+                    <strong>Action Type = Lightning Web Component</strong>, choose <strong>c:docGenButton</strong>, give
+                    it a label, and Save. Then add that action to the object's
+                    <strong>Lightning record page</strong> (or the Page Layout's actions). It shows on records of the
+                    object and record types you picked here.
+                </li>
+            </ol>
+        </div>
+
+        <template if:true={loading}>
+            <lightning-spinner alternative-text="Loading" size="small"></lightning-spinner>
+        </template>
+
+        <!-- Form -->
+        <template if:true={showForm}>
+            <div class="slds-box slds-box_x-small slds-var-m-bottom_medium slds-theme_shade">
+                <h3 class="slds-text-title_caps slds-var-m-bottom_small">{formTitle}</h3>
+                <div class="slds-grid slds-wrap slds-gutters_x-small">
+                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_x-small">
+                        <lightning-input
+                            label="Button label"
+                            data-field="label"
+                            value={form.label}
+                            onchange={handleField}
+                            required
+                        ></lightning-input>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_x-small">
+                        <lightning-combobox
+                            label="Object"
+                            data-field="objectApiName"
+                            value={form.objectApiName}
+                            options={objectOptions}
+                            onchange={handleObjectChange}
+                            placeholder="Pick an object"
+                            required
+                        ></lightning-combobox>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_x-small">
+                        <lightning-combobox
+                            label="Template"
+                            data-field="template"
+                            value={form.template}
+                            options={templateOptions}
+                            onchange={handleComboChange}
+                            placeholder="Pick a template"
+                            required
+                        ></lightning-combobox>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_x-small">
+                        <lightning-combobox
+                            label="Output format override"
+                            data-field="outputFormatOverride"
+                            value={form.outputFormatOverride}
+                            options={outputFormatOptions}
+                            onchange={handleComboChange}
+                        ></lightning-combobox>
+                    </div>
+                    <div class="slds-col slds-size_1-of-1 slds-var-p-bottom_x-small">
+                        <template if:true={hasRecordTypes}>
+                            <lightning-dual-listbox
+                                label="Show for record types"
+                                source-label="Available"
+                                selected-label="Show button for"
+                                field-level-help="Leave empty to show for every record type of the object."
+                                options={recordTypeOptions}
+                                value={selectedRecordTypes}
+                                onchange={handleRecordTypeChange}
+                            ></lightning-dual-listbox>
+                        </template>
+                        <template if:false={hasRecordTypes}>
+                            <p class="slds-text-body_small slds-text-color_weak">
+                                This object has no record types — the button shows for all its records.
+                            </p>
+                        </template>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_x-small">
+                        <lightning-input
+                            label="Document title (optional)"
+                            data-field="documentTitle"
+                            value={form.documentTitle}
+                            onchange={handleField}
+                            placeholder="e.g. Invoice for {Name}"
+                        ></lightning-input>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-var-p-bottom_x-small">
+                        <lightning-input
+                            type="number"
+                            label="Sort order (optional)"
+                            data-field="sortOrder"
+                            value={form.sortOrder}
+                            onchange={handleField}
+                        ></lightning-input>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-var-p-vertical_x-small">
+                        <lightning-input
+                            type="checkbox"
+                            label="Save generated file to the record"
+                            data-field="saveToRecord"
+                            checked={form.saveToRecord}
+                            onchange={handleField}
+                        ></lightning-input>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-var-p-vertical_x-small">
+                        <lightning-input
+                            type="checkbox"
+                            label="Active"
+                            data-field="active"
+                            checked={form.active}
+                            onchange={handleField}
+                        ></lightning-input>
+                    </div>
+                </div>
+                <div class="slds-var-m-top_small">
+                    <lightning-button
+                        variant="brand"
+                        label={saveLabel}
+                        onclick={handleSave}
+                        disabled={saving}
+                    ></lightning-button>
+                    <lightning-button
+                        class="slds-var-m-left_x-small"
+                        label="Cancel"
+                        onclick={handleToggleForm}
+                    ></lightning-button>
+                </div>
+            </div>
+        </template>
+
+        <!-- List -->
+        <template if:true={hasButtons}>
+            <table class="slds-table slds-table_cell-buffer slds-table_bordered">
+                <thead>
+                    <tr class="slds-line-height_reset">
+                        <th scope="col"><div class="slds-truncate">Label</div></th>
+                        <th scope="col"><div class="slds-truncate">Object</div></th>
+                        <th scope="col"><div class="slds-truncate">Sort</div></th>
+                        <th scope="col"><div class="slds-truncate">Record types</div></th>
+                        <th scope="col"><div class="slds-truncate">Template</div></th>
+                        <th scope="col"><div class="slds-truncate">Status</div></th>
+                        <th scope="col"><div class="slds-truncate">Actions</div></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template for:each={buttons} for:item="b">
+                        <tr key={b.developerName} class="slds-hint-parent">
+                            <td><div class="slds-truncate" title={b.label}>{b.label}</div></td>
+                            <td><div class="slds-truncate" title={b.objectApiName}>{b.objectApiName}</div></td>
+                            <td><div class="slds-truncate">{b.sortOrder}</div></td>
+                            <td><div class="slds-truncate" title={b.recordTypesLabel}>{b.recordTypesLabel}</div></td>
+                            <td>
+                                <div class="slds-truncate" title={b.templateApiName}>
+                                    {b.templateApiName}{b.templateId}
+                                </div>
+                            </td>
+                            <td>
+                                <span class={b.statusBadgeClass}>{b.statusLabel}</span>
+                            </td>
+                            <td>
+                                <lightning-button-icon
+                                    icon-name="utility:edit"
+                                    alternative-text="Edit"
+                                    title="Edit"
+                                    data-name={b.developerName}
+                                    onclick={handleEdit}
+                                ></lightning-button-icon>
+                                <template if:true={b.active}>
+                                    <lightning-button-icon
+                                        class="slds-var-m-left_xx-small"
+                                        icon-name="utility:toggle"
+                                        alternative-text="Deactivate"
+                                        title="Deactivate (hide the button)"
+                                        data-name={b.developerName}
+                                        onclick={handleDeactivate}
+                                    ></lightning-button-icon>
+                                </template>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </template>
+        <template if:false={hasButtons}>
+            <template if:false={loading}>
+                <p class="slds-text-body_regular slds-text-color_weak slds-var-p-vertical_small">
+                    No document buttons yet. Click <strong>New Button</strong> to create your first one.
+                </p>
+            </template>
+        </template>
+    </div>
+</template>

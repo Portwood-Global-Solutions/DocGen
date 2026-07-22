@@ -794,6 +794,10 @@ export default class DocGenSignatureSender extends NavigationMixin(LightningElem
                 `${signerName} marked as verified. Signing page opened in a new tab.`,
                 'success'
             );
+            // Keep the "previous requests" list in sync when the bypass was
+            // triggered from a historical row (status flips to Viewed, and the
+            // button hides once no longer eligible).
+            await this.loadPreviousRequests();
         } catch (e) {
             const msg = e.body && e.body.message ? e.body.message : e.message || 'Unknown error.';
             this.showToast('Unable to mark verified', msg, 'error');

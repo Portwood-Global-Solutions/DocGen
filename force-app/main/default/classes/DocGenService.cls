@@ -3762,8 +3762,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
                 if (tagContent.startsWith('#')) {
                     String key = tagContent.substring(1).trim();
-                    // For {#IF ...} expressions, the closing tag is {/IF} not {/IF expression}
-                    String balanceKey = (key.startsWith('IF ') || key.startsWith('if ')) ? 'IF' : key;
+                    // For {#IF ...} and {#GroupBy ...} the closing tag is the bare
+                    // keyword ({/IF} / {/GroupBy}), not the full opener expression.
+                    String balanceKey = (key.startsWith('IF ') || key.startsWith('if '))
+                        ? 'IF'
+                        : (key.startsWithIgnoreCase('GroupBy ') ? 'GroupBy' : key);
                     Integer sectionEnd = findBalancedEnd(xml, tagClose + 1, balanceKey);
                     if (sectionEnd == -1) {
                         String snippet = xml.substring(Math.max(0, tagStartPos - 40), Math.min(len, tagStartPos + 40));
@@ -3802,6 +3805,11 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         Integer chosenContainerStart = -1;
                         Integer chosenContainerEnd = -1;
                         Boolean isIfConditional = key.startsWith('IF ') || key.startsWith('if ');
+                        // {#GroupBy ...} repeats its ENTIRE block once per group, so it
+                        // must never trigger single-row/list container auto-expansion —
+                        // same reasoning as {#IF ...} (issue #53).
+                        Boolean isGroupBy = key.startsWithIgnoreCase('GroupBy ');
+                        Boolean skipContainerExpand = isIfConditional || isGroupBy;
 
                         // Candidate: row container (skipped for {#IF ...} conditionals — issue #53).
                         // Sibling guard: if the row already contains another section opener/closer
@@ -3810,7 +3818,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         // `{#A}…{/A} … {#B}…{/B}` sections inside one row would each grab the
                         // whole row, dropping the siblings' content (truthy path renders only
                         // the first section's trueBranch and advances past `</w:tr>`).
-                        Integer rowContainerStart = isIfConditional ? -1 : lastIndexOfTagStart(xml, 'w:tr', cursor);
+                        Integer rowContainerStart = skipContainerExpand ? -1 : lastIndexOfTagStart(xml, 'w:tr', cursor);
                         if (rowContainerStart != -1) {
                             Integer rowContainerEnd = xml.indexOf('</w:tr>', rowContainerStart);
                             Boolean rowClosedBeforeCursor = xml.substring(rowContainerStart, cursor)
@@ -3839,7 +3847,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         // paragraph (e.g. Ben's checkbox doc: `{#A}☒{:else}☐{/A} label {#B}…`)
                         // would each grab the whole paragraph and drop everything after their
                         // own `{/}` closing tag.
-                        Integer numPropsStart = isIfConditional ? -1 : xml.lastIndexOf('<w:numPr', cursor);
+                        Integer numPropsStart = skipContainerExpand ? -1 : xml.lastIndexOf('<w:numPr', cursor);
                         if (numPropsStart != -1) {
                             Integer paragraphStart = lastIndexOfTagStart(xml, 'w:p', cursor);
                             if (paragraphStart != -1 && paragraphStart <= numPropsStart) {
@@ -3876,7 +3884,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         // HTML template type (v1.61+): mirror the DOCX auto-expand behavior
                         // for <tr> rows and <li> list items. Only considered when the merge
                         // engine is running in HTML context — leaves DOCX paths untouched.
-                        if (currentTemplateType == 'HTML' && !isIfConditional) {
+                        if (currentTemplateType == 'HTML' && !skipContainerExpand) {
                             // Candidate: HTML <tr> row
                             Integer htmlTrStart = lastIndexOfTagStart(xml, 'tr', cursor);
                             if (htmlTrStart != -1) {
@@ -3911,7 +3919,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         // spreadsheetml. Cloned rows carry duplicate r indices and cell refs
                         // (Excel treats duplicates as corruption); renumberExcelRows() rewrites
                         // them after the merge pass.
-                        if (currentTemplateType == 'Excel' && !isIfConditional) {
+                        if (currentTemplateType == 'Excel' && !skipContainerExpand) {
                             Integer xlRowStart = lastIndexOfTagStart(xml, 'row', cursor);
                             if (xlRowStart != -1) {
                                 Integer xlRowEnd = xml.indexOf('</row>', xlRowStart);
@@ -3996,6 +4004,17 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                             } else if (elseBranch != null) {
                                 output += processXml(elseBranch, data);
                             }
+                            cursor = (closeTagEnd != -1 ? closeTagEnd + 1 : sectionEnd);
+                            continue;
+                        }
+
+                        // {#GroupBy <Relationship> by <Field>} — repeat the block once
+                        // per distinct value of Field among the relationship's records
+                        // (Conga-style grouping). {GroupName} is the group value and the
+                        // inner {#<Relationship>}…/{SUM:<Relationship>.…} are scoped to
+                        // the current group's members.
+                        if (key.startsWithIgnoreCase('GroupBy ')) {
+                            output += renderGroupBy(key.substring(8).trim(), trueBranch, data);
                             cursor = (closeTagEnd != -1 ? closeTagEnd + 1 : sectionEnd);
                             continue;
                         }
@@ -4417,6 +4436,90 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return output;
     }
 
+    /**
+     * Renders a {#GroupBy <Relationship> by <Field>} … {/GroupBy} block.
+     *
+     * Groups the relationship's already-retrieved child records by <Field>
+     * (dot-paths like Product2.Family supported) and emits the block once per
+     * distinct value, in FIRST-SEEN order — so the query's ORDER BY controls the
+     * group order. Inside each rendered block:
+     *   - {GroupName} resolves to the group's value (the header),
+     *   - {#<Relationship>}…{/<Relationship>} loops only that group's members,
+     *   - {SUM|COUNT|AVG|MIN|MAX:<Relationship>.Field} aggregate the group,
+     * because the per-group context re-binds <Relationship> to just its members
+     * (preserving the original value shape — plain list vs {records:…} map).
+     * An empty/absent relationship renders nothing.
+     */
+    private static String renderGroupBy(String spec, String block, Map<String, Object> data) {
+        Integer byIdx = spec.toLowerCase().indexOf(' by ');
+        if (byIdx == -1) {
+            throw new DocGenException(
+                'Malformed {#GroupBy}: expected "{#GroupBy <Relationship> by <Field>}", got "{#GroupBy ' + spec + '}".'
+            );
+        }
+        String relName = spec.substring(0, byIdx).trim();
+        String groupField = spec.substring(byIdx + 4).trim();
+        if (String.isBlank(relName) || String.isBlank(groupField)) {
+            throw new DocGenException(
+                'Malformed {#GroupBy}: a relationship and a field are both required, ' +
+                'e.g. "{#GroupBy OpportunityLineItems by Product2.Family}".'
+            );
+        }
+        Object originalVal = data.get(relName);
+        List<Object> records = childRecordsOf(originalVal);
+        if (records == null || records.isEmpty()) {
+            return '';
+        }
+        List<String> order = new List<String>();
+        Map<String, List<Object>> groups = new Map<String, List<Object>>();
+        Map<String, Object> rawByKey = new Map<String, Object>();
+        for (Object rec : records) {
+            if (!(rec instanceof Map<String, Object>)) {
+                continue;
+            }
+            Object gv = resolveValue((Map<String, Object>) rec, groupField);
+            String gk = gv == null ? '' : String.valueOf(gv);
+            if (!groups.containsKey(gk)) {
+                groups.put(gk, new List<Object>());
+                order.add(gk);
+                rawByKey.put(gk, gv);
+            }
+            groups.get(gk).add(rec);
+        }
+        String out = '';
+        for (String gk : order) {
+            Map<String, Object> ctx = new Map<String, Object>(data);
+            Object gv = rawByKey.get(gk);
+            ctx.put('GroupName', gv == null ? '' : String.valueOf(gv));
+            // Re-bind the relationship to this group's members, keeping the
+            // original value shape so inner loops AND aggregates work unchanged.
+            if (originalVal instanceof Map<String, Object>) {
+                Map<String, Object> gm = new Map<String, Object>((Map<String, Object>) originalVal);
+                gm.put('records', groups.get(gk));
+                ctx.put(relName, gm);
+            } else {
+                ctx.put(relName, groups.get(gk));
+            }
+            out += processXml(block, ctx);
+        }
+        return out;
+    }
+
+    /** Extracts the record list from a relationship value that is either a plain
+     *  List<Object> or a {records: List<Object>, …} map (aliased/subset form). */
+    private static List<Object> childRecordsOf(Object v) {
+        if (v instanceof List<Object>) {
+            return (List<Object>) v;
+        }
+        if (v instanceof Map<String, Object>) {
+            Object recs = ((Map<String, Object>) v).get('records');
+            if (recs instanceof List<Object>) {
+                return (List<Object>) recs;
+            }
+        }
+        return null;
+    }
+
     private static Integer findBalancedEnd(String xml, Integer startSearch, String key) {
         Integer depth = 1;
         Integer cursor = startSearch;
@@ -4442,6 +4545,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     content.equals('^IF') ||
                     content.startsWith('^IF ');
                 isCloser = content.equals('/IF');
+            } else if (key == 'GroupBy') {
+                // GroupBy openers carry a spec ("#GroupBy Rel by Field"); the
+                // close tag is bare "/GroupBy". Same shape as IF above so nested
+                // GroupBy blocks balance correctly.
+                isOpener = content.equals('#GroupBy') || content.startsWith('#GroupBy ');
+                isCloser = content.equals('/GroupBy');
             } else {
                 isOpener = content.equals('#' + key) || content.equals('^' + key);
                 isCloser = content.equals('/' + key);

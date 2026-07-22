@@ -27,6 +27,10 @@
                     <lightning-icon icon-name="utility:image" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Assets</span>
                 </button>
+                <button class={buttonsTabClass} onclick={handleShowButtons}>
+                    <lightning-icon icon-name="utility:button_choice" size="x-small" class="nav-icon"></lightning-icon>
+                    <span>Buttons</span>
+                </button>
                 <button class={emailTabClass} onclick={handleShowEmail}>
                     <lightning-icon icon-name="utility:email" size="x-small" class="nav-icon"></lightning-icon>
                     <span>Email Templates</span>
@@ -109,6 +113,20 @@
                         </div>
                         <div class="panel-body">
                             <c-doc-gen-assets></c-doc-gen-assets>
+                        </div>
+                    </template>
+
+                    <!-- BUTTONS -->
+                    <template if:true={isButtons}>
+                        <div class="panel-header">
+                            <h2>Document Buttons</h2>
+                            <p>
+                                Create one-click document buttons for record pages — choose the object, template, and
+                                record types, no Setup needed.
+                            </p>
+                        </div>
+                        <div class="panel-body">
+                            <c-doc-gen-button-builder></c-doc-gen-button-builder>
                         </div>
                     </template>
 

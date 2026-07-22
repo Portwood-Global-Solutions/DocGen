@@ -2258,6 +2258,15 @@ public with sharing class DocGenSignatureSenderController {
             List<Map<String, Object>> signerList = new List<Map<String, Object>>();
             for (DocGen_Signer__c signer : req.Signers__r) {
                 Map<String, Object> signerMap = new Map<String, Object>();
+                // 3.42 — carry the signer record Id + eligibility so the "Sign In
+                // Person" (PIN bypass) action works for historical requests and
+                // after a page refresh, not just the freshly-created result list.
+                // markSignerVerifiedInPerson stays DocGen_Admin-gated + audited.
+                signerMap.put('signerId', signer.Id);
+                signerMap.put(
+                    'canVerifyInPerson',
+                    signer.Status__c != 'Signed' && signer.Status__c != 'Cancelled' && signer.Status__c != 'Declined'
+                );
                 signerMap.put('signerName', signer.Signer_Name__c);
                 signerMap.put('signerEmail', signer.Signer_Email__c);
                 signerMap.put('roleName', signer.Role_Name__c);
