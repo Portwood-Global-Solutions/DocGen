@@ -283,7 +283,9 @@ HTML templates open in a full WYSIWYG designer — the page you see is the page 
 - **Page setup** — size, orientation, and margins pickers write a clean `@page` rule into your document. If your HTML declares its own `@page`, the engine defers to it.
 - **Panels** — `+ Insert` (blocks, tables, charts, barcodes, special characters — or press `` ` `` anywhere on the page), `{} Tags` (your query's merge fields as clickable chips), Images (the shared Asset Library), Query (edit fields without leaving the designer), Versions, Header/Footer, and Watermark.
 
-**Text formatting:** bold/italic/underline/strike (the buttons read as _pressed_ when your cursor sits on formatted text — click again to unformat), super/subscript, lists, alignment, four text sizes, text and highlight colors, three font families, Unicode-safe special characters, undo/redo.
+**Text formatting:** bold/italic/underline/strike (the buttons read as _pressed_ when your cursor sits on formatted text — click again to unformat), super/subscript, lists, alignment, a **numeric point-size box** with −/+ steppers (any exact 6–96pt value; it reads the size at your cursor), text and highlight colors, font families, Unicode-safe special characters, undo/redo.
+
+**Merge tags style like the text around them (v3.36+).** A `{Name}` pill inside a 24pt serif heading renders in 24pt serif — what you see is what the merged value prints. You can also style a tag directly: click the pill and use the toolbar (bold, italic, underline, strike, color, font, size). The styling serializes as a styled span around the tag and survives save/reopen, so the engine merges the value _inside_ your formatting.
 
 **Tables — Excel-level editing:**
 
@@ -1258,6 +1260,26 @@ Nested loops are supported:
 
 Empty loops (null or empty child list) render nothing — no error.
 
+**Group into a table (or block) per value — `{#GroupBy}` (v3.42+).** When you want one table per _type_ / _category_ / _status_ — and you don't want to hand-write a separate loop for every value — group a child relationship by a field and repeat the block once per distinct value:
+
+```
+{#GroupBy OpportunityLineItems by Product2.Family}
+  <h3>{GroupName}</h3>
+  <table>
+    {#OpportunityLineItems}
+      <tr><td>{Product2.Name}</td><td>{TotalPrice:currency}</td></tr>
+    {/OpportunityLineItems}
+    <tr><td>Subtotal</td><td>{SUM:OpportunityLineItems.TotalPrice:currency}</td></tr>
+  </table>
+{/GroupBy}
+```
+
+- `{#GroupBy <Relationship> by <Field>}` repeats its whole block once per **distinct value** of `<Field>` among the relationship's records. 50 distinct values → 50 tables, automatically — no need to know the values in advance.
+- Groups render in **first-seen order**, so add `ORDER BY <Field>` to that relationship in the Query Config to control (e.g. alphabetize) group order.
+- `<Field>` may be a **dot-path** on the child (e.g. `Product2.Family`, `Owner.Name`).
+- Inside the block: **`{GroupName}`** is the group's value (use it as the header); the inner **`{#<Relationship>}…{/<Relationship>}`** loops only that group's members; and **`{SUM|COUNT|AVG|MIN|MAX:<Relationship>.Field}`** aggregate just that group.
+- Works identically in Word and HTML templates. An empty/absent relationship renders nothing.
+
 ### 7.4 Conditionals
 
 #### Boolean conditional
@@ -2168,13 +2190,18 @@ A packet is multiple templates generated in one action and merged (or sent as a 
 
 For the "this object always generates this one template" case, add the **DocGen Button** quick action to a record page — one click generates and downloads the document, with no Runner and no Flow wrapper. Community-contributed.
 
-**Setup (three steps):**
+**Configure a button — from the UI (v3.42+, recommended).** Open the DocGen app → **Command Hub → Buttons** tab. Click **New Button**, then pick the **object**, the **template**, and (optionally) which **record types** the button appears for, a document title, output-format override, save-to-record, sort order, and active flag. Saving writes the configuration for you (behind the scenes it deploys a **DocGen Button** custom metadata record — this is asynchronous, so a new button appears in the list a few seconds later). No Setup navigation, no hand-typed API names. The list view shows every button with its object, sort order, record types, and status; edit or deactivate from there.
 
-1. **Configure a button** — Setup → Custom Metadata Types → **DocGen Button** → Manage Records → New. Set **Object API Name** (e.g. `Opportunity`) and **Template API Name** (the template's API Name field — environment-stable, deploys cleanly) or **Template Id** (org-specific; takes precedence when both are set). Optionally **Save To Record**, **Output Format Override**, **Document Title**, and **Sort Order**. Only Active records are offered. (Put the fields on the CMDT layout first — non-required fields don't auto-place.)
-2. **Grant access** — the standard **DocGen User** / **DocGen Admin** permission sets already include the button (v3.28+). The standalone **DocGen Quick Action** permission set exists for granting the button on its own.
-3. **Place the action** — Object Manager → your object → Buttons, Links, and Actions → New Action → Lightning Web Component → `docGenButton`, then add it to the page layout's actions.
+**Configure a button — via Setup (classic).** Setup → Custom Metadata Types → **DocGen Button** → Manage Records → New. Set **Object API Name** (e.g. `Opportunity`) and **Template API Name** (the template's API Name field — environment-stable, deploys cleanly) or **Template Id** (org-specific; takes precedence when both are set). Optionally **Save To Record**, **Output Format Override**, **Document Title**, **Sort Order**, and **Record Type Developer Names** (see below). Only Active records are offered. (Put the fields on the CMDT layout first — non-required fields don't auto-place.)
 
-When an object has one active configuration the click generates immediately; with several, a small picker appears. **Save To Record** additionally attaches the file to the record's Files.
+**Show a button only for certain record types (v3.42+).** The **Record Type Developer Names** field limits a button to specific record types of the object — a comma-separated list of RecordType **Developer Names** (e.g. `Standard_Invoice, Credit_Note`), matched against the record's record type. Leave it blank to show the button for **every** record type. This is enforced both when the button list is built and when it generates, so it can't be bypassed. (In the Command Hub builder this is the record-type checklist; it only appears for objects that actually have record types.)
+
+**Then, two more steps:**
+
+1. **Grant access** — the standard **DocGen User** / **DocGen Admin** permission sets already include the button (v3.28+). The standalone **DocGen Quick Action** permission set exists for granting the button on its own.
+2. **Place the action on the record page** — Object Manager → your object → Buttons, Links, and Actions → New Action → Lightning Web Component → `docGenButton`, then add that action to the object's Lightning record page (or Page Layout actions). Creating the button configuration does **not** place it on the page automatically — this step surfaces it.
+
+When an object has one active configuration (matching the record's type) the click generates immediately; with several, a small picker appears. **Save To Record** additionally attaches the file to the record's Files.
 
 > **Limitation:** this is a synchronous path — templates over the giant-query threshold (~2,000 child rows) will show an error instead of downloading. Use the Runner or a Flow with the Bulk/Giant actions for those.
 
@@ -2332,6 +2359,8 @@ Admins with `DocGen_Admin` permission set see a **Sign In Person** button on the
 - Browser confirm dialog asks them to attest they've verified the signer's identity in person.
 - The signing URL opens in a new tab without requiring PIN.
 - An audit record captures who bypassed, when, and the attestation.
+
+As of **v3.42+** the **Sign In Person** button is also available on the **Previous Requests** list — so you can bypass the PIN for a request that was sent earlier or after a page refresh, not only on the request you just created. It appears for any signer who hasn't already Signed/Cancelled/Declined, and the same `DocGen_Admin`-only gate and audit logging apply.
 
 ### 10.7 Signing page experience
 

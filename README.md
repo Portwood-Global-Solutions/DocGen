@@ -4,12 +4,12 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.41.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.42.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
-[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1727_passing-brightgreen)](#code-quality)
-[![Coverage](https://img.shields.io/badge/Coverage-77%25-brightgreen)](#code-quality)
+[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1741_passing-brightgreen)](#code-quality)
+[![Coverage](https://img.shields.io/badge/Coverage-78%25-brightgreen)](#code-quality)
 [![Security](https://img.shields.io/badge/Code_Analyzer-0%2F0%2F0-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
 
@@ -18,10 +18,10 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 ## Install
 
 ```bash
-sf package install --package 04tVx000000rfD7IAI --wait 10 --target-org <your-org>
+sf package install --package 04tVx000000rj5RIAQ --wait 10 --target-org <your-org>
 ```
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rfD7IAI) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rfD7IAI)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rj5RIAQ) | [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000rj5RIAQ)
 
 **Then:** Assign **DocGen Admin** permission set | Enable **Blob.toPdf() Release Update** | Open the **DocGen** app
 
@@ -56,16 +56,17 @@ Word and HTML both support images, rich text, headers/footers, and PDF output. W
 
 ### Merge Tags
 
-| Tag                             | What It Does                         | Example                                                      |
-| ------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
-| `{FieldName}`                   | Insert a field value                 | `{Name}`, `{Email}`, `{Phone}`                               |
-| `{Parent.Field}`                | Pull from a related record           | `{Account.Name}`, `{Owner.Email}`                            |
-| `{#ChildList}...{/ChildList}`   | Repeat for each child record         | `{#Contacts}{FirstName}{/Contacts}`                          |
-| `{#BoolField}...{/BoolField}`   | Show/hide based on checkbox          | `{#IsActive}Active member{/IsActive}`                        |
-| `{#Field}...{:else}...{/Field}` | Show/hide with fallback              | `{#Industry}Sector: {Industry}{:else}No industry{/Industry}` |
-| `{^Field}...{/Field}`           | Show when field is false/blank       | `{^HasDiscount}No discount applied{/HasDiscount}`            |
-| `{#IF Field op Value}...{/IF}`  | Compare field against value          | `{#IF Amount > 50000}Premium{:else}Standard{/IF}`            |
-| `{RichTextField}`               | Rich text with formatting and images | `{Description}` renders bold, italic, lists                  |
+| Tag                                     | What It Does                                | Example                                                      |
+| --------------------------------------- | ------------------------------------------- | ------------------------------------------------------------ |
+| `{FieldName}`                           | Insert a field value                        | `{Name}`, `{Email}`, `{Phone}`                               |
+| `{Parent.Field}`                        | Pull from a related record                  | `{Account.Name}`, `{Owner.Email}`                            |
+| `{#ChildList}...{/ChildList}`           | Repeat for each child record                | `{#Contacts}{FirstName}{/Contacts}`                          |
+| `{#GroupBy List by Field}...{/GroupBy}` | One block/table per distinct value (v3.42+) | `{#GroupBy Lines by Product2.Family}{GroupName}…{/GroupBy}`  |
+| `{#BoolField}...{/BoolField}`           | Show/hide based on checkbox                 | `{#IsActive}Active member{/IsActive}`                        |
+| `{#Field}...{:else}...{/Field}`         | Show/hide with fallback                     | `{#Industry}Sector: {Industry}{:else}No industry{/Industry}` |
+| `{^Field}...{/Field}`                   | Show when field is false/blank              | `{^HasDiscount}No discount applied{/HasDiscount}`            |
+| `{#IF Field op Value}...{/IF}`          | Compare field against value                 | `{#IF Amount > 50000}Premium{:else}Standard{/IF}`            |
+| `{RichTextField}`                       | Rich text with formatting and images        | `{Description}` renders bold, italic, lists                  |
 
 ### Formatting
 
@@ -371,7 +372,7 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-DocGen ships on a **biweekly release cycle**. Latest release: **v3.41.0 — designer save reliability**: new paragraphs and blocks you add in the visual designer's Visual mode now save reliably (a managed-package-only Lightning security sandbox dropped browser-added content when serializing the canvas back to HTML), and the starter templates size your logo correctly out of the box. Before that: **v3.40.0 — designer canvas stability**: backspacing at the page's top-left corner can no longer make the white canvas disappear — the caret is steered onto real content before any edit runs, and the page's styling self-heals if an editing quirk ever removes it. Before that: **v3.39.0 — designer reliability fix for installed orgs**: resolves designer freezes, Visual/Source switching losing changes, and silently dropped edits in orgs whose Lightning security sandbox lacks a modern DOM method; saves now stage by comparing actual content. Before that: **v3.38.0 — instant PDF previews**: the designer's PDF Preview opens your draft in a new tab in the native viewer with nothing saved to Files, the AI prompt now teaches image sizing, barcodes/QR, and charts (and points assistants at the full UserGuide), and barcode tags show at true printed size on the canvas. Before that: **v3.37.0 — one visual query builder everywhere**: the click-to-build query tree now powers the designer's Query panel and the Generate-with-AI step (parent lookups at any depth, filtered related lists, live-updating AI prompt), and designer images are first-class — drag to place, corner-resize, align, double-click to edit the tag. Recent releases: **v3.36.0** made merge tags style like text with a Google-Docs-style point-size box; **v3.35.0** brought Excel-level table editing, watermarks on HTML-template PDFs, scan-verified barcodes, and a landscape Certificate starter; **v3.34.0** introduced the HTML-first template wizard and the visual Template Designer (Beta).
+DocGen ships on a **biweekly release cycle**. Latest release: **v3.42.0 — group-by tables, button builder, historical PIN bypass**: a new `{#GroupBy}` tag renders one table per category automatically (50 categories → 50 tables, no manual setup); a point-and-click **Buttons** tab in the Command Hub builds record-page document buttons — pick the object, template, and which record types show them — with no Setup navigation; and admins can bypass the email PIN on previously-sent signature requests, not just freshly-created ones. Before that: **v3.41.0 — designer save reliability**: new paragraphs and blocks you add in the visual designer's Visual mode now save reliably (a managed-package-only Lightning security sandbox dropped browser-added content when serializing the canvas back to HTML), and the starter templates size your logo correctly out of the box. Before that: **v3.40.0 — designer canvas stability**: backspacing at the page's top-left corner can no longer make the white canvas disappear — the caret is steered onto real content before any edit runs, and the page's styling self-heals if an editing quirk ever removes it. Before that: **v3.39.0 — designer reliability fix for installed orgs**: resolves designer freezes, Visual/Source switching losing changes, and silently dropped edits in orgs whose Lightning security sandbox lacks a modern DOM method; saves now stage by comparing actual content. Before that: **v3.38.0 — instant PDF previews**: the designer's PDF Preview opens your draft in a new tab in the native viewer with nothing saved to Files, the AI prompt now teaches image sizing, barcodes/QR, and charts (and points assistants at the full UserGuide), and barcode tags show at true printed size on the canvas. Before that: **v3.37.0 — one visual query builder everywhere**: the click-to-build query tree now powers the designer's Query panel and the Generate-with-AI step (parent lookups at any depth, filtered related lists, live-updating AI prompt), and designer images are first-class — drag to place, corner-resize, align, double-click to edit the tag. Recent releases: **v3.36.0** made merge tags style like text with a Google-Docs-style point-size box; **v3.35.0** brought Excel-level table editing, watermarks on HTML-template PDFs, scan-verified barcodes, and a landscape Certificate starter; **v3.34.0** introduced the HTML-first template wizard and the visual Template Designer (Beta).
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/DocGen/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -444,7 +445,8 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
-| v3.41.0 | **Latest (Released)**                   | `04tVx000000rfD7IAI` |
+| v3.42.0 | **Latest (Released)**                   | `04tVx000000rj5RIAQ` |
+| v3.41.0 | Released                                | `04tVx000000rfD7IAI` |
 | v3.40.0 | Released                                | `04tVx000000rWrNIAU` |
 | v3.39.0 | Released                                | `04tVx000000rGkzIAE` |
 | v3.38.0 | Released                                | `04tVx000000rEmPIAU` |
