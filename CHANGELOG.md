@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.41.0 — Designer save reliability (new paragraphs) + sized starter logos
+
+### Fixed
+
+- **New paragraphs added in the visual designer disappeared on Save or when switching to Source** — in installed (subscriber) orgs, Lightning Web Security's namespace sandbox drops browser-inserted DOM nodes from `cloneNode(true)`, which the designer used to serialize the canvas back to HTML. Edits to text in _existing_ blocks survived (those nodes came from our own write and clone fine), but any block you _added_ in Visual mode — a new paragraph, a pasted block — was silently lost. Community report. The designer now serializes from the canvas's live HTML string instead of a cloned node tree, so added content round-trips reliably. This is a companion to v3.39.0's `replaceWith` fix — a second, subtler facet of the same namespace-sandbox behavior, and only ever reproduced in a managed-package install (never in development).
+
+### Changed
+
+- **Starter templates size the logo out of the box** — the Record Report, Business Letter, and Invoice starters carried an unsized `{%asset:logo}` tag, so an uploaded logo rendered at its full native resolution and could overrun the header band. Every starter logo (and the Insert → Image "Shared asset" snippet) now carries a `:144x` size token (~1.5in wide, height auto), matching the already-sized Agreement starter.
+
+LWC-only release — no server-side changes. Verified in a namespaced org: new paragraphs added in Visual mode now appear in Source and persist through Save; sized logos render within the header. Full e2e suite (13 scripts) + RunLocalTests (1727 methods, 100% pass) green. (This release also splits e2e-03's page-setup matrix into e2e-03b so the suite stays under the 100-SOQL synchronous limit — test tooling only.)
+
 ## v3.40.0 — Designer canvas stability (top-left backspace)
 
 ### Fixed
