@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.43.0 — Button-builder access hardening (DocGen Button Manager permission set)",
-      "versionNumber": "3.43.0.NEXT",
+      "versionName": "v3.44.0 — E-signature certificate unification, multi-signer verification fix, Designer panel close fix",
+      "versionNumber": "3.44.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.43 hardens access to the document-button builder introduced in v3.42: managing buttons is now a separate, deliberately-assigned permission (the new DocGen Button Manager permission set) and the builder appears only for administrators who also hold metadata-customization rights. 100% native Salesforce — no external services or callouts. Free for all users.",
-      "ancestorVersion": "3.42.0"
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.44 unifies the e-signature Certificate of Completion across both signing paths — every completed document now carries the same ESIGN/UETA attestation and a link to the verify page. It fixes multi-signer verification so uploading a signed PDF to the verify page returns every signer, not just the last one. And it resolves a Designer issue where the slide-in panels (Insert, Tags, Images, Query, Versions, Header/Footer, Watermark) could sit behind the Salesforce tab bar: panels now stay clear of the chrome, keep their close button pinned, and close with Escape. 100% native Salesforce — no external services or callouts. Free for all users.",
+      "ancestorVersion": "3.43.0"
     }
   ],
   "name": "Portwood DocGen",
@@ -208,6 +208,8 @@
     "Portwood DocGen Managed@3.40.0-1": "04tVx000000rWrNIAU",
     "Portwood DocGen Managed@3.41.0-1": "04tVx000000rfD7IAI",
     "Portwood DocGen Managed@3.42.0-1": "04tVx000000rj5RIAQ",
-    "Portwood DocGen Managed@3.43.0-1": "04tVx000000rkeDIAQ"
+    "Portwood DocGen Managed@3.43.0-1": "04tVx000000rkeDIAQ",
+    "Portwood DocGen Managed@3.44.0-1": "04tVx000000rksjIAA",
+    "Portwood DocGen Managed@3.44.0-2": "04tVx000000rlATIAY"
   }
 }

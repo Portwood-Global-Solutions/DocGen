@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.44.0 — E-signature certificate unification, multi-signer verify fix, Designer panel close fix
+
+### Fixed
+
+- **Multi-signer verification returned only one signer when the document was uploaded.** On the guided/drawn signing path each signer composites onto the previous signer's PDF, and each signer's audit was stamped with the hash of the document _as of their signing_ — so only the final signer's hash matched the delivered file. Uploading a completed multi-signer PDF to the verify page (SHA-256 lookup) therefore showed just one signer, while the token link correctly showed everyone. On completion, every signer's audit is now back-filled with the final document hash, so **both** verify paths — file upload **and** token link — return the full signer roster. A regression test drives a two-signer composited flow and asserts the upload path returns all signers.
+- **Designer slide-in panels could hide behind the Salesforce tab bar.** In taller chrome (console / NPSP navigation) the floating panels — Insert, Tags, Images, Query, Versions, Header/Footer, Watermark — opened partly under the tab bar, so their close button wasn't reachable. Panels now pin their top just below the _actual_ rendered chrome (measured live, so it adapts to any org's tab-bar height), keep the close button in a sticky header so it stays reachable while the panel scrolls, and close with **Escape**.
+
+### Changed
+
+- **Unified e-signature Certificate of Completion across both signing paths.** The typed/server certificate and the drawn/guided certificate now emit the same thing: the **ESIGN/UETA attestation** appears on both (previously drawn-path only) and both carry a **link to the verify page** (previously typed-path only). The certificate no longer prints an in-file SHA-256 that could never match the delivered file — the authoritative document hash lives on the tamper-evident audit record and is confirmed at the verify page (drop the received PDF, or follow the token link).
+- **`DocGen Button Manager` permission set relabeled to `Portwood DocGen Button Manager`** for clearer identification in Setup.
+
+Validated on the Portwood Dev sandbox (full v3.44.0 deploy, 398/398 components) and a namespaced build scratch org (RunLocalTests, 78% coverage). Promoted as `04tVx000000rlATIAY`.
+
 ## v3.43.0 — Button-builder access hardening
 
 ### Fixed / Changed
