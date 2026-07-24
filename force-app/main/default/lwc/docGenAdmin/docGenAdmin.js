@@ -6546,6 +6546,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // it last was while the canvas owned it. `_caret` is written on selectionchange
     // (above) and read by every action.
     _caret = { range: null, blockEl: null, cellEl: null };
+    /** True while the caret is inside a table — drives the contextual table row. */
+    @track caretInTable = false;
     // Blocks that count as "the thing the caret is in" for highlight + fill purposes.
     static get CARET_BLOCK_SELECTOR() {
         return 'p, div, h1, h2, h3, h4, h5, h6, td, th, li, blockquote, pre';
@@ -6561,6 +6563,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const cellEl = el && el.closest ? el.closest('td, th') : null;
             this._caret = { range, blockEl, cellEl };
             this._paintActiveBlock(pv, blockEl, cellEl);
+            // Drives the contextual table row. Kept as a tracked boolean flipped only
+            // on change, so the toolbar does not re-render on every caret move.
+            const inTable = !!cellEl || !!(this._cellSel && this._cellSel.length);
+            if (this.caretInTable !== inTable) {
+                this.caretInTable = inTable;
+            }
         } catch (e) {
             /* best effort — a stale caret beats no caret */
         }

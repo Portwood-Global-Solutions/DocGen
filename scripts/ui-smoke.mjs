@@ -303,6 +303,59 @@ async function main() {
             record('zoom: control present', false, zoomReport.why);
         }
 
+        // --- 4b. Contextual table row: hidden outside a table, functional inside --
+        // Density comes from hiding ~45 controls until they are relevant. That is only
+        // an improvement if they reliably COME BACK, so assert both halves.
+        const tableCtx = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const bar = () => __dgFind('.dg-format-bar');
+      const countTableBtns = () => bar().querySelectorAll('[data-taction]').length;
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+
+      // Caret in a plain paragraph -> table tools should be absent.
+      const p = document.createElement('p');
+      p.textContent = 'outside any table';
+      pv.appendChild(p);
+      pv.focus();
+      let r = document.createRange(); r.selectNodeContents(p);
+      let s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return new Promise((resolve) => setTimeout(() => {
+        const hiddenOutside = countTableBtns() === 0;
+
+        // Caret inside a table cell -> table tools should appear and work.
+        const tbl = document.createElement('table');
+        tbl.innerHTML = '<tr><td>cell one</td><td>cell two</td></tr>';
+        pv.appendChild(tbl);
+        const td = tbl.querySelector('td');
+        const r2 = document.createRange(); r2.selectNodeContents(td);
+        const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r2);
+        document.dispatchEvent(new Event('selectionchange'));
+        setTimeout(() => {
+          const shownInside = countTableBtns() > 0;
+          let rowAdded = false;
+          const addRow = bar().querySelector('[data-taction="rowAfter"]');
+          if (addRow) {
+            const before = tbl.rows.length;
+            addRow.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+            addRow.click();
+            rowAdded = tbl.rows.length === before + 1;
+          }
+          resolve({ hiddenOutside, shownInside, rowAdded, btnCount: countTableBtns() });
+        }, 400);
+      }, 400));`)
+        );
+        record(
+            'table tools hidden outside a table',
+            tableCtx.hiddenOutside,
+            `${tableCtx.btnCount} table buttons visible`
+        );
+        record('table tools appear inside a table', tableCtx.shownInside, '');
+        record('table tools work when shown (+ Row)', tableCtx.rowAdded, '');
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',
