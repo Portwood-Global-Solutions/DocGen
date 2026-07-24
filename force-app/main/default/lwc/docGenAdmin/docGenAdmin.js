@@ -1,5 +1,9 @@
 import { LightningElement, track, wire } from 'lwc';
 import { createRecord, updateRecord } from 'lightning/uiRecordApi';
+// #236 — Type__c is a RESTRICTED picklist and the wizard defaults to 'HTML', a value
+// added in v1.61.0. Orgs installed before that and later upgraded may not have it, in
+// which case every create fails. Read the org's real values instead of hardcoding them.
+import { getObjectInfo, getPicklistValues } from 'lightning/uiObjectInfoApi';
 import LightningConfirm from 'lightning/confirm';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
@@ -139,6 +143,65 @@ import VER_PAGE_MARGINS_FIELD from '@salesforce/schema/DocGen_Template_Version__
 import VER_CUSTOM_MARGINS_FIELD from '@salesforce/schema/DocGen_Template_Version__c.Custom_Margins__c';
 
 // Field API name map — resolves namespace automatically
+// #236 — every Type__c picklist value this build knows about, mapped to the release
+// that introduced it. Type__c is RESTRICTED, so writing a value the org does not have
+// fails the whole insert. Used as a fallback list and to name what a partially-upgraded
+// org is missing.
+const TYPE_VALUE_HISTORY = {
+    Word: '1.0',
+    PowerPoint: '1.0',
+    Excel: '1.5x',
+    HTML: '1.61.0',
+    PDF: '3.03.0'
+};
+
+/**
+ * #236 — pull the ACTIONABLE message out of an LDS / UI API error.
+ *
+ * `error.body.message` on a DML failure is always the generic
+ * "An error occurred while trying to update the record. Please try again." — which is
+ * why every customer report of the template-create failure was verbatim identical and
+ * none of them identified a cause. The real detail lives in `body.output.fieldErrors`
+ * and `body.output.errors`, which nothing was reading.
+ */
+function ldsErrorDetail(error) {
+    if (!error) {
+        return 'Unknown error.';
+    }
+    const body = error.body || error;
+    const parts = [];
+    const output = body.output || {};
+    // Field-level: { Field__c: [{ message, statusCode, fieldLabel }] }
+    if (output.fieldErrors) {
+        for (const key of Object.keys(output.fieldErrors)) {
+            for (const fe of output.fieldErrors[key] || []) {
+                const label = fe.fieldLabel || key;
+                parts.push(`${label}: ${fe.message}${fe.statusCode ? ` [${fe.statusCode}]` : ''}`);
+            }
+        }
+    }
+    // Record-level: [{ message, statusCode }]
+    for (const re of output.errors || []) {
+        parts.push(`${re.message}${re.statusCode ? ` [${re.statusCode}]` : ''}`);
+    }
+    // Page-level (older shape) and DML arrays from Apex.
+    for (const pe of body.pageErrors || []) {
+        parts.push(pe.message);
+    }
+    if (Array.isArray(body)) {
+        for (const b of body) {
+            if (b && b.message) parts.push(b.message);
+        }
+    }
+    if (!parts.length && body.message) {
+        parts.push(body.message);
+    }
+    if (!parts.length && error.message) {
+        parts.push(error.message);
+    }
+    return parts.length ? parts.join(' | ') : 'Unknown error.';
+}
+
 const F = {
     Name: 'Name',
     Category: CATEGORY_FIELD.fieldApiName,
@@ -3910,14 +3973,60 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     // --- Options ---
+    // --- #236: Type__c picklist read from the org, not hardcoded ---------------
+    @wire(getObjectInfo, { objectApiName: DOCGEN_TEMPLATE_OBJECT })
+    templateObjectInfo;
+
+    @wire(getPicklistValues, {
+        recordTypeId: '$templateObjectInfo.data.defaultRecordTypeId',
+        fieldApiName: TYPE_FIELD
+    })
+    wiredTypePicklist(result) {
+        this._typePicklist = result;
+        if (result && result.data && Array.isArray(result.data.values)) {
+            this._orgTypeValues = result.data.values.map((v) => v.value);
+            // The wizard's default is HTML. If this org never received it, fall back
+            // to something it does have rather than failing on every create.
+            if (this._orgTypeValues.length && !this._orgTypeValues.includes(this.newTemplateType)) {
+                this.newTemplateType = this._orgTypeValues.includes('HTML') ? 'HTML' : this._orgTypeValues[0];
+            }
+        }
+    }
+    _typePicklist;
+    @track _orgTypeValues = null;
+
     get typeOptions() {
-        return [
-            { label: 'Word', value: 'Word' },
-            { label: 'PowerPoint', value: 'PowerPoint' },
-            { label: 'Excel', value: 'Excel' },
-            { label: 'HTML', value: 'HTML' },
-            { label: 'PDF', value: 'PDF' }
-        ];
+        const fallback = Object.keys(TYPE_VALUE_HISTORY);
+        // Until the wire resolves (and if it errors) keep the historical hardcoded
+        // list so the wizard is never empty.
+        const values = this._orgTypeValues && this._orgTypeValues.length ? this._orgTypeValues : fallback;
+        return values.map((v) => ({ label: v, value: v }));
+    }
+
+    /**
+     * #236 — true when this org's Type__c picklist is missing values this build
+     * expects. That means the package schema did not fully upgrade, and it is the
+     * leading explanation for "cannot create new templates after upgrading".
+     */
+    get missingTypeValues() {
+        if (!this._orgTypeValues || !this._orgTypeValues.length) {
+            return [];
+        }
+        return Object.keys(TYPE_VALUE_HISTORY).filter((v) => !this._orgTypeValues.includes(v));
+    }
+
+    get hasMissingTypeValues() {
+        return this.missingTypeValues.length > 0;
+    }
+
+    get missingTypeValuesMessage() {
+        const missing = this.missingTypeValues.map((v) => `${v} (added in v${TYPE_VALUE_HISTORY[v]})`).join(', ');
+        return (
+            `This org's Template Type picklist is missing: ${missing}. ` +
+            'That means the package upgrade did not fully apply its schema. ' +
+            'Re-run the package upgrade, or add the missing values to the ' +
+            'DocGen Template > Type field in Setup. Until then those template types cannot be created.'
+        );
     }
 
     get outputFormatOptions() {
@@ -4019,6 +4128,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // --- Create Logic ---
     async createTemplate() {
+        // #236 — fail with a cause the admin can act on, rather than letting UI API
+        // flatten a restricted-picklist rejection into "An error occurred...".
+        const preflight = this._preflightCreate();
+        if (preflight) {
+            this.showToast('Cannot create template', preflight, 'error', 'sticky');
+            return;
+        }
         const fields = {};
         fields[NAME_FIELD.fieldApiName] = this.newTemplateName;
         fields[CATEGORY_FIELD.fieldApiName] = this.newTemplateCategory;
@@ -4130,8 +4246,46 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 await this._openDesignerSurface();
             }
         } catch (error) {
-            this.showToast('Error creating record', error.body ? error.body.message : error.message, 'error');
+            // #236 — surface the REAL cause. The generic UI API string told us nothing
+            // across dozens of upgrade-failure reports; fieldErrors names the field.
+            const detail = ldsErrorDetail(error);
+            let hint = '';
+            if (/RESTRICTED_PICKLIST|INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST/i.test(detail)) {
+                hint =
+                    ' — This org is missing a picklist value the package expects, which means the ' +
+                    'upgrade did not fully apply its schema. Re-run the package upgrade.';
+            } else if (
+                /INSUFFICIENT_ACCESS|FIELD_INTEGRITY|not writeable|INVALID_FIELD_FOR_INSERT_UPDATE/i.test(detail)
+            ) {
+                hint = ' — Check that the DocGen Admin permission set is assigned to your user.';
+            } else if (/DUPLICATE_VALUE/i.test(detail)) {
+                hint = ' — The API Name is already used by another template. Change it and retry.';
+            }
+            this.showToast('Could not create template', detail + hint, 'error', 'sticky');
+            // eslint-disable-next-line no-console
+            console.error('DocGen createTemplate failed', error);
         }
+    }
+
+    /**
+     * #236 — pre-flight the values we are about to write against what the org actually
+     * has. A restricted-picklist rejection is otherwise indistinguishable from any other
+     * DML failure once UI API has flattened it.
+     *
+     * Returns an error string, or null when the create looks safe to attempt.
+     */
+    _preflightCreate() {
+        if (this._orgTypeValues && this._orgTypeValues.length && !this._orgTypeValues.includes(this.newTemplateType)) {
+            return (
+                `This org's Template Type picklist does not contain "${this.newTemplateType}"` +
+                (TYPE_VALUE_HISTORY[this.newTemplateType]
+                    ? ` (added in v${TYPE_VALUE_HISTORY[this.newTemplateType]})`
+                    : '') +
+                '. The package upgrade did not fully apply its schema. Re-run the upgrade, or pick one of: ' +
+                this._orgTypeValues.join(', ')
+            );
+        }
+        return null;
     }
 
     /**
@@ -6250,6 +6404,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } catch (e) {
             /* best effort */
         }
+        // #238/#239/#240 — record the durable caret while the canvas still owns the
+        // selection. Every toolbar control (color pickers, table tools, chip insert)
+        // reads THIS, not the live selection, because clicking any of them moves focus
+        // out of the canvas and destroys the live one.
+        this._recordCaret(node, pv);
         const names = {
             H1: 'Heading 1',
             H2: 'Heading 2',
@@ -6276,6 +6435,170 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         this.selectionContextLabel = 'Editing: ' + (label || 'Page');
     };
+
+    // ===== Durable caret tracker (#238 / #239 / #240) =========================
+    //
+    // The Designer's original model read `window.getSelection()` at the moment a
+    // toolbar control fired. That works for the swatch buttons only because they
+    // preventDefault() on mousedown and so never move focus. Everything else — the
+    // <input type="color"> pickers (which hand focus to a native OS dialog), the chip
+    // rail, the table popovers — loses the selection before its handler runs, which
+    // is why colors silently did nothing and inserts always fell through to
+    // pv.appendChild at the end of the document.
+    //
+    // The fix is to stop asking "where is the caret now?" and instead remember where
+    // it last was while the canvas owned it. `_caret` is written on selectionchange
+    // (above) and read by every action.
+    _caret = { range: null, blockEl: null, cellEl: null };
+    // Blocks that count as "the thing the caret is in" for highlight + fill purposes.
+    static get CARET_BLOCK_SELECTOR() {
+        return 'p, div, h1, h2, h3, h4, h5, h6, td, th, li, blockquote, pre';
+    }
+
+    /** Capture caret position + its block/cell context. Called while the canvas is focused. */
+    _recordCaret(node, pv) {
+        try {
+            const sel = window.getSelection();
+            const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+            const el = node && node.nodeType === 3 ? node.parentElement : node;
+            const blockEl = el && el.closest ? el.closest(DocGenAdmin.CARET_BLOCK_SELECTOR) : null;
+            const cellEl = el && el.closest ? el.closest('td, th') : null;
+            this._caret = { range, blockEl, cellEl };
+            this._paintActiveBlock(pv, blockEl, cellEl);
+        } catch (e) {
+            /* best effort — a stale caret beats no caret */
+        }
+    }
+
+    /**
+     * #238 — mark where you are. CSS cannot thicken or restyle a caret beyond
+     * `caret-color`, and a 1px bar is genuinely hard to find on a pill-dense page, so
+     * the containing block (and cell, when in a table) gets a tint instead.
+     *
+     * Applied as INLINE style, not via docGenAdmin.css: the canvas is an
+     * lwc:dom="manual" host and component styles do not reach nodes written into it by
+     * hand — the same reason _showDropMarker sets style.cssText directly.
+     *
+     * Because it is inline it would otherwise serialize into the saved body, so the
+     * author's original `style` attribute is captured verbatim and put back the moment
+     * the caret moves (and unconditionally before serialization).
+     */
+    _paintActiveBlock(pv, blockEl, cellEl) {
+        if (!pv) {
+            return;
+        }
+        try {
+            const target = cellEl || blockEl;
+            if (this._paintedEl === target) {
+                return;
+            }
+            this._clearActiveBlockPaint();
+            if (!target || target === pv) {
+                return;
+            }
+            this._paintedEl = target;
+            // null when the element had no style attribute at all — restore removes it.
+            this._paintedPrevStyle = target.getAttribute('style');
+            const isCell = target.tagName === 'TD' || target.tagName === 'TH';
+            target.style.backgroundColor = 'rgba(124, 58, 237, 0.06)';
+            if (isCell) {
+                // Inside a grid an outline reads correctly; a left bar collides with
+                // the cell border.
+                target.style.outline = '2px solid #7c3aed';
+                target.style.outlineOffset = '-2px';
+            } else {
+                target.style.boxShadow = '-3px 0 0 0 #7c3aed';
+            }
+        } catch (e) {
+            /* highlight is cosmetic — never let it break editing */
+        }
+    }
+
+    /** Restore the author's original style attribute on the highlighted element. */
+    _clearActiveBlockPaint() {
+        const el = this._paintedEl;
+        this._paintedEl = null;
+        if (!el) {
+            return;
+        }
+        try {
+            if (this._paintedPrevStyle === null || this._paintedPrevStyle === undefined) {
+                el.removeAttribute('style');
+            } else {
+                el.setAttribute('style', this._paintedPrevStyle);
+            }
+        } catch (e) {
+            /* best effort */
+        }
+        this._paintedPrevStyle = null;
+    }
+    _paintedEl = null;
+    _paintedPrevStyle = null;
+
+    /** The live canvas element, or null when not in visual mode. */
+    _canvas() {
+        const host = this.template.querySelector('.dg-visual-host');
+        return (host && host.querySelector('.dg-pv')) || null;
+    }
+
+    /**
+     * Put the caret back where the author left it, and — critically — return focus to
+     * the canvas FIRST. `document.execCommand` is a no-op while an <input> or another
+     * window holds focus, which was the whole reason the color pickers appeared to do
+     * nothing. Returns true when a caret was restored.
+     */
+    _restoreCaret() {
+        const pv = this._canvas();
+        if (!pv) {
+            return false;
+        }
+        const range = (this._caret && this._caret.range) || this._savedFmtRange || this._lastCanvasRange;
+        try {
+            pv.focus();
+        } catch (e) {
+            /* focus is best-effort */
+        }
+        if (!range) {
+            return false;
+        }
+        try {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Containment test that survives the LWS namespace sandbox. `pv.contains(el)` can
+     * report false for a node that IS inside the canvas when the two are different
+     * proxy identities for the same underlying node — the failure behind #240's
+     * "always inserts at the bottom". Walking parentNode compares each hop directly.
+     */
+    _isInCanvas(el, pv) {
+        if (!el || !pv) {
+            return false;
+        }
+        try {
+            if (pv.contains(el)) {
+                return true;
+            }
+        } catch (e) {
+            /* fall through to the manual walk */
+        }
+        let cur = el;
+        let hops = 0;
+        while (cur && hops < 200) {
+            if (cur === pv) {
+                return true;
+            }
+            cur = cur.parentNode;
+            hops++;
+        }
+        return false;
+    }
 
     // --- Table tools (visual mode): operate on the cell holding the caret ---
     // ===== Excel-style cell selection =====
@@ -6361,23 +6684,32 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         while (node && node.nodeType === 3) {
             node = node.parentNode;
         }
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
-        if (!node || !pv || !pv.contains(node) || !node.closest) {
-            const host2 = this.template.querySelector('.dg-visual-host');
-            const pv2 = host2 && host2.querySelector('.dg-pv');
-            if (this._ctxCell && this._ctxCell.isConnected && pv2 && pv2.contains(this._ctxCell)) {
+        const pv = this._canvas();
+        if (!node || !pv || !this._isInCanvas(node, pv) || !node.closest) {
+            // #239 — the live selection is gone (a color picker or popover took focus).
+            // The remembered cell is the whole point of the caret tracker: without it
+            // this returned null and cell fill toasted "Click inside a table cell first"
+            // even though the author's caret was plainly in a cell.
+            const remembered = this._caret && this._caret.cellEl;
+            if (remembered && remembered.isConnected && this._isInCanvas(remembered, pv)) {
+                return remembered;
+            }
+            if (this._ctxCell && this._ctxCell.isConnected && pv && this._isInCanvas(this._ctxCell, pv)) {
                 return this._ctxCell;
             }
             return null;
         }
         const cell = node.closest('td, th');
-        if (cell && pv.contains(cell)) {
+        if (cell && this._isInCanvas(cell, pv)) {
             return cell;
+        }
+        const remembered = this._caret && this._caret.cellEl;
+        if (remembered && remembered.isConnected && this._isInCanvas(remembered, pv)) {
+            return remembered;
         }
         // Right-click doesn't reliably move the caret under LWS — fall back
         // to the cell the context menu was opened on.
-        if (this._ctxCell && this._ctxCell.isConnected && pv.contains(this._ctxCell)) {
+        if (this._ctxCell && this._ctxCell.isConnected && this._isInCanvas(this._ctxCell, pv)) {
             return this._ctxCell;
         }
         return null;
@@ -6389,6 +6721,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const action = event.currentTarget.dataset.taction;
         const value = event.currentTarget.dataset.value || null;
+        // #239 — the <select> controls (border width, cell padding, table alignment)
+        // take focus when opened, which destroys the live selection before this runs.
+        // Restore before resolving the target cell.
+        this._restoreCaret();
         const cell = this._selectedTableCell();
         if (!cell) {
             // Fill works everywhere: outside a table it colors the block the
@@ -6511,6 +6847,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             for (const c of targets) {
                 c.style.background = value === 'transparent' ? '' : value;
             }
+        } else if (action === 'vAlign') {
+            // #246 — top | middle | bottom, the only three CSS 2.1 allows on a table
+            // cell (and therefore the only three Flying Saucer honors). Applies to the
+            // Excel-style multi-cell selection when there is one.
+            const targets = this._cellSel && this._cellSel.length ? this._cellSel : [cell];
+            for (const c of targets) {
+                c.style.verticalAlign = value;
+            }
+        } else if (action === 'vAlignTable') {
+            // Whole-table sweep — the common case is "make this entire header band
+            // middle-aligned", which is tedious cell by cell.
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.verticalAlign = value;
+            }
+        } else if (action === 'distributeCols') {
+            this._distributeColumnsEvenly(table);
+        } else if (action === 'tableWidth') {
+            table.style.width = value;
+            if (value === 'auto') {
+                table.style.tableLayout = 'auto';
+            }
+        } else if (action === 'cellPadding') {
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.padding = value;
+            }
+        } else if (action === 'tableAlign') {
+            // margin auto is the CSS 2.1 way to centre a table; float would break the
+            // page flow Flying Saucer builds.
+            if (value === 'center') {
+                table.style.marginLeft = 'auto';
+                table.style.marginRight = 'auto';
+            } else if (value === 'right') {
+                table.style.marginLeft = 'auto';
+                table.style.marginRight = '0';
+            } else {
+                table.style.marginLeft = '0';
+                table.style.marginRight = 'auto';
+            }
         } else if (
             action === 'bordersAll' ||
             action === 'bordersOutline' ||
@@ -6521,6 +6895,62 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._applyBorders(action, table);
         }
         this.htmlEditorDirty = true;
+    }
+
+    /**
+     * #242 — snap every column to the same width.
+     *
+     * Operates on the GRID, not on row.children: with colspans a row can have fewer
+     * cells than the table has columns, so counting children would produce uneven
+     * widths on exactly the tables that need this most.
+     *
+     * Rewrites an existing <colgroup> rather than adding one — two colgroups on a
+     * single table was the v2.8.0 giant-table bug that rendered everything at 200%
+     * width and packed the cells into the left half of the page.
+     */
+    _distributeColumnsEvenly(table) {
+        if (!table) {
+            return;
+        }
+        // Widest row in grid terms = the real column count.
+        let columns = 0;
+        for (const tr of table.rows) {
+            let span = 0;
+            for (const c of tr.children) {
+                span += c.colSpan || 1;
+            }
+            columns = Math.max(columns, span);
+        }
+        if (columns < 1) {
+            return;
+        }
+        const pct = (100 / columns).toFixed(4) + '%';
+        // Authored per-cell widths would override the colgroup, so clear them.
+        for (const c of table.querySelectorAll('td, th')) {
+            c.style.width = '';
+            c.removeAttribute('width');
+        }
+        let colgroup = table.querySelector('colgroup');
+        if (colgroup) {
+            while (colgroup.firstChild) {
+                colgroup.removeChild(colgroup.firstChild);
+            }
+        } else {
+            colgroup = document.createElement('colgroup');
+            table.insertBefore(colgroup, table.firstChild);
+        }
+        for (let i = 0; i < columns; i++) {
+            const col = document.createElement('col');
+            col.style.width = pct;
+            colgroup.appendChild(col);
+        }
+        // table-layout: fixed is what makes the colgroup authoritative; without it the
+        // browser (and Flying Saucer) size columns from content and ignore the widths.
+        table.style.tableLayout = 'fixed';
+        if (!table.style.width) {
+            table.style.width = '100%';
+        }
+        this.showToast('Columns distributed', `All ${columns} columns set to ${pct}.`, 'success');
     }
 
     // --- Table borders: style presets x width x color, selection-aware ---
@@ -6582,6 +7012,49 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
             }
         }
+    }
+
+    // --- #242: whole-table properties ----------------------------------------
+    @track _tablePrefs = { padding: '4pt', align: 'left' };
+
+    get cellPaddingOptions() {
+        return [
+            { value: '0pt 4pt', label: 'Padding: tight' },
+            { value: '4pt', label: 'Padding: normal' },
+            { value: '0pt 5.4pt', label: 'Padding: Word default' },
+            { value: '8pt', label: 'Padding: roomy' }
+        ].map((o) => ({ ...o, selected: o.value === this._tablePrefs.padding }));
+    }
+
+    get tableAlignOptions() {
+        return [
+            { value: 'left', label: 'Table: left' },
+            { value: 'center', label: 'Table: centered' },
+            { value: 'right', label: 'Table: right' }
+        ].map((o) => ({ ...o, selected: o.value === this._tablePrefs.align }));
+    }
+
+    handleCellPaddingChange(event) {
+        const value = event.currentTarget.value;
+        this._tablePrefs = { ...this._tablePrefs, padding: value };
+        this._applyTableProp('cellPadding', value);
+    }
+
+    handleTableAlignChange(event) {
+        const value = event.currentTarget.value;
+        this._tablePrefs = { ...this._tablePrefs, align: value };
+        this._applyTableProp('tableAlign', value);
+    }
+
+    /**
+     * The <select> controls can't reuse handleTableAction directly — it reads the
+     * action and value off data- attributes, and a <select> carries its value on the
+     * element. Synthesize the same shape so all table mutation stays in one place.
+     */
+    _applyTableProp(action, value) {
+        this.handleTableAction({
+            currentTarget: { dataset: { taction: action, value: value } }
+        });
     }
 
     handleBorderWidthChange(event) {
@@ -7214,6 +7687,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!cmd) {
             return;
         }
+        // #239 — the swatch buttons preventDefault on mousedown so the selection is
+        // normally still live here, but the border-width <select> and any control that
+        // does take focus land in this handler too. Restoring is idempotent when the
+        // caret never moved.
+        this._restoreCaret();
         // Lists via DOM surgery — LWS quietly breaks execCommand's list
         // commands, and this way numbers/bullets always render.
         if (cmd === 'insertUnorderedList' || cmd === 'insertOrderedList') {
@@ -7303,15 +7781,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const cmd = event.currentTarget.dataset.cmd;
         const value = event.currentTarget.value;
-        if (this._savedFmtRange) {
-            try {
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(this._savedFmtRange);
-            } catch (e) {
-                /* selection restore is best-effort */
-            }
-        }
+        // #239 — re-focus the canvas BEFORE restoring the range. The old code restored
+        // the range but left focus on the <input type="color"> (or on the native OS
+        // color dialog), and execCommand does nothing in that state — the picker looked
+        // like it worked and changed nothing.
+        this._restoreCaret();
         if (cmd === 'cellFill') {
             const cell = this._selectedTableCell();
             if (cell) {
@@ -8130,6 +8604,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * upload path (see _sanitizeStagedHtml, which uses the same technique).
      */
     _extractVisualBody(pv) {
+        // #238 — drop the caret highlight before the string round-trip. It is applied
+        // as inline style (component CSS can't reach manual-DOM nodes), so leaving it
+        // on would bake a purple tint into the saved template body.
+        this._clearActiveBlockPaint();
         const tpl = document.createElement('template');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip of the live canvas; re-cleaned below, never cloneNode (LWS drops browser-inserted nodes)
         tpl.innerHTML = pv.innerHTML;
@@ -8239,6 +8717,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _exitVisualMode() {
+        // #238 — MUST come before the innerHTML read below. The caret highlight is an
+        // inline style, so leaving it on makes an untouched session compare unequal to
+        // _visualEnteredDom and rewrite the body — breaking the documented guarantee
+        // that an unchanged session restores the original code byte-for-byte.
+        this._clearActiveBlockPaint();
         const host = this.template.querySelector('.dg-visual-host');
         const pv = host && host.querySelector('.dg-pv');
         const ta = this.template.querySelector('.dg-html-body-editor');
@@ -9669,11 +10152,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         if (this.showHtmlBodyVisual) {
             this._insertIntoVisualPage(snippet);
+            // #240 — the message now reflects where it actually landed.
+            const appended = this._lastInsertWasAppended;
             this.showToast(
                 isBlock ? 'Block added' : 'Tag inserted',
-                isBlock
-                    ? 'Added at the end of the document — click into it to edit, or drag chips from the rail to drop them exactly where you point.'
-                    : 'Added at the end of the document — move it where you need it.',
+                appended
+                    ? 'Added at the end of the document — click into the page first to place it at your cursor, or drag chips from the rail to drop them exactly where you point.'
+                    : 'Added at your cursor.',
                 'success'
             );
             return;
@@ -9708,24 +10193,48 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Capture BEFORE insertion — insertNode empties the fragment.
         const firstEl = tpl.content.firstElementChild;
         let inserted = false;
+        // #240 — prefer the REMEMBERED caret over the live selection. Clicking a chip in
+        // the rail moves focus out of the canvas, so by the time this runs the live
+        // selection is usually gone and every insert fell through to pv.appendChild —
+        // the "always inserts at the bottom" report.
+        const candidates = [];
+        if (this._caret && this._caret.range) {
+            candidates.push(this._caret.range);
+        }
         try {
             const sel = window.getSelection();
             if (sel && sel.rangeCount) {
-                const range = sel.getRangeAt(0);
-                let node = range.startContainer;
-                const el = node.nodeType === 3 ? node.parentElement : node;
-                if (el && pv.contains(el) && !el.closest('[data-dg-tag]')) {
-                    range.collapse(true);
-                    range.insertNode(tpl.content);
-                    inserted = true;
-                }
+                candidates.push(sel.getRangeAt(0));
             }
         } catch (e) {
-            inserted = false;
+            /* live selection is optional — the remembered one is the primary */
+        }
+        if (this._lastCanvasRange) {
+            candidates.push(this._lastCanvasRange);
+        }
+        for (const range of candidates) {
+            try {
+                const node = range.startContainer;
+                const el = node.nodeType === 3 ? node.parentElement : node;
+                // Never split a merge-tag pill: they are contenteditable=false atoms and
+                // an insert inside one corrupts the tag.
+                if (el && this._isInCanvas(el, pv) && el.closest && !el.closest('[data-dg-tag]')) {
+                    const target = range.cloneRange();
+                    target.collapse(true);
+                    target.insertNode(tpl.content);
+                    inserted = true;
+                    break;
+                }
+            } catch (e) {
+                /* try the next candidate */
+            }
         }
         if (!inserted) {
             pv.appendChild(tpl.content);
         }
+        // Report what ACTUALLY happened — the old toast said "added at the end"
+        // unconditionally, which misreported every successful caret insert.
+        this._lastInsertWasAppended = !inserted;
         // Never make the user hunt for what they just added.
         if (firstEl && firstEl.scrollIntoView) {
             try {
@@ -10389,12 +10898,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return refreshApex(this.wiredTemplatesResult);
     }
 
-    showToast(title, message, variant) {
+    // mode is optional — 'sticky' keeps error detail on screen long enough to read
+    // and copy (used by the #236 create-failure path, where the message names a field).
+    showToast(title, message, variant, mode) {
         this.dispatchEvent(
             new ShowToastEvent({
                 title: title,
                 message: message,
-                variant: variant
+                variant: variant,
+                mode: mode || 'dismissable'
             })
         );
     }

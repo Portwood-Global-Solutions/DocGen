@@ -11,8 +11,28 @@
         >
         </lightning-input>
         <p class="slds-form-element__help slds-var-m-top_xx-small">
-            Use <strong>&#123;</strong> to see available merge fields.
+            Type <strong>&#123;</strong> to see available merge fields. Besides your record's fields you can use
+            <strong>&#123;Today&#125;</strong>, <strong>&#123;Now&#125;</strong> and
+            <strong>&#123;RunningUser.Name&#125;</strong>.
         </p>
+        <p class="slds-form-element__help slds-var-m-top_xx-small slds-text-color_weak">
+            Always give dates a format &mdash; <strong>&#123;Today:yyyy-MM-dd&#125;</strong> uses your Salesforce
+            timezone, while a bare <strong>&#123;Now&#125;</strong> renders in GMT.
+        </p>
+        <div class="slds-var-m-top_xx-small">
+            <template for:each={exampleChips} for:item="ex">
+                <button
+                    key={ex.key}
+                    type="button"
+                    class="slds-badge slds-var-m-right_xx-small dg-title-example"
+                    data-value={ex.value}
+                    onclick={handleExampleClick}
+                    title="Use this format"
+                >
+                    {ex.value}
+                </button>
+            </template>
+        </div>
 
         <!-- Typeahead Dropdown -->
         <template if:true={showSuggestions}>

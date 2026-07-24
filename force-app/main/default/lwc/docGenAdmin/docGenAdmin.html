@@ -18,6 +18,24 @@
                     <div class="wizard-content">
                         <!-- Step 1: Details + Data Source Selection -->
                         <template if:true={isStep1}>
+                            <!-- #236 — a partially-upgraded org is missing restricted
+                                 Type__c picklist values, which makes every create fail
+                                 with an opaque UI API error. Say so up front. -->
+                            <template if:true={hasMissingTypeValues}>
+                                <div
+                                    class="slds-box slds-box_x-small slds-theme_warning slds-var-m-bottom_medium"
+                                    role="alert"
+                                >
+                                    <p class="slds-text-body_small">
+                                        <lightning-icon
+                                            icon-name="utility:warning"
+                                            size="x-small"
+                                            class="slds-var-m-right_x-small"
+                                        ></lightning-icon>
+                                        {missingTypeValuesMessage}
+                                    </p>
+                                </div>
+                            </template>
                             <!-- HTML-first authoring path picker -->
                             <div
                                 class="dg-authoring-cards slds-var-m-bottom_large"
@@ -2326,6 +2344,105 @@
                                         >
                                             Repeat Hdr
                                         </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <!-- #246 — vertical alignment. top/middle/bottom are the
+                                             only values CSS 2.1 allows on a table cell, so they are
+                                             the only ones Flying Saucer will honor. -->
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Vertical alignment of cell contents — applies to the selected cells"
+                                            >V-Align</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="vAlign"
+                                            data-value="top"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Align cell contents to the top"
+                                        >
+                                            &#8593; Top
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="vAlign"
+                                            data-value="middle"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Centre cell contents vertically"
+                                        >
+                                            &#8597; Middle
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="vAlign"
+                                            data-value="bottom"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Align cell contents to the bottom"
+                                        >
+                                            &#8595; Bottom
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <!-- #242 — whole-table properties -->
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Whole-table settings — put your cursor in the table first"
+                                            >Table&nbsp;Props</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="distributeCols"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Make every column the same width"
+                                        >
+                                            Equal Cols
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="tableWidth"
+                                            data-value="100%"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Stretch the table to the full page width"
+                                        >
+                                            Full Width
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="vAlignTable"
+                                            data-value="middle"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Centre every cell in this table vertically"
+                                        >
+                                            All Middle
+                                        </button>
+                                        <select
+                                            class="dg-page-select"
+                                            title="Cell padding for the whole table"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleCellPaddingChange}
+                                        >
+                                            <template for:each={cellPaddingOptions} for:item="opt">
+                                                <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                    {opt.label}
+                                                </option>
+                                            </template>
+                                        </select>
+                                        <select
+                                            class="dg-page-select"
+                                            title="Horizontal placement of the table on the page"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleTableAlignChange}
+                                        >
+                                            <template for:each={tableAlignOptions} for:item="opt">
+                                                <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                    {opt.label}
+                                                </option>
+                                            </template>
+                                        </select>
                                         <span class="dg-fmt-sep"></span>
                                         <span class="dg-fmt-label" title="Table borders">Borders</span>
                                         <button

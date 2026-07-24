@@ -9540,6 +9540,26 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // still emitted because the source @page can't supply them on its own.
         Boolean sourceHasPageRule = hasSourcePageRule(sourceStyles);
 
+        // #243 — v1.90's "source always wins" was too broad. A Word template carries its
+        // orientation in <w:sectPr>, NOT in markup, so admins set Page_Orientation__c on
+        // the template record; after a Word→HTML conversion the converted HTML's own
+        // @page then silently discarded that choice and every landscape template came out
+        // portrait. Precedence is now: explicit record override → source @page → engine
+        // default. "Explicit" means a NON-DEFAULT picklist value (Landscape / Legal / A4),
+        // because Portrait+Letter are the field defaults and are indistinguishable from
+        // "admin never touched this" — deferring on those preserves v1.90 (#60, #71).
+        Boolean explicitPageOverride = hasExplicitPageOverride();
+        // The engine's <style> is emitted BEFORE sourceStyles, so simply adding our @page
+        // would lose the cascade to the author's. Strip the competing declaration instead
+        // and leave everything else the author wrote intact.
+        if (explicitPageOverride && sourceHasPageRule) {
+            sourceStyles = stripSourcePageDecl(sourceStyles, 'size');
+            if (hasExplicitMarginOverride()) {
+                sourceStyles = stripSourcePageDecl(sourceStyles, 'margin');
+            }
+            sourceHasPageRule = false;
+        }
+
         // 1.68 — when admin set Page_Size__c or Page_Orientation__c, emit explicit
         // inch dimensions. Otherwise fall back to "size: letter" (the v1.61–1.67
         // default) for backward compat. Never mix dimensions with the `landscape`
@@ -9614,6 +9634,10 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         css += ' body { font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; }';
         // v1.97 — no global max-width on images; inline width/height takes precedence.
         css += ' table { border-collapse: collapse; }';
+        // #245 — an unbreakable token (URL, record Id, no-spaces reference code) otherwise
+        // runs straight through the cell border. Emitted in the ENGINE stylesheet, ahead of
+        // sourceStyles, so an author who wants the old behavior can still override it.
+        css += ' td, th { word-wrap: break-word; overflow-wrap: break-word; }';
 
         String html = '<html><head><meta charset="utf-8"/>';
         html += '<style>' + css + '</style>';
@@ -9921,6 +9945,68 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return false;
         }
         return sourceStyles.toLowerCase().contains('@page');
+    }
+
+    /**
+     * #243 — true when the admin made a DELIBERATE page-setup choice on the template
+     * record, i.e. picked a non-default picklist value. Page_Orientation__c defaults to
+     * Portrait and Page_Size__c to Letter, so those two values cannot be distinguished
+     * from "never touched" and must NOT override an author's @page — that would flip
+     * every existing HTML template that declares its own page (the v1.90 fix for #60/#71).
+     * Landscape / Legal / A4 can only have been chosen on purpose.
+     */
+    @TestVisible
+    private static Boolean hasExplicitPageOverride() {
+        String orient = DocGenHtmlRenderer.orientationOverride;
+        String size = DocGenHtmlRenderer.pageSizeOverride;
+        return 'Landscape'.equalsIgnoreCase(orient) || 'Legal'.equalsIgnoreCase(size) || 'A4'.equalsIgnoreCase(size);
+    }
+
+    /**
+     * #243 — true when Page_Margins__c names a concrete preset. 'Default' is the field
+     * default and 'FromSource' explicitly defers to the source document, so neither
+     * justifies overwriting an author's @page margin.
+     */
+    @TestVisible
+    private static Boolean hasExplicitMarginOverride() {
+        String preset = DocGenHtmlRenderer.marginsOverride;
+        return String.isNotBlank(preset) &&
+            !'Default'.equalsIgnoreCase(preset) &&
+            !'FromSource'.equalsIgnoreCase(preset);
+    }
+
+    /**
+     * #243 — removes a single declaration (`size` or `margin`) from every `@page` block
+     * in the source styles, leaving the rest of the author's CSS untouched.
+     *
+     * Needed because the engine's <style> is emitted BEFORE the source's, so an engine
+     * `@page { size: ... }` loses the cascade to an author declaration of equal
+     * specificity. Dropping the competing declaration lets the engine's value apply
+     * without relocating or rewriting author CSS.
+     *
+     * The `(^|;)` anchor is what keeps this surgical: `size` cannot match `font-size`
+     * and `margin` cannot match `margin-top`, because in both cases the character
+     * following the property name is not `:`.
+     */
+    @TestVisible
+    private static String stripSourcePageDecl(String styles, String prop) {
+        if (String.isBlank(styles)) {
+            return styles;
+        }
+        Matcher blocks = Pattern.compile('(?is)(@page[^\\{]*\\{)([^\\}]*)(\\})').matcher(styles);
+        Pattern decl = Pattern.compile('(?i)(^|;)\\s*' + prop + '\\s*:[^;\\}]*(;|$)');
+        String out = '';
+        Integer last = 0;
+        while (blocks.find()) {
+            out += styles.substring(last, blocks.start());
+            // Collapse the matched declaration to a bare ';' so neighbouring
+            // declarations stay separated.
+            String body = decl.matcher(blocks.group(2)).replaceAll('$1');
+            out += blocks.group(1) + body + blocks.group(3);
+            last = blocks.end();
+        }
+        out += styles.substring(last);
+        return out;
     }
 
     /**

@@ -517,6 +517,13 @@
     caret-color: #7c3aed;
 }
 
+/* #238 — the active-block/cell highlight is deliberately NOT defined here.
+   The canvas is an lwc:dom="manual" host, and component CSS does not reach nodes
+   written into it by hand (which is why _showDropMarker sets style.cssText inline).
+   The highlight is applied as inline style in _paintActiveBlock and removed again in
+   _clearActiveBlockPaint, which also runs before serialization so it can never reach
+   the saved template body. */
+
 .dg-tag-panel {
     border: 1px solid #d8dde6;
     border-radius: 8px;

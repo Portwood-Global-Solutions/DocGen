@@ -1,0 +1,17 @@
+/* #237 — one-click example title formats. Styled as a badge but it is a real
+   <button>, so it needs the browser's default button chrome removed. */
+.dg-title-example {
+    cursor: pointer;
+    border: 1px solid #d8dde6;
+    background: #f3f3f3;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.7rem;
+    line-height: 1.4;
+}
+
+.dg-title-example:hover,
+.dg-title-example:focus {
+    background: #1b5e9e;
+    border-color: #1b5e9e;
+    color: #fff;
+}

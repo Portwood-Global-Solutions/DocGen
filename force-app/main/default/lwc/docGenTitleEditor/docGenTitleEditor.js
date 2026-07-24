@@ -1,5 +1,27 @@
 import { LightningElement, api, track } from 'lwc';
 
+/**
+ * #237 — built-in tokens DocGenService.generateDocTitle resolves that are NOT
+ * SObject fields, so they never appear in the Query Config and were previously
+ * undiscoverable. See DocGenService.cls:8719-8728.
+ *
+ * The formatted variants are listed first deliberately: a bare {Now} falls through
+ * to String.valueOf(), which renders a DateTime in GMT, while any format suffix goes
+ * through DateTime.format() and uses the running user's timezone.
+ */
+const BUILT_IN_TOKENS = [
+    'Today:yyyy-MM-dd',
+    'Today:MMMM d, yyyy',
+    'Today:MM-dd-yyyy',
+    'Today',
+    'Now:yyyy-MM-dd HH-mm',
+    'Now:h:mm a',
+    'Now',
+    'RunningUser.Name',
+    'RunningUser.Email',
+    'RunningUser.Alias'
+];
+
 export default class DocGenTitleEditor extends LightningElement {
     @api
     get value() {
@@ -97,7 +119,10 @@ export default class DocGenTitleEditor extends LightningElement {
     }
 
     parseFields() {
-        if (!this.queryConfig) return [];
+        // #237 — built-ins first: they are always valid regardless of Query Config,
+        // and they are the ones authors did not know existed.
+        const builtIns = [...BUILT_IN_TOKENS];
+        if (!this.queryConfig) return builtIns;
 
         // Basic parser: Split by comma, ignore subqueries `(SELECT ...)`
         // 1. Remove subqueries
@@ -109,7 +134,22 @@ export default class DocGenTitleEditor extends LightningElement {
         // 3. Trim and Filter
         const fields = tokens.map((t) => t.trim()).filter((t) => t && !t.startsWith('(')); // Double check
 
-        return fields;
+        return builtIns.concat(fields);
+    }
+
+    /** One-click example formats, shown under the input. */
+    get exampleChips() {
+        return [
+            { key: 'ex1', value: '{Name}_{Today:yyyy-MM-dd}' },
+            { key: 'ex2', value: 'Invoice_{Name}_{Today:MMMM d, yyyy}' },
+            { key: 'ex3', value: '{Name} - signed {Now:yyyy-MM-dd HH-mm}' }
+        ];
+    }
+
+    handleExampleClick(event) {
+        this._value = event.currentTarget.dataset.value;
+        this.notifyChange();
+        this.showSuggestions = false;
     }
 
     get hasSuggestions() {
