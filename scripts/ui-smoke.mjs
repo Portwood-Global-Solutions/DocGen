@@ -356,6 +356,81 @@ async function main() {
         record('table tools appear inside a table', tableCtx.shownInside, '');
         record('table tools work when shown (+ Row)', tableCtx.rowAdded, '');
 
+        // --- 4c. Selection bubble: appears, is unclipped, and actually formats ----
+        // The bubble is position: fixed precisely so no ancestor can clip it. Assert
+        // that property directly rather than trusting the CSS — this is the same
+        // class of check that would have caught the overflow regression.
+        const bubble = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+      const p = document.createElement('p');
+      p.textContent = 'select me for the bubble';
+      pv.appendChild(p);
+      pv.focus();
+      const r = document.createRange(); r.selectNodeContents(p);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return new Promise((resolve) => setTimeout(() => {
+        const el = __dgFind('.dg-sel-bubble');
+        if (!el) return resolve({ appeared:false });
+        const br = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        // No clipping ancestor may be smaller than the bubble.
+        let clipper = null, node = el.parentElement;
+        while (node && !clipper) {
+          const ncs = getComputedStyle(node);
+          if ((ncs.overflowX !== 'visible' || ncs.overflowY !== 'visible')) {
+            const nr = node.getBoundingClientRect();
+            if (nr.height < br.height - 1 || nr.width < br.width - 1) {
+              clipper = (typeof node.className === 'string' && node.className ? node.className.split(' ')[0] : node.tagName)
+                        + ' overflow:' + ncs.overflowX + '/' + ncs.overflowY;
+            }
+          }
+          node = node.parentElement;
+        }
+        // Centre must be hit-testable.
+        const cx = Math.round(br.left + br.width/2), cy = Math.round(br.top + br.height/2);
+        let top = document.elementFromPoint(cx, cy), guard = 0;
+        while (top && top.shadowRoot && guard++ < 10) {
+          const inner = top.shadowRoot.elementFromPoint(cx, cy);
+          if (!inner || inner === top) break;
+          top = inner;
+        }
+        // Does it actually format?
+        const bold = [...el.querySelectorAll('button')].find(b => (b.textContent||'').trim() === 'B');
+        let formatted = false;
+        if (bold) {
+          const before = pv.innerHTML;
+          bold.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+          bold.click();
+          formatted = pv.innerHTML !== before;
+        }
+        // Must sit above the selection, not on top of it.
+        const selRect = r.getBoundingClientRect();
+        resolve({
+          appeared: true,
+          fixed: cs.position === 'fixed',
+          onScreen: br.top >= 0 && br.left >= 0 && br.width > 20 && br.height > 10,
+          hitTestable: !!(top && el.contains(top)),
+          clipper,
+          coversSelection: br.bottom > selRect.top + 2 && br.top < selRect.bottom - 2,
+          formatted
+        });
+      }, 500));`)
+        );
+        record('bubble: appears on text selection', !!bubble.appeared, '');
+        if (bubble.appeared) {
+            record('bubble: position fixed (uncippable)', !!bubble.fixed, 'must be fixed, got ' + bubble.fixed);
+            record('bubble: on screen with real size', !!bubble.onScreen, '');
+            record('bubble: no clipping ancestor', !bubble.clipper, bubble.clipper || '');
+            record('bubble: centre is hit-testable', !!bubble.hitTestable, '');
+            record('bubble: does not cover the selection', !bubble.coversSelection, '');
+            record('bubble: bold actually formats', !!bubble.formatted, '');
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

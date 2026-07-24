@@ -1585,6 +1585,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     renderedCallback() {
+        // Floating chrome is position: fixed in viewport coordinates, so it can only
+        // be placed once the element exists and has been laid out.
+        if (this.selectionBubble) {
+            const bubble = this.template.querySelector('.dg-sel-bubble');
+            if (bubble) {
+                this._positionSelectionBubble(bubble);
+            }
+        }
         // Sync native textarea DOM value with tracked property after re-render
         if (this.currentWizardStep === '2' && this.newTemplateQuery) {
             const ta = this.template.querySelector('.wizard-query-textarea');
@@ -6569,6 +6577,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (this.caretInTable !== inTable) {
                 this.caretInTable = inTable;
             }
+            this._syncSelectionBubble();
         } catch (e) {
             /* best effort — a stale caret beats no caret */
         }
@@ -6668,6 +6677,176 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _bodyCanvas() {
         const host = this.template.querySelector('.dg-visual-host');
         return (host && host.querySelector('.dg-pv')) || null;
+    }
+
+    // ===== Floating layer ====================================================
+    //
+    // CSS has no anchored positioning, so a popover declared `position: absolute`
+    // inside the toolbar is at the mercy of every ancestor's overflow. That is not a
+    // hypothetical: a toolbar rewrite set `overflow-x: auto`, the spec coerced
+    // `overflow-y` from `visible` to `auto` with it, and every menu silently rendered
+    // inside a 38px clipping box. Nothing was visible and the editor read as dead.
+    //
+    // The fix is structural, not a tweak: floating elements are `position: fixed` and
+    // positioned in VIEWPORT coordinates from the anchor's rect, so no ancestor's
+    // overflow can clip them. Placement flips when it would leave the viewport and is
+    // clamped to stay on screen — the collision behaviour Floating UI exists to provide.
+    //
+    // @param anchorEl  the control the floating element belongs to
+    // @param floatEl   the floating element (must be position: fixed in CSS)
+    // @param opts      { gap, prefer: 'bottom'|'top', align: 'start'|'center'|'end' }
+    _positionFloating(anchorEl, floatEl, opts = {}) {
+        if (!anchorEl || !floatEl) {
+            return;
+        }
+        const gap = opts.gap == null ? 6 : opts.gap;
+        const prefer = opts.prefer || 'bottom';
+        const align = opts.align || 'start';
+        try {
+            // Measure only after the element is laid out; callers call this from
+            // renderedCallback or immediately after making it visible.
+            const a = anchorEl.getBoundingClientRect();
+            const f = floatEl.getBoundingClientRect();
+            const vw = document.documentElement.clientWidth;
+            const vh = document.documentElement.clientHeight;
+            const fw = f.width || floatEl.offsetWidth || 160;
+            const fh = f.height || floatEl.offsetHeight || 120;
+
+            // Vertical: use the preferred side unless it would overflow AND the other
+            // side has more room.
+            const roomBelow = vh - a.bottom;
+            const roomAbove = a.top;
+            let top;
+            if (prefer === 'top') {
+                top = roomAbove >= fh + gap || roomAbove >= roomBelow ? a.top - fh - gap : a.bottom + gap;
+            } else {
+                top = roomBelow >= fh + gap || roomBelow >= roomAbove ? a.bottom + gap : a.top - fh - gap;
+            }
+
+            // Horizontal: align to the anchor, then clamp into the viewport so a
+            // control near the right edge does not push its menu off screen.
+            let left;
+            if (align === 'center') {
+                left = a.left + a.width / 2 - fw / 2;
+            } else if (align === 'end') {
+                left = a.right - fw;
+            } else {
+                left = a.left;
+            }
+            const margin = 8;
+            left = Math.max(margin, Math.min(left, vw - fw - margin));
+            top = Math.max(margin, Math.min(top, vh - fh - margin));
+
+            floatEl.style.position = 'fixed';
+            floatEl.style.left = Math.round(left) + 'px';
+            floatEl.style.top = Math.round(top) + 'px';
+            floatEl.style.zIndex = '9000';
+        } catch (e) {
+            /* positioning is best-effort — never break the editor over chrome */
+        }
+    }
+
+    /**
+     * Reposition every open floating element. Bound to scroll/resize while something
+     * is open, because `fixed` coordinates are viewport-absolute and go stale the
+     * moment anything moves.
+     */
+    _repositionFloatingLayer = () => {
+        const openMenu = this.template.querySelector('.dg-fmt-menu');
+        if (openMenu && this._floatAnchor && this._floatAnchor.isConnected) {
+            this._positionFloating(this._floatAnchor, openMenu);
+        }
+        const bubble = this.template.querySelector('.dg-sel-bubble');
+        if (bubble && this.selectionBubble) {
+            this._positionSelectionBubble(bubble);
+        }
+    };
+
+    _watchFloatingLayer(on) {
+        if (on && !this._floatWatching) {
+            window.addEventListener('scroll', this._repositionFloatingLayer, true);
+            window.addEventListener('resize', this._repositionFloatingLayer);
+            this._floatWatching = true;
+        } else if (!on && this._floatWatching) {
+            window.removeEventListener('scroll', this._repositionFloatingLayer, true);
+            window.removeEventListener('resize', this._repositionFloatingLayer);
+            this._floatWatching = false;
+        }
+    }
+    _floatWatching = false;
+    _floatAnchor = null;
+
+    // ===== Selection bubble ==================================================
+    //
+    // The third layer of the editor's chrome, alongside the persistent bar and the
+    // slash menu. Research on block editors is consistent that you need all three:
+    // a bubble for "format what I just selected", a static bar for discoverability,
+    // and slash for "insert something new". The bubble is what earns the persistent
+    // bar the right to be small.
+    //
+    // Deliberately additive: nothing is removed from the toolbar to make this work,
+    // so it cannot repeat the fae4f53 failure where controls were relocated into
+    // chrome that turned out not to render.
+    @track selectionBubble = null;
+
+    /** A trimmed swatch set — the bubble is for quick hits, not the full palette. */
+    get bubbleColorSwatches() {
+        return (this.textColorSwatches || []).slice(0, 5);
+    }
+
+    /** Show/hide the bubble as the selection changes inside any editing surface. */
+    _syncSelectionBubble() {
+        if (!this.showHtmlBodyVisual) {
+            if (this.selectionBubble) {
+                this.selectionBubble = null;
+                this._watchFloatingLayer(false);
+            }
+            return;
+        }
+        let show = false;
+        try {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount && !sel.isCollapsed) {
+                const node = sel.getRangeAt(0).startContainer;
+                const el = node && node.nodeType === 3 ? node.parentElement : node;
+                // Only for real text selections inside an editable surface — a
+                // pill-only selection has its own menu.
+                if (el && this._surfaceContaining(el) && (sel.toString() || '').trim().length) {
+                    show = true;
+                }
+            }
+        } catch (e) {
+            show = false;
+        }
+        if (show !== !!this.selectionBubble) {
+            this.selectionBubble = show ? { visible: true } : null;
+            this._watchFloatingLayer(show || !!this.openFmtMenu);
+        }
+    }
+
+    /**
+     * Park the bubble ABOVE the selection where there is room, below it otherwise —
+     * it must never cover the text being formatted.
+     */
+    _positionSelectionBubble(bubbleEl) {
+        try {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount) {
+                return;
+            }
+            const rects = sel.getRangeAt(0).getClientRects();
+            const r = rects && rects.length ? rects[0] : sel.getRangeAt(0).getBoundingClientRect();
+            if (!r || (!r.width && !r.height)) {
+                return;
+            }
+            // Synthesize an anchor rect from the selection itself.
+            const anchor = {
+                getBoundingClientRect: () => r
+            };
+            this._positionFloating(anchor, bubbleEl, { gap: 8, prefer: 'top', align: 'center' });
+        } catch (e) {
+            /* best effort */
+        }
     }
 
     /**

@@ -633,6 +633,72 @@
     border-color: #c23934;
 }
 
+/* Selection bubble — floating format toolbar over the current text selection.
+   position: fixed is load-bearing, not stylistic: it takes the element out of every
+   ancestor's overflow context, which is the only reliable way to stop a scrolling
+   parent clipping it. Coordinates come from _positionFloating in JS. */
+.dg-sel-bubble {
+    position: fixed;
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 5px 7px;
+    background: #1c1533;
+    border: 1px solid #2f2450;
+    border-radius: 9px;
+    box-shadow:
+        0 10px 28px rgba(16, 10, 40, 0.34),
+        0 2px 6px rgba(16, 10, 40, 0.22);
+    animation: dg-bubble-in 110ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes dg-bubble-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Dark bubble → invert the button chrome so it reads on the dark ground. */
+.dg-sel-bubble .dg-fmt-btn {
+    background: transparent;
+    border-color: transparent;
+    color: #f2eeff;
+    min-width: 26px;
+    height: 24px;
+}
+
+.dg-sel-bubble .dg-fmt-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: transparent;
+    color: #fff;
+}
+
+.dg-sel-bubble .dg-fmt-btn.dg-fmt-on {
+    background: #7c3aed;
+    border-color: #7c3aed;
+    color: #fff;
+}
+
+.dg-sel-bubble .dg-fmt-swatch {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.dg-sel-bubble-sep {
+    width: 1px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.18);
+    margin: 0 3px;
+}
+
 .dg-tag-panel {
     border: 1px solid #d8dde6;
     border-radius: 8px;

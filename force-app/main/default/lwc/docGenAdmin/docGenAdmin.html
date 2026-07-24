@@ -2594,6 +2594,76 @@
                                          keeping it outside makes that impossible by
                                          construction. Positioned over the canvas by
                                          getBoundingClientRect math. -->
+                                    <!-- Selection bubble — the third chrome layer,
+                                         alongside the persistent bar and slash menu.
+                                         position: fixed in viewport coordinates so no
+                                         ancestor's overflow can clip it (the failure
+                                         mode that killed the previous rewrite), and
+                                         placed ABOVE the selection so it never covers
+                                         the text being formatted. -->
+                                    <template if:true={selectionBubble}>
+                                        <div class="dg-sel-bubble" role="toolbar" aria-label="Selection formatting">
+                                            <button
+                                                class={boldBtnClass}
+                                                data-cmd="bold"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title="Bold"
+                                            >
+                                                <b>B</b>
+                                            </button>
+                                            <button
+                                                class={italicBtnClass}
+                                                data-cmd="italic"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title="Italic"
+                                            >
+                                                <i>I</i>
+                                            </button>
+                                            <button
+                                                class={underlineBtnClass}
+                                                data-cmd="underline"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title="Underline"
+                                            >
+                                                <u>U</u>
+                                            </button>
+                                            <button
+                                                class={strikeBtnClass}
+                                                data-cmd="strikeThrough"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title="Strikethrough"
+                                            >
+                                                <s>S</s>
+                                            </button>
+                                            <span class="dg-sel-bubble-sep"></span>
+                                            <template for:each={bubbleColorSwatches} for:item="sw">
+                                                <button
+                                                    key={sw.key}
+                                                    class="dg-fmt-swatch"
+                                                    style={sw.style}
+                                                    data-cmd="foreColor"
+                                                    data-value={sw.value}
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleFormatAction}
+                                                    title={sw.title}
+                                                ></button>
+                                            </template>
+                                            <span class="dg-sel-bubble-sep"></span>
+                                            <button
+                                                class="dg-fmt-btn dg-fmt-btn_word"
+                                                data-cmd="removeFormat"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title="Clear formatting"
+                                            >
+                                                Clear
+                                            </button>
+                                        </div>
+                                    </template>
                                     <div class="dg-canvas-wrap" onmouseleave={handleCanvasMouseLeave}>
                                         <div
                                             class="dg-html-preview-frame dg-visual-host dg-designer-size"
