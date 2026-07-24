@@ -1438,7 +1438,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // #244 — Ctrl/Cmd + wheel zoom is bound to the canvas node, not the document.
         if (this._wheelBoundPv) {
             this._wheelBoundPv.removeEventListener('wheel', this.handleCanvasWheel);
+            this._wheelBoundPv.removeEventListener('mousemove', this.handleCanvasMouseMove);
             this._wheelBoundPv = null;
+        }
+        if (this._overlayRaf) {
+            cancelAnimationFrame(this._overlayRaf);
+            this._overlayRaf = null;
         }
         this._disableFloatPanelChrome();
     }
@@ -1792,6 +1797,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // canvas from the event — track focus from INSIDE it.
                         pv.addEventListener('focusin', () => {
                             this._canvasFocused = true;
+                            // #247 — three editable surfaces now; the toolbar has to
+                            // know which one it is acting on.
+                            this._activeSurface = 'body';
                         });
                         pv.addEventListener('keydown', (e) => {
                             // A top-left-corner click parks the caret at the
@@ -1904,14 +1912,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         if (this._wheelBoundPv !== pv) {
                             if (this._wheelBoundPv) {
                                 this._wheelBoundPv.removeEventListener('wheel', this.handleCanvasWheel);
+                                this._wheelBoundPv.removeEventListener('mousemove', this.handleCanvasMouseMove);
                             }
                             pv.addEventListener('wheel', this.handleCanvasWheel, { passive: false });
+                            // #241 — table handles follow the pointer.
+                            pv.addEventListener('mousemove', this.handleCanvasMouseMove);
                             this._wheelBoundPv = pv;
                         }
                         // Snapshot AFTER pillify so "unchanged" compares
                         // like-for-like on exit.
                         // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
                         this._visualEnteredDom = pv.innerHTML;
+                        // #247 — running header/footer are editable bands on the page.
+                        this._mountChromeBands();
                     }
                 }
                 this._pendingPreviewWrite = null;
@@ -6444,9 +6457,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         while (node && node.nodeType === 3) {
             node = node.parentNode;
         }
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
-        if (!node || !pv || !pv.contains(node)) {
+        // #247 — the caret can now be in the body OR in a running header/footer band.
+        // Resolve which surface owns it so the tracker and the context label follow.
+        const pv = this._surfaceContaining(node);
+        if (!node || !pv) {
             this.selectionContextLabel = '';
             return;
         }
@@ -6489,8 +6503,34 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             el = el.parentElement;
         }
-        this.selectionContextLabel = 'Editing: ' + (label || 'Page');
+        const where =
+            this._activeSurface === 'header' ? 'Header — ' : this._activeSurface === 'footer' ? 'Footer — ' : '';
+        this.selectionContextLabel = 'Editing: ' + where + (label || 'Page');
     };
+
+    /**
+     * #247 — which editable surface (body canvas or chrome band) holds this node, if
+     * any. Also sets _activeSurface, so a caret moved by keyboard rather than by click
+     * still redirects the toolbar to the right surface.
+     */
+    _surfaceContaining(node) {
+        if (!node) {
+            return null;
+        }
+        const body = this._bodyCanvas();
+        if (body && this._isInCanvas(node, body)) {
+            this._activeSurface = 'body';
+            return body;
+        }
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band && this._isInCanvas(node, band)) {
+                this._activeSurface = which;
+                return band;
+            }
+        }
+        return null;
+    }
 
     // ===== Durable caret tracker (#238 / #239 / #240) =========================
     //
@@ -6591,10 +6631,123 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _paintedEl = null;
     _paintedPrevStyle = null;
 
-    /** The live canvas element, or null when not in visual mode. */
+    /**
+     * The editing surface the caret is currently in.
+     *
+     * #247 — the Designer now has three editable surfaces, not one: the page body and
+     * the running header/footer bands. Every existing caller of _canvas() (formatting,
+     * table tools, chip insert, the caret tracker) becomes header-aware for free by
+     * resolving through here, which is why the bands support the full toolbar rather
+     * than being a second, weaker editor.
+     */
+    _activeSurface = 'body';
+
     _canvas() {
+        if (this._activeSurface === 'header' || this._activeSurface === 'footer') {
+            const band = this.template.querySelector('.dg-chrome-band_' + this._activeSurface);
+            if (band && band.isConnected) {
+                return band;
+            }
+        }
+        return this._bodyCanvas();
+    }
+
+    /**
+     * The page body specifically. Anything that is about the SHEET rather than about
+     * the caret — zoom, page dimensions, watermark, oversize-table refitting — must use
+     * this, or it would apply itself to whichever band happens to be focused.
+     */
+    _bodyCanvas() {
         const host = this.template.querySelector('.dg-visual-host');
         return (host && host.querySelector('.dg-pv')) || null;
+    }
+
+    /**
+     * #247 — mount the header/footer bands: write their stored HTML in, turn on
+     * contenteditable, pillify merge tags, and wire the listeners that keep the
+     * template record in sync. Runs from renderedCallback alongside the body canvas.
+     */
+    _mountChromeBands() {
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (!band) {
+                continue;
+            }
+            const stored = (which === 'header' ? this.editTemplateHeaderHtml : this.editTemplateFooterHtml) || '';
+            if (this._bandMounted !== band || this._bandSource[which] !== stored) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM band write; content is re-cleaned by _extractBandHtml on the way out
+                band.innerHTML = stored || '<p><br/></p>';
+                this._bandSource[which] = stored;
+                band.setAttribute('contenteditable', 'true');
+                band.setAttribute('spellcheck', 'false');
+                this._pillifyTags(band);
+            }
+            if (band.dataset.dgWired === '1') {
+                continue;
+            }
+            band.dataset.dgWired = '1';
+            band.addEventListener('focusin', () => {
+                this._activeSurface = which;
+                this._canvasFocused = true;
+            });
+            band.addEventListener('input', () => {
+                this._activeSurface = which;
+                this._syncBandToRecord(which, band);
+                this._maybePillifyTyped();
+            });
+            band.addEventListener('click', (e) => {
+                const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+                if (pill && pill.getAttribute('contenteditable') !== 'true') {
+                    e.preventDefault();
+                    this._openPillMenu(pill);
+                }
+            });
+            // Same reason the body canvas traps keydown: Lightning's "/" global-search
+            // hotkey would otherwise swallow the keystroke.
+            band.addEventListener('keydown', (e) => e.stopPropagation());
+            band.addEventListener('dragover', (e) => e.preventDefault());
+            band.addEventListener('mouseup', () => this._performPendingDropInsert());
+        }
+        this._bandMounted = this.template.querySelector('.dg-chrome-band_header');
+    }
+    _bandMounted = null;
+    _bandSource = { header: null, footer: null };
+
+    /** Serialize a band back to its template field, pills unwrapped to plain tags. */
+    _syncBandToRecord(which, band) {
+        const html = this._extractBandHtml(band);
+        if (which === 'header') {
+            this.editTemplateHeaderHtml = html;
+        } else {
+            this.editTemplateFooterHtml = html;
+        }
+        // Keep the remount guard in step, or the next render would overwrite what the
+        // author is typing with the value they started from.
+        this._bandSource[which] = html;
+        this.htmlEditorDirty = true;
+    }
+
+    /**
+     * Band → clean HTML. Same string-round-trip discipline as _extractVisualBody:
+     * read innerHTML as a STRING and re-parse, never cloneNode, because under the LWS
+     * namespace sandbox cloneNode silently drops nodes native contenteditable inserted.
+     */
+    _extractBandHtml(band) {
+        this._clearActiveBlockPaint();
+        const tpl = document.createElement('template');
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip of a live band; re-cleaned below, never cloneNode (LWS drops browser-inserted nodes)
+        tpl.innerHTML = band.innerHTML;
+        const root = tpl.content;
+        for (const el of root.querySelectorAll('style, .dg-drop-marker')) {
+            el.remove();
+        }
+        this._unpillifyTags(root);
+        const container = document.createElement('div');
+        container.appendChild(root);
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- serialize the cleaned fragment back to a string
+        const out = container.innerHTML.trim();
+        // The placeholder an empty band is seeded with must not become real content.
+        return out === '<p><br></p>' || out === '<p><br/></p>' ? '' : out;
     }
 
     // ===== #244: Designer zoom ===============================================
@@ -6649,7 +6802,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     };
 
     _applyZoom() {
-        const pv = this._canvas();
+        // #247 — zoom is about the SHEET, so it must target the body canvas
+        // explicitly. _canvas() follows the caret and would scale a header band.
+        const pv = this._bodyCanvas();
         if (!pv) {
             return;
         }
@@ -6724,6 +6879,265 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             hops++;
         }
         return false;
+    }
+
+    // ===== #241: Confluence-style table row/column handles ====================
+    //
+    // The add/remove actions already existed, but only as four similar-looking text
+    // buttons in the format bar that act on "the current cell" — so the author had to
+    // click the right cell, travel to the toolbar, and guess where the new column
+    // would land. These handles put the affordance on the table itself.
+    //
+    // The handle elements are rendered by the LWC template as siblings of the canvas
+    // (see .dg-canvas-wrap in the markup), NOT injected into it. The canvas gets
+    // serialized straight back into the saved template body, so chrome placed inside
+    // would need stripping on the way out — keeping it outside removes that risk
+    // entirely.
+    @track tableOverlay = null;
+    _overlayTable = null;
+
+    /**
+     * mousemove fires continuously; recomputing rects on every one of them would be
+     * wasteful. Skip the work while the pointer stays inside the table the overlay is
+     * already drawn for, and rAF-coalesce the rest.
+     */
+    handleCanvasMouseMove = (event) => {
+        if (this._overlayRaf) {
+            return;
+        }
+        this._overlayRaf = requestAnimationFrame(() => {
+            this._overlayRaf = null;
+            try {
+                this._updateTableOverlay(event);
+            } catch (e) {
+                /* handles are cosmetic — never break editing */
+            }
+        });
+    };
+    _overlayRaf = null;
+
+    handleCanvasMouseLeave() {
+        this.tableOverlay = null;
+        this._overlayTable = null;
+        this._highlightTableBand(null);
+    }
+
+    /** Recompute the handle strip for whichever table the pointer is over. */
+    _updateTableOverlay(event) {
+        if (!this.showHtmlBodyVisual) {
+            return;
+        }
+        const pv = this._canvas();
+        const wrap = this.template.querySelector('.dg-canvas-wrap');
+        if (!pv || !wrap) {
+            return;
+        }
+        let node = event.target;
+        while (node && node.nodeType === 3) {
+            node = node.parentNode;
+        }
+        const table = node && node.closest ? node.closest('table') : null;
+        if (!table || !this._isInCanvas(table, pv)) {
+            if (this.tableOverlay) {
+                this.tableOverlay = null;
+                this._overlayTable = null;
+            }
+            return;
+        }
+        this._overlayTable = table;
+        const wrapRect = wrap.getBoundingClientRect();
+        // Column boundaries come from the widest row so a header with colspans
+        // doesn't produce fewer handles than the table has columns.
+        let widest = null;
+        let widestSpan = -1;
+        for (const tr of table.rows) {
+            let span = 0;
+            for (const c of tr.children) {
+                span += c.colSpan || 1;
+            }
+            if (span > widestSpan) {
+                widestSpan = span;
+                widest = tr;
+            }
+        }
+        const cols = [];
+        if (widest) {
+            let i = 0;
+            for (const cell of widest.children) {
+                const r = cell.getBoundingClientRect();
+                // Skip anything scrolled out of view — the handles are absolutely
+                // positioned in a non-scrolling wrapper, so an off-screen handle would
+                // float over unrelated chrome.
+                if (r.bottom < wrapRect.top || r.top > wrapRect.bottom) {
+                    i += cell.colSpan || 1;
+                    continue;
+                }
+                cols.push({
+                    key: 'c' + i,
+                    index: i,
+                    style: `left:${r.left - wrapRect.left}px; top:${
+                        table.getBoundingClientRect().top - wrapRect.top - 22
+                    }px; width:${r.width}px;`
+                });
+                i += cell.colSpan || 1;
+            }
+        }
+        const rows = [];
+        let ri = 0;
+        for (const tr of table.rows) {
+            const r = tr.getBoundingClientRect();
+            if (r.bottom < wrapRect.top || r.top > wrapRect.bottom) {
+                ri++;
+                continue;
+            }
+            rows.push({
+                key: 'r' + ri,
+                index: ri,
+                style: `left:${table.getBoundingClientRect().left - wrapRect.left - 46}px; top:${
+                    r.top - wrapRect.top
+                }px; height:${r.height}px;`
+            });
+            ri++;
+        }
+        this.tableOverlay = { cols, rows };
+    }
+
+    /** Tint the column/row a handle refers to, so "which one" is never a guess. */
+    handleTableHandleEnter(event) {
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const isCol = event.currentTarget.classList.contains('dg-tbl-handle_col');
+        this._highlightTableBand(isCol ? { col: idx } : { row: idx });
+    }
+
+    handleTableHandleLeave() {
+        this._highlightTableBand(null);
+    }
+
+    _highlightTableBand(spec) {
+        // Undo the previous band first — these are inline styles on live canvas nodes,
+        // so the original style attribute is captured and restored verbatim.
+        for (const [el, prev] of this._bandPainted || []) {
+            if (prev === null || prev === undefined) {
+                el.removeAttribute('style');
+            } else {
+                el.setAttribute('style', prev);
+            }
+        }
+        this._bandPainted = [];
+        const table = this._overlayTable;
+        if (!spec || !table || !table.isConnected) {
+            return;
+        }
+        const targets = [];
+        if (typeof spec.col === 'number') {
+            for (const tr of table.rows) {
+                let i = 0;
+                for (const cell of tr.children) {
+                    const span = cell.colSpan || 1;
+                    if (spec.col >= i && spec.col < i + span) {
+                        targets.push(cell);
+                    }
+                    i += span;
+                }
+            }
+        } else if (typeof spec.row === 'number' && table.rows[spec.row]) {
+            for (const cell of table.rows[spec.row].children) {
+                targets.push(cell);
+            }
+        }
+        for (const cell of targets) {
+            this._bandPainted.push([cell, cell.getAttribute('style')]);
+            cell.style.backgroundColor = 'rgba(124, 58, 237, 0.14)';
+        }
+    }
+    _bandPainted = [];
+
+    /**
+     * The handle actions address a column/row by INDEX, whereas handleTableAction
+     * addresses "the cell the caret is in". Rather than fake a caret, operate on the
+     * grid directly — and clear the band highlight first so its inline style can't be
+     * cloned into a newly inserted row.
+     */
+    _tableFromOverlay() {
+        this._highlightTableBand(null);
+        const table = this._overlayTable;
+        return table && table.isConnected ? table : null;
+    }
+
+    handleInsertColAt(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        for (const tr of table.rows) {
+            const ref = tr.children[Math.min(idx, tr.children.length - 1)];
+            if (ref) {
+                const c = ref.cloneNode(false);
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('colspan');
+                ref.insertAdjacentElement('beforebegin', c);
+            }
+        }
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
+    }
+
+    handleDeleteColAt(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        for (const tr of table.rows) {
+            if (tr.children[idx]) {
+                tr.children[idx].remove();
+            }
+        }
+        if (!table.querySelector('td, th')) {
+            table.remove();
+        }
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
+    }
+
+    handleInsertRowAt(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const row = table.rows[idx];
+        if (!row) {
+            return;
+        }
+        const clone = row.cloneNode(true);
+        for (const c of clone.children) {
+            // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+            c.innerHTML = '&nbsp;';
+            c.removeAttribute('rowspan');
+        }
+        row.insertAdjacentElement('beforebegin', clone);
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
+    }
+
+    handleDeleteRowAt(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const row = table.rows[idx];
+        if (row) {
+            row.remove();
+        }
+        if (!table.querySelector('tr')) {
+            table.remove();
+        }
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
     }
 
     // --- Table tools (visual mode): operate on the cell holding the caret ---
@@ -8535,9 +8949,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (!parent || parent.tagName === 'STYLE' || parent.closest('[data-dg-tag]')) {
                 return;
             }
-            const host = this.template.querySelector('.dg-visual-host');
-            const pv = host && host.querySelector('.dg-pv');
-            if (!pv || !pv.contains(node) || !/\{[^{}]+\}/.test(node.nodeValue)) {
+            // #247 — type-to-pill has to work in the running header/footer bands too,
+            // not just the page body.
+            const pv = this._surfaceContaining(node);
+            if (!pv || !/\{[^{}]+\}/.test(node.nodeValue)) {
                 return;
             }
             const doc = node.ownerDocument || document;

@@ -524,6 +524,115 @@
    _clearActiveBlockPaint, which also runs before serialization so it can never reach
    the saved template body. */
 
+/* #247 — running header/footer bands.
+   Styled to read as page CHROME rather than body content: dimmed, dashed, labelled.
+   They are real editing surfaces (the format bar, rail chips and table tools all work
+   in them), but they write Header_Html__c / Footer_Html__c, not the body. */
+.dg-chrome-band {
+    border: 1px dashed #c9c7e0;
+    border-radius: 4px;
+    background: #fbfaff;
+    padding: 6px 10px;
+    min-height: 34px;
+    font-size: 0.8rem;
+    color: #3e3e4a;
+    cursor: text;
+    overflow-x: auto;
+}
+
+.dg-chrome-band:focus,
+.dg-chrome-band:focus-within {
+    border-color: #7c3aed;
+    border-style: solid;
+    background: #fff;
+    outline: none;
+}
+
+.dg-chrome-band_header {
+    margin-bottom: 4px;
+}
+
+.dg-chrome-band_footer {
+    margin-top: 4px;
+}
+
+.dg-chrome-band-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8b8ba7;
+    margin: 2px 0;
+}
+
+.dg-chrome-band-hint {
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: italic;
+    margin-left: 6px;
+}
+
+/* #241 — table row/column handles.
+   These ARE component-owned nodes (LWC renders them as siblings of the canvas, not
+   inside the lwc:dom="manual" host), so unlike the caret highlight they can be
+   styled from here. The wrapper is the positioning context. */
+.dg-canvas-wrap {
+    position: relative;
+}
+
+.dg-tbl-handle {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity 0.12s ease-in-out;
+    pointer-events: auto;
+}
+
+.dg-canvas-wrap:hover .dg-tbl-handle {
+    opacity: 0.55;
+}
+
+.dg-tbl-handle:hover {
+    opacity: 1;
+}
+
+.dg-tbl-handle_col {
+    height: 20px;
+}
+
+.dg-tbl-handle_row {
+    width: 42px;
+    flex-direction: row;
+}
+
+.dg-tbl-handle-btn {
+    width: 18px;
+    height: 18px;
+    line-height: 1;
+    padding: 0;
+    border: 1px solid #b49aef;
+    border-radius: 3px;
+    background: #fff;
+    color: #5b21b6;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.dg-tbl-handle-btn:hover {
+    background: #7c3aed;
+    border-color: #7c3aed;
+    color: #fff;
+}
+
+.dg-tbl-handle-btn_del:hover {
+    background: #c23934;
+    border-color: #c23934;
+}
+
 .dg-tag-panel {
     border: 1px solid #d8dde6;
     border-radius: 8px;

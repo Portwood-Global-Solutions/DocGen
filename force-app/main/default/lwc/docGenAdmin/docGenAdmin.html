@@ -2564,11 +2564,112 @@
                                             title="Custom cell fill color"
                                         />
                                     </div>
+                                    <!-- #247 — the running header is page chrome, so it
+                                         belongs ON the page, not behind a panel button.
+                                         Same editing surface as the body: rail chips drag
+                                         in, the format bar applies, tables work. Writes to
+                                         Header_Html__c rather than the body. -->
+                                    <div class="dg-chrome-band-label">
+                                        Running header
+                                        <span class="dg-chrome-band-hint">repeats at the top of every PDF page</span>
+                                    </div>
                                     <div
-                                        class="dg-html-preview-frame dg-visual-host dg-designer-size"
+                                        class="dg-chrome-band dg-chrome-band_header"
                                         lwc:dom="manual"
-                                        title="Visual editing — click into the page and type"
+                                        data-surface="header"
+                                        title="Running header — click in and type. Appears on every page of the PDF."
                                     ></div>
+                                    <!-- #241 — the table row/column handles are rendered
+                                         HERE, as LWC-owned siblings of the canvas, never
+                                         inside it. The canvas is serialized back to the
+                                         template body, so any chrome placed within it
+                                         would have to be stripped again on the way out;
+                                         keeping it outside makes that impossible by
+                                         construction. Positioned over the canvas by
+                                         getBoundingClientRect math. -->
+                                    <div class="dg-canvas-wrap" onmouseleave={handleCanvasMouseLeave}>
+                                        <div
+                                            class="dg-html-preview-frame dg-visual-host dg-designer-size"
+                                            lwc:dom="manual"
+                                            title="Visual editing — click into the page and type"
+                                        ></div>
+                                        <template if:true={tableOverlay}>
+                                            <!-- Column gutter, above the table -->
+                                            <template for:each={tableOverlay.cols} for:item="col">
+                                                <div
+                                                    key={col.key}
+                                                    class="dg-tbl-handle dg-tbl-handle_col"
+                                                    style={col.style}
+                                                    data-index={col.index}
+                                                    onmouseenter={handleTableHandleEnter}
+                                                    onmouseleave={handleTableHandleLeave}
+                                                >
+                                                    <button
+                                                        class="dg-tbl-handle-btn"
+                                                        data-index={col.index}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleInsertColAt}
+                                                        title="Insert a column here"
+                                                    >
+                                                        +
+                                                    </button>
+                                                    <button
+                                                        class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
+                                                        data-index={col.index}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleDeleteColAt}
+                                                        title="Delete this column"
+                                                    >
+                                                        &minus;
+                                                    </button>
+                                                </div>
+                                            </template>
+                                            <!-- Row gutter, left of the table -->
+                                            <template for:each={tableOverlay.rows} for:item="row">
+                                                <div
+                                                    key={row.key}
+                                                    class="dg-tbl-handle dg-tbl-handle_row"
+                                                    style={row.style}
+                                                    data-index={row.index}
+                                                    onmouseenter={handleTableHandleEnter}
+                                                    onmouseleave={handleTableHandleLeave}
+                                                >
+                                                    <button
+                                                        class="dg-tbl-handle-btn"
+                                                        data-index={row.index}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleInsertRowAt}
+                                                        title="Insert a row here"
+                                                    >
+                                                        +
+                                                    </button>
+                                                    <button
+                                                        class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
+                                                        data-index={row.index}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleDeleteRowAt}
+                                                        title="Delete this row"
+                                                    >
+                                                        &minus;
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </template>
+                                    </div>
+                                    <!-- #247 — running footer, mirror of the header band -->
+                                    <div
+                                        class="dg-chrome-band dg-chrome-band_footer"
+                                        lwc:dom="manual"
+                                        data-surface="footer"
+                                        title="Running footer — click in and type. Appears on every page of the PDF."
+                                    ></div>
+                                    <div class="dg-chrome-band-label">
+                                        Running footer
+                                        <span class="dg-chrome-band-hint"
+                                            >repeats at the bottom of every PDF page &middot; &#123;PageNumber&#125; and
+                                            &#123;TotalPages&#125; show sample values here</span
+                                        >
+                                    </div>
                                     <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">
                                         This is your document — click anywhere and type. The colored pills are your data
                                         fields. Drag anything from the rail on the right straight onto the page.
