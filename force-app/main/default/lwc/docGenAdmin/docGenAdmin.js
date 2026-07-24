@@ -6334,6 +6334,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             pv.style.minHeight = h + 'px';
             pv.style.padding = pad + 'px';
         }
+        // #247 — the header/footer bands are the sheet's top and bottom margin zones,
+        // so they must match the page EXACTLY: same width, and the same horizontal
+        // padding as the body, or the header text would not line up with the body text
+        // directly beneath it and the illusion of one continuous page breaks.
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band) {
+                band.style.width = w + 'px';
+                band.style.maxWidth = w + 'px';
+                band.style.paddingLeft = pad + 'px';
+                band.style.paddingRight = pad + 'px';
+            }
+        }
     }
 
     // --- Format Code + Code ⇄ Preview (shared by the HTML editor and the DOCX viewer) ---
@@ -6561,9 +6574,58 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const cellEl = el && el.closest ? el.closest('td, th') : null;
             this._caret = { range, blockEl, cellEl };
             this._paintActiveBlock(pv, blockEl, cellEl);
+            // The table toolbar row is contextual: it exists only while the caret is
+            // actually in a table. That is ~45 controls that used to be on screen
+            // permanently, whether or not the author had a table at all.
+            const inTable = !!cellEl || !!(this._cellSel && this._cellSel.length);
+            if (this.caretInTable !== inTable) {
+                this.caretInTable = inTable;
+            }
         } catch (e) {
             /* best effort — a stale caret beats no caret */
         }
+    }
+
+    /** Drives the contextual table row. */
+    @track caretInTable = false;
+
+    // --- Toolbar menus -------------------------------------------------------
+    // The old bar rendered every swatch, font and border preset inline — 110+
+    // controls in one wrapping strip that ate a third of a laptop screen. The
+    // long tail now lives behind small labelled menus; only one is open at a time.
+    @track openFmtMenu = null;
+
+    handleFmtMenuToggle(event) {
+        // preventDefault on mousedown keeps the page selection alive; the click
+        // handler then just flips which menu is open.
+        const which = event.currentTarget.dataset.menu;
+        this.openFmtMenu = this.openFmtMenu === which ? null : which;
+    }
+
+    closeFmtMenu() {
+        this.openFmtMenu = null;
+    }
+
+    get isTextColorMenuOpen() {
+        return this.openFmtMenu === 'textColor';
+    }
+    get isHighlightMenuOpen() {
+        return this.openFmtMenu === 'highlight';
+    }
+    get isFontMenuOpen() {
+        return this.openFmtMenu === 'font';
+    }
+    get isAlignMenuOpen() {
+        return this.openFmtMenu === 'align';
+    }
+    get isTablePropsMenuOpen() {
+        return this.openFmtMenu === 'tableProps';
+    }
+    get isBordersMenuOpen() {
+        return this.openFmtMenu === 'borders';
+    }
+    get isCellFillMenuOpen() {
+        return this.openFmtMenu === 'cellFill';
     }
 
     /**
@@ -6820,6 +6882,58 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } catch (e) {
             /* zoom is cosmetic */
         }
+        this._applyPillSpread();
+    }
+
+    /**
+     * Zooming in must make dense merge-tag areas EASIER TO EDIT, not just bigger.
+     *
+     * A pure transform scales the crowding along with everything else — four pills
+     * jammed into one table cell are still four pills jammed into one cell, just
+     * larger. So above 100% pills get progressively more horizontal margin and
+     * line-height ON TOP of the scale, which pulls them apart into individually
+     * clickable targets and lets a cramped cell wrap onto more lines.
+     *
+     * Safe to mutate: _unpillifyTags keeps only font-weight/style/decoration/colour/
+     * family/size off a pill when serializing, so margin and line-height are dropped
+     * on the way out and can never reach the saved template.
+     */
+    _applyPillSpread() {
+        const z = this.designerZoom || 1;
+        // Nothing below 1x — shrinking should stay faithful to the printed layout.
+        const extra = z > 1 ? z - 1 : 0;
+        const marginX = (extra * 7).toFixed(1);
+        const padX = (6 + extra * 5).toFixed(1);
+        const lineH = (1 + extra * 0.55).toFixed(2);
+        for (const surface of this._allSurfaces()) {
+            for (const pill of surface.querySelectorAll('[data-dg-tag]')) {
+                if (extra === 0) {
+                    pill.style.margin = '';
+                    pill.style.lineHeight = '';
+                    pill.style.padding = '0 6px';
+                    continue;
+                }
+                pill.style.margin = `${(extra * 2.5).toFixed(1)}px ${marginX}px`;
+                pill.style.padding = `0 ${padX}px`;
+                pill.style.lineHeight = lineH;
+            }
+        }
+    }
+
+    /** Body canvas + both chrome bands — everything the author can type into. */
+    _allSurfaces() {
+        const out = [];
+        const body = this._bodyCanvas();
+        if (body) {
+            out.push(body);
+        }
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band) {
+                out.push(band);
+            }
+        }
+        return out;
     }
 
     /**
@@ -8979,6 +9093,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 sel.removeAllRanges();
                 sel.addRange(r);
             }
+            // A freshly typed pill takes its style straight from _pillStyleFor, which
+            // knows nothing about zoom — re-apply the spread so it matches its
+            // neighbours instead of snapping back to tight spacing.
+            this._applyPillSpread();
         } catch (e) {
             /* best effort */
         }
