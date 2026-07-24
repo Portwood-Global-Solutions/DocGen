@@ -563,7 +563,19 @@ private class DocGenHtmlRendererTest {
                 '</w:body></w:document>';
 
             String html = DocGenHtmlRenderer.convertToHtml(xml);
-            System.assert(html.contains('vertical-align:center'), 'Should have vertical alignment');
+            // #246 — this assertion previously demanded `vertical-align:center`, which
+            // is INVALID CSS: table cells accept top | middle | bottom only. Flying
+            // Saucer dropped the declaration and the cell fell back to the stylesheet
+            // default of `top`, so every centre-aligned Word cell rendered top-aligned
+            // while this test passed. Word's "center" must be translated to "middle".
+            System.assert(
+                html.contains('vertical-align:middle'),
+                'Word w:vAlign="center" must emit CSS vertical-align:middle: ' + html
+            );
+            System.assert(
+                !html.contains('vertical-align:center'),
+                'vertical-align:center is not valid CSS and must never be emitted: ' + html
+            );
         }
     }
 
