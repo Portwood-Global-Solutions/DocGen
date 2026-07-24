@@ -10784,6 +10784,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } catch (e) {
             /* malformed config — skip */
         }
+        // The configured-fields section above only appears once a template already HAS
+        // form fields, which made the {?key} writeback grammar undiscoverable to anyone
+        // who had not used it before. Always offer the syntax itself, plus a pointer to
+        // where keys are configured.
+        sections.push({
+            key: 'writeback',
+            label: 'Signer inputs & writeback',
+            hint: 'The signer fills these in during e-signing. The answer is merged into the signed PDF and can be written back to the record — configure keys under Edit Template → Signer Inputs.',
+            items: [
+                {
+                    key: 'wb_basic',
+                    label: 'Signer answer',
+                    snippet: '{?key}',
+                    title: "{?key} — the signer's answer for the form field named `key`. Renders empty if unanswered."
+                },
+                {
+                    key: 'wb_fallback',
+                    label: 'Signer answer + default',
+                    snippet: '{?key|fallback}',
+                    title: '{?key|fallback} — same, but prints `fallback` when the signer leaves it blank.'
+                }
+            ]
+        });
+        // {RepeatHeader} was only reachable as a table-toolbar toggle, so it was
+        // invisible to anyone browsing the tag rail for it.
+        sections.push({
+            key: 'tablemarkers',
+            label: 'Table markers',
+            hint: 'Place inside a table to control how it paginates in the PDF.',
+            items: [
+                {
+                    key: 'tm_repeat',
+                    label: 'Repeat header row',
+                    snippet: '{RepeatHeader}',
+                    title: '{RepeatHeader} — put it in the header row and that row repeats at the top of every PDF page the table spans.'
+                }
+            ]
+        });
         return sections;
     }
 
