@@ -139,31 +139,44 @@ async function main() {
       const bar = __dgFind('.dg-format-bar');
       const pv = __dgFind('.dg-pv');
       const out = [];
-      // Seed a DELIBERATELY CONTRARY baseline. Asserting "the DOM changed" against
-      // plain default text produces false failures for every command whose result is
-      // already the current state — "align left" on left-aligned text, "clear
-      // formatting" on unformatted text, "Helvetica" on Helvetica. Starting from
-      // centred, red, bold, Times, highlighted text means every command under test has
-      // something real to change.
-      const seed = () => {
+      // Full reset per control. Reusing whatever block survived the previous command
+      // makes results order-dependent — the bullet-list test replaces the <p> with a
+      // <ul>, so the ordered-list test that follows was operating on a different
+      // element entirely. Each control now starts from an identical document.
+      //
+      // The baseline is deliberately CONTRARY (red, bold, Times, highlighted) so
+      // commands whose result is already the current state still have something to
+      // change. Alignment is the exception: it is seeded opposite to whichever
+      // alignment is under test, since "centre" on centred text is a legitimate no-op.
+      const seed = (label) => {
         pv.focus();
-        let p = pv.querySelector('p, h1, h2, td, div');
-        if (!p) { p = document.createElement('p'); pv.appendChild(p); }
-        p.setAttribute('style', 'text-align:center');
+        const style = pv.querySelector('style');
+        while (pv.firstChild) pv.removeChild(pv.firstChild);
+        if (style) pv.appendChild(style);
+        const p = document.createElement('p');
+        p.style.textAlign = /center|centre/i.test(label) ? 'left'
+                          : /right/i.test(label) ? 'left'
+                          : /left/i.test(label) ? 'center'
+                          : 'center';
         p.innerHTML = '<span style="color:#e01e1e;font-family:Times,serif;font-weight:bold;background-color:#fff3a3">smoke probe text</span>';
+        pv.appendChild(p);
         const r = document.createRange();
         r.selectNodeContents(p);
         const s = window.getSelection();
         s.removeAllRanges(); s.addRange(r);
         return p;
       };
+      const label0 = (b) => (b.textContent || b.title || b.dataset.cmd || b.dataset.taction || '?').trim();
       const clickable = [...bar.querySelectorAll('button')].filter(b => {
         const t = (b.textContent || '').trim();
         // undo/redo have no stable effect on a fresh doc; zoom is a view control.
-        return !/^(↺|↻|⤺|⤻|Undo|Redo|−|\\+)$/.test(t) && !b.dataset.zstep;
+        void t;
+        // Undo/redo cannot be asserted after a programmatic DOM reset — the browser's
+        // undo stack does not track our manual DOM writes. Zoom is a view control.
+        return b.dataset.cmd !== 'undo' && b.dataset.cmd !== 'redo' && !b.dataset.zstep && !b.dataset.szstep;
       });
       for (const b of clickable) {
-        seed();
+        seed(label0(b));
         const before = pv.innerHTML;
         let opensMenu = !!b.dataset.menu;
         b.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));

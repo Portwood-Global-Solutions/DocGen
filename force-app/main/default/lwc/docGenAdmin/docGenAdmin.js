@@ -6801,24 +6801,87 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.handleZoomStep({ currentTarget: { dataset: { zstep: event.deltaY < 0 ? '1' : '-1' } } });
     };
 
+    /**
+     * Zoom the SHEET — body page and both running-chrome bands together.
+     *
+     * Previously this scaled only the body canvas, so zooming in left the header and
+     * footer at their original size: the page grew out from under its own chrome. They
+     * are part of the same sheet and have to scale as one, which is also the only way
+     * the Word-style margin layout stays true at any zoom level.
+     */
     _applyZoom() {
-        // #247 — zoom is about the SHEET, so it must target the body canvas
-        // explicitly. _canvas() follows the caret and would scale a header band.
-        const pv = this._bodyCanvas();
-        if (!pv) {
+        const z = this.designerZoom || 1;
+        const targets = this._allSurfaces();
+        if (!targets.length) {
             return;
         }
+        for (const el of targets) {
+            try {
+                el.style.transformOrigin = 'top center';
+                el.style.transform = z === 1 ? '' : `scale(${z})`;
+                // A transform does not change the element's layout box, so the scroll
+                // container has no idea the page got taller. Pad the difference back in
+                // or the bottom of a zoomed-in document becomes unreachable.
+                const natural = el.offsetHeight || 0;
+                el.style.marginBottom = z > 1 ? Math.round((z - 1) * natural) + 'px' : '';
+            } catch (e) {
+                /* zoom is cosmetic — never let it break editing */
+            }
+        }
+        this._applyPillSpread();
+    }
+
+    /** Body canvas + both chrome bands — every region the author can type into. */
+    _allSurfaces() {
+        const out = [];
+        const body = this._bodyCanvas();
+        if (body) {
+            out.push(body);
+        }
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band) {
+                out.push(band);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Zooming in must make dense merge-tag areas EASIER TO EDIT, not merely bigger.
+     *
+     * A pure transform scales the crowding along with everything else — four pills
+     * jammed into one table cell are still four pills jammed into one cell, just larger.
+     * Above 100% pills therefore gain horizontal margin, padding and line-height ON TOP
+     * of the scale, which pulls them into individually clickable targets and lets a
+     * cramped cell wrap onto more lines.
+     *
+     * Safe to mutate: _unpillifyTags keeps only font-weight/style/decoration/colour/
+     * family/size from a pill when serializing, so margin, padding and line-height are
+     * dropped on the way out and can never reach the saved template.
+     */
+    _applyPillSpread() {
         const z = this.designerZoom || 1;
-        try {
-            pv.style.transformOrigin = 'top center';
-            pv.style.transform = z === 1 ? '' : `scale(${z})`;
-            // A transform does not change the element's layout box, so the scroll
-            // container has no idea the page got taller. Pad the difference back in or
-            // the bottom of a zoomed-in document becomes unreachable.
-            const natural = pv.offsetHeight || 0;
-            pv.style.marginBottom = z > 1 ? Math.round((z - 1) * natural) + 'px' : '';
-        } catch (e) {
-            /* zoom is cosmetic */
+        // Nothing below 1x — shrinking should stay faithful to the printed layout.
+        const extra = z > 1 ? z - 1 : 0;
+        for (const surface of this._allSurfaces()) {
+            let pills;
+            try {
+                pills = surface.querySelectorAll('[data-dg-tag]');
+            } catch (e) {
+                continue;
+            }
+            for (const pill of pills) {
+                if (extra === 0) {
+                    pill.style.margin = '';
+                    pill.style.lineHeight = '';
+                    pill.style.padding = '0 6px';
+                    continue;
+                }
+                pill.style.margin = `${(extra * 2.5).toFixed(1)}px ${(extra * 7).toFixed(1)}px`;
+                pill.style.padding = `0 ${(6 + extra * 5).toFixed(1)}px`;
+                pill.style.lineHeight = (1 + extra * 0.55).toFixed(2);
+            }
         }
     }
 
@@ -6833,6 +6896,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!pv) {
             return false;
         }
+        // If the LIVE selection is already inside an editable surface, it is the truth —
+        // leave it alone. Restoring unconditionally overwrote a perfectly good selection
+        // with a remembered (and possibly stale, or detached by a re-render) one, which
+        // is why align-left, ordered-list and clear-formatting could silently no-op:
+        // the command ran against the wrong range. Only restore when the live selection
+        // has actually been lost.
+        try {
+            const live = window.getSelection();
+            if (live && live.rangeCount) {
+                const node = live.getRangeAt(0).startContainer;
+                const el = node && node.nodeType === 3 ? node.parentElement : node;
+                if (el && this._surfaceContaining(el)) {
+                    return true;
+                }
+            }
+        } catch (e) {
+            /* fall through to the remembered caret */
+        }
         const range = (this._caret && this._caret.range) || this._savedFmtRange || this._lastCanvasRange;
         try {
             pv.focus();
@@ -6843,6 +6924,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return false;
         }
         try {
+            // A range whose containers were detached by a re-render throws on addRange
+            // (or silently selects nothing). Verify it still points into a live surface.
+            const anchor =
+                range.startContainer && range.startContainer.nodeType === 3
+                    ? range.startContainer.parentElement
+                    : range.startContainer;
+            if (!anchor || !anchor.isConnected || !this._surfaceContaining(anchor)) {
+                return false;
+            }
             const sel = window.getSelection();
             sel.removeAllRanges();
             sel.addRange(range);
@@ -8017,25 +8107,42 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.htmlEditorDirty = true;
     }
 
-    /** The block element (p, heading, list item, div, td) holding the caret. */
+    /**
+     * The block element (p, heading, list item, div, td) holding the caret.
+     *
+     * Two defects fixed here, both caught by the UI smoke harness:
+     *
+     * 1. It resolved the canvas as `.dg-visual-host .dg-pv` and tested membership with
+     *    `pv.contains(node)`. That is the call documented as unreliable across LWS proxy
+     *    identities in #240 — when it returned a false negative this method returned
+     *    null and BOTH list buttons silently did nothing but show "Click into some text
+     *    first". Now uses the surface resolver and the parentNode walk.
+     * 2. It could only ever see the body, so lists (and anything else built on it) were
+     *    dead in the running header and footer bands.
+     */
     _selectedBlockElement() {
         let node = null;
         try {
             const sel = window.getSelection();
             node = sel && sel.anchorNode;
         } catch (e) {
-            return null;
+            node = null;
         }
         while (node && node.nodeType === 3) {
             node = node.parentNode;
         }
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
-        if (!node || !pv || !pv.contains(node) || !node.closest) {
+        let surface = node ? this._surfaceContaining(node) : null;
+        if (!surface || !node || !node.closest) {
+            // Selection lost (a toolbar control took focus) — fall back to the caret
+            // the tracker remembered while the surface still had it.
+            const remembered = this._caret && this._caret.blockEl;
+            if (remembered && remembered.isConnected && this._surfaceContaining(remembered)) {
+                return remembered;
+            }
             return null;
         }
-        const blk = node.closest('p, h1, h2, h3, h4, li, div, td, th');
-        return blk && pv.contains(blk) && blk !== pv ? blk : null;
+        const blk = node.closest('p, h1, h2, h3, h4, h5, h6, li, div, td, th, blockquote');
+        return blk && blk !== surface && this._isInCanvas(blk, surface) ? blk : null;
     }
 
     /**
@@ -8979,6 +9086,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 sel.removeAllRanges();
                 sel.addRange(r);
             }
+            // A freshly typed pill takes its style straight from _pillStyleFor, which
+            // knows nothing about zoom — re-apply the spread so it matches its
+            // neighbours instead of snapping back to tight spacing.
+            this._applyPillSpread();
         } catch (e) {
             /* best effort */
         }
