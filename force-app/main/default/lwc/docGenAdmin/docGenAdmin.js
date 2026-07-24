@@ -1435,6 +1435,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             document.removeEventListener('mousedown', this._onDocMouseDown, true);
             this._docMouseListenerAdded = false;
         }
+        // #244 — Ctrl/Cmd + wheel zoom is bound to the canvas node, not the document.
+        if (this._wheelBoundPv) {
+            this._wheelBoundPv.removeEventListener('wheel', this.handleCanvasWheel);
+            this._wheelBoundPv = null;
+        }
         this._disableFloatPanelChrome();
     }
 
@@ -1887,6 +1892,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         if (!this._selListenerAdded) {
                             document.addEventListener('selectionchange', this._onSelectionChange);
                             this._selListenerAdded = true;
+                        }
+                        // #244 — the canvas is rewritten on every re-render, so the
+                        // zoom transform has to be re-applied to the new node.
+                        this._applyZoom();
+                        // The canvas element itself is replaced on every re-render, so
+                        // track WHICH node the wheel handler is bound to rather than a
+                        // boolean — a plain flag would leave it attached to a detached
+                        // node and Ctrl+scroll would stop working after the first
+                        // re-render.
+                        if (this._wheelBoundPv !== pv) {
+                            if (this._wheelBoundPv) {
+                                this._wheelBoundPv.removeEventListener('wheel', this.handleCanvasWheel);
+                            }
+                            pv.addEventListener('wheel', this.handleCanvasWheel, { passive: false });
+                            this._wheelBoundPv = pv;
                         }
                         // Snapshot AFTER pillify so "unchanged" compares
                         // like-for-like on exit.
@@ -2562,7 +2582,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             dataSourceMode: this.dataSourceMode,
             providerFields: (this.providerFields || []).map((f) => f.name || f),
             assets,
-            docDescription: this.aiDocDescription
+            docDescription: this.aiDocDescription,
+            // #248 — field types let the model pick its own format suffixes
+            // ({Amount:currency}, {CloseDate:MMMM d, yyyy}) instead of emitting bare
+            // tags the author then has to fix by hand.
+            fieldTypes: this._buildFieldTypeMap(this.wizardQueryMeta)
         });
     }
 
@@ -2570,8 +2594,40 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
         return buildAiPrompt(shape, {
             dataSourceMode: this.editTemplateObject === 'FlowJsonData' ? 'flow' : 'record',
-            providerFields: (this.providerFields || []).map((f) => f.name || f)
+            providerFields: (this.providerFields || []).map((f) => f.name || f),
+            fieldTypes: this._buildFieldTypeMap(this.designerQueryMeta)
         });
+    }
+
+    /**
+     * #248 — flatten the already-loaded describe metadata into
+     * { 'Amount': 'CURRENCY', 'Account.Name': 'STRING', 'Lines.Quantity': 'DOUBLE' }.
+     *
+     * The wizard's query-builder step has fetched all of this already
+     * (getObjectFields returns label/value/type), so this costs no extra round trips.
+     * Returns {} when metadata has not loaded — buildAiPrompt degrades to the untyped
+     * listing rather than blocking.
+     */
+    _buildFieldTypeMap(meta) {
+        const out = {};
+        if (!meta) {
+            return out;
+        }
+        const add = (prefix, list) => {
+            for (const f of list || []) {
+                if (f && f.value && f.type) {
+                    out[prefix + f.value] = f.type;
+                }
+            }
+        };
+        add('', meta.fields);
+        for (const rel of Object.keys(meta.childFieldsByRel || {})) {
+            add(rel + '.', meta.childFieldsByRel[rel]);
+        }
+        for (const rel of Object.keys(meta.parentFieldsByRel || {})) {
+            add(rel + '.', meta.parentFieldsByRel[rel]);
+        }
+        return out;
     }
 
     // --- AI-step field checklist (build your query before the prompt) ---
@@ -6541,6 +6597,76 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return (host && host.querySelector('.dg-pv')) || null;
     }
 
+    // ===== #244: Designer zoom ===============================================
+    // A document with several merge-tag pills in one table cell is far denser on
+    // screen than it will be in the PDF — pills carry padding and a border — which
+    // makes precise cursor placement hard exactly where it matters most.
+    //
+    // Implemented as a CSS transform on the canvas. It is a VIEW setting only: the
+    // transform lives on .dg-pv itself, and serialization reads pv.innerHTML (children
+    // only), so zoom can never reach the saved template body.
+    @track designerZoom = 1;
+
+    get zoomOptions() {
+        return [0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => ({
+            value: String(z),
+            label: Math.round(z * 100) + '%',
+            selected: z === this.designerZoom
+        }));
+    }
+
+    get zoomLabel() {
+        return Math.round(this.designerZoom * 100) + '%';
+    }
+
+    handleZoomChange(event) {
+        const z = parseFloat(event.currentTarget.value);
+        if (!isNaN(z)) {
+            this.designerZoom = z;
+            this._applyZoom();
+        }
+    }
+
+    handleZoomStep(event) {
+        const dir = parseFloat(event.currentTarget.dataset.zstep) || 0;
+        const steps = [0.5, 0.75, 1, 1.25, 1.5, 2];
+        let idx = steps.indexOf(this.designerZoom);
+        if (idx === -1) {
+            idx = steps.indexOf(1);
+        }
+        idx = Math.min(steps.length - 1, Math.max(0, idx + dir));
+        this.designerZoom = steps[idx];
+        this._applyZoom();
+    }
+
+    /** Ctrl/Cmd + wheel zooms, matching every other canvas tool. */
+    handleCanvasWheel = (event) => {
+        if (!this.showHtmlBodyVisual || !(event.ctrlKey || event.metaKey)) {
+            return;
+        }
+        event.preventDefault();
+        this.handleZoomStep({ currentTarget: { dataset: { zstep: event.deltaY < 0 ? '1' : '-1' } } });
+    };
+
+    _applyZoom() {
+        const pv = this._canvas();
+        if (!pv) {
+            return;
+        }
+        const z = this.designerZoom || 1;
+        try {
+            pv.style.transformOrigin = 'top center';
+            pv.style.transform = z === 1 ? '' : `scale(${z})`;
+            // A transform does not change the element's layout box, so the scroll
+            // container has no idea the page got taller. Pad the difference back in or
+            // the bottom of a zoomed-in document becomes unreachable.
+            const natural = pv.offsetHeight || 0;
+            pv.style.marginBottom = z > 1 ? Math.round((z - 1) * natural) + 'px' : '';
+        } catch (e) {
+            /* zoom is cosmetic */
+        }
+    }
+
     /**
      * Put the caret back where the author left it, and — critically — return focus to
      * the canvas FIRST. `document.execCommand` is a no-op while an <input> or another
@@ -10451,9 +10577,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         if (rect) {
             const pvRect = pv.getBoundingClientRect();
-            marker.style.left = rect.left - pvRect.left + 'px';
-            marker.style.top = rect.top - pvRect.top + 'px';
-            marker.style.height = (rect.height || 16) + 'px';
+            // #244 — getBoundingClientRect returns SCALED screen pixels, but the marker
+            // is positioned in the canvas's own (unscaled) coordinate space because it
+            // is a child of the scaled element. Divide the delta back out or the marker
+            // drifts further from the pointer the more you zoom.
+            const z = this.designerZoom || 1;
+            marker.style.left = (rect.left - pvRect.left) / z + 'px';
+            marker.style.top = (rect.top - pvRect.top) / z + 'px';
+            marker.style.height = (rect.height || 16) / z + 'px';
             marker.style.display = 'block';
         } else {
             marker.style.display = 'none';

@@ -2260,6 +2260,42 @@
                                         >
                                             &#8631; Redo
                                         </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <!-- #244 — zoom the canvas for dense, pill-heavy
+                                             documents. View-only: never saved. -->
+                                        <span class="dg-fmt-label" title="Zoom the page view (Ctrl/Cmd + scroll)"
+                                            >Zoom</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-zstep="-1"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleZoomStep}
+                                            title="Zoom out"
+                                        >
+                                            &minus;
+                                        </button>
+                                        <select
+                                            class="dg-page-select"
+                                            title="Zoom level — affects this editor only, never the PDF"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleZoomChange}
+                                        >
+                                            <template for:each={zoomOptions} for:item="opt">
+                                                <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                    {opt.label}
+                                                </option>
+                                            </template>
+                                        </select>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-zstep="1"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleZoomStep}
+                                            title="Zoom in"
+                                        >
+                                            +
+                                        </button>
                                         <span class="dg-fmt-break"></span>
                                         <span class="dg-fmt-label" title="Table tools — put your cursor in a cell first"
                                             >Table</span

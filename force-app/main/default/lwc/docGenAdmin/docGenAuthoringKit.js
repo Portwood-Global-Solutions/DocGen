@@ -454,6 +454,42 @@ export function buildStarterHtml(starterKey, shape) {
 // ---------------------------------------------------------------------------
 
 /**
+ * #248 — annotate a field in the prompt's data-shape listing with its Salesforce type
+ * and the format suffix that type usually wants.
+ *
+ * Without the type the model emits bare {Amount} / {CloseDate} tags and the author has
+ * to go back and add formatting by hand. With it, the model picks sensible suffixes
+ * itself. `type` is the Schema.DisplayType name returned by
+ * DocGenController.getObjectFields (STRING, CURRENCY, DATE, …); when it is missing the
+ * annotation is simply omitted.
+ */
+function describeFieldForPrompt(fieldName, type) {
+    if (!type) {
+        return '';
+    }
+    const t = String(type).toUpperCase();
+    const hint = {
+        CURRENCY: ' — format as {' + fieldName + ':currency}',
+        DOUBLE: ' — format as {' + fieldName + ':#,##0.00}',
+        INTEGER: ' — format as {' + fieldName + ':number}',
+        LONG: ' — format as {' + fieldName + ':number}',
+        PERCENT: ' — format as {' + fieldName + ':percent}',
+        DATE: ' — format as {' + fieldName + ':MMMM d, yyyy}',
+        DATETIME: ' — format as {' + fieldName + ':MMMM d, yyyy h:mm a}',
+        BOOLEAN: ' — render as {' + fieldName + ':checkbox} for an [X]/[ ] box',
+        PICKLIST: ' — use {' + fieldName + ':label} to print the label rather than the API value',
+        MULTIPICKLIST: ' — semicolon-delimited values',
+        REFERENCE: ' — a lookup Id; dot through it for readable text, e.g. {' + fieldName + '.Name}',
+        TEXTAREA: ' — may contain line breaks',
+        EMAIL: '',
+        PHONE: '',
+        URL: '',
+        ID: ''
+    }[t];
+    return ` (${t}${hint === undefined ? '' : hint})`;
+}
+
+/**
  * Assemble a self-contained LLM prompt: rendering constraints + tag syntax +
  * this template's actual schema. Works pasted into any assistant.
  */
@@ -527,14 +563,55 @@ export function buildAiPrompt(shape, options) {
             lines.push('  - (list your provider field names here before pasting)');
         }
     } else {
+        const types = opts.fieldTypes || {};
         lines.push(`- Base object: ${shape.object}`);
         for (const f of [...shape.baseFields, ...shape.parentFields]) {
-            lines.push(`  - {${f}}${f.includes('.') ? ' (parent lookup)' : ''}`);
+            const note = describeFieldForPrompt(f, types[f]);
+            lines.push(`  - {${f}}${note}${f.includes('.') ? ' (parent lookup)' : ''}`);
         }
         for (const c of shape.children) {
-            lines.push(
-                `- Child relationship {#${c.relationshipName}}...{/${c.relationshipName}} with fields: ${c.fields.map((f) => '{' + f + '}').join(', ')}`
-            );
+            lines.push(`- Child relationship: {#${c.relationshipName}} ... {/${c.relationshipName}}`);
+            lines.push('  Fields (write them BARE inside the loop, with no relationship prefix):');
+            for (const f of c.fields) {
+                lines.push(`    - {${f}}${describeFieldForPrompt(f, types[c.relationshipName + '.' + f])}`);
+            }
+        }
+        lines.push('');
+        // #248 — the single most common thing an LLM gets wrong when generating a
+        // DocGen template: it puts the loop tags on their own lines wrapping the
+        // <table>, which repeats the whole table instead of the row.
+        lines.push('REPEATING TABLES — READ THIS TWICE, IT IS THE MOST COMMON MISTAKE:');
+        lines.push(
+            '- Loop tags for a repeating table go INLINE, INSIDE the row that repeats: the opening {#Rel} in the FIRST cell of the data <tr>, and the closing {/Rel} in the LAST cell of that same <tr>.'
+        );
+        lines.push(
+            '- Do NOT put {#Rel} on its own line above <table> and {/Rel} below it. That repeats the ENTIRE TABLE — headers and all — once per child record, which is never what is wanted.'
+        );
+        lines.push('- Column headers belong in a real <thead>, OUTSIDE the loop, so they render once.');
+        if (shape.children && shape.children.length) {
+            const c = shape.children[0];
+            const cols = (c.fields || []).slice(0, 3);
+            if (cols.length) {
+                lines.push('- Correct shape, using this template’s own data:');
+                lines.push('  <table>');
+                lines.push('    <thead>');
+                lines.push(`      <tr>${cols.map((f) => `<th>${f}</th>`).join('')}</tr>`);
+                lines.push('    </thead>');
+                lines.push('    <tbody>');
+                lines.push(
+                    `      <tr><td>{#${c.relationshipName}}{${cols[0]}}</td>` +
+                        cols
+                            .slice(1, -1)
+                            .map((f) => `<td>{${f}}</td>`)
+                            .join('') +
+                        (cols.length > 1
+                            ? `<td>{${cols[cols.length - 1]}}{/${c.relationshipName}}</td>`
+                            : `<td>{/${c.relationshipName}}</td>`) +
+                        '</tr>'
+                );
+                lines.push('    </tbody>');
+                lines.push('  </table>');
+            }
         }
     }
     const assets = opts.assets || [];
