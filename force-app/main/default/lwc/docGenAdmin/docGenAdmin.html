@@ -2034,715 +2034,552 @@
                                     ></textarea>
                                 </div>
                                 <template if:true={showHtmlBodyVisual}>
-                                    <!-- Primary row — always visible, one line.
-                                         Everything used constantly and nothing else.
-                                         The long tail lives in the small labelled
-                                         menus; table tools are contextual (below). -->
                                     <div class="dg-format-bar" role="toolbar" aria-label="Text formatting">
-                                        <div class="dg-fmt-cluster">
-                                            <button
-                                                class={boldBtnClass}
-                                                data-cmd="bold"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title="Bold"
-                                            >
-                                                <b>B</b>
-                                            </button>
-                                            <button
-                                                class={italicBtnClass}
-                                                data-cmd="italic"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title="Italic"
-                                            >
-                                                <i>I</i>
-                                            </button>
-                                            <button
-                                                class={underlineBtnClass}
-                                                data-cmd="underline"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title="Underline"
-                                            >
-                                                <u>U</u>
-                                            </button>
-                                            <button
-                                                class={strikeBtnClass}
-                                                data-cmd="strikeThrough"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title="Strikethrough"
-                                            >
-                                                <s>S</s>
-                                            </button>
-                                        </div>
-
-                                        <div class="dg-fmt-cluster">
-                                            <button
-                                                class="dg-fmt-btn"
-                                                data-szstep="-1"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFontSizeStep}
-                                                title="Decrease font size"
-                                            >
-                                                &minus;
-                                            </button>
-                                            <input
-                                                class="dg-fmt-size-input"
-                                                type="number"
-                                                min="6"
-                                                max="96"
-                                                step="1"
-                                                value={fmtSizePt}
-                                                onmousedown={handleColorPickMouseDown}
-                                                onchange={handleFontSizeInput}
-                                                title="Font size in points — highlight text (or click a merge tag) and type any size"
-                                            />
-                                            <button
-                                                class="dg-fmt-btn"
-                                                data-szstep="1"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFontSizeStep}
-                                                title="Increase font size"
-                                            >
-                                                +
-                                            </button>
-                                        </div>
-
-                                        <!-- Text colour -->
-                                        <div class="dg-fmt-menu-wrap">
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_menu"
-                                                data-menu="textColor"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFmtMenuToggle}
-                                                title="Text colour"
-                                            >
-                                                <span class="dg-fmt-swatch-cue dg-fmt-swatch-cue_text">A</span>
-                                                <span class="dg-fmt-caret">&#9662;</span>
-                                            </button>
-                                            <template if:true={isTextColorMenuOpen}>
-                                                <div class="dg-fmt-menu">
-                                                    <div class="dg-fmt-menu-grid">
-                                                        <template for:each={textColorSwatches} for:item="sw">
-                                                            <button
-                                                                key={sw.key}
-                                                                class="dg-fmt-swatch"
-                                                                style={sw.style}
-                                                                data-cmd="foreColor"
-                                                                data-value={sw.value}
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleFormatAction}
-                                                                title={sw.title}
-                                                            ></button>
-                                                        </template>
-                                                    </div>
-                                                    <label class="dg-fmt-menu-row">
-                                                        <span>Custom</span>
-                                                        <input
-                                                            type="color"
-                                                            class="dg-fmt-colorpick"
-                                                            data-cmd="foreColor"
-                                                            value="#1f3a5f"
-                                                            onmousedown={handleColorPickMouseDown}
-                                                            onchange={handleColorPickChange}
-                                                        />
-                                                    </label>
-                                                </div>
-                                            </template>
-                                        </div>
-
-                                        <!-- Highlight -->
-                                        <div class="dg-fmt-menu-wrap">
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_menu"
-                                                data-menu="highlight"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFmtMenuToggle}
-                                                title="Highlight colour"
-                                            >
-                                                <span class="dg-fmt-swatch-cue dg-fmt-swatch-cue_bg">BG</span>
-                                                <span class="dg-fmt-caret">&#9662;</span>
-                                            </button>
-                                            <template if:true={isHighlightMenuOpen}>
-                                                <div class="dg-fmt-menu">
-                                                    <div class="dg-fmt-menu-grid">
-                                                        <template for:each={highlightSwatches} for:item="sw">
-                                                            <button
-                                                                key={sw.key}
-                                                                class="dg-fmt-swatch"
-                                                                style={sw.style}
-                                                                data-cmd="hiliteColor"
-                                                                data-value={sw.value}
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleFormatAction}
-                                                                title={sw.title}
-                                                            ></button>
-                                                        </template>
-                                                    </div>
-                                                    <label class="dg-fmt-menu-row">
-                                                        <span>Custom</span>
-                                                        <input
-                                                            type="color"
-                                                            class="dg-fmt-colorpick"
-                                                            data-cmd="hiliteColor"
-                                                            value="#fef3c7"
-                                                            onmousedown={handleColorPickMouseDown}
-                                                            onchange={handleColorPickChange}
-                                                        />
-                                                    </label>
-                                                </div>
-                                            </template>
-                                        </div>
-
-                                        <!-- Paragraph: alignment + lists + sup/sub -->
-                                        <div class="dg-fmt-menu-wrap">
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_menu"
-                                                data-menu="align"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFmtMenuToggle}
-                                                title="Paragraph — alignment and lists"
-                                            >
-                                                &#8801;<span class="dg-fmt-caret">&#9662;</span>
-                                            </button>
-                                            <template if:true={isAlignMenuOpen}>
-                                                <div class="dg-fmt-menu">
-                                                    <div class="dg-fmt-menu-grid">
-                                                        <button
-                                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                                            data-cmd="justifyLeft"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleFormatAction}
-                                                            title="Align left"
-                                                        >
-                                                            Left
-                                                        </button>
-                                                        <button
-                                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                                            data-cmd="justifyCenter"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleFormatAction}
-                                                            title="Centre"
-                                                        >
-                                                            Center
-                                                        </button>
-                                                        <button
-                                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                                            data-cmd="justifyRight"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleFormatAction}
-                                                            title="Align right"
-                                                        >
-                                                            Right
-                                                        </button>
-                                                    </div>
-                                                    <div class="dg-fmt-menu-grid">
-                                                        <button
-                                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                                            data-cmd="insertUnorderedList"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleFormatAction}
-                                                            title="Bulleted list"
-                                                        >
-                                                            &bull; List
-                                                        </button>
-                                                        <button
-                                                            class="dg-fmt-btn dg-fmt-btn_word"
-                                                            data-cmd="insertOrderedList"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleFormatAction}
-                                                            title="Numbered list"
-                                                        >
-                                                            1. List
-                                                        </button>
-                                                    </div>
-                                                    <div class="dg-fmt-menu-grid">
-                                                        <button
-                                                            class="dg-fmt-btn"
-                                                            data-cmd="superscript"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleFormatAction}
-                                                            title="Superscript"
-                                                        >
-                                                            x&#178;
-                                                        </button>
-                                                        <button
-                                                            class="dg-fmt-btn"
-                                                            data-cmd="subscript"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleFormatAction}
-                                                            title="Subscript"
-                                                        >
-                                                            x&#8322;
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </template>
-                                        </div>
-
-                                        <!-- Font family -->
-                                        <div class="dg-fmt-menu-wrap">
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_menu"
-                                                data-menu="font"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFmtMenuToggle}
-                                                title="Font — the PDF engine ships exactly these four"
-                                            >
-                                                Aa<span class="dg-fmt-caret">&#9662;</span>
-                                            </button>
-                                            <template if:true={isFontMenuOpen}>
-                                                <div class="dg-fmt-menu">
-                                                    <template for:each={fontChoices} for:item="font">
-                                                        <button
-                                                            key={font.key}
-                                                            class="dg-fmt-menu-item"
-                                                            style={font.style}
-                                                            data-cmd="fontName"
-                                                            data-value={font.value}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleFormatAction}
-                                                            title={font.title}
-                                                        >
-                                                            {font.label}
-                                                        </button>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
-
-                                        <div class="dg-fmt-cluster">
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                data-cmd="removeFormat"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title="Clear formatting from the selection"
-                                            >
-                                                Clear
-                                            </button>
-                                            <button
-                                                class="dg-fmt-btn"
-                                                data-cmd="undo"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title="Undo"
-                                            >
-                                                &#8630;
-                                            </button>
-                                            <button
-                                                class="dg-fmt-btn"
-                                                data-cmd="redo"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title="Redo"
-                                            >
-                                                &#8631;
-                                            </button>
-                                        </div>
-
-                                        <div class="dg-fmt-cluster">
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleInsertTable}
-                                                title="Insert a 3-column table at your cursor"
-                                            >
-                                                &#8862; Table
-                                            </button>
-                                        </div>
-
-                                        <!-- Zoom sits far right: it is a view control,
-                                             not a document edit. Above 100% it also
-                                             spreads merge-tag pills apart. -->
-                                        <div class="dg-fmt-cluster dg-fmt-cluster_end">
-                                            <button
-                                                class="dg-fmt-btn"
-                                                data-zstep="-1"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleZoomStep}
-                                                title="Zoom out"
-                                            >
-                                                &minus;
-                                            </button>
-                                            <select
-                                                class="dg-page-select dg-zoom-select"
-                                                title="Zoom — editor only, never the PDF. Above 100% merge tags spread apart so they are easier to click."
-                                                onmousedown={handleColorPickMouseDown}
-                                                onchange={handleZoomChange}
-                                            >
-                                                <template for:each={zoomOptions} for:item="opt">
-                                                    <option key={opt.value} value={opt.value} selected={opt.selected}>
-                                                        {opt.label}
-                                                    </option>
-                                                </template>
-                                            </select>
-                                            <button
-                                                class="dg-fmt-btn"
-                                                data-zstep="1"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleZoomStep}
-                                                title="Zoom in — also spreads merge tags apart"
-                                            >
-                                                +
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <!-- Contextual table row — exists ONLY while the caret
-                                         is inside a table. This is ~45 controls that used to
-                                         sit on screen permanently whether or not the document
-                                         had a table at all. -->
-                                    <template if:true={caretInTable}>
-                                        <div
-                                            class="dg-format-bar dg-format-bar_context"
-                                            role="toolbar"
-                                            aria-label="Table tools"
+                                        <button
+                                            class={boldBtnClass}
+                                            data-cmd="bold"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Bold"
                                         >
-                                            <span class="dg-fmt-context-label">&#8862; Table</span>
-                                            <div class="dg-fmt-cluster">
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="rowAfter"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Add a row below"
-                                                >
-                                                    + Row
-                                                </button>
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="colAfter"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Add a column to the right"
-                                                >
-                                                    + Col
-                                                </button>
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="rowDel"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Delete this row"
-                                                >
-                                                    &minus; Row
-                                                </button>
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="colDel"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Delete this column"
-                                                >
-                                                    &minus; Col
-                                                </button>
-                                            </div>
-                                            <div class="dg-fmt-cluster">
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="mergeCells"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Merge cells — click the first, shift-click the last, then Merge"
-                                                >
-                                                    Merge
-                                                </button>
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="splitCell"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Split a merged cell back into its grid cells"
-                                                >
-                                                    Split
-                                                </button>
-                                            </div>
-                                            <div class="dg-fmt-cluster">
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="vAlign"
-                                                    data-value="top"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Align cell contents to the top"
-                                                >
-                                                    &#8593;
-                                                </button>
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="vAlign"
-                                                    data-value="middle"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Centre cell contents vertically"
-                                                >
-                                                    &#8597;
-                                                </button>
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-taction="vAlign"
-                                                    data-value="bottom"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title="Align cell contents to the bottom"
-                                                >
-                                                    &#8595;
-                                                </button>
-                                            </div>
-
-                                            <!-- Table properties -->
-                                            <div class="dg-fmt-menu-wrap">
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_menu dg-fmt-btn_word"
-                                                    data-menu="tableProps"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleFmtMenuToggle}
-                                                    title="Whole-table settings"
-                                                >
-                                                    Table<span class="dg-fmt-caret">&#9662;</span>
-                                                </button>
-                                                <template if:true={isTablePropsMenuOpen}>
-                                                    <div class="dg-fmt-menu">
-                                                        <button
-                                                            class="dg-fmt-menu-item"
-                                                            data-taction="distributeCols"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleTableAction}
-                                                            title="Make every column the same width"
-                                                        >
-                                                            Distribute columns evenly
-                                                        </button>
-                                                        <button
-                                                            class="dg-fmt-menu-item"
-                                                            data-taction="tableWidth"
-                                                            data-value="100%"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleTableAction}
-                                                            title="Stretch to the full page width"
-                                                        >
-                                                            Full width
-                                                        </button>
-                                                        <button
-                                                            class="dg-fmt-menu-item"
-                                                            data-taction="vAlignTable"
-                                                            data-value="middle"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleTableAction}
-                                                            title="Centre every cell vertically"
-                                                        >
-                                                            All cells middle-aligned
-                                                        </button>
-                                                        <button
-                                                            class="dg-fmt-menu-item"
-                                                            data-taction="headerRow"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleTableAction}
-                                                            title="Style this row as a header"
-                                                        >
-                                                            Style row as header
-                                                        </button>
-                                                        <button
-                                                            class="dg-fmt-menu-item"
-                                                            data-taction="repeatHeader"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleTableAction}
-                                                            title="Repeat the header row on every PDF page this table spans"
-                                                        >
-                                                            Repeat header each page
-                                                        </button>
-                                                        <label class="dg-fmt-menu-row">
-                                                            <span>Padding</span>
-                                                            <select
-                                                                class="dg-page-select"
-                                                                onmousedown={handleColorPickMouseDown}
-                                                                onchange={handleCellPaddingChange}
-                                                            >
-                                                                <template for:each={cellPaddingOptions} for:item="opt">
-                                                                    <option
-                                                                        key={opt.value}
-                                                                        value={opt.value}
-                                                                        selected={opt.selected}
-                                                                    >
-                                                                        {opt.label}
-                                                                    </option>
-                                                                </template>
-                                                            </select>
-                                                        </label>
-                                                        <label class="dg-fmt-menu-row">
-                                                            <span>Placement</span>
-                                                            <select
-                                                                class="dg-page-select"
-                                                                onmousedown={handleColorPickMouseDown}
-                                                                onchange={handleTableAlignChange}
-                                                            >
-                                                                <template for:each={tableAlignOptions} for:item="opt">
-                                                                    <option
-                                                                        key={opt.value}
-                                                                        value={opt.value}
-                                                                        selected={opt.selected}
-                                                                    >
-                                                                        {opt.label}
-                                                                    </option>
-                                                                </template>
-                                                            </select>
-                                                        </label>
-                                                        <button
-                                                            class="dg-fmt-menu-item dg-fmt-menu-item_danger"
-                                                            data-taction="tableDel"
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleTableAction}
-                                                            title="Delete this table"
-                                                        >
-                                                            Delete table
-                                                        </button>
-                                                    </div>
-                                                </template>
-                                            </div>
-
-                                            <!-- Borders -->
-                                            <div class="dg-fmt-menu-wrap">
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_menu dg-fmt-btn_word"
-                                                    data-menu="borders"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleFmtMenuToggle}
-                                                    title="Table borders"
-                                                >
-                                                    Borders<span class="dg-fmt-caret">&#9662;</span>
-                                                </button>
-                                                <template if:true={isBordersMenuOpen}>
-                                                    <div class="dg-fmt-menu">
-                                                        <div class="dg-fmt-menu-grid">
-                                                            <button
-                                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                                data-taction="bordersAll"
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleTableAction}
-                                                                title="Full grid"
-                                                            >
-                                                                All
-                                                            </button>
-                                                            <button
-                                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                                data-taction="bordersOutline"
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleTableAction}
-                                                                title="Outline only"
-                                                            >
-                                                                Outline
-                                                            </button>
-                                                            <button
-                                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                                data-taction="bordersRows"
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleTableAction}
-                                                                title="Horizontal lines only"
-                                                            >
-                                                                Rows
-                                                            </button>
-                                                            <button
-                                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                                data-taction="bordersNone"
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleTableAction}
-                                                                title="No borders"
-                                                            >
-                                                                None
-                                                            </button>
-                                                        </div>
-                                                        <label class="dg-fmt-menu-row">
-                                                            <span>Thickness</span>
-                                                            <select
-                                                                class="dg-page-select"
-                                                                onmousedown={handleColorPickMouseDown}
-                                                                onchange={handleBorderWidthChange}
-                                                            >
-                                                                <template for:each={borderWidthOptions} for:item="opt">
-                                                                    <option
-                                                                        key={opt.value}
-                                                                        value={opt.value}
-                                                                        selected={opt.selected}
-                                                                    >
-                                                                        {opt.label}
-                                                                    </option>
-                                                                </template>
-                                                            </select>
-                                                        </label>
-                                                        <label class="dg-fmt-menu-row">
-                                                            <span>Colour</span>
-                                                            <input
-                                                                type="color"
-                                                                class="dg-fmt-colorpick"
-                                                                value={borderColorValue}
-                                                                onmousedown={handleColorPickMouseDown}
-                                                                onchange={handleBorderColorChange}
-                                                            />
-                                                        </label>
-                                                    </div>
-                                                </template>
-                                            </div>
-
-                                            <!-- Cell fill -->
-                                            <div class="dg-fmt-menu-wrap">
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_menu dg-fmt-btn_word"
-                                                    data-menu="cellFill"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleFmtMenuToggle}
-                                                    title="Cell fill colour"
-                                                >
-                                                    Fill<span class="dg-fmt-caret">&#9662;</span>
-                                                </button>
-                                                <template if:true={isCellFillMenuOpen}>
-                                                    <div class="dg-fmt-menu">
-                                                        <div class="dg-fmt-menu-grid">
-                                                            <template for:each={highlightSwatches} for:item="sw">
-                                                                <button
-                                                                    key={sw.key}
-                                                                    class="dg-fmt-swatch"
-                                                                    style={sw.style}
-                                                                    data-taction="cellFill"
-                                                                    data-value={sw.value}
-                                                                    onmousedown={handleFmtMouseDown}
-                                                                    onclick={handleTableAction}
-                                                                    title={sw.title}
-                                                                ></button>
-                                                            </template>
-                                                        </div>
-                                                        <label class="dg-fmt-menu-row">
-                                                            <span>Custom</span>
-                                                            <input
-                                                                type="color"
-                                                                class="dg-fmt-colorpick"
-                                                                data-cmd="cellFill"
-                                                                value="#f2f4f7"
-                                                                onmousedown={handleColorPickMouseDown}
-                                                                onchange={handleColorPickChange}
-                                                            />
-                                                        </label>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                        </div>
-                                    </template>
-                                    <!-- #247 — the running header is the TOP MARGIN of the
-                                         sheet, Word-style: same paper, same width, no gap,
-                                         dimmed until you click in. Not a panel floating
-                                         above the page. Same editing surface as the body
-                                         (rail chips drag in, the format bar applies,
-                                         tables work) but writes Header_Html__c. -->
-                                    <div class="dg-sheet">
-                                        <div
-                                            class="dg-chrome-band dg-chrome-band_header"
-                                            lwc:dom="manual"
-                                            data-surface="header"
-                                            data-band-label="Header"
-                                            title="Running header — click in and type. Appears at the top of every PDF page."
-                                        ></div>
-                                        <!-- #241 — the table row/column handles are rendered
+                                            <b>B</b>
+                                        </button>
+                                        <button
+                                            class={italicBtnClass}
+                                            data-cmd="italic"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Italic"
+                                        >
+                                            <i>I</i>
+                                        </button>
+                                        <button
+                                            class={underlineBtnClass}
+                                            data-cmd="underline"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Underline"
+                                        >
+                                            <u>U</u>
+                                        </button>
+                                        <button
+                                            class={strikeBtnClass}
+                                            data-cmd="strikeThrough"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Strikethrough"
+                                        >
+                                            <s>S</s>
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="superscript"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Superscript"
+                                        >
+                                            x&#178;
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-cmd="subscript"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Subscript"
+                                        >
+                                            x&#8322;
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="insertUnorderedList"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Bulleted list"
+                                        >
+                                            &#8226; List
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="insertOrderedList"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Numbered list"
+                                        >
+                                            1. List
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyLeft"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align left"
+                                        >
+                                            Left
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyCenter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align center"
+                                        >
+                                            Center
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="justifyRight"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Align right"
+                                        >
+                                            Right
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-szstep="-1"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFontSizeStep}
+                                            title="Decrease font size"
+                                        >
+                                            &#8722;
+                                        </button>
+                                        <input
+                                            class="dg-fmt-size-input"
+                                            type="number"
+                                            min="6"
+                                            max="96"
+                                            step="1"
+                                            value={fmtSizePt}
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleFontSizeInput}
+                                            title="Font size in points — highlight text (or click a merge tag) and type any size"
+                                        />
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-szstep="1"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFontSizeStep}
+                                            title="Increase font size"
+                                        >
+                                            +
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Text color">A</span>
+                                        <template for:each={textColorSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-cmd="foreColor"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="foreColor"
+                                            value="#1f3a5f"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom text color — any color you want"
+                                        />
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Highlight color">BG</span>
+                                        <template for:each={highlightSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-cmd="hiliteColor"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="hiliteColor"
+                                            value="#fef3c7"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom highlight color"
+                                        />
+                                        <span class="dg-fmt-sep"></span>
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Font — the PDF engine ships exactly these four"
+                                            >Font</span
+                                        >
+                                        <template for:each={fontChoices} for:item="font">
+                                            <button
+                                                key={font.key}
+                                                class="dg-fmt-btn dg-fmt-btn_word"
+                                                style={font.style}
+                                                data-cmd="fontName"
+                                                data-value={font.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFormatAction}
+                                                title={font.title}
+                                            >
+                                                {font.label}
+                                            </button>
+                                        </template>
+                                        <span class="dg-fmt-sep"></span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="removeFormat"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Clear formatting from the selection"
+                                        >
+                                            Clear
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="undo"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Undo"
+                                        >
+                                            &#8630; Undo
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-cmd="redo"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleFormatAction}
+                                            title="Redo"
+                                        >
+                                            &#8631; Redo
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <!-- #244 — zoom the canvas for dense, pill-heavy
+                                             documents. View-only: never saved. -->
+                                        <span class="dg-fmt-label" title="Zoom the page view (Ctrl/Cmd + scroll)"
+                                            >Zoom</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-zstep="-1"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleZoomStep}
+                                            title="Zoom out"
+                                        >
+                                            &minus;
+                                        </button>
+                                        <select
+                                            class="dg-page-select"
+                                            title="Zoom level — affects this editor only, never the PDF"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleZoomChange}
+                                        >
+                                            <template for:each={zoomOptions} for:item="opt">
+                                                <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                    {opt.label}
+                                                </option>
+                                            </template>
+                                        </select>
+                                        <button
+                                            class="dg-fmt-btn"
+                                            data-zstep="1"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleZoomStep}
+                                            title="Zoom in"
+                                        >
+                                            +
+                                        </button>
+                                        <span class="dg-fmt-break"></span>
+                                        <span class="dg-fmt-label" title="Table tools — put your cursor in a cell first"
+                                            >Table</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleInsertTable}
+                                            title="Insert a 3-column table at your cursor"
+                                        >
+                                            + Table
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="rowAfter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Add a row below the current cell"
+                                        >
+                                            + Row
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="colAfter"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Add a column to the right of the current cell"
+                                        >
+                                            + Col
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="rowDel"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Delete the current row"
+                                        >
+                                            − Row
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="colDel"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Delete the current column"
+                                        >
+                                            − Col
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="mergeCells"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Merge cells — select across cells (click first, shift-click last) then Merge; with just a caret, merges with the cell to the right"
+                                        >
+                                            Merge
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="splitCell"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Split a merged cell back into its grid cells"
+                                        >
+                                            Split
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="headerRow"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Style the current row as a header (navy fill, white bold text)"
+                                        >
+                                            Header Row
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="repeatHeader"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Repeat this table's header row at the top of every PDF page it spans (toggles the {RepeatHeader} marker)"
+                                        >
+                                            Repeat Hdr
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <!-- #246 — vertical alignment. top/middle/bottom are the
+                                             only values CSS 2.1 allows on a table cell, so they are
+                                             the only ones Flying Saucer will honor. -->
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Vertical alignment of cell contents — applies to the selected cells"
+                                            >V-Align</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="vAlign"
+                                            data-value="top"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Align cell contents to the top"
+                                        >
+                                            &#8593; Top
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="vAlign"
+                                            data-value="middle"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Centre cell contents vertically"
+                                        >
+                                            &#8597; Middle
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="vAlign"
+                                            data-value="bottom"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Align cell contents to the bottom"
+                                        >
+                                            &#8595; Bottom
+                                        </button>
+                                        <span class="dg-fmt-sep"></span>
+                                        <!-- #242 — whole-table properties -->
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Whole-table settings — put your cursor in the table first"
+                                            >Table&nbsp;Props</span
+                                        >
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="distributeCols"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Make every column the same width"
+                                        >
+                                            Equal Cols
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="tableWidth"
+                                            data-value="100%"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Stretch the table to the full page width"
+                                        >
+                                            Full Width
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="vAlignTable"
+                                            data-value="middle"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Centre every cell in this table vertically"
+                                        >
+                                            All Middle
+                                        </button>
+                                        <select
+                                            class="dg-page-select"
+                                            title="Cell padding for the whole table"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleCellPaddingChange}
+                                        >
+                                            <template for:each={cellPaddingOptions} for:item="opt">
+                                                <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                    {opt.label}
+                                                </option>
+                                            </template>
+                                        </select>
+                                        <select
+                                            class="dg-page-select"
+                                            title="Horizontal placement of the table on the page"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleTableAlignChange}
+                                        >
+                                            <template for:each={tableAlignOptions} for:item="opt">
+                                                <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                    {opt.label}
+                                                </option>
+                                            </template>
+                                        </select>
+                                        <span class="dg-fmt-sep"></span>
+                                        <span class="dg-fmt-label" title="Table borders">Borders</span>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersAll"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Full grid — every cell outlined"
+                                        >
+                                            All
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersOutline"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Outline around the table only"
+                                        >
+                                            Outline
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersRows"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="Horizontal row lines only"
+                                        >
+                                            Rows
+                                        </button>
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-taction="bordersNone"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleTableAction}
+                                            title="No borders"
+                                        >
+                                            None
+                                        </button>
+                                        <select
+                                            class="dg-page-select"
+                                            title="Border thickness — restyles the table under the cursor"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleBorderWidthChange}
+                                        >
+                                            <template for:each={borderWidthOptions} for:item="opt">
+                                                <option key={opt.value} value={opt.value} selected={opt.selected}>
+                                                    {opt.label}
+                                                </option>
+                                            </template>
+                                        </select>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            title="Border color — restyles the table under the cursor"
+                                            value={borderColorValue}
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleBorderColorChange}
+                                        />
+                                        <span
+                                            class="dg-fmt-label"
+                                            title="Fill the current cell — or, outside a table, the paragraph/panel the cursor is in"
+                                            >Fill</span
+                                        >
+                                        <template for:each={highlightSwatches} for:item="sw">
+                                            <button
+                                                key={sw.key}
+                                                class="dg-fmt-swatch"
+                                                style={sw.style}
+                                                data-taction="cellFill"
+                                                data-value={sw.value}
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleTableAction}
+                                                title={sw.title}
+                                            ></button>
+                                        </template>
+                                        <input
+                                            type="color"
+                                            class="dg-fmt-colorpick"
+                                            data-cmd="cellFill"
+                                            value="#f2f4f7"
+                                            onmousedown={handleColorPickMouseDown}
+                                            onchange={handleColorPickChange}
+                                            title="Custom cell fill color"
+                                        />
+                                    </div>
+                                    <!-- #247 — the running header is page chrome, so it
+                                         belongs ON the page, not behind a panel button.
+                                         Same editing surface as the body: rail chips drag
+                                         in, the format bar applies, tables work. Writes to
+                                         Header_Html__c rather than the body. -->
+                                    <div class="dg-chrome-band-label">
+                                        Running header
+                                        <span class="dg-chrome-band-hint">repeats at the top of every PDF page</span>
+                                    </div>
+                                    <div
+                                        class="dg-chrome-band dg-chrome-band_header"
+                                        lwc:dom="manual"
+                                        data-surface="header"
+                                        title="Running header — click in and type. Appears on every page of the PDF."
+                                    ></div>
+                                    <!-- #241 — the table row/column handles are rendered
                                          HERE, as LWC-owned siblings of the canvas, never
                                          inside it. The canvas is serialized back to the
                                          template body, so any chrome placed within it
@@ -2750,90 +2587,94 @@
                                          keeping it outside makes that impossible by
                                          construction. Positioned over the canvas by
                                          getBoundingClientRect math. -->
-                                        <div class="dg-canvas-wrap" onmouseleave={handleCanvasMouseLeave}>
-                                            <div
-                                                class="dg-html-preview-frame dg-visual-host dg-designer-size"
-                                                lwc:dom="manual"
-                                                title="Visual editing — click into the page and type"
-                                            ></div>
-                                            <template if:true={tableOverlay}>
-                                                <!-- Column gutter, above the table -->
-                                                <template for:each={tableOverlay.cols} for:item="col">
-                                                    <div
-                                                        key={col.key}
-                                                        class="dg-tbl-handle dg-tbl-handle_col"
-                                                        style={col.style}
-                                                        data-index={col.index}
-                                                        onmouseenter={handleTableHandleEnter}
-                                                        onmouseleave={handleTableHandleLeave}
-                                                    >
-                                                        <button
-                                                            class="dg-tbl-handle-btn"
-                                                            data-index={col.index}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleInsertColAt}
-                                                            title="Insert a column here"
-                                                        >
-                                                            +
-                                                        </button>
-                                                        <button
-                                                            class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
-                                                            data-index={col.index}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleDeleteColAt}
-                                                            title="Delete this column"
-                                                        >
-                                                            &minus;
-                                                        </button>
-                                                    </div>
-                                                </template>
-                                                <!-- Row gutter, left of the table -->
-                                                <template for:each={tableOverlay.rows} for:item="row">
-                                                    <div
-                                                        key={row.key}
-                                                        class="dg-tbl-handle dg-tbl-handle_row"
-                                                        style={row.style}
-                                                        data-index={row.index}
-                                                        onmouseenter={handleTableHandleEnter}
-                                                        onmouseleave={handleTableHandleLeave}
-                                                    >
-                                                        <button
-                                                            class="dg-tbl-handle-btn"
-                                                            data-index={row.index}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleInsertRowAt}
-                                                            title="Insert a row here"
-                                                        >
-                                                            +
-                                                        </button>
-                                                        <button
-                                                            class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
-                                                            data-index={row.index}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleDeleteRowAt}
-                                                            title="Delete this row"
-                                                        >
-                                                            &minus;
-                                                        </button>
-                                                    </div>
-                                                </template>
-                                            </template>
-                                        </div>
-                                        <!-- #247 — running footer: the bottom margin of the
-                                             same sheet, mirroring the header. -->
+                                    <div class="dg-canvas-wrap" onmouseleave={handleCanvasMouseLeave}>
                                         <div
-                                            class="dg-chrome-band dg-chrome-band_footer"
+                                            class="dg-html-preview-frame dg-visual-host dg-designer-size"
                                             lwc:dom="manual"
-                                            data-surface="footer"
-                                            data-band-label="Footer"
-                                            title="Running footer — click in and type. Appears at the bottom of every PDF page."
+                                            title="Visual editing — click into the page and type"
                                         ></div>
+                                        <template if:true={tableOverlay}>
+                                            <!-- Column gutter, above the table -->
+                                            <template for:each={tableOverlay.cols} for:item="col">
+                                                <div
+                                                    key={col.key}
+                                                    class="dg-tbl-handle dg-tbl-handle_col"
+                                                    style={col.style}
+                                                    data-index={col.index}
+                                                    onmouseenter={handleTableHandleEnter}
+                                                    onmouseleave={handleTableHandleLeave}
+                                                >
+                                                    <button
+                                                        class="dg-tbl-handle-btn"
+                                                        data-index={col.index}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleInsertColAt}
+                                                        title="Insert a column here"
+                                                    >
+                                                        +
+                                                    </button>
+                                                    <button
+                                                        class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
+                                                        data-index={col.index}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleDeleteColAt}
+                                                        title="Delete this column"
+                                                    >
+                                                        &minus;
+                                                    </button>
+                                                </div>
+                                            </template>
+                                            <!-- Row gutter, left of the table -->
+                                            <template for:each={tableOverlay.rows} for:item="row">
+                                                <div
+                                                    key={row.key}
+                                                    class="dg-tbl-handle dg-tbl-handle_row"
+                                                    style={row.style}
+                                                    data-index={row.index}
+                                                    onmouseenter={handleTableHandleEnter}
+                                                    onmouseleave={handleTableHandleLeave}
+                                                >
+                                                    <button
+                                                        class="dg-tbl-handle-btn"
+                                                        data-index={row.index}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleInsertRowAt}
+                                                        title="Insert a row here"
+                                                    >
+                                                        +
+                                                    </button>
+                                                    <button
+                                                        class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
+                                                        data-index={row.index}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleDeleteRowAt}
+                                                        title="Delete this row"
+                                                    >
+                                                        &minus;
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </template>
+                                    </div>
+                                    <!-- #247 — running footer, mirror of the header band -->
+                                    <div
+                                        class="dg-chrome-band dg-chrome-band_footer"
+                                        lwc:dom="manual"
+                                        data-surface="footer"
+                                        title="Running footer — click in and type. Appears on every page of the PDF."
+                                    ></div>
+                                    <div class="dg-chrome-band-label">
+                                        Running footer
+                                        <span class="dg-chrome-band-hint"
+                                            >repeats at the bottom of every PDF page &middot; &#123;PageNumber&#125; and
+                                            &#123;TotalPages&#125; show sample values here</span
+                                        >
                                     </div>
                                     <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">
                                         This is your document — click anywhere and type. The colored pills are your data
-                                        fields. The dimmed strips at the top and bottom of the page are your running
-                                        header and footer — click straight into them. Drag anything from the rail on the
-                                        right onto the page. Deleting a pill removes the whole field.
+                                        fields. Drag anything from the rail on the right straight onto the page.
+                                        Deleting a pill removes the whole field — they can't break. Your styles and page
+                                        setup are never touched here.
                                     </p>
                                 </template>
                             </div>

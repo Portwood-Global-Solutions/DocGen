@@ -524,112 +524,51 @@
    _clearActiveBlockPaint, which also runs before serialization so it can never reach
    the saved template body. */
 
-/* #247 — running header/footer, Word-style.
-   These are NOT panels floating above the paper. They are the top and bottom margin
-   zones OF the sheet: same width, same white, no gap, one shared shadow, so the
-   header/body/footer stack reads as a single continuous page. Word's cue is a faint
-   dashed rule and dimmed text until you click in; that is what is reproduced here.
-   The sheet width and horizontal padding are set from JS (_applyCanvasDimensions)
-   so the header text aligns exactly with the body text below it. */
-/* The "desk" the sheet sits on. This gradient used to live on the canvas host, which
-   meant the host drew its own grey panel + border BETWEEN the header band and the
-   page — a visible seam that made the header read as a separate widget floating
-   above the paper. Moving the desk out here and stripping the host's own chrome
-   (below) leaves one uninterrupted sheet: header, body, footer. */
-.dg-sheet {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    padding: 18px 0;
-    background: radial-gradient(ellipse at 50% 0%, #eceef4 0%, #dde1ea 70%, #d4d9e4 100%);
-    border: 1px solid #d3d0e6;
-    border-radius: 8px;
-}
-
-/* Inside the sheet the host is a pure scroll viewport — no background, no border,
-   no padding, or it would redraw the seam this whole structure exists to remove. */
-.dg-sheet .dg-visual-host,
-.dg-sheet .dg-visual-host.dg-designer-size {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 0;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-}
-
-.dg-sheet .dg-canvas-wrap {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
+/* #247 — running header/footer bands.
+   Styled to read as page CHROME rather than body content: dimmed, dashed, labelled.
+   They are real editing surfaces (the format bar, rail chips and table tools all work
+   in them), but they write Header_Html__c / Footer_Html__c, not the body. */
 .dg-chrome-band {
-    box-sizing: border-box;
-    background: #fff;
-    border: none;
-    min-height: 42px;
+    border: 1px dashed #c9c7e0;
+    border-radius: 4px;
+    background: #fbfaff;
+    padding: 6px 10px;
+    min-height: 34px;
     font-size: 0.8rem;
-    /* Dimmed until focused — Word greys inactive header text. */
-    color: #9a9aa8;
+    color: #3e3e4a;
     cursor: text;
-    margin: 0 auto;
-    position: relative;
-    transition: color 0.12s ease-in-out;
+    overflow-x: auto;
 }
 
 .dg-chrome-band:focus,
 .dg-chrome-band:focus-within {
-    color: #181818;
+    border-color: #7c3aed;
+    border-style: solid;
+    background: #fff;
     outline: none;
-    background: #fdfcff;
 }
 
-/* The separator rule sits INSIDE the sheet, like Word's header boundary. */
 .dg-chrome-band_header {
-    border-bottom: 1px dashed #d6d3e6;
-    border-radius: 6px 6px 0 0;
-    padding-top: 14px;
-    padding-bottom: 6px;
-    box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.06);
+    margin-bottom: 4px;
 }
 
 .dg-chrome-band_footer {
-    border-top: 1px dashed #d6d3e6;
-    border-radius: 0 0 6px 6px;
-    padding-top: 6px;
-    padding-bottom: 14px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    margin-top: 4px;
 }
 
-/* The tiny in-margin tag Word shows ("Header") — only while that band is active,
-   so it never competes with the document itself. */
-.dg-chrome-band::before {
-    content: attr(data-band-label);
-    position: absolute;
-    top: 2px;
-    left: 8px;
-    font-size: 0.58rem;
+.dg-chrome-band-label {
+    font-size: 0.65rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #b9b7c8;
-    opacity: 0;
-    transition: opacity 0.12s ease-in-out;
-    pointer-events: none;
+    letter-spacing: 0.04em;
+    color: #8b8ba7;
+    margin: 2px 0;
 }
 
-.dg-chrome-band_footer::before {
-    top: auto;
-    bottom: 2px;
-}
-
-.dg-chrome-band:hover::before,
-.dg-chrome-band:focus::before,
-.dg-chrome-band:focus-within::before {
-    opacity: 1;
+.dg-chrome-band-hint {
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: italic;
+    margin-left: 6px;
 }
 
 /* #241 — table row/column handles.
@@ -862,23 +801,15 @@
     overflow-y: auto;
 }
 
-/* The toolbar used to be one flat wrap of 110+ controls that ate a third of a
-   laptop screen. It is now a single compact row of the things used constantly,
-   with the long tail behind small labelled menus and all table tooling moved to a
-   contextual row that only exists while the caret is in a table.
-   nowrap + overflow-x keeps it to ONE line at any window width — wrapping to three
-   rows was most of what made it feel cluttered. */
 .dg-format-bar {
     position: sticky;
     top: 0;
     z-index: 30;
     display: flex;
     align-items: center;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: visible;
-    gap: 2px;
-    padding: 5px 8px;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px;
     background: rgba(255, 255, 255, 0.94);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -886,146 +817,6 @@
     border-radius: 10px;
     margin-bottom: 6px;
     box-shadow: 0 4px 14px rgba(28, 20, 68, 0.07);
-}
-
-/* Contextual table row — visually subordinate to the primary bar so it reads as
-   "tools for the thing you're in", not a second permanent toolbar. */
-.dg-format-bar_context {
-    top: 44px;
-    z-index: 29;
-    background: rgba(247, 245, 255, 0.96);
-    border-color: #d9d3f2;
-}
-
-.dg-fmt-context-label {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #6b5bb5;
-    font-weight: 700;
-    padding: 0 8px 0 2px;
-    white-space: nowrap;
-}
-
-/* Related controls sit tight together; clusters are what create the rhythm,
-   replacing the old run of manual separator spans. */
-.dg-fmt-cluster {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 0 6px;
-    border-right: 1px solid #e8e5f4;
-    flex: 0 0 auto;
-}
-
-.dg-fmt-cluster:last-child,
-.dg-fmt-cluster_end {
-    border-right: none;
-}
-
-/* Zoom is a view control, not a document edit — push it away from the rest. */
-.dg-fmt-cluster_end {
-    margin-left: auto;
-    padding-left: 10px;
-    border-left: 1px solid #e8e5f4;
-}
-
-.dg-fmt-menu-wrap {
-    position: relative;
-    display: flex;
-    align-items: center;
-    padding: 0 4px;
-    flex: 0 0 auto;
-}
-
-.dg-fmt-btn_menu {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-}
-
-.dg-fmt-caret {
-    font-size: 0.55rem;
-    color: #8b88a5;
-    line-height: 1;
-}
-
-.dg-fmt-swatch-cue {
-    display: inline-block;
-    font-weight: 700;
-    font-size: 0.72rem;
-    padding: 0 2px;
-    border-bottom: 3px solid #1f3a5f;
-    line-height: 1.1;
-}
-
-.dg-fmt-swatch-cue_bg {
-    border-bottom-color: #fef3c7;
-}
-
-.dg-fmt-menu {
-    position: absolute;
-    top: calc(100% + 5px);
-    left: 0;
-    z-index: 60;
-    min-width: 150px;
-    padding: 7px;
-    background: #fff;
-    border: 1px solid #d8dde6;
-    border-radius: 8px;
-    box-shadow: 0 8px 22px rgba(28, 20, 68, 0.16);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.dg-fmt-menu-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px;
-}
-
-.dg-fmt-menu-item {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 5px 8px;
-    border: none;
-    border-radius: 5px;
-    background: transparent;
-    font-size: 0.78rem;
-    color: #16325c;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.dg-fmt-menu-item:hover {
-    background: #f1eefc;
-}
-
-.dg-fmt-menu-item_danger {
-    color: #c23934;
-    border-top: 1px solid #eee;
-    margin-top: 2px;
-}
-
-.dg-fmt-menu-item_danger:hover {
-    background: #fdeceb;
-}
-
-.dg-fmt-menu-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 0.72rem;
-    color: #54585d;
-    padding: 2px 4px;
-    white-space: nowrap;
-}
-
-.dg-zoom-select {
-    min-width: 74px;
 }
 
 .dg-fmt-btn {
