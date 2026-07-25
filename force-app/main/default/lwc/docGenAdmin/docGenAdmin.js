@@ -9140,8 +9140,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const attr = img.getAttribute('data-dg-tag');
             const m = attr && /^\{%asset:([a-z0-9-]+)/i.exec(attr);
             if (m) {
-                const w = Math.round(img.getBoundingClientRect().width);
-                img.setAttribute('data-dg-tag', '{%asset:' + m[1] + ':' + w + 'x}');
+                // Record BOTH dimensions, not just the width.
+                //
+                // A width-only tag renders as `width:Npx;height:auto`, and nothing
+                // server-side can know what height that resolves to — the aspect
+                // ratio lives in the image file. For a running header that matters a
+                // lot: the engine has to grow the page's top margin to fit the
+                // header, and it cannot size a margin it cannot measure, so a tall
+                // logo silently overflowed the margin box and painted behind the
+                // body. The browser is the only place the rendered height is known,
+                // so it is the place that should write it down.
+                const box = img.getBoundingClientRect();
+                const w = Math.round(box.width);
+                const h = Math.round(box.height);
+                const size = h > 0 ? w + 'x' + h : w + 'x';
+                img.setAttribute('data-dg-tag', '{%asset:' + m[1] + ':' + size + '}');
                 img.title = img.getAttribute('data-dg-tag') + ' — drag the corner to resize';
             }
             this.htmlEditorDirty = true;
@@ -10501,9 +10514,56 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         this._safeReplace(pill, img);
                     }
                 }
+                this._stampAssetImageHeights(surface);
             }
         } catch (e) {
             /* best effort */
+        }
+    }
+
+    /**
+     * Repair width-only asset tags by measuring the rendered image.
+     *
+     * `{%asset:logo:200x}` renders as `width:200px;height:auto`, and the height
+     * exists only in the image file — so the PDF engine cannot size the page margin
+     * a running header needs, and a tall logo overflows it. Templates saved before
+     * the resize handler recorded both dimensions are all in this state.
+     *
+     * Measuring here fixes them in place: the PDF preview reads the live surfaces,
+     * so it is correct immediately, and the repaired tag persists on the next save.
+     * Deliberately does NOT set htmlEditorDirty — opening a template must not
+     * announce unsaved changes the author did not make.
+     */
+    _stampAssetImageHeights(surface) {
+        let imgs;
+        try {
+            imgs = surface.querySelectorAll('img[data-dg-tag]');
+        } catch (e) {
+            return;
+        }
+        for (const img of imgs) {
+            const m = /^\{%asset:([a-z0-9-]+):(\d+)x\}$/i.exec(img.getAttribute('data-dg-tag') || '');
+            if (!m) {
+                continue;
+            }
+            const stamp = () => {
+                let h = Math.round(img.getBoundingClientRect().height);
+                if (!(h > 0) && img.naturalWidth > 0) {
+                    // Not laid out yet (a hidden surface) — derive it from the file.
+                    h = Math.round((parseInt(m[2], 10) * img.naturalHeight) / img.naturalWidth);
+                }
+                if (!(h > 0)) {
+                    return;
+                }
+                const next = '{%asset:' + m[1] + ':' + m[2] + 'x' + h + '}';
+                img.setAttribute('data-dg-tag', next);
+                img.title = next + ' — drag the corner to resize';
+            };
+            if (img.complete && img.naturalWidth) {
+                stamp();
+            } else {
+                img.addEventListener('load', stamp, { once: true });
+            }
         }
     }
 

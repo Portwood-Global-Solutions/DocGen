@@ -9608,19 +9608,42 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // tall as the margin. Content taller than it overflows and paints over the
         // body — a logo or a multi-line address block in the header landed on top of
         // the document's first section. Word grows the header area and pushes the body
-        // down; this is the equivalent. Only when WE own the margins: an author who
-        // wrote their own @page keeps it.
+        // down; this is the equivalent.
+        Boolean emitMarginsOverSourcePage = false;
+        String growHeader = hasHeader && !headerHasCounters ? header : null;
+        String growFooter = hasFooter && !footerHasCounters ? footer : null;
         if (!sourceHasPageRule) {
-            marginsCss = growMarginsForRunningChrome(
-                marginsCss,
-                hasHeader && !headerHasCounters ? header : null,
-                hasFooter && !footerHasCounters ? footer : null
-            );
+            marginsCss = growMarginsForRunningChrome(marginsCss, growHeader, growFooter);
+        } else if (growHeader != null || growFooter != null) {
+            // The author owns @page — but a running header that overflows its margin
+            // box is a CORRECTNESS failure, not a style preference, and v1.90's
+            // "source wins" was never meant to cover it. Read the author's own
+            // margins, and only if the chrome genuinely does not fit, strip their
+            // margin declaration and re-emit it with the top/bottom raised. Their
+            // page size and left/right margins are preserved exactly.
+            List<Decimal> src = parseSourcePageMargins(sourceStyles);
+            if (src != null) {
+                String grown = growMarginsForRunningChrome(
+                    'margin: ' + src[0] + 'in ' + src[1] + 'in ' + src[2] + 'in ' + src[3] + 'in',
+                    growHeader,
+                    growFooter
+                );
+                if (grown.contains('margin-top:') || grown.contains('margin-bottom:')) {
+                    sourceStyles = stripSourcePageDecl(sourceStyles, 'margin');
+                    marginsCss = grown;
+                    emitMarginsOverSourcePage = true;
+                }
+            }
         }
         if (!sourceHasPageRule || hasHeader || hasFooter) {
             css = '@page {';
             if (!sourceHasPageRule) {
                 css += ' size: ' + sizeCss + '; ' + marginsCss + ';';
+            } else if (emitMarginsOverSourcePage) {
+                // Margins only — the author's `size` is untouched. Their own margin
+                // declaration was stripped above, so this is the only one left and
+                // there is no cascade to lose.
+                css += ' ' + marginsCss + ';';
             }
             if (hasHeader) {
                 if (headerHasCounters) {
@@ -9718,6 +9741,43 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return out;
     }
 
+    /**
+     * [top, right, bottom, left] in inches from the SOURCE stylesheet's own @page
+     * margin, or null when it declares none (in which case there is nothing to
+     * preserve and nothing to compare the chrome against).
+     *
+     * Handles the units templates actually use. A margin in a unit we cannot read
+     * returns null rather than a wrong number — better to leave the author's page
+     * alone than to rewrite it from a bad measurement.
+     */
+    @TestVisible
+    private static List<Decimal> parseSourcePageMargins(String styles) {
+        if (String.isBlank(styles)) {
+            return null;
+        }
+        Matcher block = Pattern.compile('(?is)@page[^\\{]*\\{([^\\}]*)\\}').matcher(styles);
+        if (!block.find()) {
+            return null;
+        }
+        Matcher decl = Pattern.compile('(?i)(?:^|;)\\s*margin\\s*:([^;\\}]*)').matcher(block.group(1));
+        if (!decl.find()) {
+            return null;
+        }
+        List<Decimal> vals = new List<Decimal>();
+        Matcher num = Pattern.compile('(?i)([0-9]*\\.?[0-9]+)\\s*(in|pt|px|cm|mm)').matcher(decl.group(1));
+        while (num.find()) {
+            vals.add(toInches(Decimal.valueOf(num.group(1)), num.group(2).toLowerCase()));
+        }
+        if (vals.isEmpty()) {
+            return null;
+        }
+        Decimal t = vals[0];
+        Decimal r = vals.size() >= 2 ? vals[1] : t;
+        Decimal b = vals.size() >= 3 ? vals[2] : t;
+        Decimal l = vals.size() >= 4 ? vals[3] : r;
+        return new List<Decimal>{ t, r, b, l };
+    }
+
     /** [top, right, bottom, left] from a `margin: …in` shorthand, CSS expansion rules. */
     private static List<Decimal> parseMarginShorthandIn(String marginsCss) {
         List<Decimal> vals = new List<Decimal>();
@@ -9768,7 +9828,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return tallestImage > textHeight ? tallestImage : textHeight;
     }
 
-    /** An <img>'s effective height in inches — author sizing, else the clamp. */
+    /** An <img>'s effective height in inches — author sizing, else a safe floor. */
     private static Decimal imageHeightIn(String tag) {
         Matcher sm = Pattern.compile('(?i)(?:^|[;\\s"\'])height\\s*:\\s*([0-9]*\\.?[0-9]+)\\s*(in|pt|px|cm|mm)')
             .matcher(tag);
@@ -9779,7 +9839,22 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (am.find()) {
             return toInches(Decimal.valueOf(am.group(1)), 'px');
         }
-        // Unsized — clampRunningImages will give it this height.
+        // Width set but height auto — the height lives in the image file and nothing
+        // here can read it without loading the blob (which the zero-heap PDF path
+        // exists to avoid). Assume SQUARE: it is a floor, not a guess, and it is
+        // wrong only in the safe direction for anything wider than it is tall. The
+        // Designer records the real height on insert/resize, so this is the fallback
+        // for hand-authored templates, not the normal path.
+        Matcher wm = Pattern.compile('(?i)(?:^|[;\\s"\'])width\\s*:\\s*([0-9]*\\.?[0-9]+)\\s*(in|pt|px|cm|mm)')
+            .matcher(tag);
+        if (wm.find()) {
+            return toInches(Decimal.valueOf(wm.group(1)), wm.group(2).toLowerCase());
+        }
+        Matcher wa = Pattern.compile('(?i)\\swidth\\s*=\\s*["\']?([0-9]*\\.?[0-9]+)').matcher(tag);
+        if (wa.find()) {
+            return toInches(Decimal.valueOf(wa.group(1)), 'px');
+        }
+        // Fully unsized — clampRunningImages will give it this height.
         return RUNNING_IMG_CLAMP_IN;
     }
 

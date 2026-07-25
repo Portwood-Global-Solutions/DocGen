@@ -1046,13 +1046,62 @@ private class DocGenHtmlTemplateTest {
     }
 
     @IsTest
-    static void wrapHtmlForPdfRespectsAuthorPageRuleOverChromeGrowth() {
-        // When the author wrote their own @page the engine emits no margins at all,
-        // so it must not start injecting margin-top either — v1.90's "source wins".
-        String hdr = '<img style="height:2in" src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
-        String src = '@page { size: Letter portrait; margin: 0.4in; }';
+    static void wrapHtmlForPdfGrowsMarginEvenWhenSourceOwnsPageRule() {
+        // THE case that made this bug survive two fixes. Designer-authored HTML
+        // templates carry their own @page, so sourceHasPageRule was true and the
+        // growth was skipped entirely — the rendered @page had no margin at all and
+        // the header kept overflowing. A running header that does not fit its margin
+        // box is a correctness failure, not a style preference, so it grows anyway.
+        String hdr = '<img style="width:200px;height:280px" src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
+        String src = 'body { color: #000; } @page { size: Letter portrait; margin: 0.75in; }';
         String outp = DocGenService.wrapHtmlForPdf('<p>body</p>', src, hdr, null);
-        System.assert(!outp.contains('margin-top:'), 'Author @page must not be overridden: ' + outp);
+        System.assert(
+            outp.contains('margin-top: 3.07in'),
+            'Top margin must grow to fit a 280px header even when the source owns @page: ' + outp
+        );
+        // The author's own margin declaration is stripped so ours is not out-cascaded,
+        // but their page SIZE is left exactly as written.
+        System.assert(outp.contains('size: Letter portrait'), 'Author page size must survive: ' + outp);
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfLeavesSourcePageAloneWhenChromeFits() {
+        // Growth is the exception, not the rule: a header that fits must leave the
+        // author's @page completely untouched (v1.90's "source wins").
+        String src = '@page { size: Letter portrait; margin: 0.75in; }';
+        String outp = DocGenService.wrapHtmlForPdf('<p>body</p>', src, '<p>Confidential</p>', null);
+        System.assert(!outp.contains('margin-top:'), 'A header that fits must not rewrite the page: ' + outp);
+        System.assert(outp.contains('margin: 0.75in'), 'The author margin must remain: ' + outp);
+    }
+
+    @IsTest
+    static void estimateChromeHeightFallsBackToWidthWhenHeightIsAuto() {
+        // {%asset:logo:200x} renders as width:200px;height:auto — the height lives in
+        // the image file and nothing server-side can read it without loading the blob
+        // (which the zero-heap PDF path exists to avoid). Assuming square is a floor,
+        // wrong only in the safe direction for anything wider than it is tall.
+        Decimal h = DocGenService.estimateChromeHeightIn('<img style="width:200px;height:auto" src="x">');
+        System.assertEquals(
+            Decimal.valueOf(200) / 96,
+            h,
+            'A width-only image must fall back to its width, not the 0.45in unsized clamp'
+        );
+    }
+
+    @IsTest
+    static void parseSourcePageMarginsReadsShorthandAndUnits() {
+        List<Decimal> four = DocGenService.parseSourcePageMargins('@page { margin: 1in 2in 3in 4in; }');
+        System.assertEquals(1, four[0]);
+        System.assertEquals(3, four[2]);
+        List<Decimal> one = DocGenService.parseSourcePageMargins('@page { margin: 0.75in; }');
+        System.assertEquals(0.75, one[0], 'One value applies to every side');
+        System.assertEquals(0.75, one[2]);
+        System.assertEquals(
+            null,
+            DocGenService.parseSourcePageMargins('@page { size: Letter; }'),
+            'No margin, no list'
+        );
+        System.assertEquals(null, DocGenService.parseSourcePageMargins('body { margin: 1in; }'), 'Only @page counts');
     }
 
     @IsTest
