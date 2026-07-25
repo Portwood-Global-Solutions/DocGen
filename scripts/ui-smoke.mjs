@@ -1927,12 +1927,17 @@ async function main() {
             record('table handles are visible and clickable over a header table', !!bandHandles.ok, bandHandles.why);
         }
 
-        // --- 4p. An author's cell fill survives the editor's own tints ----------
+        // --- 4p. An author's cell fill STAYS ------------------------------------
         //
-        // The row/column hover tint paints OVER whatever fill the author set, and
-        // restores it from a captured style attribute. The caret-highlight sweep
-        // used to blanket-clear backgroundColor on every [data-dg-paint] node —
-        // including those — so the fill was wiped before the restore could run.
+        // Chrome is drawn with inline styles on the same nodes the author edits, so
+        // it can only coexist under two rules: never write a property the author can
+        // write, and never snapshot/restore a whole style attribute. Both were
+        // broken. The caret highlight tinted background-color and restored the style
+        // attribute it captured on arrival — so a fill applied while the caret was in
+        // the cell (click cell, click swatch: the normal order) lived exactly as long
+        // as the caret stayed there.
+        //
+        // Driven through the REAL toolbar control, not by setting style directly.
         const fillReport = await page.evaluate(
             inPage(`
       const step = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1940,10 +1945,14 @@ async function main() {
         const seg = __dgFind('.dg-mode-seg');
         return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
       };
+      const norm = (c) => (c || '').split(' ').join('');
       return (async () => {
         if (!__dgFind('.dg-pv') && modeBtn('Visual')) { modeBtn('Visual').click(); await step(1800); }
         const pv = __dgFind('.dg-pv');
-        if (!pv) return { ok:false, why:'no canvas' };
+        const bar = __dgFind('.dg-format-bar');
+        if (!pv) return { setup:'no canvas' };
+        const out = { setup:'ok' };
+
         const style = pv.querySelector('style');
         while (pv.firstChild) pv.removeChild(pv.firstChild);
         if (style) pv.appendChild(style);
@@ -1951,44 +1960,83 @@ async function main() {
         t.innerHTML = '<tr><td>c1</td><td>c2</td></tr><tr><td>c3</td><td>c4</td></tr>';
         pv.appendChild(t);
         const cell = t.querySelector('td');
-        // The author's own fill, exactly as handleTableAction('cellFill') writes it.
-        cell.style.background = 'rgb(255, 214, 0)';
-        const want = cell.style.backgroundColor;
 
-        // Hover the row so the band tint paints over it.
-        const cr = cell.getBoundingClientRect();
-        cell.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
-          clientX: Math.round(cr.left + 6), clientY: Math.round(cr.top + 6)}));
-        await step(500);
-
-        // Put the caret in and type — this is the snapshot/clear path that wiped it.
+        // Caret INTO the cell first — the order that used to lose the fill.
         pv.focus();
         const r = document.createRange(); r.selectNodeContents(cell); r.collapse(false);
         const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
         document.dispatchEvent(new Event('selectionchange'));
-        await step(300);
-        pv.dispatchEvent(new InputEvent('beforeinput', {bubbles:true, composed:true, inputType:'insertText', data:'x'}));
-        pv.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
         await step(500);
 
-        // Move the pointer away so the hover tint is released, and the CARET to
-        // another cell so its own highlight is released too. Both are transient
-        // chrome painted over the fill; the assertion is about what the cell is
-        // left holding once neither is on it.
-        pv.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
-          clientX: Math.round(cr.left + 6), clientY: Math.round(cr.bottom + 300)}));
+        // Apply the fill through the real control.
+        const swatch = [...bar.querySelectorAll('[data-taction="cellFill"][data-value]')]
+          .find(b => /^#/.test(b.dataset.value || ''));
+        if (!swatch) return Object.assign(out, { applied: 'no cellFill swatch in the toolbar' });
+        // Canonicalise through the browser: the swatch value is hex, but the DOM
+        // reports rgb(). Comparing the two forms directly is how the first version of
+        // this assertion reported a failure while the product was working.
+        const probe = document.createElement('div');
+        probe.style.background = swatch.dataset.value;
+        const wantRaw = probe.style.backgroundColor;
+        const want = norm(wantRaw);
+        swatch.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        swatch.click();
+        await step(500);
+        const live = () => __dgFind('.dg-pv').querySelector('td');
+        out.applied = norm(live().style.background || live().style.backgroundColor).indexOf(want) !== -1
+          ? 'ok' : ('swatch ' + want + ' produced ' + live().style.cssText);
+
+        // Now everything that used to erase it: hover the row, type, move the caret.
+        const cr = live().getBoundingClientRect();
+        live().dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+          clientX: Math.round(cr.left + 6), clientY: Math.round(cr.top + 6)}));
+        await step(400);
+        pv.dispatchEvent(new InputEvent('beforeinput', {bubbles:true, composed:true, inputType:'insertText', data:'x'}));
+        pv.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        await step(400);
         const other = __dgFind('.dg-pv').querySelectorAll('td')[3];
         const r2 = document.createRange(); r2.selectNodeContents(other); r2.collapse(false);
         const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r2);
         document.dispatchEvent(new Event('selectionchange'));
-        await step(700);
+        pv.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+          clientX: Math.round(cr.left + 6), clientY: Math.round(cr.bottom + 400)}));
+        await step(800);
+        const after = norm(live().style.background || live().style.backgroundColor);
+        out.stayed = after.indexOf(want) !== -1 ? 'ok' : ('fill became ' + JSON.stringify(after));
 
-        const live = __dgFind('.dg-pv').querySelector('td');
-        const now = live ? live.style.backgroundColor : '';
-        return { ok: now === want, why: now === want ? '' : ('fill ' + JSON.stringify(want) + ' became ' + JSON.stringify(now)) };
+        // And it must survive the trip to SAVED html, with no chrome alongside it.
+        const seg = __dgFind('.dg-mode-seg');
+        const src = seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === 'Source') : null;
+        if (!src) return Object.assign(out, { saved: 'no source toggle' });
+        src.click();
+        await step(1200);
+        const ta = __dgFind('.dg-html-body-editor');
+        const html = (ta && ta.value) || '';
+        out.saved = (norm(html).indexOf(want) !== -1 || html.indexOf(swatch.dataset.value) !== -1)
+          ? 'ok' : ('fill ' + wantRaw + ' missing from the serialized body');
+        out.noChrome = !/data-dg-paint|data-dg-selcell/.test(html)
+          ? 'ok' : 'editor chrome leaked into the serialized body';
+        const vis = seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === 'Visual') : null;
+        if (vis) { vis.click(); await step(1600); }
+        return out;
       })();`)
         );
-        record('an author cell fill survives hover tint + typing', !!fillReport.ok, fillReport.why);
+        if (fillReport.setup !== 'ok') {
+            record('cell fill harness', false, fillReport.setup);
+        } else {
+            record('the fill swatch applies a fill', fillReport.applied === 'ok', fillReport.applied);
+            record(
+                'the fill STAYS through hover, typing and caret moves',
+                fillReport.stayed === 'ok',
+                fillReport.stayed
+            );
+            record('the fill survives into the serialized body', fillReport.saved === 'ok', fillReport.saved);
+            record(
+                'no editor chrome leaks into the serialized body',
+                fillReport.noChrome === 'ok',
+                fillReport.noChrome
+            );
+        }
 
         // --- 4q. The Designer tab can open a template on its own ----------------
         //

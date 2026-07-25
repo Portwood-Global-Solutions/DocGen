@@ -6627,11 +6627,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 return;
             }
             this._paintedEl = target;
-            // null when the element had no style attribute at all — restore removes it.
-            this._paintedPrevStyle = target.getAttribute('style');
             target.setAttribute('data-dg-paint', 'block');
+            // NO background-color, and NO style-attribute snapshot. See the
+            // CHROME PROPERTY RULE above _clearActiveBlockPaint: this highlight
+            // used to tint the background and restore the whole style attribute it
+            // captured on arrival, so a fill applied while the caret sat in the cell
+            // — which is the normal order: click the cell, then click the swatch —
+            // was reverted the moment the caret moved on.
             const isCell = target.tagName === 'TD' || target.tagName === 'TH';
-            target.style.backgroundColor = 'rgba(124, 58, 237, 0.06)';
             if (isCell) {
                 target.style.outline = '2px solid #7c3aed';
                 target.style.outlineOffset = '-2px';
@@ -6644,52 +6647,86 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /**
-     * Remove every editor highlight, whoever applied it. Sweeping by marker rather
-     * than by remembered reference is what stops tints being stranded when the canvas
-     * re-renders or two systems touch the same element.
+     * THE CHROME PROPERTY RULE
+     * ------------------------
+     * Editor chrome is drawn with inline styles, because component CSS cannot reach
+     * nodes inside an lwc:dom="manual" host. That makes the canvas a shared writing
+     * surface between the editor and the author, and it only stays safe under two
+     * rules:
+     *
+     *   1. Chrome NEVER writes a property the author can write. Each system owns
+     *      its own channel — caret highlight: outline (cells) / box-shadow (blocks);
+     *      cell selection: inset box-shadow; band hover: filter. background-color
+     *      belongs to the author alone.
+     *   2. Chrome NEVER snapshots and restores a whole style attribute. A snapshot
+     *      is a photograph of the element at one instant, and every edit the author
+     *      makes afterwards is erased when it is put back.
+     *
+     * Both rules were broken here, and between them they are why a cell fill would
+     * not stick: the highlight tinted background-color, captured the style attribute
+     * on arrival, and restored it on departure — so a fill applied while the caret
+     * was in the cell lived exactly as long as the caret stayed there.
+     *
+     * Sweeping by marker rather than by remembered reference is what stops tints
+     * being stranded when the canvas re-renders or two systems touch one element.
+     *
+     * As a bonus, outline and filter are both ignored by Flying Saucer, so even if a
+     * tint ever did leak into a saved template it could not change the PDF.
      */
     _clearActiveBlockPaint() {
         const el = this._paintedEl;
         this._paintedEl = null;
         if (el) {
             try {
-                if (this._paintedPrevStyle === null || this._paintedPrevStyle === undefined) {
-                    el.removeAttribute('style');
-                } else {
-                    el.setAttribute('style', this._paintedPrevStyle);
-                }
+                this._stripCaretProps(el);
                 el.removeAttribute('data-dg-paint');
             } catch (e) {
                 /* detached */
             }
         }
-        this._paintedPrevStyle = null;
+        // Scoped to the caret highlight's own marker. Sweeping every [data-dg-paint]
+        // also hit the row/column hover tint, which is applied OVER the author's
+        // fill — clearing that blind was the first half of "tables keep overwriting
+        // fill colors". Each system undoes only its own tint.
         for (const surface of this._allSurfaces()) {
             let stragglers;
             try {
-                // ONLY the caret highlight. This used to sweep every [data-dg-paint],
-                // which included the row/column hover tint — and that tint is applied
-                // OVER the author's own cell fill. Blanket-clearing backgroundColor
-                // therefore deleted the fill, permanently: the hover system restores
-                // from a captured style attribute, but by the time it ran the value
-                // had already been wiped. It showed up as "tables keep overwriting
-                // fill colors" once _pushUndo started snapshotting (and so clearing
-                // paint) on every keystroke, and once the handles became reachable
-                // over every surface. Each system now undoes only its own tint.
                 stragglers = surface.querySelectorAll('[data-dg-paint="block"]');
             } catch (e) {
                 continue;
             }
             for (const node of stragglers) {
-                node.style.backgroundColor = '';
-                node.style.boxShadow = '';
-                node.style.outline = '';
-                node.style.outlineOffset = '';
+                this._stripCaretProps(node);
                 node.removeAttribute('data-dg-paint');
-                if (!node.getAttribute('style')) {
-                    node.removeAttribute('style');
-                }
             }
+        }
+    }
+
+    /** The caret highlight's own channels — outline on cells, a bar on blocks. */
+    _stripCaretProps(el) {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+        el.style.boxShadow = '';
+        if (!el.getAttribute('style')) {
+            el.removeAttribute('style');
+        }
+    }
+
+    /**
+     * Every channel any chrome system is allowed to write, and nothing else.
+     *
+     * background-color is deliberately absent: it is the author's, and clearing it
+     * is what destroyed cell fills. Drops the style attribute entirely once empty so
+     * serialized HTML does not accumulate `style=""`.
+     */
+    _stripChromeProps(el) {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+        el.style.boxShadow = '';
+        el.style.filter = '';
+        el.style.backgroundClip = '';
+        if (!el.getAttribute('style')) {
+            el.removeAttribute('style');
         }
     }
 
@@ -6704,10 +6741,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _clearEditorPaint() {
         this._highlightTableBand(null);
         this._clearActiveBlockPaint();
+        this._clearCellSel();
+        // Belt and braces before anything serializes: sweep any element still
+        // carrying a chrome marker and strip only the chrome channels. A tint that
+        // survived its own system's cleanup — a re-render mid-hover, a node moved by
+        // a row insert — must not be baked into the saved template.
+        for (const surface of this._allSurfaces()) {
+            let residue;
+            try {
+                residue = surface.querySelectorAll('[data-dg-paint], [data-dg-selcell]');
+            } catch (e) {
+                continue;
+            }
+            for (const el of residue) {
+                this._stripChromeProps(el);
+                el.removeAttribute('data-dg-paint');
+                el.removeAttribute('data-dg-selcell');
+            }
+        }
     }
 
     _paintedEl = null;
-    _paintedPrevStyle = null;
 
     /**
      * The editing surface the caret is currently in.
@@ -8518,15 +8572,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _highlightTableBand(spec) {
-        // Undo the previous band first — these are inline styles on live canvas nodes,
-        // so the original style attribute is captured and restored verbatim.
-        for (const [el, prev] of this._bandPainted || []) {
-            if (prev === null || prev === undefined) {
-                el.removeAttribute('style');
-            } else {
-                el.setAttribute('style', prev);
+        // Undo the previous band first. Clears only `filter`, never a captured style
+        // attribute — see THE CHROME PROPERTY RULE. Restoring a snapshot here erased
+        // any fill the author applied to those cells while the band was lit, which is
+        // precisely what the row/column handles invite you to do.
+        for (const el of this._bandPainted || []) {
+            try {
+                el.style.filter = '';
+                if (!el.getAttribute('style')) {
+                    el.removeAttribute('style');
+                }
+                el.removeAttribute('data-dg-paint');
+            } catch (e) {
+                /* detached */
             }
-            el.removeAttribute('data-dg-paint');
         }
         this._bandPainted = [];
         const table = this._overlayTable;
@@ -8551,9 +8610,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
         }
         for (const cell of targets) {
-            this._bandPainted.push([cell, cell.getAttribute('style')]);
+            this._bandPainted.push(cell);
             cell.setAttribute('data-dg-paint', 'band');
-            cell.style.backgroundColor = 'rgba(124, 58, 237, 0.14)';
+            // `filter` tints whatever is underneath — the author's fill included —
+            // without writing a property the author owns. Flying Saucer ignores
+            // filter, so even a leaked tint could not reach the PDF.
+            cell.style.filter = 'brightness(0.93) saturate(1.25)';
         }
     }
     _bandPainted = [];
