@@ -1521,7 +1521,7 @@
                         </div>
                     </template>
                     <template if:true={designerHasTemplate}>
-                        <div class="dg-designer-chrome">
+                        <div class={designerShellClass}>
                             <div class="dg-designer-toolbar">
                                 <div class="dg-designer-toolbar__title">
                                     <lightning-icon icon-name="utility:brush" size="small"></lightning-icon>
@@ -2354,6 +2354,17 @@
                                         >
                                             +
                                         </button>
+                                        <!-- Focus mode: collapses the secondary chrome rows so the page gets the
+                                             screen. Nothing is removed, only hidden. -->
+                                        <button
+                                            class="dg-fmt-btn dg-fmt-btn_word"
+                                            data-viewctl="focus"
+                                            onmousedown={handleFmtMouseDown}
+                                            onclick={handleToggleFocusMode}
+                                            title="Focus mode — hide the setup rows and give the page the screen"
+                                        >
+                                            &#9713; {focusModeLabel}
+                                        </button>
                                         <!-- Word-style grid picker: hover to choose
                                              rows x columns, click to place. -->
                                         <div class="dg-fmt-menu-wrap">
@@ -2750,6 +2761,9 @@
                                                 lwc:dom="manual"
                                                 title="Visual editing — click into the page and type"
                                             ></div>
+                                            <template if:true={tableGhost}>
+                                                <div class={tableGhost.cls} style={tableGhost.style}></div>
+                                            </template>
                                             <template if:true={tableOverlay}>
                                                 <!-- Column gutter, above the table -->
                                                 <template for:each={tableOverlay.cols} for:item="col">
@@ -2764,6 +2778,9 @@
                                                         <button
                                                             class="dg-tbl-handle-btn"
                                                             data-index={col.index}
+                                                            data-axis="col"
+                                                            onmouseenter={handleSeamPreview}
+                                                            onmouseleave={handleGhostClear}
                                                             onmousedown={handleFmtMouseDown}
                                                             onclick={handleInsertColAt}
                                                             title="Insert a column here"
@@ -2773,6 +2790,9 @@
                                                         <button
                                                             class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
                                                             data-index={col.index}
+                                                            data-axis="col"
+                                                            onmouseenter={handleRemovePreview}
+                                                            onmouseleave={handleGhostClear}
                                                             onmousedown={handleFmtMouseDown}
                                                             onclick={handleDeleteColAt}
                                                             title="Delete this column"
@@ -2794,6 +2814,9 @@
                                                         <button
                                                             class="dg-tbl-handle-btn"
                                                             data-index={row.index}
+                                                            data-axis="row"
+                                                            onmouseenter={handleSeamPreview}
+                                                            onmouseleave={handleGhostClear}
                                                             onmousedown={handleFmtMouseDown}
                                                             onclick={handleInsertRowAt}
                                                             title="Insert a row here"
@@ -2803,6 +2826,9 @@
                                                         <button
                                                             class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
                                                             data-index={row.index}
+                                                            data-axis="row"
+                                                            onmouseenter={handleRemovePreview}
+                                                            onmouseleave={handleGhostClear}
                                                             onmousedown={handleFmtMouseDown}
                                                             onclick={handleDeleteRowAt}
                                                             title="Delete this row"
@@ -2858,6 +2884,8 @@
                                                         style={seam.style}
                                                         data-index={seam.index}
                                                         data-axis={seam.axis}
+                                                        onmouseenter={handleSeamPreview}
+                                                        onmouseleave={handleGhostClear}
                                                         onmousedown={handleFmtMouseDown}
                                                         onclick={handleSeamInsert}
                                                         title="Insert here"

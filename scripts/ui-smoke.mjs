@@ -177,6 +177,8 @@ async function main() {
         // their own popover assertions. Leaving them in this loop also left their
         // menus OPEN, which then toggled shut under the later tests.
         if (b.getAttribute('aria-haspopup') === 'true' || b.dataset.menu) return false;
+        // View controls (zoom, focus mode) change what you SEE, never the document.
+        if (b.dataset.viewctl) return false;
         return b.dataset.cmd !== 'undo' && b.dataset.cmd !== 'redo' && !b.dataset.zstep && !b.dataset.szstep;
       });
       for (const b of clickable) {
@@ -681,6 +683,77 @@ async function main() {
       };`)
         );
         record('header/footer are part of the sheet (width, alignment, flush)', sheet.ok, sheet.why);
+
+        // --- 4c-4. Ghost preview, fit-width, focus mode --------------------------
+        const extras = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const bar = __dgFind('.dg-format-bar');
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+      const t = document.createElement('table');
+      t.innerHTML = '<tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr>';
+      pv.appendChild(t);
+      const cell0 = t.querySelector('td');
+      const cr = cell0.getBoundingClientRect();
+      cell0.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+        clientX: Math.round(cr.left+5), clientY: Math.round(cr.top+5)}));
+      return new Promise((resolve) => setTimeout(() => {
+        const out = {};
+        // Ghost on seam hover.
+        const seam = (__dgFind('.dg-tbl-seam', true) || [])[0];
+        if (!seam) { out.ghost = 'no seam'; }
+        else {
+          seam.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true, composed:true}));
+        }
+        setTimeout(() => {
+          const g = __dgFind('.dg-tbl-ghost');
+          if (g) {
+            const gr = g.getBoundingClientRect();
+            const gcs = getComputedStyle(g);
+            out.ghost = (gr.width > 4 && gr.height > 4 && gcs.pointerEvents === 'none') ? 'ok'
+                        : ('bad size/pointer-events: ' + Math.round(gr.width) + 'x' + Math.round(gr.height) + ' pe=' + gcs.pointerEvents);
+          } else if (!out.ghost) { out.ghost = 'ghost did not appear'; }
+
+          // Fit width should widen the page toward the column.
+          const sel = [...bar.querySelectorAll('select')].find(s2 => [...s2.options].some(o => o.value === 'fit'));
+          if (!sel) { out.fit = 'no fit option'; }
+          else {
+            const before = pv.getBoundingClientRect().width;
+            sel.value = 'fit';
+            sel.dispatchEvent(new Event('change', {bubbles:true, composed:true}));
+            setTimeout(() => {
+              const after = pv.getBoundingClientRect().width;
+              const col = __dgFind('.dg-designer-canvas-col');
+              const colW = col ? col.getBoundingClientRect().width : 0;
+              out.fit = (after >= before && after <= colW + 2) ? 'ok'
+                        : ('page ' + Math.round(before) + '->' + Math.round(after) + ' col ' + Math.round(colW));
+
+              // Focus mode should hide the setup rows.
+              const focusBtn = bar.querySelector('[data-viewctl="focus"]');
+              if (!focusBtn) { out.focus = 'no focus button'; resolve(out); return; }
+              const chromeRow = __dgFind('.dg-designer-toolbar');
+              const visBefore = chromeRow ? chromeRow.getBoundingClientRect().height > 0 : false;
+              focusBtn.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+              focusBtn.click();
+              setTimeout(() => {
+                const row2 = __dgFind('.dg-designer-toolbar');
+                const visAfter = row2 ? row2.getBoundingClientRect().height > 0 : false;
+                out.focus = (visBefore && !visAfter) ? 'ok' : ('visible before=' + visBefore + ' after=' + visAfter);
+                // restore
+                const fb = __dgFind('[data-viewctl="focus"]');
+                if (fb) { fb.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true})); fb.click(); }
+                resolve(out);
+              }, 400);
+            }, 400);
+          }
+        }, 300);
+      }, 500));`)
+        );
+        record('table +/- shows a ghost of what it will add/remove', extras.ghost === 'ok', extras.ghost || '');
+        record('zoom: Fit width fills the column', extras.fit === 'ok', extras.fit || '');
+        record('focus mode hides the setup chrome', extras.focus === 'ok', extras.focus || '');
 
         // --- 4d. Invisible chrome must never intercept clicks --------------------
         // opacity: 0 does NOT remove an element from hit-testing. Any overlay left at

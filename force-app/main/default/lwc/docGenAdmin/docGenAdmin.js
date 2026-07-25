@@ -7032,11 +7032,63 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track designerZoom = 1;
 
     get zoomOptions() {
-        return [0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => ({
+        const opts = [0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => ({
             value: String(z),
             label: Math.round(z * 100) + '%',
             selected: z === this.designerZoom
         }));
+        // Fit width — a Letter page is 816px, so on a 1358px column 40% of the
+        // screen was empty desk at 100%. This spends it on the document.
+        opts.push({ value: 'fit', label: 'Fit width', selected: this._zoomIsFit });
+        return opts;
+    }
+    _zoomIsFit = false;
+
+    /** Scale that makes the page fill the available column, less breathing room. */
+    _fitWidthZoom() {
+        const pv = this._bodyCanvas();
+        const col = this.template.querySelector('.dg-designer-canvas-col');
+        if (!pv || !col) {
+            return 1;
+        }
+        const pageW = parseFloat(pv.style.width) || pv.getBoundingClientRect().width || 816;
+        const avail = col.getBoundingClientRect().width - 56;
+        if (!(avail > 0) || !(pageW > 0)) {
+            return 1;
+        }
+        // Clamped: never below 50% (unreadable) and never above 200% (the sheet
+        // would dwarf the chrome).
+        return Math.max(0.5, Math.min(2, Math.round((avail / pageW) * 100) / 100));
+    }
+
+    // ===== Focus mode ========================================================
+    //
+    // 389px of chrome sat above the toolbar on a 900px screen — 43% of the viewport
+    // spent before any document was visible. Focus mode collapses the secondary rows
+    // (template picker, save/edit, page setup, status) and leaves the toolbar and the
+    // page. Nothing is removed, only hidden, and one click brings it all back.
+    @track focusMode = false;
+
+    get focusModeLabel() {
+        return this.focusMode ? 'Exit focus' : 'Focus';
+    }
+
+    get designerShellClass() {
+        return this.focusMode ? 'dg-designer-chrome dg-designer-chrome_focus' : 'dg-designer-chrome';
+    }
+
+    handleToggleFocusMode() {
+        this.focusMode = !this.focusMode;
+        // Re-fit after the layout settles: collapsing the chrome changes the space
+        // the page has to fill.
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            if (this._zoomIsFit) {
+                this.designerZoom = this._fitWidthZoom();
+            }
+            this._applyZoom();
+            this._applyCanvasDimensions();
+        }, 60);
     }
 
     get zoomLabel() {
@@ -7044,8 +7096,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     handleZoomChange(event) {
-        const z = parseFloat(event.currentTarget.value);
+        const raw = event.currentTarget.value;
+        if (raw === 'fit') {
+            this._zoomIsFit = true;
+            this.designerZoom = this._fitWidthZoom();
+            this._applyZoom();
+            return;
+        }
+        const z = parseFloat(raw);
         if (!isNaN(z)) {
+            this._zoomIsFit = false;
             this.designerZoom = z;
             this._applyZoom();
         }
@@ -7335,7 +7395,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         this.blockHandle = {
-            style: `left:${r.left - wrapRect.left - 42}px; top:${r.top - wrapRect.top + 1}px;`
+            style: `left:${r.left - wrapRect.left - Math.round(42 * (this.designerZoom || 1))}px; top:${r.top - wrapRect.top + 1}px;`
         };
     }
     _handleBlockEl = null;
@@ -7418,6 +7478,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         this._overlayTable = table;
         const wrapRect = wrap.getBoundingClientRect();
+        // Gutter offsets are in SCREEN pixels, but the page is transform-scaled. A
+        // fixed 20px gutter is only ~12 document px at 1.6x, which slides the handles
+        // on top of the table. Scale the offsets so the gutter stays proportional.
+        const gz = this.designerZoom || 1;
+        // The ROW gutter must clear the handle's own width (42px in CSS), not just
+        // leave a 20px gap — offsetting by 20 put the buttons on top of the first
+        // column. Columns only need the bar height.
+        const gut = Math.round(20 * gz);
+        const rowGut = Math.round(50 * gz);
+        const seamOff = Math.round(8 * gz);
+        const colTop = Math.round(24 * gz);
         // Column boundaries come from the widest row so a header with colspans
         // doesn't produce fewer handles than the table has columns.
         let widest = null;
@@ -7452,7 +7523,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 cols.push({
                     key: 'c' + i,
                     index: i,
-                    style: `left:${r.left - wrapRect.left}px; top:${tRect.top - wrapRect.top - 20}px; width:${r.width}px;`
+                    style: `left:${r.left - wrapRect.left}px; top:${tRect.top - wrapRect.top - gut}px; width:${r.width}px;`
                 });
                 // Leading seam for the first column, then one after every column.
                 if (i === 0) {
@@ -7460,14 +7531,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         key: 's-lead',
                         index: 0,
                         axis: 'col',
-                        style: `left:${r.left - wrapRect.left - 8}px; top:${tRect.top - wrapRect.top - 24}px;`
+                        style: `left:${r.left - wrapRect.left - seamOff}px; top:${tRect.top - wrapRect.top - colTop}px;`
                     });
                 }
                 seams.push({
                     key: 'sc' + i,
                     index: i + (cell.colSpan || 1),
                     axis: 'col',
-                    style: `left:${r.right - wrapRect.left - 8}px; top:${tRect.top - wrapRect.top - 24}px;`
+                    style: `left:${r.right - wrapRect.left - seamOff}px; top:${tRect.top - wrapRect.top - colTop}px;`
                 });
                 i += cell.colSpan || 1;
             }
@@ -7484,25 +7555,122 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             rows.push({
                 key: 'r' + ri,
                 index: ri,
-                style: `left:${tRect2.left - wrapRect.left - 20}px; top:${r.top - wrapRect.top}px; height:${r.height}px;`
+                style: `left:${tRect2.left - wrapRect.left - rowGut}px; top:${r.top - wrapRect.top}px; height:${r.height}px;`
             });
             if (ri === 0) {
                 seams.push({
                     key: 's-rlead',
                     index: 0,
                     axis: 'row',
-                    style: `left:${tRect2.left - wrapRect.left - 24}px; top:${r.top - wrapRect.top - 8}px;`
+                    style: `left:${tRect2.left - wrapRect.left - rowGut - seamOff}px; top:${r.top - wrapRect.top - seamOff}px;`
                 });
             }
             seams.push({
                 key: 'sr' + ri,
                 index: ri + 1,
                 axis: 'row',
-                style: `left:${tRect2.left - wrapRect.left - 24}px; top:${r.bottom - wrapRect.top - 8}px;`
+                style: `left:${tRect2.left - wrapRect.left - rowGut - seamOff}px; top:${r.bottom - wrapRect.top - seamOff}px;`
             });
             ri++;
         }
         this.tableOverlay = { cols, rows, seams };
+    }
+
+    // ===== Ghost preview =====================================================
+    //
+    // Hovering an insert control paints a translucent column/row exactly where the new
+    // one will land; hovering a delete control paints the band that will disappear in
+    // red. Showing the RESULT beats labelling the action — you stop having to hold a
+    // model of "before or after this cell?" in your head.
+    @track tableGhost = null;
+
+    /** Ghost for a seam `+`: a column/row sized like its neighbour, at the seam. */
+    handleSeamPreview(event) {
+        const table = this._overlayTable;
+        const wrap = this.template.querySelector('.dg-canvas-wrap');
+        if (!table || !table.isConnected || !wrap) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const axis = event.currentTarget.dataset.axis;
+        const wrapRect = wrap.getBoundingClientRect();
+        const tRect = table.getBoundingClientRect();
+        try {
+            if (axis === 'col') {
+                const row = table.rows[0];
+                if (!row) {
+                    return;
+                }
+                // Width of the column it will sit beside; clamp to the last one when
+                // inserting at the trailing edge.
+                const ref = row.children[Math.min(idx, row.children.length - 1)];
+                if (!ref) {
+                    return;
+                }
+                const rr = ref.getBoundingClientRect();
+                const left = idx >= row.children.length ? rr.right : rr.left;
+                this.tableGhost = {
+                    style: `left:${left - wrapRect.left}px; top:${tRect.top - wrapRect.top}px; width:${rr.width}px; height:${tRect.height}px;`,
+                    cls: 'dg-tbl-ghost'
+                };
+            } else {
+                const ref = table.rows[Math.min(idx, table.rows.length - 1)];
+                if (!ref) {
+                    return;
+                }
+                const rr = ref.getBoundingClientRect();
+                const top = idx >= table.rows.length ? rr.bottom : rr.top;
+                this.tableGhost = {
+                    style: `left:${tRect.left - wrapRect.left}px; top:${top - wrapRect.top}px; width:${tRect.width}px; height:${rr.height}px;`,
+                    cls: 'dg-tbl-ghost'
+                };
+            }
+        } catch (e) {
+            this.tableGhost = null;
+        }
+    }
+
+    /** Ghost for a delete control: paint what is about to be removed, in red. */
+    handleRemovePreview(event) {
+        const table = this._overlayTable;
+        const wrap = this.template.querySelector('.dg-canvas-wrap');
+        if (!table || !table.isConnected || !wrap) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const axis = event.currentTarget.dataset.axis || (event.currentTarget.dataset.dir ? 'row' : 'col');
+        const wrapRect = wrap.getBoundingClientRect();
+        const tRect = table.getBoundingClientRect();
+        try {
+            if (axis === 'col') {
+                const row = table.rows[0];
+                const ref = row && row.children[idx];
+                if (!ref) {
+                    return;
+                }
+                const rr = ref.getBoundingClientRect();
+                this.tableGhost = {
+                    style: `left:${rr.left - wrapRect.left}px; top:${tRect.top - wrapRect.top}px; width:${rr.width}px; height:${tRect.height}px;`,
+                    cls: 'dg-tbl-ghost dg-tbl-ghost_remove'
+                };
+            } else {
+                const ref = table.rows[idx];
+                if (!ref) {
+                    return;
+                }
+                const rr = ref.getBoundingClientRect();
+                this.tableGhost = {
+                    style: `left:${tRect.left - wrapRect.left}px; top:${rr.top - wrapRect.top}px; width:${tRect.width}px; height:${rr.height}px;`,
+                    cls: 'dg-tbl-ghost dg-tbl-ghost_remove'
+                };
+            }
+        } catch (e) {
+            this.tableGhost = null;
+        }
+    }
+
+    handleGhostClear() {
+        this.tableGhost = null;
     }
 
     /**

@@ -528,6 +528,51 @@
    Styled to read as page CHROME rather than body content: dimmed, dashed, labelled.
    They are real editing surfaces (the format bar, rail chips and table tools all work
    in them), but they write Header_Html__c / Footer_Html__c, not the body. */
+/* Focus mode — the setup rows collapse and the page takes the screen.
+   Measured motivation: 389px of chrome sat above the toolbar on a 900px viewport,
+   43% of the screen spent before any document was visible. Everything here is
+   hidden, never removed, and one click restores it. The format bar and the canvas
+   deliberately survive. */
+.dg-designer-chrome_focus .dg-designer-toolbar,
+.dg-designer-chrome_focus .dg-html-editor-statusbar,
+.dg-designer-chrome_focus .dg-status-strip {
+    display: none;
+}
+
+/* With the chrome gone the sheet should claim the reclaimed height. */
+.dg-designer-chrome_focus .dg-designer-canvas-col {
+    max-height: calc(100vh - 150px);
+}
+
+/* Ghost preview: shows the column/row a control is about to add, or paints the one
+   it is about to remove. Showing the RESULT is clearer than labelling the action —
+   nobody has to hold "before or after this cell?" in their head. Purely decorative,
+   so it must never intercept a click on the control that summoned it. */
+.dg-tbl-ghost {
+    position: absolute;
+    z-index: 18;
+    pointer-events: none;
+    background: rgba(124, 58, 237, 0.16);
+    border: 1px dashed #7c3aed;
+    border-radius: 2px;
+    animation: dg-ghost-in 90ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.dg-tbl-ghost_remove {
+    background: rgba(194, 57, 52, 0.16);
+    border-color: #c23934;
+    border-style: solid;
+}
+
+@keyframes dg-ghost-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 /* Word-style insert-table grid picker. */
 .dg-grid-menu {
     min-width: 0;
