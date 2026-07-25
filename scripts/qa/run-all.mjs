@@ -48,8 +48,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  */
 const SUITES = [
     { id: 'metadata-audit', file: './suites/metadata-audit.mjs', needsOrg: false, heavy: false },
-    { id: 'apex-unit', file: './suites/apex-unit.mjs', needsOrg: true, heavy: true },
+    // apex-e2e FIRST among the org suites. Its scripts share ordered state — 02
+    // creates the data 03..06b assert against — and every other suite creates and
+    // deletes templates in the same org. Running it late let a sibling suite's
+    // cleanup pull the ground out from under e2e-06b, which then aborted with
+    // "run e2e-02 first". The chain passes cleanly in isolation; the failure was
+    // cross-suite interference, not a product defect.
     { id: 'apex-e2e', file: './suites/apex-e2e.mjs', needsOrg: true, heavy: true },
+    { id: 'apex-unit', file: './suites/apex-unit.mjs', needsOrg: true, heavy: true },
     { id: 'merge-tags', file: './suites/merge-tags.mjs', needsOrg: true, heavy: false },
     { id: 'flow-actions', file: './suites/flow-actions.mjs', needsOrg: true, heavy: false },
     { id: 'output-formats', file: './suites/output-formats.mjs', needsOrg: true, heavy: true },
