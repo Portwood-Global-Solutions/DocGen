@@ -1554,6 +1554,98 @@ async function main() {
             record('resizing a header image does not duplicate it', !!resizeReport.ok, resizeReport.why);
         }
 
+        // --- 4k. Enter = line break, Shift+Enter = paragraph --------------------
+        //
+        // contenteditable's Enter creates a <p>, which carries the template's
+        // paragraph margin — so address blocks, signature blocks and multi-line
+        // headers all came out double-spaced. In a document template the tight line
+        // is the common case, so the two keys are deliberately swapped.
+        //
+        // Driven with REAL key presses, not synthetic KeyboardEvents: a synthetic
+        // event never triggers the browser's own editing action, so the Shift+Enter
+        // half — whose whole contract is "we leave it to the browser" — cannot be
+        // observed any other way.
+        const seedPara = inPage(`
+      const pv = __dgFind('.dg-pv');
+      if (!pv) return false;
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+      const p = document.createElement('p');
+      p.textContent = 'line one';
+      pv.appendChild(p);
+      pv.focus();
+      const r = document.createRange();
+      r.selectNodeContents(p); r.collapse(false);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return true;`);
+        const readPara = inPage(`
+      const pv = __dgFind('.dg-pv');
+      return { blocks: pv.querySelectorAll('p, div').length, brInP: !!pv.querySelector('p br') };`);
+
+        let enterOk = { seeded: false };
+        try {
+            enterOk.seeded = await page.evaluate(seedPara);
+            if (enterOk.seeded) {
+                await page.waitForTimeout(400);
+                await page.keyboard.press('Enter');
+                await page.waitForTimeout(500);
+                const afterEnter = await page.evaluate(readPara);
+                enterOk.br = afterEnter.brInP && afterEnter.blocks === 1;
+                enterOk.brDetail = JSON.stringify(afterEnter);
+
+                await page.evaluate(seedPara);
+                await page.waitForTimeout(400);
+                await page.keyboard.press('Shift+Enter');
+                await page.waitForTimeout(500);
+                const afterShift = await page.evaluate(readPara);
+                enterOk.para = afterShift.blocks > 1;
+                enterOk.paraDetail = JSON.stringify(afterShift);
+            }
+        } catch (e) {
+            enterOk.err = e.message;
+        }
+        if (!enterOk.seeded) {
+            record('Enter/Shift+Enter behaviour', false, enterOk.err || 'could not seed the canvas');
+        } else {
+            record('Enter inserts a line break, staying in the paragraph', !!enterOk.br, enterOk.brDetail);
+            record('Shift+Enter starts a new paragraph', !!enterOk.para, enterOk.paraDetail);
+        }
+
+        // A list must keep "Enter = next item" — the browser owns that.
+        const listEnter = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+      const ul = document.createElement('ul');
+      ul.innerHTML = '<li>first</li>';
+      pv.appendChild(ul);
+      pv.focus();
+      const li = ul.querySelector('li');
+      const r = document.createRange(); r.selectNodeContents(li); r.collapse(false);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return true;`)
+        );
+        if (listEnter) {
+            await page.waitForTimeout(400);
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(500);
+            const listAfter = await page.evaluate(
+                inPage(`
+      const ul = __dgFind('.dg-pv').querySelector('ul');
+      return { items: ul ? ul.querySelectorAll('li').length : 0, brs: ul ? ul.querySelectorAll('br').length : -1 };`)
+            );
+            record(
+                'Enter in a list makes the next item, not a line break',
+                listAfter.items > 1,
+                JSON.stringify(listAfter)
+            );
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

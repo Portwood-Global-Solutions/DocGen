@@ -1853,6 +1853,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             if (this._slashMenuKeydown(e)) {
                                 return;
                             }
+                            // Enter = line break, Shift+Enter = new paragraph. After
+                            // the slash menu, which owns Enter while it is open.
+                            if (this._handleEnterKey(e)) {
+                                e.stopPropagation();
+                                return;
+                            }
                             // Track typing recency for the "/" recovery below.
                             // Only content keys — Tab/arrows must not count, or
                             // tabbing away right after typing would false-match.
@@ -7077,6 +7083,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 if (this._undoKeydown(e)) {
                     return;
                 }
+                // Tight line spacing matters most of all in a running header, where
+                // an address block is the common case and a paragraph gap between
+                // its lines is never what the author wanted.
+                if (this._handleEnterKey(e)) {
+                    e.stopPropagation();
+                    return;
+                }
                 e.stopPropagation();
             });
             // Image resize/move — the same handlers the body canvas gets.
@@ -7762,6 +7775,99 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._undoMark = { label: null, ts: 0 };
         this.canUndo = false;
         this.canRedo = false;
+    }
+
+    /**
+     * Enter inserts a LINE BREAK; Shift+Enter starts a NEW PARAGRAPH.
+     *
+     * Both are handled here. Neither can be delegated: the browser's plain Enter
+     * makes a paragraph and its Shift+Enter makes a line break, so leaving either
+     * to the default would give two keys with the same effect and no way to reach
+     * the other behaviour.
+     *
+     * This is deliberately the inverse of the usual convention, because in a
+     * DOCUMENT template the usual convention produces the wrong output most of the
+     * time. contenteditable's Enter creates a new <p>, and a <p> carries the
+     * template's paragraph margin — so an address block, a signature block, a
+     * multi-line header all came out double-spaced, and the author had to go to the
+     * source to fix what looked like an editor bug. A <br> keeps the lines in one
+     * paragraph and the spacing tight, which is what "the next line" almost always
+     * means here. Shift+Enter is still one keystroke away when a real paragraph
+     * break is wanted.
+     *
+     * Lists are the exception: inside an <li>, Enter genuinely means "next item",
+     * so the browser's own handling is left alone.
+     *
+     * Returns true when it handled the event.
+     */
+    _handleEnterKey(e) {
+        if (!e || e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey) {
+            return false;
+        }
+        let node = null;
+        let sel = null;
+        try {
+            sel = window.getSelection();
+            node = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+        } catch (err) {
+            return false;
+        }
+        if (!node) {
+            return false;
+        }
+        const el = node.nodeType === 3 ? node.parentElement : node;
+        if (!el || !this._surfaceContaining(el)) {
+            return false;
+        }
+        // "Next item" beats "next line" inside a list.
+        if (el.closest && el.closest('li')) {
+            return false;
+        }
+        e.preventDefault();
+        // Shift+Enter must be handled EXPLICITLY, not delegated. The browser's own
+        // Shift+Enter is already a line break, so simply letting it through left
+        // both keys doing the same thing and no way to make a real paragraph at all.
+        if (e.shiftKey) {
+            this._pushUndo('paragraph');
+            try {
+                document.execCommand('insertParagraph');
+                this.htmlEditorDirty = true;
+            } catch (err) {
+                /* nothing sensible to fall back to — the caret is unchanged */
+            }
+            return true;
+        }
+        this._pushUndo('linebreak');
+        try {
+            if (document.execCommand('insertLineBreak')) {
+                this.htmlEditorDirty = true;
+                return true;
+            }
+        } catch (err) {
+            /* fall through to the manual insert */
+        }
+        try {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            const br = document.createElement('br');
+            range.insertNode(br);
+            // A <br> at the very end of a block renders nothing — the line only
+            // becomes visible once something follows it. Browsers solve this with a
+            // trailing filler break; without it Enter at the end of a paragraph
+            // looks like it did nothing at all.
+            if (!br.nextSibling) {
+                br.parentNode.insertBefore(document.createElement('br'), br.nextSibling);
+            }
+            const after = document.createRange();
+            after.setStartAfter(br);
+            after.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(after);
+            this.htmlEditorDirty = true;
+        } catch (err) {
+            /* the browser's default already ran or the selection is gone */
+        }
+        return true;
     }
 
     /**
