@@ -18,7 +18,10 @@ import {
     prettyPrintHtml,
     scopeHtmlForInlinePreview,
     buildTagPalette,
-    buildBlockPalette
+    buildBlockPalette,
+    splitRegions,
+    joinRegions,
+    stripRegionMarkers
 } from './docGenAuthoringKit';
 
 // Each predesigned starter carries its natural object — the wizard's starter
@@ -5981,11 +5984,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * state. Throws on failure — callers own the error toast.
      */
     async _processAndSaveHtmlBody(templateId, htmlText, fileName, zipImages, source) {
+        // REGIONS: this is the single choke point every body reaches on its way to a
+        // ContentVersion — editor save, file upload, AI paste-back, switch-to-HTML.
+        // Adopting here means an author can upload an HTML file that carries
+        // data-dg-region markers and have its header and footer land in the right
+        // fields, and it means no marker can reach the renderer by any route.
+        // Idempotent: a body that came through _currentDraftHtml is already split,
+        // reports hadRegions === false, and passes through untouched.
+        htmlText = this._adoptRegions(htmlText).body;
         // GUARD: never stage editor-internal artifacts. If a preview-wrapped
         // payload (scoped .dg-pv page), tag pills, or drop markers slip in —
         // e.g. from a stale cached bundle's older code path — unwrap and
         // strip them so the stored body is always clean template HTML.
-        htmlText = this._sanitizeStagedHtml(htmlText);
+        htmlText = stripRegionMarkers(this._sanitizeStagedHtml(htmlText));
         const imagePaths = (zipImages && zipImages.imagePaths) || [];
         const imageBytes = (zipImages && zipImages.imageBytes) || [];
 
@@ -9531,6 +9542,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _enterVisualMode(html) {
+        // Regions: the source the author edits is ONE document, header and footer
+        // included. The canvas only ever renders the body, and the bands render the
+        // chrome, so peel them apart on the way in. A legacy template carries no
+        // markers — hadRegions is false and nothing is touched, which is why an
+        // existing header is never blanked by opening the designer.
+        const parts = this._adoptRegions(html);
+        html = parts.body;
         this._visualOriginalCode = html;
         this._visualEnteredDom = null; // captured in renderedCallback after mount
         // A different document is about to occupy the canvas — undoing into the
@@ -10312,11 +10330,54 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    // ===== Regions plumbing (DESIGNER_PLAN_V2 step 2) =========================
+    //
+    // The author has ONE source document; the render engine keeps the three-field
+    // contract it has today. These two methods are the whole boundary between
+    // those views, so there is exactly one place a region marker can leak.
+
+    /**
+     * Take a document that may carry region markers, move its header and footer
+     * into the template fields, and hand back the body-only document.
+     *
+     * Only overwrites the header/footer fields when markers were actually present.
+     * A legacy template reports hadRegions === false, so opening one can never
+     * blank a header that lives only in Header_Html__c — the backwards-compatibility
+     * guarantee, and the reason this needs no migration.
+     */
+    _adoptRegions(html) {
+        const parts = splitRegions(html || '');
+        if (parts.hadRegions) {
+            if (parts.header !== null) {
+                this.editTemplateHeaderHtml = parts.header;
+            }
+            if (parts.footer !== null) {
+                this.editTemplateFooterHtml = parts.footer;
+            }
+        }
+        return parts;
+    }
+
+    /**
+     * The one source document, header and footer included — what "View Source"
+     * shows and what the author thinks of as "the template". Never goes to a
+     * ContentVersion; _currentDraftHtml is the renderer-bound view.
+     */
+    _currentDraftDocument() {
+        return joinRegions(this._currentDraftHtml(), this.editTemplateHeaderHtml, this.editTemplateFooterHtml);
+    }
+
     /** Leave visual mode — lossless when nothing changed. */
     /**
-     * The full document as it stands RIGHT NOW — visual-mode edits serialized
+     * The BODY document as it stands RIGHT NOW — visual-mode edits serialized
      * non-destructively (same clone/unpillify/body-swap as exit, without
      * leaving visual mode), source mode read straight from the textarea.
+     *
+     * Renderer-bound: this is what gets staged into a ContentVersion and what the
+     * PDF preview merges, so it is body-only and carries no region markers. The
+     * source textarea holds the JOINED document, so reading it back here splits it
+     * first — that is how an author's edit to the header inside View Source finds
+     * its way to Header_Html__c.
      */
     _currentDraftHtml() {
         if (this.showHtmlBodyVisual) {
@@ -10325,13 +10386,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (pv && this._visualOriginalCode != null) {
                 const edited = this._extractVisualBody(pv);
                 const bodyRe = /(<body\b[^>]*>)[\s\S]*?(<\/body\s*>)/i;
-                return bodyRe.test(this._visualOriginalCode)
+                const doc = bodyRe.test(this._visualOriginalCode)
                     ? this._visualOriginalCode.replace(bodyRe, (m, open, close) => open + '\n' + edited + '\n' + close)
                     : edited;
+                // Belt and braces — the canvas holds body only, but a marker pasted
+                // into it must not survive to the renderer.
+                return stripRegionMarkers(doc);
             }
         }
         const ta = this.template.querySelector('.dg-html-body-editor');
-        return (ta && ta.value) || this._lastUploadedHtmlText || '';
+        const raw = (ta && ta.value) || this._lastUploadedHtmlText || '';
+        return this._adoptRegions(raw).body;
     }
 
     /**
@@ -10502,11 +10567,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     // Body-fragment template (no <body> wrapper): the content IS the doc.
                     newCode = edited;
                 }
-                ta.value = prettyPrintHtml(newCode);
+                // Regions: what the author sees in View Source is the WHOLE
+                // document, running header and footer included. This is the join;
+                // _currentDraftHtml splits it back apart on the way to the renderer.
+                // Templates with neither header nor footer come back unmarked, so a
+                // plain document's source is byte-for-byte what it always was.
+                ta.value = prettyPrintHtml(
+                    joinRegions(newCode, this.editTemplateHeaderHtml, this.editTemplateFooterHtml)
+                );
                 this.htmlEditorDirty = true;
             } else {
-                // Untouched — hand back the original text exactly.
-                ta.value = this._visualOriginalCode;
+                // Untouched — hand back the original text exactly, but still show
+                // the chrome: the author asked to see the source of the document,
+                // not of the body.
+                ta.value = joinRegions(
+                    this._visualOriginalCode,
+                    this.editTemplateHeaderHtml,
+                    this.editTemplateFooterHtml
+                );
             }
         }
         this.showHtmlBodyVisual = false;

@@ -1497,3 +1497,175 @@ export function buildTagPalette(shape) {
 
     return sections;
 }
+
+// ===== Regions: one source document (DESIGNER_PLAN_V2 step 2) ================
+//
+// A template used to have three sources of truth: the body lived in a
+// ContentVersion, the running header in Header_Html__c and the running footer in
+// Footer_Html__c. Nothing tied them together, so "View Source" showed only part of
+// the document, a Word import had nowhere to put <w:hdr>, and every new feature
+// had to be plumbed through each surface separately.
+//
+// Regions give the AUTHOR one source document:
+//
+//   <body>
+//     <div data-dg-region="header">…running header…</div>
+//     <div data-dg-region="body">…the document…</div>
+//     <div data-dg-region="footer">…running footer…</div>
+//   </body>
+//
+// The RENDER ENGINE never sees it. splitRegions() peels the chrome back off on the
+// way to saving and the three fields are written exactly as they are today, so
+// wrapHtmlForPdf keeps its current contract and nothing about PDF output changes.
+// That is what keeps this from being a risky change.
+//
+// Templates saved before this existed carry no markers: splitRegions reports
+// hadRegions === false and hands the document back untouched, so they load, edit
+// and save exactly as before. No migration.
+
+export const DG_REGION_ATTR = 'data-dg-region';
+
+const BODY_TAGS_RE = /(<body\b[^>]*>)([\s\S]*?)(<\/body\s*>)/i;
+
+/** The document's <body> contents, plus a function to put new contents back. */
+function bodySlice(html) {
+    const doc = html || '';
+    const m = doc.match(BODY_TAGS_RE);
+    if (m) {
+        return {
+            inner: m[2],
+            rebuild: (next) => doc.replace(BODY_TAGS_RE, (full, open, mid, close) => open + '\n' + next + '\n' + close)
+        };
+    }
+    // Body-fragment template (no <body> wrapper): the content IS the document.
+    return { inner: doc, rebuild: (next) => next };
+}
+
+function parseFragment(html) {
+    const tpl = document.createElement('template');
+    // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip into an inert <template>; never attached to the page
+    tpl.innerHTML = html || '';
+    return tpl;
+}
+
+function serializeChildren(node) {
+    const box = document.createElement('div');
+    while (node.firstChild) {
+        box.appendChild(node.firstChild);
+    }
+    // eslint-disable-next-line @lwc/lwc/no-inner-html -- serializing an inert fragment back to a string
+    return box.innerHTML.trim();
+}
+
+/**
+ * Peel a region-marked document into its three surfaces.
+ *
+ * Returns { header, body, footer, hadRegions }. `body` is the FULL document with
+ * the body region's contents spliced back between the <body> tags, so <head>,
+ * <style> and @page survive untouched — the same discipline _exitVisualMode uses.
+ *
+ * A document with no markers comes back verbatim as `body` with null chrome and
+ * hadRegions === false. That is the backwards-compatibility guarantee: callers
+ * must check hadRegions before overwriting Header_Html__c / Footer_Html__c, or a
+ * legacy template would have its header blanked the first time it was opened.
+ */
+export function splitRegions(html) {
+    const out = { header: null, body: html || '', footer: null, hadRegions: false };
+    if (!html || html.indexOf(DG_REGION_ATTR) === -1) {
+        return out;
+    }
+    const slice = bodySlice(html);
+    const tpl = parseFragment(slice.inner);
+    const regions = tpl.content.querySelectorAll('[' + DG_REGION_ATTR + ']');
+    if (!regions.length) {
+        return out;
+    }
+    out.hadRegions = true;
+    let bodyRegion = null;
+    for (const el of regions) {
+        // Only TOP-LEVEL regions count. A nested marker is content that happens to
+        // carry the attribute (a pasted fragment, a copied block) and unwrapping it
+        // would silently promote it to running chrome.
+        if (el.parentNode !== tpl.content) {
+            continue;
+        }
+        const kind = (el.getAttribute(DG_REGION_ATTR) || '').toLowerCase();
+        if (kind === 'header') {
+            out.header = serializeChildren(el);
+            el.remove();
+        } else if (kind === 'footer') {
+            out.footer = serializeChildren(el);
+            el.remove();
+        } else if (kind === 'body' && !bodyRegion) {
+            bodyRegion = el;
+        }
+    }
+    let bodyInner;
+    if (bodyRegion) {
+        bodyInner = serializeChildren(bodyRegion);
+    } else {
+        // Header/footer marked but no explicit body region: whatever is left after
+        // removing them IS the body.
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- serializing an inert fragment back to a string
+        bodyInner = serializeChildren(tpl.content);
+    }
+    out.body = stripRegionMarkers(slice.rebuild(bodyInner));
+    return out;
+}
+
+/**
+ * Compose one source document from the three surfaces.
+ *
+ * When there is no header and no footer the document is returned UNCHANGED —
+ * a plain template never grows markers it does not need, so nothing about the
+ * common case differs from before.
+ */
+export function joinRegions(bodyDocHtml, headerHtml, footerHtml) {
+    const header = (headerHtml || '').trim();
+    const footer = (footerHtml || '').trim();
+    if (!header && !footer) {
+        return bodyDocHtml || '';
+    }
+    const slice = bodySlice(bodyDocHtml || '');
+    const parts = [];
+    if (header) {
+        parts.push('<div ' + DG_REGION_ATTR + '="header">\n' + header + '\n</div>');
+    }
+    parts.push('<div ' + DG_REGION_ATTR + '="body">\n' + slice.inner.trim() + '\n</div>');
+    if (footer) {
+        parts.push('<div ' + DG_REGION_ATTR + '="footer">\n' + footer + '\n</div>');
+    }
+    return slice.rebuild(parts.join('\n'));
+}
+
+/**
+ * Unwrap every region marker, keeping its children.
+ *
+ * The last line of defence: a marker must never reach the renderer, the same
+ * discipline already applied to .dg-drop-marker and data-dg-paint. Called on
+ * everything bound for a ContentVersion even when the caller believes it has
+ * already split, because "believes" is how the drop-marker bug happened.
+ */
+export function stripRegionMarkers(html) {
+    if (!html || html.indexOf(DG_REGION_ATTR) === -1) {
+        return html || '';
+    }
+    const slice = bodySlice(html);
+    const tpl = parseFragment(slice.inner);
+    let marked = tpl.content.querySelectorAll('[' + DG_REGION_ATTR + ']');
+    let guard = 0;
+    while (marked.length && guard++ < 50) {
+        for (const el of marked) {
+            const parent = el.parentNode;
+            if (!parent) {
+                continue;
+            }
+            while (el.firstChild) {
+                parent.insertBefore(el.firstChild, el);
+            }
+            parent.removeChild(el);
+        }
+        marked = tpl.content.querySelectorAll('[' + DG_REGION_ATTR + ']');
+    }
+    return slice.rebuild(serializeChildren(tpl.content));
+}

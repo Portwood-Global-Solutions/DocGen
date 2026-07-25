@@ -1100,6 +1100,131 @@ async function main() {
             undoReport.buttonState
         );
 
+        // --- 4f. Regions: one source document (DESIGNER_PLAN_V2 step 2) ---------
+        //
+        // Header, body and footer are marked regions of the template's own HTML for
+        // the AUTHOR, and three separate fields for the RENDERER. These drive the
+        // real UI — type in the band, click Source, click Visual — because the
+        // helpers are module-private and testing them directly would prove only
+        // that two pure functions agree with each other.
+        const regionReport = await page.evaluate(
+            inPage(`
+      const out = {};
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const modeBtn = (label) => {
+        const seg = __dgFind('.dg-mode-seg');
+        return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
+      };
+      const ta = () => __dgFind('.dg-html-body-editor');
+
+      return (async () => {
+        const pv = __dgFind('.dg-pv');
+        const band = __dgFind('.dg-chrome-band_header');
+        const foot = __dgFind('.dg-chrome-band_footer');
+        if (!band || !modeBtn('Source') || !modeBtn('Visual')) {
+          out.setup = 'missing band or mode buttons';
+          return out;
+        }
+        out.setup = 'ok';
+
+        // Known content in all three surfaces.
+        const style = pv.querySelector('style');
+        while (pv.firstChild) pv.removeChild(pv.firstChild);
+        if (style) pv.appendChild(style);
+        const p = document.createElement('p');
+        p.textContent = 'BODYPROBE1234';
+        pv.appendChild(p);
+        pv.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+
+        band.focus();
+        band.textContent = 'HEADERPROBE1234';
+        band.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        if (foot) {
+          foot.focus();
+          foot.textContent = 'FOOTERPROBE1234';
+          foot.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        }
+        await step(400);
+
+        // --- Source view shows the WHOLE document -----------------------------
+        modeBtn('Source').click();
+        await step(900);
+        const src = (ta() && ta().value) || '';
+        out.sourceHasHeaderRegion = /data-dg-region="header"/.test(src) && src.indexOf('HEADERPROBE1234') !== -1;
+        out.sourceHasBodyRegion = /data-dg-region="body"/.test(src) && src.indexOf('BODYPROBE1234') !== -1;
+        out.sourceHasFooterRegion = !foot || (/data-dg-region="footer"/.test(src) && src.indexOf('FOOTERPROBE1234') !== -1);
+
+        // --- Round-trip back to Visual ----------------------------------------
+        modeBtn('Visual').click();
+        await step(1600);
+        const pv2 = __dgFind('.dg-pv');
+        const band2 = __dgFind('.dg-chrome-band_header');
+        const foot2 = __dgFind('.dg-chrome-band_footer');
+        const bodyHtml = pv2 ? pv2.innerHTML : '';
+        out.headerSurvived = !!band2 && band2.textContent.indexOf('HEADERPROBE1234') !== -1;
+        out.bodySurvived = bodyHtml.indexOf('BODYPROBE1234') !== -1;
+        out.footerSurvived = !foot2 || foot2.textContent.indexOf('FOOTERPROBE1234') !== -1;
+        // The canvas is the BODY. Chrome in it would print twice.
+        out.headerNotInBody = bodyHtml.indexOf('HEADERPROBE1234') === -1;
+        // No marker may survive into what reaches the renderer.
+        out.noMarkerInCanvas = bodyHtml.indexOf('data-dg-region') === -1;
+
+        // --- Legacy template: no markers, header must NOT be blanked ----------
+        // This is the backwards-compatibility guarantee. Asserted, not assumed.
+        modeBtn('Source').click();
+        await step(900);
+        const t2 = ta();
+        if (!t2) { out.legacy = 'no source editor'; return out; }
+        t2.value = '<!DOCTYPE html><html><head><style>@page { size: Letter portrait; }</style></head>'
+                 + '<body><p>LEGACYBODY9999</p></body></html>';
+        t2.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        await step(300);
+        modeBtn('Visual').click();
+        await step(1600);
+        const pv3 = __dgFind('.dg-pv');
+        const band3 = __dgFind('.dg-chrome-band_header');
+        out.legacy = (pv3 && pv3.innerHTML.indexOf('LEGACYBODY9999') !== -1)
+          ? (band3 && band3.textContent.indexOf('HEADERPROBE1234') !== -1
+              ? 'ok'
+              : 'an unmarked document blanked the header')
+          : 'unmarked document did not load into the canvas';
+        return out;
+      })();`)
+        );
+        if (regionReport.setup !== 'ok') {
+            record('regions: designer exposes bands + mode buttons', false, regionReport.setup);
+        } else {
+            record(
+                'regions: Source view shows the header as a marked region',
+                !!regionReport.sourceHasHeaderRegion,
+                'header region + content must appear in the one source document'
+            );
+            record('regions: Source view shows the body as a marked region', !!regionReport.sourceHasBodyRegion, '');
+            record(
+                'regions: Source view shows the footer as a marked region',
+                !!regionReport.sourceHasFooterRegion,
+                ''
+            );
+            record('regions: round-trip preserves the header', !!regionReport.headerSurvived, '');
+            record('regions: round-trip preserves the body', !!regionReport.bodySurvived, '');
+            record('regions: round-trip preserves the footer', !!regionReport.footerSurvived, '');
+            record(
+                'regions: header does not leak into the body canvas',
+                !!regionReport.headerNotInBody,
+                'chrome in the body would print twice'
+            );
+            record(
+                'regions: no data-dg-region marker reaches the renderer',
+                !!regionReport.noMarkerInCanvas,
+                'same discipline as .dg-drop-marker / data-dg-paint'
+            );
+            record(
+                'regions: a legacy template with no markers still loads and keeps its header',
+                regionReport.legacy === 'ok',
+                regionReport.legacy
+            );
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',
