@@ -643,11 +643,21 @@ public with sharing class DocGenHtmlRenderer {
             // position:fixed sized watermark — body content sits above via z-index
             bodyHtml += watermarkOverlayHtml;
         }
+        // data-dg-region tells the Designer that these divs are running CHROME, not
+        // body content, so a Word template converted to HTML puts <w:hdr>/<w:ftr>
+        // into Header_Html__c / Footer_Html__c instead of leaving them inline at the
+        // top of the document (DESIGNER_PLAN_V2 step 3). Purely an annotation:
+        // Flying Saucer selects these divs by #id and ignores unknown data
+        // attributes, so PDF output is byte-identical.
+        //
+        // Only the DEFAULT pair is marked. The -first variants below have no
+        // template field to be adopted into (there is one Header_Html__c, not one
+        // per page context), and marking them would drop them on import.
         if (hasHeader) {
-            bodyHtml += '<div id="docgen-header">' + headerHtml + '</div>';
+            bodyHtml += '<div id="docgen-header" data-dg-region="header">' + headerHtml + '</div>';
         }
         if (hasFooter) {
-            bodyHtml += '<div id="docgen-footer">' + footerHtml + '</div>';
+            bodyHtml += '<div id="docgen-footer" data-dg-region="footer">' + footerHtml + '</div>';
         }
         if (hasHeaderFirst) {
             bodyHtml += '<div id="docgen-header-first">' + headerFirstHtml + '</div>';

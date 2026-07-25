@@ -2481,6 +2481,48 @@ private class DocGenHtmlRendererTest {
     }
 
     @IsTest
+    static void testRunningHeaderFooterCarryDesignerRegionMarkers() {
+        // DESIGNER_PLAN_V2 step 3 — a Word template's <w:hdr>/<w:ftr> used to land
+        // inline at the top of the converted HTML, so switching that template to
+        // HTML put the running header into the document BODY, where it printed once
+        // in the flow instead of on every page.
+        //
+        // data-dg-region tells the Designer these divs are running chrome, so the
+        // import routes them into Header_Html__c / Footer_Html__c. It is an
+        // annotation only: Flying Saucer selects these divs by #id, so the running
+        // element wiring and the rendered output are unchanged.
+        String docXml =
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+            '<!-- DOCGEN_HEADER_START --><w:hdr><w:p><w:r><w:t>Running Header Text</w:t></w:r></w:p></w:hdr><!-- DOCGEN_HEADER_END -->' +
+            '<!-- DOCGEN_FOOTER_START --><w:ftr><w:p><w:r><w:t>Running Footer Text</w:t></w:r></w:p></w:ftr><!-- DOCGEN_FOOTER_END -->' +
+            '<w:p><w:r><w:t>Body Paragraph</w:t></w:r></w:p>' +
+            '</w:body></w:document>';
+        String html = DocGenHtmlRenderer.convertToHtml(docXml);
+
+        System.assert(
+            html.contains('id="docgen-header" data-dg-region="header"'),
+            'Expected the running header div to be marked as a header region for the Designer'
+        );
+        System.assert(
+            html.contains('id="docgen-footer" data-dg-region="footer"'),
+            'Expected the running footer div to be marked as a footer region for the Designer'
+        );
+        // The annotation must not disturb the running-element wiring that makes the
+        // header repeat on every page.
+        System.assert(
+            html.contains('#docgen-header { position: running(docgen-running-header); }'),
+            'Expected the running header CSS to be unchanged by the region annotation'
+        );
+        System.assert(
+            html.contains('content: element(docgen-running-header)'),
+            'Expected the @page margin box to still pull in the running header'
+        );
+        System.assert(html.contains('Running Header Text'), 'Expected header content to still render');
+        System.assert(html.contains('Running Footer Text'), 'Expected footer content to still render');
+        System.assert(html.contains('Body Paragraph'), 'Expected body content to still render');
+    }
+
+    @IsTest
     static void testTitlePgWithoutFirstHeaderFallsBackToSuppression() {
         // Backward compat: docs with <w:titlePg/> but no first-typed header
         // should suppress the default header on page 1 (legacy v1 behavior).
