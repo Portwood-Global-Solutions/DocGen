@@ -9,10 +9,10 @@
 #   full    : FULL RESET — remove ALL demo data, templates, generated docs, and
 #             template bodies. Returns the org to clone-clean data state.
 #             (The custom Demo_*__c schema + DocGen_Demo permset are KEPT so you
-#              can re-seed quickly with setup.sh. To remove the schema too, see
+#              can re-seed quickly with scripts/demo/setup-demo.sh. To remove the schema too, see
 #              README "Removing the schema".)
 #
-# Usage: bash "DEMO TEMPLATES/reset/reset.sh" <orgAlias> refresh|full
+# Usage: bash scripts/demo/reset/reset.sh <orgAlias> refresh|full
 # ============================================================================
 set -euo pipefail
 ORG="${1:?usage: reset.sh <org> refresh|full}"
@@ -38,7 +38,7 @@ case "$MODE" in
       echo "    giant remaining: ${rem:-?}"
       [ "${rem:-1}" = "0" ] && break
     done
-    echo "    Re-seed anytime with: bash \"$ROOT/install/setup.sh\" $ORG"
+    echo "    Re-seed anytime with: ./scripts/demo/setup-demo.sh $ORG"
     ;;
   *)
     echo "Unknown mode '$MODE'. Use 'refresh' or 'full'."; exit 1;;

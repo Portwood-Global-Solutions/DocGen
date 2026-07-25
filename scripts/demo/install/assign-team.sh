@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Grant the demo permission sets to teammates.
-#   Usage: bash "DEMO TEMPLATES/install/assign-team.sh" <orgAlias> user1@example.com user2@example.com ...
+#   Usage: bash scripts/demo/install/assign-team.sh <orgAlias> user1@example.com user2@example.com ...
 #   Each user gets DocGen_Admin (template builder + generate) and DocGen_Demo
 #   (the demo objects/fields/tabs). Use DocGen_User instead of DocGen_Admin for
 #   generate-only access (edit the PSETS line below).

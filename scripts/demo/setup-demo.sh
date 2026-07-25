@@ -9,19 +9,24 @@
 # WHAT THIS IS
 # -----------
 # The same scratch-org bootstrap the QA harness uses (scripts/qa/setup-org.sh),
-# plus the demo schema, ~2,400 seeded records and the 23-template example
+# plus the demo schema, ~2,400 seeded records and the 31-template example
 # library. A demo org and a test org want almost exactly the same thing — the
 # product deployed, permissions assigned, components placed on a record page and
 # realistic data to point at — so this reuses that bootstrap rather than
 # maintaining a second one that drifts.
 #
-# WHERE THE PIECES CAME FROM
-# --------------------------
-# The schema/seed/install/reset tooling under "DEMO TEMPLATES" was written for
-# one specific sandbox and removed from the repo in #174 because it is useless
-# to anyone who is not us. It is restored here as INTERNAL tooling and pointed at
-# an arbitrary org alias. The shareable half — html/ and the two markdown files —
-# is unchanged and still what gets published.
+# TWO ROOTS, ON PURPOSE
+# ---------------------
+# scripts/demo/   — this tooling: schema, seed, install, reset. INTERNAL. It was
+#                   written for one specific sandbox and removed from the repo in
+#                   #174; restored here, pointed at an arbitrary org alias.
+# DEMO TEMPLATES/ — the example library: html/ bodies, the docx/pptx builders,
+#                   and the two markdown files. PUBLISHED. Nothing in it is
+#                   org-specific, and the #174 trim still holds for what ships.
+#
+# The installer's manifest names bodies relative to the library ("html/…",
+# "docx/out/…"), so it resolves the two roots separately rather than assuming
+# the tooling and the content sit together.
 #
 # ON CPQ
 # ------
@@ -76,7 +81,7 @@ say "Base org (product, permission sets, record page)"
 # (events, education, certificates, statements). Deployed from outside force-app
 # so a package build can never pick them up.
 say "Deploying demo schema"
-sf project deploy start --target-org "$ORG" --source-dir "$DEMO/schema/force-app" --ignore-conflicts --wait 20
+sf project deploy start --target-org "$ORG" --source-dir "$HERE/schema/force-app" --ignore-conflicts --wait 20
 
 say "Assigning the demo permission set"
 sf org assign permset --target-org "$ORG" --name DocGen_Demo 2>/dev/null ||
@@ -89,12 +94,12 @@ sf org assign permset --target-org "$ORG" --name DocGen_Demo 2>/dev/null ||
 say "Seeding demo data"
 for s in seed-01-core seed-02-events seed-03-education seed-04-records seed-05-giant; do
     printf '   %s … ' "$s"
-    if sf apex run --target-org "$ORG" -f "$DEMO/seed/$s.apex" >/dev/null 2>&1; then
+    if sf apex run --target-org "$ORG" -f "$HERE/seed/$s.apex" >/dev/null 2>&1; then
         echo "ok"
     else
         # Not fatal. A later scenario failing to seed should not cost you the
         # whole org — you find out which one, and every other demo still works.
-        echo "FAILED (re-run: sf apex run --target-org $ORG -f \"$DEMO/seed/$s.apex\")"
+        echo "FAILED (re-run: sf apex run --target-org $ORG -f \"$HERE/seed/$s.apex\")"
     fi
 done
 
@@ -104,7 +109,7 @@ python3 "$DEMO/docx/build_docx.py" >/dev/null
 python3 "$DEMO/pptx/build_pptx.py" >/dev/null
 
 say "Installing the template library"
-node "$DEMO/install/install.mjs" "$ORG"
+node "$HERE/install/install.mjs" "$ORG"
 
 say "Done — $ORG is ready to demo"
 cat <<EOF

@@ -6,8 +6,12 @@
 //   3. Creates namespaced DocGen_Template__c + active DocGen_Template_Version__c
 //      (DML insert — works in a subscriber org; no global save method needed)
 //
-// Usage: node "DEMO TEMPLATES/install/install.mjs" <orgAlias> [--only key1,key2]
-//   default org alias: dave@portwood.dev.demo
+// Usage: node scripts/demo/install/install.mjs <orgAlias> [--only=key1,key2]
+//
+// This tooling lives under scripts/demo/ (internal), while the template BODIES
+// it uploads live under "DEMO TEMPLATES/" (the shareable example library). The
+// manifest's `file` paths are relative to that library — "html/financial/...",
+// "docx/out/..." — so the two roots are resolved separately below.
 // ============================================================================
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -17,9 +21,12 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const run = promisify(execFile);
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DEMO_ROOT = path.resolve(HERE, "..");
-const ORG = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : "dave@portwood.dev.demo";
+const HERE = path.dirname(fileURLToPath(import.meta.url)); // scripts/demo/install
+const REPO_ROOT = path.resolve(HERE, "..", "..", "..");
+// Template bodies, NOT the tooling. Kept apart on purpose: the library is
+// published, this installer is not.
+const DEMO_ROOT = path.join(REPO_ROOT, "DEMO TEMPLATES");
+const ORG = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : null;
 const onlyArg = process.argv.find((a) => a.startsWith("--only="));
 const ONLY = onlyArg ? onlyArg.split("=")[1].split(",") : null;
 
@@ -63,6 +70,12 @@ function apexLiteral(s) {
 }
 
 async function main() {
+  // No default org. The old default was one specific sandbox, so running this
+  // with no argument silently targeted somebody else's org.
+  if (!ORG) {
+    console.error("usage: node scripts/demo/install/install.mjs <orgAlias> [--only=key1,key2]");
+    process.exit(1);
+  }
   const manifest = JSON.parse(await fs.readFile(path.join(HERE, "manifest.json"), "utf8"));
   let templates = manifest.templates;
   if (ONLY) templates = templates.filter((t) => ONLY.includes(t.key));

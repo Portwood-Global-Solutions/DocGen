@@ -8,21 +8,23 @@
 //   Product2 deletion CASCADE the standard entries.
 // ============================================================================
 List<PricebookEntry> mega = [
-    SELECT Id FROM PricebookEntry
-    WHERE Product2.ProductCode LIKE 'GIANT-%' AND Pricebook2.IsStandard = false
-    LIMIT 2000];
+    SELECT Id
+    FROM PricebookEntry
+    WHERE Product2.ProductCode LIKE 'GIANT-%' AND Pricebook2.IsStandard = FALSE
+    LIMIT 2000
+];
 if (!mega.isEmpty()) {
     delete mega;
 } else {
     List<Product2> prods = [SELECT Id FROM Product2 WHERE ProductCode LIKE 'GIANT-%' LIMIT 1000];
     if (!prods.isEmpty()) {
-        delete prods;                      // cascades the standard PricebookEntries
+        delete prods; // cascades the standard PricebookEntries
     } else {
         delete [SELECT Id FROM Pricebook2 WHERE Name = 'Portwood Mega Catalog (Giant Demo)'];
     }
 }
 Integer remaining =
     [SELECT COUNT() FROM Product2 WHERE ProductCode LIKE 'GIANT-%'] +
-    [SELECT COUNT() FROM PricebookEntry WHERE Product2.ProductCode LIKE 'GIANT-%' AND Pricebook2.IsStandard = false] +
+    [SELECT COUNT() FROM PricebookEntry WHERE Product2.ProductCode LIKE 'GIANT-%' AND Pricebook2.IsStandard = FALSE] +
     [SELECT COUNT() FROM Pricebook2 WHERE Name = 'Portwood Mega Catalog (Giant Demo)'];
 System.debug('GIANT-REMAINING ' + remaining);
