@@ -1489,6 +1489,71 @@ async function main() {
             );
         }
 
+        // --- 4j. Resizing an image in the header must not duplicate it ----------
+        //
+        // The image resize/move handlers were wired to the body canvas only, so a
+        // corner drag in a band fell through to the browser's NATIVE image drag
+        // inside a contenteditable — which COPIES the image. Every attempted resize
+        // left another logo behind.
+        const resizeReport = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const modeBtn = (label) => {
+        const seg = __dgFind('.dg-mode-seg');
+        return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
+      };
+      return (async () => {
+        if (!__dgFind('.dg-pv') && modeBtn('Visual')) { modeBtn('Visual').click(); await step(1800); }
+        const band = __dgFind('.dg-chrome-band_header');
+        if (!band) return { ok:false, why:'no header band' };
+
+        // Put one asset image in the header via the rail (the real route).
+        band.textContent = '';
+        band.focus();
+        const r0 = document.createRange(); r0.selectNodeContents(band); r0.collapse(false);
+        const s0 = window.getSelection(); s0.removeAllRanges(); s0.addRange(r0);
+        document.dispatchEvent(new Event('selectionchange'));
+        await step(300);
+        const imgBtn = __dgFind('[data-panel="images"]');
+        if (!imgBtn) return { ok:false, why:'no images panel' };
+        imgBtn.click(); await step(1600);
+        const thumb = __dgFind('.dg-image-thumb');
+        if (!thumb) { imgBtn.click(); return { ok:true, why:'skip: no assets' , skipped:true }; }
+        thumb.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        thumb.click();
+        await step(1000);
+        const close = __dgFind('[data-panel="images"]'); if (close) close.click();
+        await step(400);
+
+        const b2 = __dgFind('.dg-chrome-band_header');
+        const before = b2.querySelectorAll('img').length;
+        if (before !== 1) return { ok:false, why:'expected exactly 1 image after insert, got ' + before };
+
+        // Drag the bottom-right corner, the way a resize happens.
+        const img = b2.querySelector('img');
+        const rect = img.getBoundingClientRect();
+        const cx = Math.round(rect.right - 3), cy = Math.round(rect.bottom - 3);
+        img.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true, clientX:cx, clientY:cy}));
+        img.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true, clientX:cx, clientY:cy}));
+        for (let i = 1; i <= 5; i++) {
+          document.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true, clientX:cx + i*10, clientY:cy}));
+        }
+        document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, composed:true}));
+        await step(600);
+
+        const b3 = __dgFind('.dg-chrome-band_header');
+        const after = b3.querySelectorAll('img').length;
+        const w = Math.round(b3.querySelector('img').getBoundingClientRect().width);
+        return { ok: after === 1, why: after === 1 ? ('resized to ' + w + 'px, still 1 image')
+                                                  : ('resize duplicated the image: ' + before + ' -> ' + after) };
+      })();`)
+        );
+        if (resizeReport.skipped) {
+            console.log(`  SKIP  resizing a header image does not duplicate it — ${resizeReport.why}`);
+        } else {
+            record('resizing a header image does not duplicate it', !!resizeReport.ok, resizeReport.why);
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

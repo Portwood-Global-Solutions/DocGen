@@ -7079,6 +7079,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
                 e.stopPropagation();
             });
+            // Image resize/move — the same handlers the body canvas gets.
+            //
+            // Without them, dragging an image's corner in a band fell through to the
+            // browser's NATIVE image drag inside a contenteditable, which copies the
+            // image rather than resizing it: "resizing images in the header adds
+            // additional images and duplicates it". _imgResizeStart preventDefaults
+            // on mousedown, which is what stops the native drag ever starting.
+            band.addEventListener('mousemove', (e) => {
+                this._imgResizeHover(e);
+                this._cellSelMove(e, band);
+                this._tableResizeHover(e, band);
+            });
+            band.addEventListener('mousedown', (e) => {
+                if (this._imgResizeStart(e, band)) {
+                    return;
+                }
+                this._cellSelDown(e, band);
+                this._tableResizeStart(e, band);
+            });
             band.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 this._showDropMarker(e, band);
@@ -9094,7 +9113,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     _imgResizeStart(event, pv) {
         const img = event.target && event.target.tagName === 'IMG' ? event.target : null;
-        if (!img || !pv.contains(img)) {
+        // _isInCanvas, not pv.contains — contains() is unreliable under the LWS
+        // namespace sandbox and would silently refuse to resize an image that IS in
+        // the surface, dropping the drag back to the native (duplicating) one.
+        if (!img || !this._isInCanvas(img, pv)) {
             return false;
         }
         // Body of the image = pick it up and move it; only the bottom-right
@@ -10432,6 +10454,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const img = doc.createElement('img');
         img.setAttribute('data-dg-tag', tag);
         img.setAttribute('contenteditable', 'false');
+        // The editor implements its own move (_imgMoveStart) and resize with mouse
+        // events. Leaving the image natively draggable means any mousedown the
+        // editor does not claim becomes a browser drag inside a contenteditable —
+        // which COPIES the image rather than moving it, so a fumbled resize left a
+        // duplicate behind. Nothing here needs the native behaviour.
+        img.setAttribute('draggable', 'false');
         img.src = url;
         img.style.cssText = 'vertical-align:middle;outline:1px dashed #b8e6c9;outline-offset:2px;cursor:nwse-resize;';
         const size = m[2];
