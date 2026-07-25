@@ -1,17 +1,17 @@
 {
     "meta": {
         "org": "docgen-verify",
-        "startedAt": "2026-07-25T20:50:43.627Z",
-        "durationMs": 283569,
+        "startedAt": "2026-07-25T22:34:55.256Z",
+        "durationMs": 339716,
         "args": "--org docgen-verify --suite ui-runner"
     },
     "tally": {
-        "passed": 70,
+        "passed": 75,
         "failed": 3,
-        "skipped": 3,
-        "evaluated": 73,
-        "total": 76,
-        "rate": 95.9,
+        "skipped": 2,
+        "evaluated": 78,
+        "total": 80,
+        "rate": 96.2,
         "bySeverity": {
             "blocker": 0,
             "major": 2,
@@ -74,7 +74,7 @@
                 {
                     "name": "the generated document's title resolves merge tokens against the record",
                     "ok": true,
-                    "detail": "Document_Title_Format__c = \"UIQA-ms0ufuto {Name}\" → title was \"UIQA-ms0ufuto UIQA Alpha\", expected \"UIQA-ms0ufuto UIQA Alpha\"",
+                    "detail": "Document_Title_Format__c = \"UIQA-ms0y5ulm {Name}\" → title was \"UIQA-ms0y5ulm UIQA Alpha\", expected \"UIQA-ms0y5ulm UIQA Alpha\"",
                     "severity": "minor",
                     "skipped": false,
                     "area": "Runner (server contract)"
@@ -202,7 +202,7 @@
                 {
                     "name": "pressing Create Document in Save to Record mode puts the document ON the record",
                     "ok": true,
-                    "detail": "ContentDocument \"UIQA-ms0ufuto UIQA Alpha\" linked to 001O5000040nl28IAA",
+                    "detail": "ContentDocument \"UIQA-ms0y5ulm UIQA Alpha\" linked to 001O5000040nvS4IAI",
                     "severity": "blocker",
                     "skipped": false,
                     "area": "Runner (record page)"
@@ -226,7 +226,7 @@
                 {
                     "name": "pressing Create Document in Download mode downloads the document to the browser",
                     "ok": true,
-                    "detail": "the browser received \"UIQA-ms0ufuto UIQA Alpha.pdf\"",
+                    "detail": "the browser received \"UIQA-ms0y5ulm UIQA Alpha.pdf\"",
                     "severity": "blocker",
                     "skipped": false,
                     "area": "Runner (record page)"
@@ -370,7 +370,7 @@
                 {
                     "name": "sending a signature request tells the user it worked",
                     "ok": true,
-                    "detail": "component text: Signature Links Generated! Provide each signer with their unique secure link: UIQA-ms0ufuto Signer Signer https://<CONFIGURE_SITE_URL_IN_SETUP>/apex/portwoodglobal__DocGenSignaturePdf?token=24b2b8352c0c7fdf66aa6016e847d6",
+                    "detail": "component text: Signature Links Generated! Provide each signer with their unique secure link: UIQA-ms0y5ulm Signer Signer https://<CONFIGURE_SITE_URL_IN_SETUP>/apex/portwoodglobal__DocGenSignaturePdf?token=a9a1df2f6a9184b55aff79b50412a1",
                     "severity": "major",
                     "skipped": false,
                     "area": "Signature sender (record page)"
@@ -378,7 +378,7 @@
                 {
                     "name": "sending writes a DocGen_Signature_Request__c tied to this record and template",
                     "ok": true,
-                    "detail": "request a08O5000013ynZuIAI: record=001O5000040nl28IAA (expected 001O5000040nl28IAA), status=Sent, order=Parallel, sourceDoc=068O500000MI65VIAT",
+                    "detail": "request a08O5000013z1xsIAA: record=001O5000040nvS4IAI (expected 001O5000040nvS4IAI), status=Sent, order=Parallel, sourceDoc=068O500000MI909IAD",
                     "severity": "blocker",
                     "skipped": false,
                     "area": "Signature sender (record page)"
@@ -386,7 +386,7 @@
                 {
                     "name": "sending writes exactly one DocGen_Signer__c carrying what was typed",
                     "ok": true,
-                    "detail": "1 signer row(s) (expected 1); first = name \"UIQA-ms0ufuto Signer\" (typed \"UIQA-ms0ufuto Signer\"), email \"uiqa-ms0ufuto@example.com\" (typed \"uiqa-ms0ufuto@example.com\"), role \"Signer\" (typed \"Signer\"), status \"Pending\" (expected \"Pending\"), sort order 1 (expected 1)",
+                    "detail": "1 signer row(s) (expected 1); first = name \"UIQA-ms0y5ulm Signer\" (typed \"UIQA-ms0y5ulm Signer\"), email \"uiqa-ms0y5ulm@example.com\" (typed \"uiqa-ms0y5ulm@example.com\"), role \"Signer\" (typed \"Signer\"), status \"Pending\" (expected \"Pending\"), sort order 1 (expected 1)",
                     "severity": "blocker",
                     "skipped": false,
                     "area": "Signature sender (record page)"
@@ -498,7 +498,7 @@
                 {
                     "name": "pressing Run creates a bulk job on the server",
                     "ok": true,
-                    "detail": "DocGen_Job__c a03O500003h4KXVIA2 status Completed",
+                    "detail": "DocGen_Job__c a03O500003h4rElIAI status Completed",
                     "severity": "blocker",
                     "skipped": false,
                     "area": "Bulk runner"
@@ -538,7 +538,7 @@
                 {
                     "name": "the failing job records WHY each record failed",
                     "ok": true,
-                    "detail": "Error_Log__c = 001O5000040nl28IAA — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached).\n001O5000040oT81IAE — portwoodglobal.DocGenException: Error retrieving ",
+                    "detail": "Error_Log__c = 001O5000040nvS4IAI — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached).\n001O5000040nvS5IAI — portwoodglobal.DocGenException: Error retrieving ",
                     "severity": "major",
                     "skipped": false,
                     "area": "Bulk runner"
@@ -546,7 +546,7 @@
                 {
                     "name": "the Recent Jobs list shows the error count to the user",
                     "ok": true,
-                    "detail": "Recent Jobs did not show \"UIQA-ms0ufuto-err\" with \"2 errors\" — a user would see the run as finished with no indication anything went wrong",
+                    "detail": "Recent Jobs did not show \"UIQA-ms0y5ulm-err\" with \"2 errors\" — a user would see the run as finished with no indication anything went wrong",
                     "severity": "major",
                     "skipped": false,
                     "area": "Bulk runner"
@@ -594,7 +594,7 @@
                 {
                     "name": "Command Hub \"Email Templates\" mounts its component",
                     "ok": true,
-                    "detail": "rendered 1445 chars of text; consoleErrors=none",
+                    "detail": "rendered 1544 chars of text; consoleErrors=none",
                     "severity": "major",
                     "skipped": false,
                     "area": "Command Hub"
@@ -602,22 +602,50 @@
                 {
                     "name": "the document Button builder mounts from the Command Hub",
                     "ok": true,
-                    "detail": "rendered 761 chars of text",
+                    "detail": "rendered 994 chars of text",
                     "severity": "major",
                     "skipped": false,
                     "area": "Command Hub"
                 },
                 {
-                    "name": "docGenButton one-click generation from a record action",
-                    "ok": false,
-                    "detail": "docGenButton is exposed as lightning__RecordAction ONLY, and nothing in this org hosts it: there are no LightningComponent QuickActionDefinitions, and a lightning__RecordAction component cannot be placed on a FlexiPage region (the QA host page reaches docGenRunner and docGenSignatureSender precisely because those are lightning__RecordPage). Covering it needs a QuickActionDefinition fixture plus the page-layout assignment that puts the action on the Account highlights panel, which does not exist yet.",
+                    "name": "the DocGen quick action is reachable by a mouse",
+                    "ok": true,
+                    "detail": "clickable on the highlights panel",
                     "severity": "major",
-                    "skipped": true
+                    "skipped": false
+                },
+                {
+                    "name": "a retired or wrong-object button configuration never appears",
+                    "ok": true,
+                    "detail": "getButtons returned only QA_Account_Doc — the inactive fixture and the Contact fixture were both withheld, so the component takes its run-immediately branch",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "pressing the record action does not error",
+                    "ok": true,
+                    "detail": "the action screen had already closed itself, which it only does after a successful generate",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the record action delivers a document to the browser",
+                    "ok": true,
+                    "detail": "downloaded \"QA Button Document.pdf\"",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "Save To Record = false leaves the record untouched",
+                    "ok": true,
+                    "detail": "4 files before and after",
+                    "severity": "major",
+                    "skipped": false
                 },
                 {
                     "name": "a user without the DocGen permission set gets a clear message, not a broken UI",
                     "ok": false,
-                    "detail": "needs a second user and a Login-As session; creating a licensed user and switching identity is outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. The template-audience half of this (Required_Permission_Sets__c) IS covered above.",
+                    "detail": "the restricted user could not be signed in — no session cookie was set and the browser is still on https://business-business-345-dev-ed.scratch.my.salesforce.com/. A scratch org often refuses a password login for a freshly created user until the identity is verified.",
                     "severity": "major",
                     "skipped": true
                 },

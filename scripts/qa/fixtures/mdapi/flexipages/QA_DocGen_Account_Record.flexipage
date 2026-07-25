@@ -31,6 +31,21 @@
         <type>Region</type>
     </flexiPageRegions>
     <flexiPageRegions>
+        <!--
+          force:highlightsPanel is what renders QUICK ACTIONS. Without it the
+          page looks complete and the actions simply are not there — the layout
+          can carry a perfectly valid platformActionList entry and nothing
+          appears, which reads as "the quick action failed to deploy" when the
+          action is sitting in the org exactly as intended. This is the only
+          route to docGenButton, a lightning__RecordAction that cannot be placed
+          in a region like the other two components.
+        -->
+        <itemInstances>
+            <componentInstance>
+                <componentName>force:highlightsPanel</componentName>
+                <identifier>qaHighlightsPanel</identifier>
+            </componentInstance>
+        </itemInstances>
         <itemInstances>
             <componentInstance>
                 <componentName>force:detailPanel</componentName>

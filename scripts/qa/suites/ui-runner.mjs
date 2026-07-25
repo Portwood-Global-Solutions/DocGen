@@ -2284,27 +2284,335 @@ export async function run({ org, headed }) {
          *    in sections 2 and 3 via the QA host FlexiPage. What is left
          *    is genuinely out of reach.
          * ============================================================ */
-        add(
-            skip(
-                'docGenButton one-click generation from a record action',
-                'docGenButton is exposed as lightning__RecordAction ONLY, and nothing in this org hosts it: there ' +
-                    'are no LightningComponent QuickActionDefinitions, and a lightning__RecordAction component ' +
-                    'cannot be placed on a FlexiPage region (the QA host page reaches docGenRunner and ' +
-                    'docGenSignatureSender precisely because those are lightning__RecordPage). Covering it needs a ' +
-                    'QuickActionDefinition fixture plus the page-layout assignment that puts the action on the ' +
-                    'Account highlights panel, which does not exist yet.',
-                SEVERITY.MAJOR
-            )
-        );
-        add(
-            skip(
-                'a user without the DocGen permission set gets a clear message, not a broken UI',
-                'needs a second user and a Login-As session; creating a licensed user and switching identity is ' +
-                    'outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. ' +
-                    'The template-audience half of this (Required_Permission_Sets__c) IS covered above.',
-                SEVERITY.MAJOR
-            )
-        );
+        /* ---- docGenButton: one-click generation from a record action ---- *
+         * Reached through the QA_DocGen_Button quick action. A
+         * lightning__RecordAction cannot sit in a FlexiPage region, so unlike
+         * docGenRunner it needs a QuickActionDefinition AND a page-layout entry
+         * (scripts/qa/fixtures/, applied by setup-org.sh). If these checks start
+         * reporting the action as missing, re-run that — do NOT re-skip them.
+         *
+         * The component is entirely data-driven: three DocGen_Button__mdt
+         * fixtures make an Account resolve to exactly ONE visible config, which
+         * is what sends it down the run-immediately branch rather than the
+         * picker. The other two exist to be filtered out, by two DIFFERENT
+         * rules, so a failure can name which filter broke.
+         */
+        try {
+            await openRecord(page, base, acctId);
+            const filesBefore = await recordFileCount(org, acctId);
+
+            // The action may be on the visible bar or under the overflow menu,
+            // depending on viewport width and how many actions the layout has.
+            const actionLabel = 'DocGen Button (QA)';
+            let act = await locateByText(page, 'a, button', actionLabel);
+            if (!act.found) {
+                const more = await locateByText(page, 'button, a', 'Show more actions');
+                if (more.found && more.hit === 'ok') {
+                    await clickAt(page, more, 1200);
+                    act = await locateByText(page, 'a, button', actionLabel);
+                }
+            }
+
+            if (!act.found) {
+                add(
+                    check(
+                        'the DocGen quick action is present on the record',
+                        false,
+                        `no action labelled "${actionLabel}" on the Account highlights panel — the QuickAction or ` +
+                            'its layout entry did not deploy. Re-run scripts/qa/setup-org.sh.',
+                        SEVERITY.MAJOR
+                    )
+                );
+            } else {
+                add(
+                    check(
+                        'the DocGen quick action is reachable by a mouse',
+                        act.hit === 'ok',
+                        act.hit === 'ok' ? 'clickable on the highlights panel' : `unreachable: ${act.hit}`,
+                        SEVERITY.MAJOR
+                    )
+                );
+
+                // Armed BEFORE the click: deliver() creates an anchor and clicks
+                // it synchronously on the generate() response, so the download can
+                // fire before an await placed after the click is even reached.
+                const downloadName = page
+                    .waitForEvent('download', { timeout: 180000 })
+                    .then((d) => d.suggestedFilename())
+                    .catch(() => null);
+
+                await clickAt(page, act, 3000);
+
+                // Sampled FAST and only briefly. On the happy path the component
+                // generates and then closes its own action screen
+                // (CloseActionScreenEvent), so it is gone in about a second — a
+                // 20s poll for "the host is still present" asserts the OPPOSITE
+                // of correct behaviour, and duly failed on a run where the
+                // document downloaded perfectly. Its absence is therefore not
+                // evidence of anything; only its ERROR state is, and that is what
+                // the next check looks for.
+                let shown = '';
+                for (let i = 0; i < 25 && !shown.trim(); i++) {
+                    shown = (await componentText(page, 'doc-gen-button')) || '';
+                    if (!shown.trim()) await page.waitForTimeout(200);
+                }
+
+                // The filter rules are asserted against the SERVER, not against
+                // whatever the modal happened to be showing when it was sampled.
+                // Reading them off `shown` looked fine and was vacuous: the
+                // component closes on success, `shown` is then empty, and "the
+                // empty string does not contain 'QA Inactive'" passes without
+                // testing anything at all.
+                //
+                // Two fixtures exist purely to be excluded, by two DIFFERENT
+                // rules, so a failure names which one broke.
+                const btnLog = await runAnonymous(
+                    org,
+                    `Id a = [SELECT Id FROM Account WHERE Id = '${acctId}' LIMIT 1].Id;
+             List<DocGenButtonController.ButtonOption> opts = DocGenButtonController.getButtons(a);
+             String names = '';
+             for (DocGenButtonController.ButtonOption o : opts) { names += o.developerName + ';'; }
+             System.debug('BTNCOUNT=' + opts.size());
+             System.debug('BTNNAMES=' + names);`
+                );
+                const btn = debugMap(btnLog);
+                const names = btn.BTNNAMES || '';
+                const onlyActiveAccount = btn.BTNCOUNT === '1' && names.indexOf('QA_Account_Doc') !== -1;
+                add(
+                    check(
+                        'a retired or wrong-object button configuration never appears',
+                        onlyActiveAccount,
+                        onlyActiveAccount
+                            ? 'getButtons returned only QA_Account_Doc — the inactive fixture and the Contact ' +
+                                  'fixture were both withheld, so the component takes its run-immediately branch'
+                            : `getButtons returned ${btn.BTNCOUNT} option(s) [${names}] — expected exactly ` +
+                                  'QA_Account_Doc. QA_Account_Inactive leaking means the Active__c filter broke; ' +
+                                  'QA_Contact_Doc leaking means the Object_API_Name__c filter broke.',
+                        // A retired configuration coming back to life still
+                        // GENERATES a document, and it looks legitimate — worse
+                        // than a button that is simply missing.
+                        SEVERITY.BLOCKER
+                    )
+                );
+
+                // STRUCTURAL, not a keyword match. A keyword list passed a
+                // component that was displaying "No DocGen Template found with
+                // API Name 'QA_Verify_Designer'" — plainly an error, but it
+                // contains none of the words error/failed/not configured. The
+                // component's own error branch is the only reliable signal: it
+                // is the one that renders .slds-text-color_error.
+                const errored = await ev(
+                    page,
+                    `
+                const h = __dgFind(${JSON.stringify(host('doc-gen-button'))});
+                if (!h) return null;
+                const find = (root) => {
+                  if (root.querySelector && root.querySelector('.slds-text-color_error')) return true;
+                  for (const el of (root.querySelectorAll ? root.querySelectorAll('*') : []))
+                    if (el.shadowRoot && find(el.shadowRoot)) return true;
+                  return false;
+                };
+                return find(h.shadowRoot || h);
+              `
+                );
+                // errored === null means the host had already closed itself, which
+                // on this component only happens AFTER a successful generate — so
+                // it is a pass, and the download check below is what proves it.
+                add(
+                    check(
+                        'pressing the record action does not error',
+                        !errored,
+                        errored
+                            ? `component is in its error state: ${shown.trim().slice(0, 200)}`
+                            : errored === null
+                              ? 'the action screen had already closed itself, which it only does after a ' +
+                                    'successful generate'
+                              : 'no error state',
+                        SEVERITY.MAJOR
+                    )
+                );
+
+                const dlName = await downloadName;
+                add(
+                    check(
+                        'the record action delivers a document to the browser',
+                        !!dlName,
+                        dlName
+                            ? `downloaded "${dlName}"`
+                            : 'no download event fired within 180s — a person pressed the button and got no file',
+                        SEVERITY.BLOCKER
+                    )
+                );
+
+                // Save_To_Record__c = false on the fixture, so the record's file
+                // count must be UNCHANGED. Asserting the download alone would
+                // pass even if the setting were being ignored.
+                const filesAfter = await recordFileCount(org, acctId);
+                add(
+                    check(
+                        'Save To Record = false leaves the record untouched',
+                        filesAfter === filesBefore,
+                        filesAfter === filesBefore
+                            ? `${filesAfter} files before and after`
+                            : `file count went ${filesBefore} -> ${filesAfter}; the configuration says download only`,
+                        SEVERITY.MAJOR
+                    )
+                );
+            }
+        } catch (e) {
+            add(skip('docGenButton record-action checks', `threw: ${String(e.message).slice(0, 160)}`, SEVERITY.MAJOR));
+        }
+        /* ---- the user who was never granted DocGen ---- *
+         * Every check so far ran as a System Administrator with DocGen_Admin.
+         * That is the one user whose experience is guaranteed to be fine, and it
+         * hides the most common real-world first impression of the product: an
+         * ordinary user who lands on a record page before anyone assigned them
+         * the permission set.
+         *
+         * A second identity is the only way to see it — System.runAs does not
+         * exist in anonymous Apex, and the component's behaviour lives in the
+         * browser. So: create a Standard User with NO DocGen permission set,
+         * set a password, and sign in as them in a separate browser context.
+         * The original session is untouched.
+         */
+        let restrictedCtx = null;
+        try {
+            const pw = 'DocGenQA!' + Date.now().toString().slice(-6);
+            const seed = await runAnonymous(
+                org,
+                `
+        // Reused across runs when it already exists — a scratch org has very few
+        // Salesforce licences and burning one per run would exhaust them.
+        String uname = 'uiqa.restricted@docgenqa.test.' + UserInfo.getOrganizationId().toLowerCase();
+        List<User> found = [SELECT Id, Username FROM User WHERE Username = :uname LIMIT 1];
+        User u;
+        if (found.isEmpty()) {
+            Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
+            u = new User(
+                FirstName = 'UIQA', LastName = 'Restricted', Username = uname,
+                Email = 'uiqa-restricted@example.com', Alias = 'uiqares',
+                ProfileId = p.Id, TimeZoneSidKey = 'America/New_York',
+                LocaleSidKey = 'en_US', EmailEncodingKey = 'UTF-8', LanguageLocaleKey = 'en_US'
+            );
+            insert u;
+        } else {
+            u = found[0];
+        }
+        // Assert the premise of the test rather than assuming it: if some earlier
+        // run left a DocGen permission set on this user, the check below would be
+        // measuring the wrong thing entirely.
+        Integer psa = [
+            SELECT COUNT() FROM PermissionSetAssignment
+            WHERE AssigneeId = :u.Id AND PermissionSet.Name LIKE 'DocGen%'
+        ];
+        System.setPassword(u.Id, '${pw}');
+        System.debug('RUSER=' + u.Username);
+        System.debug('RDOCGENPS=' + psa);`
+            );
+            const rs = debugMap(seed);
+            if (!rs.RUSER) {
+                add(
+                    skip(
+                        'a user without the DocGen permission set gets a clear message, not a broken UI',
+                        `could not create the restricted user: ${String(seed).slice(-200)}`,
+                        SEVERITY.MAJOR
+                    )
+                );
+            } else if (rs.RDOCGENPS !== '0') {
+                add(
+                    skip(
+                        'a user without the DocGen permission set gets a clear message, not a broken UI',
+                        `the QA user already carries ${rs.RDOCGENPS} DocGen permission set(s), so this would not be ` +
+                            'testing an unentitled user. Remove them and re-run.',
+                        SEVERITY.MAJOR
+                    )
+                );
+            } else {
+                const r = await launch({ headed });
+                restrictedCtx = r;
+                const loginUrl = base.replace('.lightning.force.com', '.my.salesforce.com');
+                await r.page.goto(loginUrl + '/', { waitUntil: 'domcontentloaded' });
+                await r.page.fill('#username', rs.RUSER).catch(() => {});
+                await r.page.fill('#password', pw).catch(() => {});
+                await r.page.click('#Login').catch(() => {});
+                await r.page.waitForTimeout(8000);
+
+                // DID THE LOGIN ACTUALLY SUCCEED? This gate is not optional.
+                // Without it the run lands back on the Salesforce login page,
+                // whose own text contains the words "access" and "log in", the
+                // leniency below matches them, and the check reports a cheerful
+                // PASS for a session that was never established. It did exactly
+                // that on the first run.
+                const authed = await r.page
+                    .evaluate(() => !!(document.cookie && document.cookie.indexOf('sid=') !== -1))
+                    .catch(() => false);
+                const url = r.page.url();
+                const onLoginPage = /\/login|\/_ui\/identity|secur\/login/i.test(url) || !authed;
+                // A fresh identity on a new machine can also be challenged for an
+                // emailed verification code. Platform behaviour, not a product
+                // defect, and it must not be reported as one either.
+                const challenged = /verify|challenge|_ui\/identity/i.test(url) || (await r.page.title()).match(/Verify/i);
+                if (onLoginPage || challenged) {
+                    add(
+                        skip(
+                            'a user without the DocGen permission set gets a clear message, not a broken UI',
+                            challenged
+                                ? 'the org challenged the new identity for email verification at login, so the ' +
+                                      `record page was never reached (landed on ${url.slice(0, 120)}).`
+                                : 'the restricted user could not be signed in — no session cookie was set and the ' +
+                                      `browser is still on ${url.slice(0, 120)}. A scratch org often refuses a ` +
+                                      'password login for a freshly created user until the identity is verified.',
+                            SEVERITY.MAJOR
+                        )
+                    );
+                } else {
+                    await r.page.goto(`${base}/lightning/r/${acctId}/view?qa=${Date.now()}`, {
+                        waitUntil: 'domcontentloaded'
+                    });
+                    await r.page.waitForTimeout(12000);
+                    const runnerText = (await componentText(r.page, 'doc-gen-runner')) || '';
+                    const body = await r.page.evaluate(() => document.body.innerText || '');
+
+                    // The bar is not "it works" — an unentitled user SHOULD be
+                    // refused. The bar is that the refusal is legible: no raw
+                    // exception, no bare "undefined", no blank panel where a
+                    // component should be.
+                    const raw =
+                        /System\.|Apex|SObject|INSUFFICIENT_ACCESS|FIELD_INTEGRITY|null pointer|undefined/i.test(
+                            runnerText
+                        );
+                    const blank = runnerText.trim().length === 0;
+                    const gotSomething = /permission|access|contact your administrator|not available|no templates/i.test(
+                        runnerText + ' ' + body
+                    );
+                    add(
+                        check(
+                            'a user without the DocGen permission set gets a clear message, not a broken UI',
+                            !raw && (!blank || gotSomething),
+                            raw
+                                ? `the component showed raw platform detail to an end user: ${runnerText.trim().slice(0, 200)}`
+                                : blank && !gotSomething
+                                  ? 'the component rendered nothing at all — an unentitled user sees an empty ' +
+                                    'panel with no explanation of why'
+                                  : `handled: ${(runnerText.trim() || body.trim()).slice(0, 200)}`,
+                            SEVERITY.MAJOR
+                        )
+                    );
+                }
+            }
+        } catch (e) {
+            add(
+                skip(
+                    'a user without the DocGen permission set gets a clear message, not a broken UI',
+                    `threw: ${String(e.message).slice(0, 200)}`,
+                    SEVERITY.MAJOR
+                )
+            );
+        } finally {
+            if (restrictedCtx) {
+                await restrictedCtx.browser.close().catch(() => {});
+            }
+        }
         add(
             skip(
                 'the Combine PDFs and Document Packet runs produce a real merged document',

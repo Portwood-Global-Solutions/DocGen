@@ -1,15 +1,15 @@
 # DocGen QA report
 
-**Org** `docgen-verify` · **Run** 2026-07-25T20:50:43.627Z · **Duration** 284s
+**Org** `docgen-verify` · **Run** 2026-07-25T22:34:55.256Z · **Duration** 340s
 
 ## Headline
 
 |                       |            |
 | --------------------- | ---------- |
-| Checks evaluated      | 73         |
-| Passed                | 70 (95.9%) |
+| Checks evaluated      | 78         |
+| Passed                | 75 (96.2%) |
 | Failed                | 3          |
-| Skipped (not counted) | 3          |
+| Skipped (not counted) | 2          |
 | Blockers              | 0          |
 | Major                 | 2          |
 | Minor                 | 1          |
@@ -18,7 +18,7 @@
 
 | Suite       | Area        | Passed | Failed | Skipped |  Rate |
 | ----------- | ----------- | -----: | -----: | ------: | ----: |
-| `ui-runner` | End-user UI |     70 |      3 |       3 | 95.9% |
+| `ui-runner` | End-user UI |     75 |      3 |       2 | 96.2% |
 
 ## What to fix
 
@@ -34,8 +34,7 @@ Ordered by severity. The detail column is written to say WHERE to look.
 
 A skipped check is not a passing one. Each of these is a gap in the evidence.
 
-- `ui-runner` — docGenButton one-click generation from a record action: docGenButton is exposed as lightning**RecordAction ONLY, and nothing in this org hosts it: there are no LightningComponent QuickActionDefinitions, and a lightning**RecordAction component cannot be placed on a FlexiPage region (the QA host page reaches docGenRunner and docGenSignatureSender precisely because those are lightning\_\_RecordPage). Covering it needs a QuickActionDefinition fixture plus the page-layout assignment that puts the action on the Account highlights panel, which does not exist yet.
-- `ui-runner` — a user without the DocGen permission set gets a clear message, not a broken UI: needs a second user and a Login-As session; creating a licensed user and switching identity is outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. The template-audience half of this (Required_Permission_Sets\_\_c) IS covered above.
+- `ui-runner` — a user without the DocGen permission set gets a clear message, not a broken UI: the restricted user could not be signed in — no session cookie was set and the browser is still on https://business-business-345-dev-ed.scratch.my.salesforce.com/. A scratch org often refuses a password login for a freshly created user until the identity is verified.
 - `ui-runner` — the Combine PDFs and Document Packet runs produce a real merged document: both tabs are proved to render, list their sources and gate their button (section 2g/2h), but actually running them means driving a dual-listbox move — select an option, then press the listbox's own arrow button — and then a multi-megabyte client-side PDF merge. Neither the move nor the merge is exercised here, so "the packet is correct" is NOT claimed.
 
 ## Every check
@@ -48,7 +47,7 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ picker hides an inactive template — Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version
 - ❌ picker hides a template that has no active version — "UIQA No Version" is offered in the runner picker but cannot generate — the user gets "No template file found (active or attached)" only after pressing Generate. DocGenController.getTemplatesForObject
 - ✅ generating from the picked template produces a real document — DocGenService.processDocument returned 66207 bytes
-- ✅ the generated document's title resolves merge tokens against the record — Document_Title_Format\_\_c = "UIQA-ms0ufuto {Name}" → title was "UIQA-ms0ufuto UIQA Alpha", expected "UIQA-ms0ufuto UIQA Alpha"
+- ✅ the generated document's title resolves merge tokens against the record — Document_Title_Format\_\_c = "UIQA-ms0y5ulm {Name}" → title was "UIQA-ms0y5ulm UIQA Alpha", expected "UIQA-ms0y5ulm UIQA Alpha"
 - ✅ a locked output format cannot be overridden at run time — Lock_Output_Format\_\_c = true, override 'Word' → "This template locks its output format. Override not permitted."
 - ✅ a template with no active version fails with a message, not a blank document — got: Error retrieving template data: No template file found (active or attached).
 - ✅ bulk template picker excludes deactivated templates — matches the single-record runner
@@ -64,10 +63,10 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ the Save to Record output choice is reachable — found=true hit=ok
 - ✅ choosing Save to Record is honoured by the UI — output pills after the click: download, save(active)
 - ✅ the Create Document button is reachable — found=true hit=ok
-- ✅ pressing Create Document in Save to Record mode puts the document ON the record — ContentDocument "UIQA-ms0ufuto UIQA Alpha" linked to 001O5000040nl28IAA
+- ✅ pressing Create Document in Save to Record mode puts the document ON the record — ContentDocument "UIQA-ms0y5ulm UIQA Alpha" linked to 001O5000040nvS4IAI
 - ✅ the saved file is in the template's own output format — Output_Format\_\_c = PDF, file extension = .pdf
 - ✅ choosing Download is honoured by the UI — output pills after the click: download(active), save
-- ✅ pressing Create Document in Download mode downloads the document to the browser — the browser received "UIQA-ms0ufuto UIQA Alpha.pdf"
+- ✅ pressing Create Document in Download mode downloads the document to the browser — the browser received "UIQA-ms0y5ulm UIQA Alpha.pdf"
 - ✅ Download does NOT also attach the document to the record — files linked to the record: 3 before the run, 3 after. Download and Save to Record are the two halves of one choice; honouring it means Download leaves the record untouched.
 - ✅ a template with Lock_Output_Format\_\_c exposes no runtime file-format control — with the locked template selected the runner offered 2 picker(s) (category + template) and the choice widgets [download, save], which are output DESTINATIONS, not formats. The server half of this cont
 - ✅ the Document Packet tab renders its template chooser and it is reachable — packet tab active=true, dual listboxes=1, source list hit=ok
@@ -85,9 +84,9 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ a signer with no email address cannot be sent to — role and name filled, email blank → send button disabled=true
 - ✅ a complete document + signer enables the send button — role, name and email all filled → send button disabled=false
 - ✅ the send button is reachable by a mouse — found=true hit=ok
-- ✅ sending a signature request tells the user it worked — component text: Signature Links Generated! Provide each signer with their unique secure link: UIQA-ms0ufuto Signer Signer https://<CONFIGURE_SITE_URL_IN_SETUP>/apex/portwoodglobal\_\_DocGenSignaturePdf?
-- ✅ sending writes a DocGen_Signature_Request\_\_c tied to this record and template — request a08O5000013ynZuIAI: record=001O5000040nl28IAA (expected 001O5000040nl28IAA), status=Sent, order=Parallel, sourceDoc=068O500000MI65VIAT
-- ✅ sending writes exactly one DocGen_Signer\_\_c carrying what was typed — 1 signer row(s) (expected 1); first = name "UIQA-ms0ufuto Signer" (typed "UIQA-ms0ufuto Signer"), email "uiqa-ms0ufuto@example.com" (typed "uiqa-ms0ufuto@example.com"), role "Signer" (typed "Signer"),
+- ✅ sending a signature request tells the user it worked — component text: Signature Links Generated! Provide each signer with their unique secure link: UIQA-ms0y5ulm Signer Signer https://<CONFIGURE_SITE_URL_IN_SETUP>/apex/portwoodglobal\_\_DocGenSignaturePdf?
+- ✅ sending writes a DocGen_Signature_Request\_\_c tied to this record and template — request a08O5000013z1xsIAA: record=001O5000040nvS4IAI (expected 001O5000040nvS4IAI), status=Sent, order=Parallel, sourceDoc=068O500000MI909IAD
+- ✅ sending writes exactly one DocGen_Signer\_\_c carrying what was typed — 1 signer row(s) (expected 1); first = name "UIQA-ms0y5ulm Signer" (typed "UIQA-ms0y5ulm Signer"), email "uiqa-ms0y5ulm@example.com" (typed "uiqa-ms0y5ulm@example.com"), role "Signer" (typed "Signer"),
 - ✅ bulk generation UI renders on its tab — {"chars":251,"hasHeading":true,"hasStep1":true}
 - ✅ bulk generation UI boots without a console error
 - ✅ the screen stays usable while a job is still running — template search box is hittable with 1 non-terminal job(s) present
@@ -101,20 +100,24 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ the Validate Filter button is clickable — found=true hit=ok
 - ✅ Validate reports the true number of matching records — expected "2 Records Found" for Name LIKE 'UIQA%' (2 accounts seeded); component text did not contain it
 - ✅ the Run button is clickable once the filter is validated — found=true hit=ok
-- ✅ pressing Run creates a bulk job on the server — DocGen_Job\_\_c a03O500003h4KXVIA2 status Completed
+- ✅ pressing Run creates a bulk job on the server — DocGen_Job\_\_c a03O500003h4rElIAI status Completed
 - ✅ the job generates one document per matching record — status=Completed total=2 success=2 errors=0; error log:
 - ✅ each generated document is attached to its own record — 5 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files
 - ✅ the output honours the template's Output Format (PDF) — extensions produced: pdf
 - ✅ a run where every record fails is reported as failed, not as success — status=Failed success=0 errors=2
-- ✅ the failing job records WHY each record failed — Error_Log\_\_c = 001O5000040nl28IAA — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached). 001O5000040oT81IAE — portwoodglobal.DocGenException: Er
-- ✅ the Recent Jobs list shows the error count to the user — Recent Jobs did not show "UIQA-ms0ufuto-err" with "2 errors" — a user would see the run as finished with no indication anything went wrong
+- ✅ the failing job records WHY each record failed — Error_Log\_\_c = 001O5000040nvS4IAI — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached). 001O5000040nvS5IAI — portwoodglobal.DocGenException: Er
+- ✅ the Recent Jobs list shows the error count to the user — Recent Jobs did not show "UIQA-ms0y5ulm-err" with "2 errors" — a user would see the run as finished with no indication anything went wrong
 - ❌ a filter that matches no records leaves Run disabled — Validate returned 0 records but Run Bulk Generation is still enabled — the user can submit a job that will produce nothing. isRunDisabled only requires filterValidated, and runAnalysis() early-returns
 - ✅ the DocGen Command Hub renders with its navigation — {"present":true,"navs":["My Templates","Bulk Generation","Signatures","Assets","Buttons","Email Templates","Learning Center","MoreTabs","API Name Help Info","Type Help Info","Word","PDF"]}
 - ✅ Command Hub "Bulk Generation" mounts its component — rendered 372 chars of text; consoleErrors=none
 - ✅ Command Hub "Signatures" mounts its component — rendered 1263 chars of text; consoleErrors=none
 - ✅ Command Hub "Assets" mounts its component — rendered 489 chars of text; consoleErrors=none
-- ✅ Command Hub "Email Templates" mounts its component — rendered 1445 chars of text; consoleErrors=none
-- ✅ the document Button builder mounts from the Command Hub — rendered 761 chars of text
-- ⊘ docGenButton one-click generation from a record action — docGenButton is exposed as lightning**RecordAction ONLY, and nothing in this org hosts it: there are no LightningComponent QuickActionDefinitions, and a lightning**RecordAction component cannot be pla
-- ⊘ a user without the DocGen permission set gets a clear message, not a broken UI — needs a second user and a Login-As session; creating a licensed user and switching identity is outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. The templ
+- ✅ Command Hub "Email Templates" mounts its component — rendered 1544 chars of text; consoleErrors=none
+- ✅ the document Button builder mounts from the Command Hub — rendered 994 chars of text
+- ✅ the DocGen quick action is reachable by a mouse — clickable on the highlights panel
+- ✅ a retired or wrong-object button configuration never appears — getButtons returned only QA_Account_Doc — the inactive fixture and the Contact fixture were both withheld, so the component takes its run-immediately branch
+- ✅ pressing the record action does not error — the action screen had already closed itself, which it only does after a successful generate
+- ✅ the record action delivers a document to the browser — downloaded "QA Button Document.pdf"
+- ✅ Save To Record = false leaves the record untouched — 4 files before and after
+- ⊘ a user without the DocGen permission set gets a clear message, not a broken UI — the restricted user could not be signed in — no session cookie was set and the browser is still on https://business-business-345-dev-ed.scratch.my.salesforce.com/. A scratch org often refuses a passwo
 - ⊘ the Combine PDFs and Document Packet runs produce a real merged document — both tabs are proved to render, list their sources and gate their button (section 2g/2h), but actually running them means driving a dual-listbox move — select an option, then press the listbox's own a
