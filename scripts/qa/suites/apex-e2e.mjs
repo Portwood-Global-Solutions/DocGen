@@ -26,6 +26,10 @@ export const E2E_SEQUENCE = [
     ['e2e-05-generate-bulk.apex', 'Bulk generation', SEVERITY.MAJOR],
     ['e2e-06-signatures.apex', 'Signatures', SEVERITY.BLOCKER],
     ['e2e-06b-signature-lifecycle.apex', 'Signature lifecycle', SEVERITY.MAJOR],
+    // 06c is the redemption half — 06/06b stop at "the email goes out".
+    // BLOCKER, not MAJOR: this is the only script that proves a real template
+    // renders to a real signed document that reaches the record.
+    ['e2e-06c-signing.apex', 'Signature redemption', SEVERITY.BLOCKER],
     ['e2e-07-syntax1.apex', 'Merge-tag syntax', SEVERITY.BLOCKER],
     ['e2e-07-syntax2.apex', 'Merge-tag syntax', SEVERITY.BLOCKER],
     ['e2e-07-syntax3.apex', 'Merge-tag syntax', SEVERITY.BLOCKER],

@@ -57,6 +57,11 @@ DocGen_Template__c tpl;
 if (existing.isEmpty()) {
     tpl = new DocGen_Template__c(
         Name = VERIFY_NAME,
+        // The DocGen_Button__mdt QA fixtures point at the template by API name,
+        // not Id — an Id would tie the fixture to one org. This is the other end
+        // of that reference; change it and docGenButton fails with "No DocGen
+        // Template found with API Name", which reads like a product bug.
+        API_Name__c = 'QA_Verify_Designer',
         Type__c = 'HTML',
         Output_Format__c = 'PDF',
         Base_Object_API__c = 'Account',
@@ -72,6 +77,7 @@ if (existing.isEmpty()) {
     tpl = existing[0];
     tpl.Test_Record_Id__c = acctId;
     tpl.Is_Active__c = true;
+    tpl.API_Name__c = 'QA_Verify_Designer';
     update tpl;
 }
 

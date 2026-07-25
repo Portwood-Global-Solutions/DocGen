@@ -8,5 +8,15 @@
         <members>Account</members>
         <name>CustomObject</name>
     </types>
+    <types>
+        <members>Account.QA_DocGen_Button</members>
+        <name>QuickAction</name>
+    </types>
+    <types>
+        <members>DocGen_Button.QA_Account_Doc</members>
+        <members>DocGen_Button.QA_Account_Inactive</members>
+        <members>DocGen_Button.QA_Contact_Doc</members>
+        <name>CustomMetadata</name>
+    </types>
     <version>62.0</version>
 </Package>
