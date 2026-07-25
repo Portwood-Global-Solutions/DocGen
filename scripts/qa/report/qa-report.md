@@ -1,39 +1,28 @@
 # DocGen QA report
 
-**Org** `docgen-verify` · **Run** 2026-07-25T15:53:35.061Z · **Duration** 176s
+**Org** `docgen-verify` · **Run** 2026-07-25T16:08:28.729Z · **Duration** 176s
 
 ## Headline
 
-|                       |             |
-| --------------------- | ----------- |
-| Checks evaluated      | 216         |
-| Passed                | 208 (96.3%) |
-| Failed                | 8           |
-| Skipped (not counted) | 0           |
-| Blockers              | 0           |
-| Major                 | 8           |
-| Minor                 | 0           |
+|                       |            |
+| --------------------- | ---------- |
+| Checks evaluated      | 248        |
+| Passed                | 248 (100%) |
+| Failed                | 0          |
+| Skipped (not counted) | 0          |
+| Blockers              | 0          |
+| Major                 | 0          |
+| Minor                 | 0          |
 
 ## Coverage by area
 
-| Suite          | Area         | Passed | Failed | Skipped |  Rate |
-| -------------- | ------------ | -----: | -----: | ------: | ----: |
-| `record-pages` | Record pages |    208 |      8 |       0 | 96.3% |
+| Suite          | Area         | Passed | Failed | Skipped | Rate |
+| -------------- | ------------ | -----: | -----: | ------: | ---: |
+| `record-pages` | Record pages |    248 |      0 |       0 | 100% |
 
 ## What to fix
 
-Ordered by severity. The detail column is written to say WHERE to look.
-
-| Severity  | Suite          | Check                                                                                        | Evidence                                                                                                                                                                                                                                                                                                       |
-| --------- | -------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **major** | `record-pages` | DocGen_Template_Version\_\_c exposes every one of its fields somewhere on the record page    | 7 field(s) exist on the object but render nowhere: Custom_Margins**c "Custom Margins (in)", Document_Title_Format**c "Document Title Format", Output_Format**c "Output Format", Page_Margins**c "Page Margins", Page_Orientation**c "Page Orientation", Page_Size**c "Page Size", Watermark_Image_CV_Id\_\_c " |
-| **major** | `record-pages` | DocGen_Job\_\_c exposes every one of its fields somewhere on the record page                 | 5 field(s) exist on the object but render nowhere: Data_Cache_CV**c "Data Cache CV", Error_Log**c "Error Log", Giant_Query_Config**c "Giant Query Config", Merged_PDF_CV**c "Merged PDF CV", Parent_Record_Id\_\_c "Parent Record Id"                                                                          |
-| **major** | `record-pages` | DocGen_Asset\_\_c has a layout file backing its record page                                  | no layouts/DocGen_Asset\_\_c-\*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render                                                                                                                                                 |
-| **major** | `record-pages` | DocGen_Asset\_\_c exposes every one of its fields somewhere on the record page               | 3 field(s) exist on the object but render nowhere: Asset_Type**c "Asset Type", Category**c "Category", Is_Active\_\_c "Is Active"                                                                                                                                                                              |
-| **major** | `record-pages` | DocGen_Email_Template\_\_c has a layout file backing its record page                         | no layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render                                                                                                                                        |
-| **major** | `record-pages` | DocGen_Email_Template\_\_c exposes every one of its fields somewhere on the record page      | 12 field(s) exist on the object but render nowhere: Body_Html**c "Body (HTML)", Body_Plain**c "Body (Plain Text)", Brand_Color**c "Brand Color Override", Description**c "Description", Footer_Text**c "Footer Text Override", Is_Active**c "Is Active", Layout_Mode**c "Layout Mode", Logo_Asset_Key**c "Lo   |
-| **major** | `record-pages` | DocGen_Signature_Request\_\_c exposes every one of its fields somewhere on the record page   | 3 field(s) exist on the object but render nowhere: Frozen_Document_CV_Id**c "Frozen Document CV Id", Snapshot_Hash**c "Snapshot Hash", Snapshot_Taken_At\_\_c "Snapshot Taken At"                                                                                                                              |
-| **major** | `record-pages` | DocGen_Signature_Placement\_\_c exposes every one of its fields somewhere on the record page | 1 field(s) exist on the object but render nowhere: Render_Inline\_\_c "Render Inline"                                                                                                                                                                                                                          |
+Nothing — every evaluated check passed.
 
 ## Every check
 
@@ -75,7 +64,7 @@ Ordered by severity. The detail column is written to say WHERE to look.
 - ✅ DocGen_Template\_\_c related lists are genuinely visible (hit test)
 - ✅ DocGen_Template\_\_c page components report no error state — no custom component is placed on this record page
 - ✅ DocGen_Template\_\_c record page logs no console errors
-- ✅ DocGen_Template_Version\_\_c record page renders — 24 field slots rendered
+- ✅ DocGen_Template_Version\_\_c record page renders — 36 field slots rendered
 - ✅ DocGen_Template_Version\_\_c detail fields are genuinely visible (hit test) — first field "Version Name" is hittable
 - ✅ DocGen_Template_Version\_\_c.Name renders on the record page
 - ✅ DocGen_Template_Version**c.Template**c renders on the record page
@@ -89,14 +78,20 @@ Ordered by severity. The detail column is written to say WHERE to look.
 - ✅ DocGen_Template_Version**c.Query_Config**c renders on the record page
 - ✅ DocGen_Template_Version\_\_c.CreatedById renders on the record page
 - ✅ DocGen_Template_Version\_\_c.LastModifiedById renders on the record page
-- ❌ DocGen_Template_Version**c exposes every one of its fields somewhere on the record page — 7 field(s) exist on the object but render nowhere: Custom_Margins**c "Custom Margins (in)", Document_Title_Format**c "Document Title Format", Output_Format**c "Output Format", Page_Margins\_\_c "Page Ma
-- ✅ DocGen_Template_Version**c fields edited outside the record page are accounted for — Footer_Html**c (edited in the Designer footer band), Header_Html\_\_c (edited in the Designer header band)
+- ✅ DocGen_Template_Version**c.Output_Format**c renders on the record page
+- ✅ DocGen_Template_Version**c.Document_Title_Format**c renders on the record page
+- ✅ DocGen_Template_Version**c.Page_Size**c renders on the record page
+- ✅ DocGen_Template_Version**c.Page_Orientation**c renders on the record page
+- ✅ DocGen_Template_Version**c.Page_Margins**c renders on the record page
+- ✅ DocGen_Template_Version**c.Custom_Margins**c renders on the record page
+- ✅ DocGen_Template_Version\_\_c exposes every one of its fields somewhere on the record page — all reachable; 3 field(s) intentionally edited elsewhere
+- ✅ DocGen_Template_Version**c fields edited outside the record page are accounted for — Footer_Html**c (edited in the Designer footer band), Header_Html**c (edited in the Designer header band), Watermark_Image_CV_Id**c (set when a watermark is uploaded)
 - ✅ DocGen_Template_Version\_\_c related lists load without error — 6 related list container(s) rendered
 - ✅ DocGen_Template_Version\_\_c shows its "Files" related list
 - ✅ DocGen_Template_Version\_\_c related lists are genuinely visible (hit test)
 - ✅ DocGen_Template_Version\_\_c page components report no error state — no custom component is placed on this record page
 - ✅ DocGen_Template_Version\_\_c record page logs no console errors
-- ✅ DocGen_Job\_\_c record page renders — 22 field slots rendered
+- ✅ DocGen_Job\_\_c record page renders — 29 field slots rendered
 - ✅ DocGen_Job\_\_c detail fields are genuinely visible (hit test) — first field "Job Number" is hittable
 - ✅ DocGen_Job\_\_c.Name renders on the record page
 - ✅ DocGen_Job**c.Template**c renders on the record page
@@ -109,7 +104,11 @@ Ordered by severity. The detail column is written to say WHERE to look.
 - ✅ DocGen_Job**c.Query_Condition**c renders on the record page
 - ✅ DocGen_Job\_\_c.CreatedById renders on the record page
 - ✅ DocGen_Job\_\_c.LastModifiedById renders on the record page
-- ❌ DocGen_Job**c exposes every one of its fields somewhere on the record page — 5 field(s) exist on the object but render nowhere: Data_Cache_CV**c "Data Cache CV", Error_Log**c "Error Log", Giant_Query_Config**c "Giant Query Config", Merged_PDF_CV\_\_c "Merged PDF CV", Parent_Reco
+- ✅ DocGen_Job**c.Error_Log**c renders on the record page
+- ✅ DocGen_Job**c.Merged_PDF_CV**c renders on the record page
+- ✅ DocGen_Job**c.Parent_Record_Id**c renders on the record page
+- ✅ DocGen_Job\_\_c exposes every one of its fields somewhere on the record page — all reachable; 2 field(s) intentionally edited elsewhere
+- ✅ DocGen_Job**c fields edited outside the record page are accounted for — Data_Cache_CV**c (internal cache pointer written by the batch), Giant_Query_Config\_\_c (internal config written by the giant-query path)
 - ✅ DocGen_Job\_\_c related lists load without error — 6 related list container(s) rendered
 - ✅ DocGen_Job\_\_c shows its "Files" related list
 - ✅ DocGen_Job\_\_c related lists are genuinely visible (hit test)
@@ -149,16 +148,37 @@ Ordered by severity. The detail column is written to say WHERE to look.
 - ✅ DocGen_Error_Log\_\_c exposes every one of its fields somewhere on the record page
 - ✅ DocGen_Error_Log\_\_c page components report no error state — no custom component is placed on this record page
 - ✅ DocGen_Error_Log\_\_c record page logs no console errors
-- ✅ DocGen_Asset\_\_c record page renders — 11 field slots rendered
+- ✅ DocGen_Asset\_\_c record page renders — 15 field slots rendered
 - ✅ DocGen_Asset\_\_c detail fields are genuinely visible (hit test) — first field "Asset Name" is hittable
-- ❌ DocGen_Asset**c has a layout file backing its record page — no layouts/DocGen_Asset**c-\*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render
-- ❌ DocGen_Asset**c exposes every one of its fields somewhere on the record page — 3 field(s) exist on the object but render nowhere: Asset_Type**c "Asset Type", Category**c "Category", Is_Active**c "Is Active"
+- ✅ DocGen_Asset\_\_c.Name renders on the record page
+- ✅ DocGen_Asset**c.Asset_Key**c renders on the record page
+- ✅ DocGen_Asset**c.Asset_Type**c renders on the record page
+- ✅ DocGen_Asset**c.Category**c renders on the record page
+- ✅ DocGen_Asset**c.Is_Active**c renders on the record page
+- ✅ DocGen_Asset\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Asset\_\_c.LastModifiedById renders on the record page
+- ✅ DocGen_Asset\_\_c exposes every one of its fields somewhere on the record page
 - ✅ DocGen_Asset\_\_c page components report no error state — no custom component is placed on this record page
 - ✅ DocGen_Asset\_\_c record page logs no console errors
-- ✅ DocGen_Email_Template\_\_c record page renders — 11 field slots rendered
+- ✅ DocGen_Email_Template\_\_c record page renders — 32 field slots rendered
 - ✅ DocGen_Email_Template\_\_c detail fields are genuinely visible (hit test) — first field "Email Template Name" is hittable
-- ❌ DocGen_Email_Template**c has a layout file backing its record page — no layouts/DocGen_Email_Template**c-\*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render
-- ❌ DocGen_Email_Template**c exposes every one of its fields somewhere on the record page — 12 field(s) exist on the object but render nowhere: Body_Html**c "Body (HTML)", Body_Plain**c "Body (Plain Text)", Brand_Color**c "Brand Color Override", Description**c "Description", Footer_Text**c "
+- ✅ DocGen_Email_Template\_\_c.Name renders on the record page
+- ✅ DocGen_Email_Template**c.Type**c renders on the record page
+- ✅ DocGen_Email_Template**c.Subject**c renders on the record page
+- ✅ DocGen_Email_Template**c.Is_Active**c renders on the record page
+- ✅ DocGen_Email_Template**c.Description**c renders on the record page
+- ✅ DocGen_Email_Template**c.Layout_Mode**c renders on the record page
+- ✅ DocGen_Email_Template**c.Body_Html**c renders on the record page
+- ✅ DocGen_Email_Template**c.Body_Plain**c renders on the record page
+- ✅ DocGen_Email_Template**c.Logo_Url**c renders on the record page
+- ✅ DocGen_Email_Template**c.Logo_Url_Extended**c renders on the record page
+- ✅ DocGen_Email_Template**c.Logo_Asset_Key**c renders on the record page
+- ✅ DocGen_Email_Template**c.Logo_Height**c renders on the record page
+- ✅ DocGen_Email_Template**c.Brand_Color**c renders on the record page
+- ✅ DocGen_Email_Template**c.Footer_Text**c renders on the record page
+- ✅ DocGen_Email_Template\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Email_Template\_\_c.LastModifiedById renders on the record page
+- ✅ DocGen_Email_Template\_\_c exposes every one of its fields somewhere on the record page
 - ✅ DocGen_Email_Template\_\_c page components report no error state — no custom component is placed on this record page
 - ✅ DocGen_Email_Template\_\_c record page logs no console errors
 - ✅ DocGen_Signature_Request\_\_c record page renders — 34 field slots rendered
@@ -179,8 +199,8 @@ Ordered by severity. The detail column is written to say WHERE to look.
 - ✅ DocGen_Signature_Request**c.Signer_Email**c renders on the record page
 - ✅ DocGen_Signature_Request\_\_c.CreatedById renders on the record page
 - ✅ DocGen_Signature_Request\_\_c.LastModifiedById renders on the record page
-- ❌ DocGen_Signature_Request**c exposes every one of its fields somewhere on the record page — 3 field(s) exist on the object but render nowhere: Frozen_Document_CV_Id**c "Frozen Document CV Id", Snapshot_Hash**c "Snapshot Hash", Snapshot_Taken_At**c "Snapshot Taken At"
-- ✅ DocGen_Signature_Request**c fields edited outside the record page are accounted for — Frozen_Document**c (internal snapshot blob written by the signing engine), Render_Data_Snapshot**c (internal snapshot blob written by the signing engine), Secure_Token**c (signing capability token — d
+- ✅ DocGen_Signature_Request\_\_c exposes every one of its fields somewhere on the record page — all reachable; 4 field(s) intentionally edited elsewhere
+- ✅ DocGen_Signature_Request**c fields edited outside the record page are accounted for — Frozen_Document**c (snapshot blob written by the signing engine), Render_Data_Snapshot**c (snapshot blob written by the signing engine), Signature_Data**c (written by the signing engine), Snapshot_Tak
 - ✅ DocGen_Signature_Request\_\_c related lists load without error — 8 related list container(s) rendered
 - ✅ DocGen_Signature_Request\_\_c shows its "Signers" related list
 - ✅ DocGen_Signature_Request\_\_c shows its "Audits" related list
@@ -208,14 +228,14 @@ Ordered by severity. The detail column is written to say WHERE to look.
 - ✅ DocGen_Signer**c.Reminder_Sent_At**c renders on the record page
 - ✅ DocGen_Signer\_\_c.CreatedById renders on the record page
 - ✅ DocGen_Signer\_\_c.LastModifiedById renders on the record page
-- ✅ DocGen_Signer\_\_c exposes every one of its fields somewhere on the record page — all reachable; 3 field(s) intentionally edited elsewhere
-- ✅ DocGen_Signer**c fields edited outside the record page are accounted for — Field_Data_Json**c (internal, written by the signing engine), PIN_Hash**c (credential hash — deliberately not on a layout), Secure_Token**c (signing capability token — deliberately not on a layout)
+- ✅ DocGen_Signer\_\_c exposes every one of its fields somewhere on the record page — all reachable; 1 field(s) intentionally edited elsewhere
+- ✅ DocGen_Signer**c fields edited outside the record page are accounted for — Field_Data_Json**c (written by the signing engine)
 - ✅ DocGen_Signer\_\_c related lists load without error — 6 related list container(s) rendered
 - ✅ DocGen_Signer\_\_c shows its "Files" related list
 - ✅ DocGen_Signer\_\_c related lists are genuinely visible (hit test)
 - ✅ DocGen_Signer\_\_c page components report no error state — no custom component is placed on this record page
 - ✅ DocGen_Signer\_\_c record page logs no console errors
-- ✅ DocGen_Signature_Placement\_\_c record page renders — 29 field slots rendered
+- ✅ DocGen_Signature_Placement\_\_c record page renders — 31 field slots rendered
 - ✅ DocGen_Signature_Placement\_\_c detail fields are genuinely visible (hit test) — first field "Placement Number" is hittable
 - ✅ DocGen_Signature_Placement\_\_c.Name renders on the record page
 - ✅ DocGen_Signature_Placement**c.Signer**c renders on the record page
@@ -230,7 +250,8 @@ Ordered by severity. The detail column is written to say WHERE to look.
 - ✅ DocGen_Signature_Placement**c.Tag_Text**c renders on the record page
 - ✅ DocGen_Signature_Placement\_\_c.CreatedById renders on the record page
 - ✅ DocGen_Signature_Placement\_\_c.LastModifiedById renders on the record page
-- ❌ DocGen_Signature_Placement**c exposes every one of its fields somewhere on the record page — 1 field(s) exist on the object but render nowhere: Render_Inline**c "Render Inline"
+- ✅ DocGen_Signature_Placement**c.Render_Inline**c renders on the record page
+- ✅ DocGen_Signature_Placement\_\_c exposes every one of its fields somewhere on the record page
 - ✅ DocGen_Signature_Placement\_\_c page components report no error state — no custom component is placed on this record page
 - ✅ DocGen_Signature_Placement\_\_c record page logs no console errors
 - ✅ DocGen_Signature_Audit\_\_c record page renders — 34 field slots rendered

@@ -46,6 +46,9 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { check, skip, suiteResult, SEVERITY } from '../lib/report.mjs';
+// Shared with metadata-audit — the two suites contradicted each other when
+// each kept its own list. See lib/field-policy.mjs.
+import { visibilityWaiver, isForbidden } from '../lib/field-policy.mjs';
 import { launch, login, openRecord, inPage, HIT_TEST } from '../lib/browser.mjs';
 import { runAnonymous, debugMap } from '../lib/sf.mjs';
 
@@ -99,25 +102,6 @@ const SWEEP_FIELD = {
  * reason attached, so the real gaps stay at the top of the fix list. A waiver
  * here is a decision on the record, not a silence.
  */
-const UI_ELSEWHERE = {
-    'DocGen_Template__c.Header_Html__c': 'edited in the Designer header band',
-    'DocGen_Template__c.Footer_Html__c': 'edited in the Designer footer band',
-    'DocGen_Template__c.Form_Fields_Config__c': 'edited on the Signer Inputs tab',
-    'DocGen_Template_Version__c.Header_Html__c': 'edited in the Designer header band',
-    'DocGen_Template_Version__c.Footer_Html__c': 'edited in the Designer footer band',
-    'DocGen_Template_Version__c.Query_Config__c': 'edited by the visual query builder',
-    'DocGen_Signature_Request__c.Frozen_Document__c': 'internal snapshot blob written by the signing engine',
-    'DocGen_Signature_Request__c.Render_Data_Snapshot__c': 'internal snapshot blob written by the signing engine',
-    'DocGen_Signature_Request__c.Signature_Data__c': 'internal, written by the signing engine',
-    'DocGen_Signer__c.Field_Data_Json__c': 'internal, written by the signing engine',
-    'DocGen_Signer__c.Signature_Data__c': 'internal, written by the signing engine',
-    // These three are capabilities, not settings. Secure_Token__c IS the guest
-    // signer's authorisation to write; putting it on a layout would hand anyone
-    // with read access the ability to impersonate a signer. Absent ON PURPOSE.
-    'DocGen_Signature_Request__c.Secure_Token__c': 'signing capability token — deliberately not on a layout',
-    'DocGen_Signer__c.Secure_Token__c': 'signing capability token — deliberately not on a layout',
-    'DocGen_Signer__c.PIN_Hash__c': 'credential hash — deliberately not on a layout'
-};
 
 /**
  * Console noise Salesforce itself emits on a stock record page. Anything not
@@ -665,7 +649,11 @@ export async function run({ org, headed }) {
             const invisibleWaived = [];
             for (const f of m.fields) {
                 if (isPresent(f.api, f.label)) continue;
-                const waiver = UI_ELSEWHERE[`${obj}.${f.api}`];
+                // A forbidden field being invisible is CORRECT, not a gap.
+                if (isForbidden(obj, f.api)) {
+                    continue;
+                }
+                const waiver = visibilityWaiver(obj, f.api);
                 (waiver ? invisibleWaived : invisible).push(waiver ? `${f.api} (${waiver})` : `${f.api} "${f.label}"`);
             }
             checks.push(

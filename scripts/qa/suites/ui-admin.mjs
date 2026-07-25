@@ -76,10 +76,13 @@ const DEEP = `
   const __deepAll = (root, sel) => {
     const out = [];
     const walk = (r) => {
-      if (!r.querySelectorAll) return;
+      if (!r || !r.querySelectorAll) return;
       for (const el of r.querySelectorAll(sel)) out.push(el);
       for (const el of r.querySelectorAll('*')) if (el.shadowRoot) walk(el.shadowRoot);
     };
+    // The ROOT's own shadow root counts too — without this, __deepAll on a
+    // lightning-datatable host searched only its (empty) light DOM.
+    if (root && root.shadowRoot) walk(root.shadowRoot);
     walk(root);
     return out;
   };
@@ -115,18 +118,44 @@ const DEEP = `
     const norm = (s) => String(s || '').split('*').join('').split(/[ ]+/).join(' ').trim();
     const cands = [];
     for (const h of __dgFind('lightning-input,lightning-textarea,lightning-combobox', true) || []) {
-      const root = h.shadowRoot || h;
-      for (const lab of root.querySelectorAll('label')) {
-        if (norm(lab.textContent) !== label) continue;
-        const inner = root.querySelector('input, textarea, button');
-        if (inner) cands.push({ host: h, inner });
-        break;
-      }
+      // lightning-input nests lightning-primitive-input-simple, which owns the
+      // label and the real <input> in a SECOND shadow root — hence __deepAll.
+      if (!__deepAll(h, 'label').some((lab) => norm(__deep(lab)) === label)) continue;
+      const inner = __deepAll(h, 'input, textarea')[0] || __deepAll(h, 'button')[0];
+      if (inner) cands.push({ host: h, inner });
     }
     return cands.find((c) => __vis(c.inner)) || cands[0] || null;
   };`;
 
-const KIT = HIT_TEST + DEEP;
+/**
+ * HIT_TEST from browser.mjs is the judge, with one correction: it decides
+ * "covered by X" using Node.contains(), which does NOT cross shadow boundaries.
+ * A lightning-button-icon puts its <svg> in a nested shadow root, so the icon
+ * sitting on its own button reads as an occluder. This re-checks a "covered by"
+ * verdict by walking the COMPOSED tree upward from whatever is at the point; if
+ * that chain reaches the element, the element really is what a click would hit.
+ */
+const HIT = `
+  const __hit = (el) => {
+    const v = __dgHittable(el);
+    if (!el || String(v).indexOf('covered by') !== 0) return v;
+    const r = el.getBoundingClientRect();
+    const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+    let top = document.elementFromPoint(x, y), guard = 0;
+    while (top && top.shadowRoot && guard++ < 12) {
+      const inner = top.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === top) break;
+      top = inner;
+    }
+    let n = top, g = 0;
+    while (n && g++ < 60) {
+      if (n === el) return 'ok';
+      n = n.parentNode != null ? n.parentNode : n.host || null;
+    }
+    return v;
+  };`;
+
+const KIT = HIT_TEST + DEEP + HIT;
 
 /** Evaluate with PIERCE + HIT_TEST + deep helpers available. Never throws. */
 async function ev(page, body, fallback = null) {
@@ -204,7 +233,7 @@ async function hittable(page, sel, index = 0) {
         `const els = __q(${JSON.stringify(sel)}, true);
      const el = els[${index}];
      if (el) el.scrollIntoView({ block: 'center' });
-     return __dgHittable(el);`,
+     return __hit(el);`,
         'could not evaluate'
     );
 }
@@ -218,7 +247,7 @@ async function hittableByText(page, sel, text) {
        if (__deep(el).toLowerCase().indexOf(want) === -1) continue;
        el.scrollIntoView({ block: 'center' });
        const inner = el.shadowRoot ? el.shadowRoot.querySelector('button, a, input') : null;
-       return __dgHittable(inner || el);
+       return __hit(inner || el);
      }
      return 'no control with that label';`,
         'could not evaluate'
@@ -293,7 +322,9 @@ const TOAST_SPY = `
 
 async function drainToasts(page) {
     try {
-        return await page.evaluate(`(() => { const t = window.__dgToasts || []; window.__dgToasts = []; return t; })()`);
+        return await page.evaluate(
+            `(() => { const t = window.__dgToasts || []; window.__dgToasts = []; return t; })()`
+        );
     } catch (e) {
         return [];
     }
@@ -343,14 +374,14 @@ async function apex(org, body) {
 async function probeTemplates(org, extraFields = []) {
     const sel = ['Id', 'Name', ...extraFields.map((f) => `' + ns + '${f}`)].join(', ');
     const getters = extraFields
-        .map((f) => `+ '|' + String(r.get(ns + '${f}')).replaceAll('[\\r\\n]+', ' ')`)
+        .map((f) => `+ '|' + String.valueOf(r.get(ns + '${f}')).replaceAll('[\\r\\n]+', ' ')`)
         .join('\n        ');
     const r = await apex(
         org,
         `List<SObject> rows = Database.query('SELECT ${sel} FROM ' + tgt + ' WHERE Name LIKE :pfx ORDER BY CreatedDate');
      System.debug('COUNT=' + rows.size());
      for (SObject r : rows) {
-        System.debug('ROW=' + r.Id + '|' + String(r.get('Name'))
+        System.debug('ROW=' + r.Id + '|' + String.valueOf(r.get('Name'))
         ${getters});
      }`
     );
@@ -483,7 +514,7 @@ export async function run({ org, headed }) {
                 page,
                 `const t = (__dgFind('[role="tab"]', true) || []).find((x) => __deep(x).indexOf(${JSON.stringify(label)}) !== -1);
          if (t) t.scrollIntoView({ block: 'center' });
-         return __dgHittable(t);`,
+         return __hit(t);`,
                 'could not evaluate'
             );
             add(
@@ -735,7 +766,9 @@ export async function run({ org, headed }) {
             check(
                 'wizard step 3 reviews the name, object and query it will save',
                 !!(step3 && step3.review && step3.echoesQuery && step3.echoesName),
-                step3 ? `reviewScreen=${step3.review} nameEchoed=${step3.echoesName} queryEchoed=${step3.echoesQuery}` : 'unreadable',
+                step3
+                    ? `reviewScreen=${step3.review} nameEchoed=${step3.echoesName} queryEchoed=${step3.echoesQuery}`
+                    : 'unreadable',
                 SEVERITY.MAJOR
             )
         );
@@ -761,7 +794,9 @@ export async function run({ org, headed }) {
             check(
                 'the created template keeps the query the wizard collected',
                 !!(fileRow && String(fileRow['Query_Config__c'] || '').indexOf('Industry') !== -1),
-                fileRow ? `Query_Config__c = ${String(fileRow['Query_Config__c']).slice(0, 90)}` : 'no record to inspect',
+                fileRow
+                    ? `Query_Config__c = ${String(fileRow['Query_Config__c']).slice(0, 90)}`
+                    : 'no record to inspect',
                 SEVERITY.MAJOR
             )
         );
@@ -956,14 +991,19 @@ export async function run({ org, headed }) {
              title: title ? __deep(title) : '',
              controls: __deepAll(panel, 'button, input, select, textarea, a, [role="option"]').length,
              textLen: __deep(panel).length,
-             hit: __dgHittable(panel)
+             hit: __hit(panel)
            };`,
                     null
                 );
                 add(
                     check(
                         `panel "${p.key}" opens with its contents rendered`,
-                        !!(opened && opened.open && opened.title === p.title && (opened.controls > 1 || opened.textLen > 60)),
+                        !!(
+                            opened &&
+                            opened.open &&
+                            opened.title === p.title &&
+                            (opened.controls > 1 || opened.textLen > 60)
+                        ),
                         opened
                             ? `title="${opened.title}" (expected "${p.title}"), interactive children=${opened.controls}, text=${opened.textLen} chars`
                             : 'the panel never opened',
@@ -1005,7 +1045,8 @@ export async function run({ org, headed }) {
          if (!pv) return { ok: false, why: 'no canvas' };
          const panel = __dgFind('.dg-float-panel');
          if (!panel) return { ok: false, why: 'the tags panel did not open' };
-         const chip = __deepAll(panel, 'button')[0];
+         // The panel head's ✕ is a button too — a chip is one that inserts.
+         const chip = __deepAll(panel, 'button').filter((b) => (b.className || '').indexOf('dg-pill-menu-x') === -1)[0];
          if (!chip) return { ok: false, why: 'the tags panel rendered no chips' };
          const label = __deep(chip).slice(0, 40);
          const before = pv.innerHTML;
@@ -1067,7 +1108,9 @@ export async function run({ org, headed }) {
                     )
                 );
             } else {
-                add(skip('changing page orientation resizes the sheet', 'no orientation select on the designer surface'));
+                add(
+                    skip('changing page orientation resizes the sheet', 'no orientation select on the designer surface')
+                );
             }
         } else {
             add(skip('the floating panels open with their contents rendered', 'the designer never opened'));
@@ -1085,12 +1128,18 @@ export async function run({ org, headed }) {
       const dt = __dgFind('lightning-datatable');
       if (!dt || !dt.shadowRoot) return null;
       const rows = [...dt.shadowRoot.querySelectorAll('tbody tr')].map((tr) => __deep(tr));
-      const label = (__dgFind('p', true) || []).map((e) => __deep(e)).find((t) => t.indexOf('templates') !== -1) || '';
+      // "12 templates" / "3 of 12 templates" — matched precisely so the Word
+      // conversion blurb (which also says "templates") cannot be mistaken for it.
+      const label = (__dgFind('p', true) || []).map((e) => __deep(e))
+        .find((t) => /^[0-9]+( of [0-9]+)? templates$/.test(t)) || '';
       return { count: rows.length, rows, label };`;
 
         const listed = await until(
             page,
-            READ_ROWS.replace('return { count: rows.length', 'if (!rows.length) return null;\n      return { count: rows.length'),
+            READ_ROWS.replace(
+                'return { count: rows.length',
+                'if (!rows.length) return null;\n      return { count: rows.length'
+            ),
             25000,
             1500
         );
@@ -1098,7 +1147,9 @@ export async function run({ org, headed }) {
             check(
                 'the template list renders rows',
                 !!(listed && listed.count > 0),
-                listed ? `${listed.count} rows; count label "${listed.label}"` : 'lightning-datatable never rendered any rows',
+                listed
+                    ? `${listed.count} rows; count label "${listed.label}"`
+                    : 'lightning-datatable never rendered any rows',
                 SEVERITY.BLOCKER
             )
         );
@@ -1110,7 +1161,8 @@ export async function run({ org, headed }) {
             await typeField(page, 'Search Templates', runId);
             await wait(2500);
             const searched = await ev(page, READ_ROWS, null);
-            const allMatch = searched && searched.rows.every((r) => r.toLowerCase().indexOf(runId.toLowerCase()) !== -1);
+            const allMatch =
+                searched && searched.rows.every((r) => r.toLowerCase().indexOf(runId.toLowerCase()) !== -1);
             add(
                 check(
                     'search narrows the list to matching rows only',
@@ -1204,23 +1256,63 @@ export async function run({ org, headed }) {
 
         step('row actions');
         /* --- 4b. ROW ACTIONS ---------------------------------------- */
+        /**
+         * Open a template's row-action menu and pick an item, with real mouse
+         * clicks. Playwright's own locator.click() kept timing out on this menu
+         * (it resolves the item, then never satisfies its actionability checks
+         * because the menu is portalled and animating), so the row, the trigger
+         * and the item are all resolved and clicked the same way everything else
+         * in this suite is.
+         */
         const rowAction = async (templateName, action) => {
-            const row = page.locator(`tr:has-text("${templateName}")`).first();
-            await row.locator('button[aria-haspopup="true"]').first().click({ timeout: 10000 });
-            await wait(1000);
-            await page.locator(`[role="menuitem"]:has-text("${action}")`).first().click({ timeout: 10000 });
+            await page.keyboard.press('Escape'); // any menu left open eats the click
+            await wait(400);
+            const trigger = await ev(
+                page,
+                BOX_FROM +
+                    `const dt = __dgFind('lightning-datatable');
+         if (!dt || !dt.shadowRoot) return null;
+         const rows = [...dt.shadowRoot.querySelectorAll('tbody tr')];
+         const row = rows.find((tr) => __deep(tr).indexOf(${JSON.stringify(templateName)}) !== -1);
+         if (!row) return { missing: 'row' };
+         const btn = __deepAll(row, 'button[aria-haspopup="true"]')[0];
+         if (!btn) return { missing: 'trigger' };
+         return __box(btn);`,
+                null
+            );
+            if (!trigger || trigger.missing) {
+                throw new Error(`row "${templateName}": ${trigger ? 'no ' + trigger.missing : 'datatable not found'}`);
+            }
+            await page.mouse.click(trigger.x, trigger.y);
+            await wait(1200);
+            const item = await ev(
+                page,
+                BOX_FROM +
+                    `for (const el of __dgFind('[role="menuitem"]', true) || []) {
+           if (__deep(el).trim().toLowerCase() !== ${JSON.stringify(action)}.toLowerCase()) continue;
+           if (!__vis(el)) continue;
+           const b = __box(el);
+           if (b) return b;
+         }
+         return null;`,
+                null
+            );
+            if (!item) throw new Error(`row "${templateName}": the menu never offered a visible "${action}" item`);
+            await page.mouse.click(item.x, item.y);
         };
 
         const actionHit = await ev(
             page,
             `const dt = __dgFind('lightning-datatable');
-       if (!dt) return 'no datatable';
-       // The action button lives inside lightning-primitive-cell-actions' own
-       // shadow root, so a plain descendant query never reaches it.
-       const btn = __deepAll(dt, 'button[aria-haspopup="true"]')[0];
+       if (!dt || !dt.shadowRoot) return 'no datatable';
+       // Scope to a BODY row: every column header also has an aria-haspopup
+       // button, and the row-action button lives two shadow roots deep.
+       const tr = dt.shadowRoot.querySelector('tbody tr');
+       if (!tr) return 'no data rows';
+       const btn = __deepAll(tr, 'button[aria-haspopup="true"]')[0];
        if (!btn) return 'no row-action button';
        btn.scrollIntoView({ block: 'center' });
-       return __dgHittable(btn);`,
+       return __hit(btn);`,
             'could not evaluate'
         );
         add(
@@ -1256,7 +1348,12 @@ export async function run({ org, headed }) {
             await clickByText(page, 'lightning-button', 'Close', { exact: true });
             await wait(2000);
         } catch (e) {
-            add(skip('row action View opens the template on its Copy-Paste Tags tab', 'could not drive the row menu: ' + msg(e)));
+            add(
+                skip(
+                    'row action View opens the template on its Copy-Paste Tags tab',
+                    'could not drive the row menu: ' + msg(e)
+                )
+            );
         }
 
         step('row action: Export');
@@ -1309,7 +1406,9 @@ export async function run({ org, headed }) {
                     check(
                         'Import Template restores an exported bundle as a new template',
                         imported,
-                        imported ? `"${NAME_IMPORT}" exists after import` : `"${NAME_IMPORT}" was never created from the bundle`,
+                        imported
+                            ? `"${NAME_IMPORT}" exists after import`
+                            : `"${NAME_IMPORT}" was never created from the bundle`,
                         SEVERITY.MAJOR
                     )
                 );
@@ -1317,7 +1416,9 @@ export async function run({ org, headed }) {
                 add(skip('Import Template restores an exported bundle as a new template', 'import failed: ' + msg(e)));
             }
         } else {
-            add(skip('Import Template restores an exported bundle as a new template', 'nothing was exported to import'));
+            add(
+                skip('Import Template restores an exported bundle as a new template', 'nothing was exported to import')
+            );
         }
 
         step('row action: Clone');
@@ -1343,7 +1444,12 @@ export async function run({ org, headed }) {
             await clickByText(page, 'lightning-button', 'Close', { exact: true });
             await wait(2000);
         } catch (e) {
-            add(skip('row action Clone creates a copy and opens it for editing', 'could not drive the row menu: ' + msg(e)));
+            add(
+                skip(
+                    'row action Clone creates a copy and opens it for editing',
+                    'could not drive the row menu: ' + msg(e)
+                )
+            );
         }
 
         step('row action: Delete');
@@ -1419,7 +1525,9 @@ export async function run({ org, headed }) {
                 )
             );
         } catch (e) {
-            add(skip('row action Design opens that template in the designer', 'could not drive the row menu: ' + msg(e)));
+            add(
+                skip('row action Design opens that template in the designer', 'could not drive the row menu: ' + msg(e))
+            );
         }
 
         /* ============================================================ *
@@ -1455,7 +1563,7 @@ export async function run({ org, headed }) {
          if (!b) return 'the Save as New Version button is missing';
          b.scrollIntoView({ block: 'center' });
          const inner = b.shadowRoot ? b.shadowRoot.querySelector('button') : null;
-         return __dgHittable(inner || b);`,
+         return __hit(inner || b);`,
                 'could not evaluate'
             );
             add(
@@ -1473,7 +1581,9 @@ export async function run({ org, headed }) {
                 { label: 'Settings', marker: 'Template Name' },
                 { label: 'Header / Footer', marker: 'Header' },
                 { label: 'Watermark', marker: 'Watermark' },
-                { label: 'Query Configuration', marker: 'Query' },
+                // "Quick Reference" is the query tab's own unconditional block —
+                // the word "Query" itself never appears in the rendered panel.
+                { label: 'Query Configuration', marker: 'Quick Reference' },
                 { label: 'Signer Inputs', marker: 'Signer Form Fields' },
                 { label: 'Copy-Paste Tags', marker: 'copy' },
                 { label: 'Fillable Fields', marker: 'field' },
@@ -1611,7 +1721,11 @@ export async function run({ org, headed }) {
                     check(
                         'Signer Inputs: a field row is editable',
                         !!(labelTyped && labelTyped.ok),
-                        labelTyped ? (labelTyped.ok ? `label was "${labelTyped.before}"` : labelTyped.why) : 'unreadable',
+                        labelTyped
+                            ? labelTyped.ok
+                                ? `label was "${labelTyped.before}"`
+                                : labelTyped.why
+                            : 'unreadable',
                         SEVERITY.MINOR
                     )
                 );
@@ -1638,7 +1752,12 @@ export async function run({ org, headed }) {
                         )
                     );
                 } else {
-                    add(skip('Signer Inputs: removing a field takes it off the list', removed ? removed.why : 'unreadable'));
+                    add(
+                        skip(
+                            'Signer Inputs: removing a field takes it off the list',
+                            removed ? removed.why : 'unreadable'
+                        )
+                    );
                 }
             } else {
                 add(skip('Signer Inputs: a field row is editable', 'no row was added'));
@@ -1768,7 +1887,12 @@ export async function run({ org, headed }) {
                 await clickByText(page, 'lightning-button', 'Close', { exact: true });
                 await wait(1500);
             } catch (e) {
-                add(skip('closing the modal with unsaved edits warns or preserves them', 'could not re-open the modal: ' + msg(e)));
+                add(
+                    skip(
+                        'closing the modal with unsaved edits warns or preserves them',
+                        'could not re-open the modal: ' + msg(e)
+                    )
+                );
             }
         } else {
             for (const n of [
@@ -1790,6 +1914,7 @@ export async function run({ org, headed }) {
             if (!hubUp) {
                 add(skip('the Command Hub opens each settings surface', 'the Command Hub tab never rendered'));
             } else {
+                const HEAD = `const h = __dgFind('.panel-header'); return h ? __deep(h).slice(0, 60) : '';`;
                 for (const item of [
                     'My Templates',
                     'Bulk Generation',
@@ -1798,6 +1923,12 @@ export async function run({ org, headed }) {
                     'Email Templates',
                     'Learning Center'
                 ]) {
+                    // Each item gets a FRESH hub. Opening Bulk Generation collapses
+                    // the sidebar (asserted on its own below); without a reload every
+                    // later item would fail as collateral damage instead of being
+                    // tested, and the report would blame the wrong control.
+                    await openTab(page, base, HUB, 10000);
+                    await until(page, `return __dgFind('.nav-links') ? { ok: 1 } : null;`, 25000, 1500);
                     const present = await ev(
                         page,
                         `return (__dgFind('.nav-links button', true) || []).some((b) => __deep(b).indexOf(${JSON.stringify(item)}) !== -1);`,
@@ -1807,33 +1938,57 @@ export async function run({ org, headed }) {
                         add(skip(`Command Hub: "${item}" opens its panel`, 'this nav item is not offered in this org'));
                         continue;
                     }
-                    // Move OFF the item first — otherwise the already-active nav
-                    // item would "fail" for not changing anything.
-                    await clickByText(page, '.nav-links button', item === 'Assets' ? 'Signatures' : 'Assets');
-                    await wait(3500);
-                    const before = await ev(
-                        page,
-                        `const h = __dgFind('.panel-header'); return h ? __deep(h).slice(0, 80) : '';`,
-                        ''
-                    );
+                    const before = await ev(page, HEAD, '');
                     await clickByText(page, '.nav-links button', item);
-                    await wait(5000);
+                    await wait(6000);
                     const after = await ev(
                         page,
                         `const h = __dgFind('.panel-header');
              const b = __dgFind('.panel-body');
-             return { head: h ? __deep(h).slice(0, 80) : '', bodyLen: b ? __deep(b).length : 0 };`,
+             return { head: h ? __deep(h).slice(0, 60) : '', bodyLen: b ? __deep(b).length : 0 };`,
                         null
                     );
+                    // "My Templates" is the landing section, so it is already open —
+                    // for that one the panel simply has to be its own and populated.
+                    const opened =
+                        item === 'My Templates'
+                            ? !!(after && /Template Library/i.test(after.head) && after.bodyLen > 20)
+                            : !!(after && after.head && after.head !== before && after.bodyLen > 20);
                     add(
                         check(
                             `Command Hub: "${item}" opens its panel`,
-                            !!(after && after.head && after.head !== before && after.bodyLen > 20),
+                            opened,
                             after ? `panel header "${before}" -> "${after.head}"; body ${after.bodyLen} chars` : 'unreadable',
                             SEVERITY.MAJOR
                         )
                     );
                 }
+
+                // Opening a section must not strand the user in it. This is the
+                // regression that made every later nav item look broken.
+                await openTab(page, base, HUB, 10000);
+                await until(page, `return __dgFind('.nav-links') ? { ok: 1 } : null;`, 25000, 1500);
+                await clickByText(page, '.nav-links button', 'Bulk Generation');
+                await wait(8000);
+                const navAfterBulk = await ev(
+                    page,
+                    `return (__dgFind('.nav-links button', true) || []).map((b) => ({ t: __deep(b), hit: __hit(b) }));`,
+                    []
+                );
+                const unreachable = (navAfterBulk || []).filter((b) => b.hit !== 'ok');
+                add(
+                    check(
+                        'the Command Hub sidebar stays usable after opening Bulk Generation',
+                        (navAfterBulk || []).length > 0 && unreachable.length === 0,
+                        unreachable.length
+                            ? `${unreachable.length}/${navAfterBulk.length} nav items became unclickable — ${unreachable
+                                  .slice(0, 3)
+                                  .map((b) => `"${b.t}": ${b.hit}`)
+                                  .join(', ')}. The user cannot leave Bulk Generation without reloading the page.`
+                            : `${(navAfterBulk || []).length} nav items still reachable`,
+                        SEVERITY.MAJOR
+                    )
+                );
             }
         } catch (e) {
             add(skip('the Command Hub opens each settings surface', 'the hub run failed: ' + msg(e)));

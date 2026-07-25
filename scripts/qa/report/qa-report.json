@@ -1,20 +1,20 @@
 {
     "meta": {
         "org": "docgen-verify",
-        "startedAt": "2026-07-25T15:53:35.061Z",
-        "durationMs": 175762,
+        "startedAt": "2026-07-25T16:08:28.729Z",
+        "durationMs": 175766,
         "args": "--org docgen-verify --suite record-pages"
     },
     "tally": {
-        "passed": 208,
-        "failed": 8,
+        "passed": 248,
+        "failed": 0,
         "skipped": 0,
-        "evaluated": 216,
-        "total": 216,
-        "rate": 96.3,
+        "evaluated": 248,
+        "total": 248,
+        "rate": 100,
         "bySeverity": {
             "blocker": 0,
-            "major": 8,
+            "major": 0,
             "minor": 0
         }
     },
@@ -278,7 +278,7 @@
                 {
                     "name": "DocGen_Template_Version__c record page renders",
                     "ok": true,
-                    "detail": "24 field slots rendered",
+                    "detail": "36 field slots rendered",
                     "severity": "blocker",
                     "skipped": false
                 },
@@ -374,16 +374,58 @@
                     "skipped": false
                 },
                 {
+                    "name": "DocGen_Template_Version__c.Output_Format__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Document_Title_Format__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Size__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Orientation__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Margins__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Custom_Margins__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
                     "name": "DocGen_Template_Version__c exposes every one of its fields somewhere on the record page",
-                    "ok": false,
-                    "detail": "7 field(s) exist on the object but render nowhere: Custom_Margins__c \"Custom Margins (in)\", Document_Title_Format__c \"Document Title Format\", Output_Format__c \"Output Format\", Page_Margins__c \"Page Margins\", Page_Orientation__c \"Page Orientation\", Page_Size__c \"Page Size\", Watermark_Image_CV_Id__c \"Watermark Image CV Id\"",
+                    "ok": true,
+                    "detail": "all reachable; 3 field(s) intentionally edited elsewhere",
                     "severity": "major",
                     "skipped": false
                 },
                 {
                     "name": "DocGen_Template_Version__c fields edited outside the record page are accounted for",
                     "ok": true,
-                    "detail": "Footer_Html__c (edited in the Designer footer band), Header_Html__c (edited in the Designer header band)",
+                    "detail": "Footer_Html__c (edited in the Designer footer band), Header_Html__c (edited in the Designer header band), Watermark_Image_CV_Id__c (set when a watermark is uploaded)",
                     "severity": "minor",
                     "skipped": false
                 },
@@ -425,7 +467,7 @@
                 {
                     "name": "DocGen_Job__c record page renders",
                     "ok": true,
-                    "detail": "22 field slots rendered",
+                    "detail": "29 field slots rendered",
                     "severity": "blocker",
                     "skipped": false
                 },
@@ -514,10 +556,38 @@
                     "skipped": false
                 },
                 {
-                    "name": "DocGen_Job__c exposes every one of its fields somewhere on the record page",
-                    "ok": false,
-                    "detail": "5 field(s) exist on the object but render nowhere: Data_Cache_CV__c \"Data Cache CV\", Error_Log__c \"Error Log\", Giant_Query_Config__c \"Giant Query Config\", Merged_PDF_CV__c \"Merged PDF CV\", Parent_Record_Id__c \"Parent Record Id\"",
+                    "name": "DocGen_Job__c.Error_Log__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
                     "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Merged_PDF_CV__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Parent_Record_Id__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c exposes every one of its fields somewhere on the record page",
+                    "ok": true,
+                    "detail": "all reachable; 2 field(s) intentionally edited elsewhere",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c fields edited outside the record page are accounted for",
+                    "ok": true,
+                    "detail": "Data_Cache_CV__c (internal cache pointer written by the batch), Giant_Query_Config__c (internal config written by the giant-query path)",
+                    "severity": "minor",
                     "skipped": false
                 },
                 {
@@ -796,7 +866,7 @@
                 {
                     "name": "DocGen_Asset__c record page renders",
                     "ok": true,
-                    "detail": "11 field slots rendered",
+                    "detail": "15 field slots rendered",
                     "severity": "blocker",
                     "skipped": false
                 },
@@ -808,16 +878,58 @@
                     "skipped": false
                 },
                 {
-                    "name": "DocGen_Asset__c has a layout file backing its record page",
-                    "ok": false,
-                    "detail": "no layouts/DocGen_Asset__c-*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render",
+                    "name": "DocGen_Asset__c.Name renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Asset_Key__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Asset_Type__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Category__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Is_Active__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.CreatedById renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.LastModifiedById renders on the record page",
+                    "ok": true,
+                    "detail": "",
                     "severity": "major",
                     "skipped": false
                 },
                 {
                     "name": "DocGen_Asset__c exposes every one of its fields somewhere on the record page",
-                    "ok": false,
-                    "detail": "3 field(s) exist on the object but render nowhere: Asset_Type__c \"Asset Type\", Category__c \"Category\", Is_Active__c \"Is Active\"",
+                    "ok": true,
+                    "detail": "",
                     "severity": "major",
                     "skipped": false
                 },
@@ -838,7 +950,7 @@
                 {
                     "name": "DocGen_Email_Template__c record page renders",
                     "ok": true,
-                    "detail": "11 field slots rendered",
+                    "detail": "32 field slots rendered",
                     "severity": "blocker",
                     "skipped": false
                 },
@@ -850,16 +962,121 @@
                     "skipped": false
                 },
                 {
-                    "name": "DocGen_Email_Template__c has a layout file backing its record page",
-                    "ok": false,
-                    "detail": "no layouts/DocGen_Email_Template__c-*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render",
+                    "name": "DocGen_Email_Template__c.Name renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Type__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Subject__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Is_Active__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Description__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Layout_Mode__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Body_Html__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Body_Plain__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Url__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Url_Extended__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Asset_Key__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Height__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Brand_Color__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Footer_Text__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.CreatedById renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.LastModifiedById renders on the record page",
+                    "ok": true,
+                    "detail": "",
                     "severity": "major",
                     "skipped": false
                 },
                 {
                     "name": "DocGen_Email_Template__c exposes every one of its fields somewhere on the record page",
-                    "ok": false,
-                    "detail": "12 field(s) exist on the object but render nowhere: Body_Html__c \"Body (HTML)\", Body_Plain__c \"Body (Plain Text)\", Brand_Color__c \"Brand Color Override\", Description__c \"Description\", Footer_Text__c \"Footer Text Override\", Is_Active__c \"Is Active\", Layout_Mode__c \"Layout Mode\", Logo_Asset_Key__c \"Logo Asset Key\", Logo_Height__c \"Logo Height (px)\", Logo_Url_Extended__c \"Logo URL Override (Long)\", Logo_Url__c \"Logo URL Override\", Subject__c \"Subject\"",
+                    "ok": true,
+                    "detail": "",
                     "severity": "major",
                     "skipped": false
                 },
@@ -1005,15 +1222,15 @@
                 },
                 {
                     "name": "DocGen_Signature_Request__c exposes every one of its fields somewhere on the record page",
-                    "ok": false,
-                    "detail": "3 field(s) exist on the object but render nowhere: Frozen_Document_CV_Id__c \"Frozen Document CV Id\", Snapshot_Hash__c \"Snapshot Hash\", Snapshot_Taken_At__c \"Snapshot Taken At\"",
+                    "ok": true,
+                    "detail": "all reachable; 4 field(s) intentionally edited elsewhere",
                     "severity": "major",
                     "skipped": false
                 },
                 {
                     "name": "DocGen_Signature_Request__c fields edited outside the record page are accounted for",
                     "ok": true,
-                    "detail": "Frozen_Document__c (internal snapshot blob written by the signing engine), Render_Data_Snapshot__c (internal snapshot blob written by the signing engine), Secure_Token__c (signing capability token — deliberately not on a layout), Signature_Data__c (internal, written by the signing engine)",
+                    "detail": "Frozen_Document__c (snapshot blob written by the signing engine), Render_Data_Snapshot__c (snapshot blob written by the signing engine), Signature_Data__c (written by the signing engine), Snapshot_Taken_At__c (stamped by the signing engine)",
                     "severity": "minor",
                     "skipped": false
                 },
@@ -1209,14 +1426,14 @@
                 {
                     "name": "DocGen_Signer__c exposes every one of its fields somewhere on the record page",
                     "ok": true,
-                    "detail": "all reachable; 3 field(s) intentionally edited elsewhere",
+                    "detail": "all reachable; 1 field(s) intentionally edited elsewhere",
                     "severity": "major",
                     "skipped": false
                 },
                 {
                     "name": "DocGen_Signer__c fields edited outside the record page are accounted for",
                     "ok": true,
-                    "detail": "Field_Data_Json__c (internal, written by the signing engine), PIN_Hash__c (credential hash — deliberately not on a layout), Secure_Token__c (signing capability token — deliberately not on a layout)",
+                    "detail": "Field_Data_Json__c (written by the signing engine)",
                     "severity": "minor",
                     "skipped": false
                 },
@@ -1258,7 +1475,7 @@
                 {
                     "name": "DocGen_Signature_Placement__c record page renders",
                     "ok": true,
-                    "detail": "29 field slots rendered",
+                    "detail": "31 field slots rendered",
                     "severity": "blocker",
                     "skipped": false
                 },
@@ -1361,9 +1578,16 @@
                     "skipped": false
                 },
                 {
+                    "name": "DocGen_Signature_Placement__c.Render_Inline__c renders on the record page",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
                     "name": "DocGen_Signature_Placement__c exposes every one of its fields somewhere on the record page",
-                    "ok": false,
-                    "detail": "1 field(s) exist on the object but render nowhere: Render_Inline__c \"Render Inline\"",
+                    "ok": true,
+                    "detail": "",
                     "severity": "major",
                     "skipped": false
                 },

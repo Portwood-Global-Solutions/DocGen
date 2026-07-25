@@ -155,9 +155,7 @@ export function toMarkdown(suites, meta) {
             continue;
         }
         const st = tally([s]);
-        L.push(
-            `| \`${s.suite}\` | ${s.area} | ${st.passed} | ${st.failed} | ${st.skipped} | ${st.rate}% |`
-        );
+        L.push(`| \`${s.suite}\` | ${s.area} | ${st.passed} | ${st.failed} | ${st.skipped} | ${st.rate}% |`);
     }
     L.push('');
 
@@ -177,9 +175,7 @@ export function toMarkdown(suites, meta) {
         const order = { blocker: 0, major: 1, minor: 2 };
         failures.sort((a, b) => order[a.severity] - order[b.severity]);
         for (const f of failures) {
-            L.push(
-                `| **${f.severity}** | \`${f.suite}\` | ${esc(f.name)} | ${esc(f.detail).slice(0, 300)} |`
-            );
+            L.push(`| **${f.severity}** | \`${f.suite}\` | ${esc(f.name)} | ${esc(f.detail).slice(0, 300)} |`);
         }
         L.push('');
     } else {

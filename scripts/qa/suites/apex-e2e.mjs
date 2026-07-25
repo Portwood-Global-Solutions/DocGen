@@ -43,7 +43,12 @@ export function parseE2E(log) {
             /(System\.LimitException[^\n]*)/.exec(log || '') ||
             /(Compile error[^\n]*)/i.exec(log || '') ||
             /(FATAL_ERROR[^\n]*)/.exec(log || '');
-        return { ran: false, pass: 0, fail: 0, why: err ? err[1].slice(0, 220) : 'no PASS/FAIL summary line was printed' };
+        return {
+            ran: false,
+            pass: 0,
+            fail: 0,
+            why: err ? err[1].slice(0, 220) : 'no PASS/FAIL summary line was printed'
+        };
     }
     return { ran: true, pass: Number(m[1]), fail: Number(m[2]), why: '' };
 }

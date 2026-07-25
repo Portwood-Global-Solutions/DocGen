@@ -61,7 +61,12 @@ export async function run({ org, classes }) {
 
     if (!res.tests.length) {
         checks.push(
-            check('Apex tests ran', false, 'the CLI returned no test results — check the org and the class list', SEVERITY.BLOCKER)
+            check(
+                'Apex tests ran',
+                false,
+                'the CLI returned no test results — check the org and the class list',
+                SEVERITY.BLOCKER
+            )
         );
         return suiteResult('apex-unit', 'Apex unit', checks);
     }

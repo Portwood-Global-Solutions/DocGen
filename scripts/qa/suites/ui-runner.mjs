@@ -119,6 +119,12 @@ for (DocGen_Template__c t : withBody) {
 }
 insert vers;
 
+// A job parked in a non-terminal status. Recent Jobs renders a spinner for it,
+// which is the precondition for the overlay check in the browser phase — seeded
+// rather than hoped for, so that check is deterministic instead of depending on
+// whatever jobs happen to be lying around the org.
+insert new DocGen_Job__c(Template__c = good.Id, Status__c = 'Queued', Label__c = '${PREFIX} parked job');
+
 System.debug('NS=' + DocGen_Template__c.sObjectType.getDescribe().getName());
 System.debug('ACCT=' + accts[0].Id);
 System.debug('SEEDED=' + [SELECT COUNT() FROM DocGen_Template__c WHERE Name LIKE '${PREFIX}%'] + ',' +
@@ -276,7 +282,10 @@ async function locateComboboxShowing(page, values) {
     const cur = (e) => ((e.value || e.textContent || '') + '').trim();
     const el = __dgFind('.slds-combobox__input, .slds-combobox__input-value', true)
       .find(e => ${vals}.indexOf(cur(e)) !== -1);`;
-    const found = await ev(page, `${finder}\n if (!el) return false; el.scrollIntoView({ block: 'center' }); return true;`);
+    const found = await ev(
+        page,
+        `${finder}\n if (!el) return false; el.scrollIntoView({ block: 'center' }); return true;`
+    );
     if (!found) return { found: false, hit: 'missing' };
     await page.waitForTimeout(350);
     return ev(
@@ -298,7 +307,10 @@ async function locateByText(page, sel, text) {
     ${TEXT_OF}
     const all = __dgFind(${JSON.stringify(sel)}, true);
     const el = all.find(e => __dgText(e).indexOf(${JSON.stringify(text)}) !== -1);`;
-    const found = await ev(page, `${finder}\n if (!el) return false; el.scrollIntoView({ block: 'center' }); return true;`);
+    const found = await ev(
+        page,
+        `${finder}\n if (!el) return false; el.scrollIntoView({ block: 'center' }); return true;`
+    );
     if (!found) return { found: false, hit: 'missing' };
     await page.waitForTimeout(350);
     return ev(
@@ -549,16 +561,18 @@ export async function run({ org, headed }) {
         const base = await login(page, org);
         await openTab(page, base, tabApi('DocGen_Bulk_Gen'), 12000);
 
+        // Asserted on the words the user must see, not on a character count —
+        // the amount of text varies with how many recent jobs exist.
         const bulkText = await componentText(page, 'doc-gen-bulk-runner');
         const rendered = {
-            present: bulkText.length > 0,
             chars: bulkText.length,
+            hasHeading: bulkText.indexOf('Bulk Document Generation') !== -1,
             hasStep1: bulkText.indexOf('Step 1') !== -1
         };
         add({
             ...check(
                 'bulk generation UI renders on its tab',
-                rendered.present && rendered.hasStep1 && rendered.chars > 200,
+                rendered.hasHeading && rendered.hasStep1,
                 JSON.stringify(rendered),
                 SEVERITY.BLOCKER
             ),
@@ -575,7 +589,7 @@ export async function run({ org, headed }) {
             area: bulkArea
         });
 
-        if (!rendered.present) {
+        if (!rendered.hasStep1) {
             add(
                 skip(
                     'bulk runner interaction checks',
@@ -596,17 +610,18 @@ export async function run({ org, headed }) {
             );
             add({
                 ...check(
-                    'the template search box is actually clickable (nothing covering it)',
+                    'the screen stays usable while a job is still running',
                     searchPos.hit === 'ok',
                     searchPos.hit === 'ok'
-                        ? `hit test ok (${liveJobs.length} non-terminal jobs present)`
-                        : `HIT_TEST says "${searchPos.hit}", with ${liveJobs.length} DocGen_Job__c row(s) in a ` +
-                          `non-terminal status. A DocGen_Job__c in a non-terminal status ` +
-                          `(Draft/Queued/Processing) makes the Recent Jobs row render an inline lightning-spinner; ` +
-                          `.history-row has no position:relative, so the spinner's slds-spinner_container escapes ` +
-                          `and covers the entire page. Every control in Bulk Generation is unusable until that job ` +
-                          `reaches a terminal status. See docGenBulkRunner.html (Recent Jobs row) + ` +
-                          `docGenBulkRunner.css .history-row.`,
+                        ? `template search box is hittable with ${liveJobs.length} non-terminal job(s) present`
+                        : `HIT_TEST on the template search box says "${searchPos.hit}", with ${liveJobs.length} ` +
+                              `DocGen_Job__c row(s) in a non-terminal status (this suite parks one deliberately). ` +
+                              `A DocGen_Job__c in a non-terminal status ` +
+                              `(Draft/Queued/Processing) makes the Recent Jobs row render an inline lightning-spinner; ` +
+                              `.history-row has no position:relative, so the spinner's slds-spinner_container escapes ` +
+                              `and covers the entire page. Every control in Bulk Generation is unusable until that job ` +
+                              `reaches a terminal status. See docGenBulkRunner.html (Recent Jobs row) + ` +
+                              `docGenBulkRunner.css .history-row.`,
                     SEVERITY.BLOCKER
                 ),
                 area: bulkArea
@@ -726,7 +741,11 @@ export async function run({ org, headed }) {
                             area: bulkArea
                         });
 
-                        const indiv = await locateByText(page, '[role="option"]', 'Individual Files');
+                        // Target the item's inner body, not the [role="option"]
+                        // host: HIT_TEST's containment test cannot cross a shadow
+                        // boundary, so the host always reads as "covered by" its
+                        // own child.
+                        const indiv = await locateByText(page, '.slds-media__body', 'Individual Files');
                         if (indiv.found && indiv.hit === 'ok') {
                             await clickAt(page, indiv, 1500);
                             const nowValue = await locateComboboxShowing(page, OUT_MODES);
@@ -946,7 +965,7 @@ export async function run({ org, headed }) {
                             Number(F(failJob, 'Success_Count__c') || 0) === 0,
                         failJob
                             ? `status=${F(failJob, 'Status__c')} success=${F(failJob, 'Success_Count__c')} ` +
-                              `errors=${F(failJob, 'Error_Count__c')}`
+                                  `errors=${F(failJob, 'Error_Count__c')}`
                             : 'no job row appeared',
                         SEVERITY.BLOCKER
                     ),
@@ -1154,7 +1173,9 @@ export async function run({ org, headed }) {
         add(skip('docGenRunner renders on a record page', unreachable, SEVERITY.BLOCKER));
         add(skip('docGenRunner Generate button produces a document from a record page', unreachable, SEVERITY.BLOCKER));
         add(skip('docGenRunner honours the Save to Record / Download output choice', unreachable, SEVERITY.MAJOR));
-        add(skip('docGenRunner shows the empty state when no template matches the record', unreachable, SEVERITY.MAJOR));
+        add(
+            skip('docGenRunner shows the empty state when no template matches the record', unreachable, SEVERITY.MAJOR)
+        );
         add(skip('docGenSignatureSender validates its fields and creates a request', unreachable, SEVERITY.BLOCKER));
         add(
             skip(

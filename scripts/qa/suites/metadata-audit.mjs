@@ -22,6 +22,8 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { check, skip, suiteResult, SEVERITY } from '../lib/report.mjs';
+// Shared with record-pages — see lib/field-policy.mjs for why.
+import { visibilityWaiver, isForbidden, LAYOUT_FORBIDDEN as SHARED_FORBIDDEN } from '../lib/field-policy.mjs';
 
 const ROOT = new URL('../../../force-app/main/default/', import.meta.url).pathname;
 
@@ -40,11 +42,11 @@ const LAYOUT_WAIVERS = {
     'DocGen_Template__c.Specific_Record_Ids__c': 'set by the sharing panel',
     'DocGen_Template__c.Record_Filter__c': 'set by the filter builder',
     // Platform events have no layouts at all.
-    'DocGen_Signature_PDF__e': 'platform event',
-    'DocGen_Guest_Render__e': 'platform event',
-    'DocGen_Field_Writeback__e': 'platform event',
+    DocGen_Signature_PDF__e: 'platform event',
+    DocGen_Guest_Render__e: 'platform event',
+    DocGen_Field_Writeback__e: 'platform event',
     // Custom metadata type — laid out by its own MDT UI.
-    'DocGen_Button__mdt': 'custom metadata type'
+    DocGen_Button__mdt: 'custom metadata type'
 };
 
 /**
@@ -146,17 +148,15 @@ export async function run() {
         for (const field of fields) {
             const key = `${obj}.${field}`;
             const objWaived = LAYOUT_WAIVERS[obj];
-            const waived = LAYOUT_WAIVERS[key] || objWaived;
+            const waived = LAYOUT_WAIVERS[key] || objWaived || visibilityWaiver(obj, field);
 
             // A secret on a page layout is a defect in the OTHER direction.
-            if (LAYOUT_FORBIDDEN.has(key)) {
+            if (isForbidden(obj, field) || LAYOUT_FORBIDDEN.has(key)) {
                 checks.push(
                     check(
                         `${key} is kept OFF the page layout`,
                         !onLayout.has(field),
-                        onLayout.has(field)
-                            ? 'a token, hash or internal snapshot is exposed on a page layout'
-                            : '',
+                        onLayout.has(field) ? 'a token, hash or internal snapshot is exposed on a page layout' : '',
                         SEVERITY.BLOCKER
                     )
                 );
@@ -187,11 +187,7 @@ export async function run() {
             // permission set — flagging it is a false positive, and a report that
             // cries wolf gets ignored, which is worse than no report.
             const grantable =
-                !isFormula &&
-                type !== 'AutoNumber' &&
-                type !== 'Summary' &&
-                type !== 'MasterDetail' &&
-                !isRequired;
+                !isFormula && type !== 'AutoNumber' && type !== 'Summary' && type !== 'MasterDetail' && !isRequired;
             // Hierarchy custom settings are not granted through field permissions.
             const isCustomSetting = CUSTOM_SETTINGS.has(obj);
             if (grantable && !isCustomSetting && obj.endsWith('__c') && adminFields.size) {
@@ -241,7 +237,9 @@ export async function run() {
                 check(
                     `${c} is exposed and declares at least one target`,
                     targets.length > 0,
-                    targets.length ? targets.join(', ') : 'isExposed=true but no <target> — it cannot be placed anywhere',
+                    targets.length
+                        ? targets.join(', ')
+                        : 'isExposed=true but no <target> — it cannot be placed anywhere',
                     SEVERITY.MAJOR
                 )
             );

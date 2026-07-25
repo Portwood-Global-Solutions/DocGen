@@ -98,7 +98,11 @@ async function main() {
             // A suite that does not exist yet is a KNOWN GAP, reported as such.
             // The alternative — omitting it — makes the report look complete.
             results.push(
-                suiteSkipped(s.id, 'Not implemented', `suite file missing or broken: ${String(e.message).slice(0, 140)}`)
+                suiteSkipped(
+                    s.id,
+                    'Not implemented',
+                    `suite file missing or broken: ${String(e.message).slice(0, 140)}`
+                )
             );
             continue;
         }
