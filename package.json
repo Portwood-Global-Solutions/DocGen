@@ -15,7 +15,9 @@
         "prepare": "husky",
         "smoke": "node scripts/ui-smoke.mjs",
         "qa": "node scripts/qa/run-all.mjs",
-        "qa:offline": "node scripts/qa/run-all.mjs --offline"
+        "qa:offline": "node scripts/qa/run-all.mjs --offline",
+        "org:setup": "./scripts/qa/setup-org.sh",
+        "org:new": "./scripts/qa/setup-org.sh docgen-verify --create"
     },
     "devDependencies": {
         "@prettier/plugin-xml": "3.4.2",

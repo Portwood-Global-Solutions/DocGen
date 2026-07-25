@@ -2,6 +2,36 @@
 
 One command runs every kind of test this package has and produces one report.
 
+## Standing up an org
+
+```bash
+npm run org:new                          # create docgen-verify and set it up
+npm run org:setup -- my-existing-org     # or configure one you already have
+```
+
+`scripts/qa/setup-org.sh` takes an org from nothing to fully testable:
+
+1. Creates the scratch org (`--no-namespace`, so the e2e scripts' bare class and
+   field references compile).
+2. Deploys `force-app`.
+3. Assigns `DocGen_Admin` and `DocGen_User` — **after** the deploy. Assigning
+   first, or forgetting, produces "No such column" on fields that plainly exist,
+   which reads as broken metadata and is not.
+4. Deploys the QA-only host page so `docGenRunner` and `docGenSignatureSender`
+   are actually placed on a record page. The package ships no FlexiPage on
+   purpose; without this there is nowhere for a browser test to reach them.
+5. Sets the org defaults that stop testing stalling on infrastructure, above all
+   **`Signature_Skip_Email_Verification__c`** — with it off a signer must verify
+   by email, which means the mail has to really leave the org, which means a
+   verified sender and DKIM that a throwaway org will never have. It also turns
+   reminders OFF, because a scheduled job firing mid-run shows up as flake in
+   any suite that counts records.
+6. Seeds the Account and the `Verify — Designer` template the smoke suite opens.
+   Without it the designer suite fails at "designer did not open", which looks
+   like a product defect and is missing seed data.
+
+Idempotent — safe to re-run against a live org.
+
 ```bash
 npm run qa                     # everything, against docgen-verify
 npm run qa -- --org myorg
