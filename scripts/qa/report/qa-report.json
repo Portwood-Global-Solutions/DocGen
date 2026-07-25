@@ -1,379 +1,790 @@
 {
     "meta": {
         "org": "docgen-verify",
-        "startedAt": "2026-07-25T16:19:34.230Z",
-        "durationMs": 174060,
-        "args": "--org docgen-verify --suite ui-runner"
+        "startedAt": "2026-07-25T16:57:09.313Z",
+        "durationMs": 419883,
+        "args": "--org docgen-verify --suite ui-admin"
     },
     "tally": {
-        "passed": 34,
-        "failed": 3,
-        "skipped": 8,
-        "evaluated": 37,
-        "total": 45,
-        "rate": 91.9,
+        "passed": 106,
+        "failed": 1,
+        "skipped": 2,
+        "evaluated": 107,
+        "total": 109,
+        "rate": 99.1,
         "bySeverity": {
             "blocker": 0,
-            "major": 2,
+            "major": 0,
             "minor": 1
         }
     },
     "suites": [
         {
-            "suite": "ui-runner",
-            "area": "End-user UI",
+            "suite": "ui-admin",
+            "area": "Admin UI",
             "checks": [
                 {
-                    "name": "runner template picker offers an active, usable template for the record",
+                    "name": "admin app mounts with its three main tabs",
                     "ok": true,
-                    "detail": "picker returned: UIQA Good PDF, UIQA Locked Format, UIQA No Version — DocGenController.getTemplatesForObjectAndRecord",
+                    "detail": "Create New | Your Templates | Designer (Beta) | More Tabs",
                     "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
+                    "skipped": false
                 },
                 {
-                    "name": "picker hides a template whose Record_Filter__c excludes this record",
-                    "ok": true,
-                    "detail": "Record_Filter__c = Industry = 'Agriculture'; the record is Technology. Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "picker hides a template requiring a permission set the user lacks",
-                    "ok": true,
-                    "detail": "Required_Permission_Sets__c = UIQA_No_Such_PermSet. Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "picker hides an inactive template",
-                    "ok": true,
-                    "detail": "Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "picker hides a template that has no active version",
-                    "ok": false,
-                    "detail": "\"UIQA No Version\" is offered in the runner picker but cannot generate — the user gets \"No template file found (active or attached)\" only after pressing Generate. DocGenController.getTemplatesForObjectInternal filters on Is_Active__c/audience but never checks for an active DocGen_Template_Version__c.",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "generating from the picked template produces a real document",
-                    "ok": true,
-                    "detail": "DocGenService.processDocument returned 66207 bytes",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "the generated document is titled from the record",
-                    "ok": true,
-                    "detail": "title was \"UIQA Alpha\", expected \"UIQA Alpha\"",
-                    "severity": "minor",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "a locked output format cannot be overridden at run time",
-                    "ok": true,
-                    "detail": "Lock_Output_Format__c = true, override 'Word' → \"This template locks its output format. Override not permitted.\"",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "a template with no active version fails with a message, not a blank document",
-                    "ok": true,
-                    "detail": "got: Error retrieving template data: No template file found (active or attached).",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "bulk template picker applies the same active/audience rules as the runner",
-                    "ok": false,
-                    "detail": "DocGenBulkController.getBulkTemplates has no Is_Active__c filter, so deactivated templates stay selectable for bulk runs. Bulk picker: UIQA Filtered Out, UIQA Good PDF, UIQA Inactive, UIQA Locked Format, UIQA No Version",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "bulk generation UI renders on its tab",
-                    "ok": true,
-                    "detail": "{\"chars\":251,\"hasHeading\":true,\"hasStep1\":true}",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "bulk generation UI boots without a console error",
+                    "name": "main tab \"Create New\" is reachable by a mouse",
                     "ok": true,
                     "detail": "",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "the screen stays usable while a job is still running",
+                    "name": "main tab \"Your Templates\" is reachable by a mouse",
                     "ok": true,
-                    "detail": "template search box is hittable with 1 non-terminal job(s) present",
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "main tab \"Designer\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "main tab \"Your Templates\" swaps in its own content",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "main tab \"Create New\" swaps in its own content",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "authoring card \"starter\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "authoring card \"starter\" selects and reveals the starter gallery",
+                    "ok": true,
+                    "detail": "clicked=true selected=true otherCardsSelected=0 pathContentShown=true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "authoring card \"ai\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "authoring card \"ai\" selects and reveals the AI intro and its Next button",
+                    "ok": true,
+                    "detail": "clicked=true selected=true otherCardsSelected=0 pathContentShown=true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "authoring card \"scratch\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "authoring card \"scratch\" selects and reveals the blank-page CTA",
+                    "ok": true,
+                    "detail": "clicked=true selected=true otherCardsSelected=0 pathContentShown=true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "authoring card \"file\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "authoring card \"file\" selects and reveals the Type / Output Format pickers",
+                    "ok": true,
+                    "detail": "clicked=true selected=true otherCardsSelected=0 pathContentShown=true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the starter gallery renders every predesigned starter",
+                    "ok": true,
+                    "detail": "rendered 5: report, invoice, letter, agreement, certificate — expected report, invoice, letter, agreement, certificate",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "every starter card takes selection when clicked",
+                    "ok": true,
+                    "detail": "5 starters each selected",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Advanced options discloses the power-user fields",
+                    "ok": true,
+                    "detail": "Data Source radio group visible before=false after=true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "creating with an empty name is refused with a visible error",
+                    "ok": true,
+                    "detail": "Error notification.\nName it first\nGive the template a name, then create.\nPress Command + F6 to navigate to the next toas",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "a refused create writes no template record",
+                    "ok": true,
+                    "detail": "",
                     "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "focusing the template box lists the available templates",
+                    "name": "wizard Next refuses to advance without a name",
                     "ok": true,
-                    "detail": "16 options offered",
+                    "detail": "error shown; still on step 1 = true",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "typing narrows the template list to the match",
+                    "name": "wizard Next advances to step 2 (Pick Your Data)",
                     "ok": true,
-                    "detail": "after typing \"UIQA Good\": UIQA Good PDF (Account • PDF)",
+                    "detail": "",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "a search with no matches says so instead of showing an empty box",
+                    "name": "wizard Back returns to step 1 and keeps what was typed",
                     "ok": true,
-                    "detail": "expected the \"No templates found\" empty state in the dropdown",
+                    "detail": "onStep1=true name=\"QAUI-0m3haq-File\" (expected \"QAUI-0m3haq-File\")",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "wizard step 2 refuses an empty query",
+                    "ok": true,
+                    "detail": "Error notification.\nError\nPlease add at least one field to the query.\nPress Command + F6 to navigate to the next toast n",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "wizard step 3 reviews the name, object and query it will save",
+                    "ok": true,
+                    "detail": "reviewScreen=true nameEchoed=true queryEchoed=true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the wizard creates a template record end to end",
+                    "ok": true,
+                    "detail": "a0BO500000OqwRxMAJ, base object Account",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "the created template keeps the query the wizard collected",
+                    "ok": true,
+                    "detail": "Query_Config__c = Name, Industry, Phone",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the AI path reaches the prompt screen",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the AI prompt is assembled with merge-tag syntax and the template fields",
+                    "ok": true,
+                    "detail": "7495 chars; contains merge-tag braces = true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the AI prompt rebuilds live from what the author describes",
+                    "ok": true,
+                    "detail": "prompt 7296 chars; carries the typed description = true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Copy Prompt puts the whole prompt on the clipboard",
+                    "ok": true,
+                    "detail": "clipboard holds 7356 chars; includes the live description = true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the AI paste-back box accepts the returned HTML",
+                    "ok": true,
+                    "detail": "textarea holds \"<html><body><p>pasted</p></body></html>\"",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the starter path creates the template record",
+                    "ok": true,
+                    "detail": "a0BO500000OrC8TMAV, HTML/PDF",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "the starter path lands in the designer with the design loaded",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "the starter body is real content, not an empty page",
+                    "ok": true,
+                    "detail": "11649 chars of HTML — \".dg-pv { background: #fff; max-width: 850px; margin: 0 auto; padding: 48px 56px; box-shadow: 0 2px 1\"",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel button \"insert\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"insert\" opens with its contents rendered",
+                    "ok": true,
+                    "detail": "title=\"Insert blocks\" (expected \"Insert blocks\"), interactive children=66, text=1245 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"insert\" is not clipped or covered once open",
+                    "ok": true,
+                    "detail": "hit-test says: ok",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"insert\" closes from its own X",
+                    "ok": true,
+                    "detail": "",
                     "severity": "minor",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "a template option can be clicked",
+                    "name": "panel button \"tags\" is reachable by a mouse",
                     "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
                 },
                 {
-                    "name": "selecting a template opens the filter and run steps",
+                    "name": "panel \"tags\" opens with its contents rendered",
                     "ok": true,
-                    "detail": "Step 2 (Record Filter) and Step 3 (Run Generation) must appear once a template is chosen",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "detail": "title=\"Merge tags\" (expected \"Merge tags\"), interactive children=75, text=2312 chars",
+                    "severity": "major",
+                    "skipped": false
                 },
                 {
-                    "name": "the bulk screen offers no file-format override — format stays the template’s",
+                    "name": "panel \"tags\" is not clipped or covered once open",
                     "ok": true,
-                    "detail": "Output Mode options: Individual Files / Print-Ready Packet / Combined + Individual",
+                    "detail": "hit-test says: ok",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"tags\" closes from its own X",
+                    "ok": true,
+                    "detail": "",
                     "severity": "minor",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "choosing an output mode is honoured by the UI",
+                    "name": "panel button \"images\" is reachable by a mouse",
                     "ok": true,
-                    "detail": "after picking \"Individual Files\" the control reads \"Individual Files\"",
+                    "detail": "",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "the Validate Filter button is clickable",
+                    "name": "panel \"images\" opens with its contents rendered",
                     "ok": true,
-                    "detail": "found=true hit=ok",
+                    "detail": "title=\"Image assets\" (expected \"Image assets\"), interactive children=2, text=186 chars",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "Validate reports the true number of matching records",
+                    "name": "panel \"images\" is not clipped or covered once open",
                     "ok": true,
-                    "detail": "expected \"2 Records Found\" for Name LIKE 'UIQA%' (2 accounts seeded); component text did not contain it",
+                    "detail": "hit-test says: ok",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "the Run button is clickable once the filter is validated",
+                    "name": "panel \"images\" closes from its own X",
                     "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "pressing Run creates a bulk job on the server",
-                    "ok": true,
-                    "detail": "DocGen_Job__c a03O500003gzxaXIAQ status Completed",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the job generates one document per matching record",
-                    "ok": true,
-                    "detail": "status=Completed total=2 success=2 errors=0; error log: ",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "each generated document is attached to its own record",
-                    "ok": true,
-                    "detail": "2 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the output honours the template's Output Format (PDF)",
-                    "ok": true,
-                    "detail": "extensions produced: pdf",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "a run where every record fails is reported as failed, not as success",
-                    "ok": true,
-                    "detail": "status=Failed success=0 errors=2",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the failing job records WHY each record failed",
-                    "ok": true,
-                    "detail": "Error_Log__c = 001O5000040js8PIAQ — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached).\n001O5000040js8QIAQ — portwoodglobal.DocGenException: Error retrieving ",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the Recent Jobs list shows the error count to the user",
-                    "ok": true,
-                    "detail": "Recent Jobs did not show \"UIQA-ms0kr7gr-err\" with \"2 errors\" — a user would see the run as finished with no indication anything went wrong",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "a filter that matches no records leaves Run disabled",
-                    "ok": false,
-                    "detail": "Validate returned 0 records but Run Bulk Generation is still enabled — the user can submit a job that will produce nothing. isRunDisabled only requires filterValidated, and runAnalysis() early-returns on a 0 count so no analysis blocks it (docGenBulkRunner.js isRunDisabled / runAnalysis).",
+                    "detail": "",
                     "severity": "minor",
-                    "skipped": false,
-                    "area": "Bulk runner"
+                    "skipped": false
                 },
                 {
-                    "name": "the DocGen Command Hub renders with its navigation",
+                    "name": "panel button \"query\" is reachable by a mouse",
                     "ok": true,
-                    "detail": "{\"present\":true,\"navs\":[\"My Templates\",\"Bulk Generation\",\"Signatures\",\"Assets\",\"Buttons\",\"Email Templates\",\"Learning Center\",\"MoreTabs\",\"API Name Help Info\",\"Type Help Info\",\"Word\",\"PDF\"]}",
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"query\" opens with its contents rendered",
+                    "ok": true,
+                    "detail": "title=\"Query fields\" (expected \"Query fields\"), interactive children=37, text=915 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"query\" is not clipped or covered once open",
+                    "ok": true,
+                    "detail": "hit-test says: ok",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"query\" closes from its own X",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "panel button \"versions\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"versions\" opens with its contents rendered",
+                    "ok": true,
+                    "detail": "title=\"Version history\" (expected \"Version history\"), interactive children=1, text=170 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"versions\" is not clipped or covered once open",
+                    "ok": true,
+                    "detail": "hit-test says: ok",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"versions\" closes from its own X",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "panel button \"hf\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"hf\" opens with its contents rendered",
+                    "ok": true,
+                    "detail": "title=\"Header & Footer\" (expected \"Header & Footer\"), interactive children=3, text=502 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"hf\" is not clipped or covered once open",
+                    "ok": true,
+                    "detail": "hit-test says: ok",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"hf\" closes from its own X",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "panel button \"watermark\" is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"watermark\" opens with its contents rendered",
+                    "ok": true,
+                    "detail": "title=\"Watermark\" (expected \"Watermark\"), interactive children=3, text=260 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"watermark\" is not clipped or covered once open",
+                    "ok": true,
+                    "detail": "hit-test says: ok",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "panel \"watermark\" closes from its own X",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "Tags panel: clicking a tag puts it on the page",
+                    "ok": true,
+                    "detail": "inserted \"Name\"",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the designer exposes its page size and orientation pickers",
+                    "ok": true,
+                    "detail": "2 page-setup selects found (expected at least size + orientation)",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "changing page orientation resizes the sheet",
+                    "ok": true,
+                    "detail": "sheet width 816 -> 1056 switching to landscape",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the template list renders rows",
+                    "ok": true,
+                    "detail": "13 rows; count label \"13 templates\"",
                     "severity": "blocker",
-                    "skipped": false,
-                    "area": "Command Hub"
+                    "skipped": false
                 },
                 {
-                    "name": "Command Hub \"Bulk Generation\" mounts its component",
+                    "name": "search narrows the list to matching rows only",
                     "ok": true,
-                    "detail": "rendered 372 chars of text; consoleErrors=none",
+                    "detail": "13 -> 2 rows for \"0m3haq\"; every remaining row matches = true",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
+                    "skipped": false
                 },
                 {
-                    "name": "Command Hub \"Signatures\" mounts its component",
+                    "name": "the row-count label reports the filtered subset",
                     "ok": true,
-                    "detail": "rendered 1400 chars of text; consoleErrors=none",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
+                    "detail": "label reads \"2 of 13 templates\"",
+                    "severity": "minor",
+                    "skipped": false
                 },
                 {
-                    "name": "Command Hub \"Assets\" mounts its component",
+                    "name": "a search with no matches empties the list instead of ignoring the query",
                     "ok": true,
-                    "detail": "rendered 489 chars of text; consoleErrors=none",
+                    "detail": "0 rows survived a nonsense query",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
+                    "skipped": false
                 },
                 {
-                    "name": "Command Hub \"Email Templates\" mounts its component",
+                    "name": "clearing the search restores the full list",
                     "ok": true,
-                    "detail": "rendered 1564 chars of text; consoleErrors=none",
+                    "detail": "13 rows (expected 13)",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
+                    "skipped": false
                 },
                 {
-                    "name": "the document Button builder mounts from the Command Hub",
+                    "name": "clicking a column header re-orders the rows both ways",
                     "ok": true,
-                    "detail": "rendered 761 chars of text",
+                    "detail": "clicked=true; first row \"QAUI-0m3haq-Starter HTML PDF\" -> asc \"Account HTML PDF Account Act\" -> desc \"Verify — Landscape Precedenc\"",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
+                    "skipped": false
                 },
                 {
-                    "name": "docGenRunner renders on a record page",
-                    "ok": false,
-                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "name": "Refresh reloads the list without emptying it",
+                    "ok": true,
+                    "detail": "hit-test=ok; 13 rows after refresh (expected 13)",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "\"New Template\" switches to the Create New wizard",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the row-action menu button is reachable by a mouse",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "row action View opens the template on its Copy-Paste Tags tab",
+                    "ok": true,
+                    "detail": "modalOpen=true, selected tabs: Your Templates, Copy-Paste Tags",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "row action Export downloads a valid .docgen.json bundle",
+                    "ok": true,
+                    "detail": "QAUI-0m3haq-Starter.docgen.json — export version 1, template \"QAUI-0m3haq-Starter\"",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Import Template restores an exported bundle as a new template",
+                    "ok": true,
+                    "detail": "\"QAUI-0m3haq-Imported\" exists after import",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "row action Clone creates a copy and opens it for editing",
+                    "ok": true,
+                    "detail": "created \"QAUI-0m3haq-File (Copy)\" (a0BO500000OrCDJMA3); the edit modal opened = true",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "row action Delete removes the template",
+                    "ok": true,
+                    "detail": "\"QAUI-0m3haq-File (Copy)\" is gone from the org",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "deleting a template asks for confirmation first",
+                    "ok": true,
+                    "detail": "a confirmation step was shown",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "row action Design opens that template in the designer",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "row action Edit opens the edit modal",
+                    "ok": true,
+                    "detail": "",
                     "severity": "blocker",
-                    "skipped": true
+                    "skipped": false
                 },
                 {
-                    "name": "docGenRunner Generate button produces a document from a record page",
-                    "ok": false,
-                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "name": "the modal Save button is reachable (nothing covers the footer)",
+                    "ok": true,
+                    "detail": "",
                     "severity": "blocker",
-                    "skipped": true
+                    "skipped": false
                 },
                 {
-                    "name": "docGenRunner honours the Save to Record / Download output choice",
-                    "ok": false,
-                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "name": "edit modal tab \"Settings\" renders its panel",
+                    "ok": true,
+                    "detail": "selected=Settings, controls=36, expected content present=true, text=1576 chars",
                     "severity": "major",
-                    "skipped": true
+                    "skipped": false
                 },
                 {
-                    "name": "docGenRunner shows the empty state when no template matches the record",
-                    "ok": false,
-                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "name": "edit modal tab \"Header / Footer\" renders its panel",
+                    "ok": true,
+                    "detail": "selected=Header / Footer, controls=38, expected content present=true, text=680 chars",
                     "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "edit modal tab \"Watermark\" renders its panel",
+                    "ok": true,
+                    "detail": "selected=Watermark / Background, controls=2, expected content present=true, text=569 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "edit modal tab \"Query Configuration\" renders its panel",
+                    "ok": true,
+                    "detail": "selected=Query Configuration, controls=7, expected content present=true, text=521 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "edit modal tab \"Signer Inputs\" renders its panel",
+                    "ok": true,
+                    "detail": "selected=Signer Inputs, controls=3, expected content present=true, text=485 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "edit modal tab \"Copy-Paste Tags\" renders its panel",
+                    "ok": true,
+                    "detail": "selected=Copy-Paste Tags, controls=18, expected content present=true, text=326 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "edit modal tab \"Fillable Fields\" renders its panel",
+                    "ok": false,
+                    "detail": "not offered for an HTML/PDF template — this tab is type-gated and needs a template of the gating type",
+                    "severity": "minor",
                     "skipped": true
                 },
                 {
-                    "name": "docGenSignatureSender validates its fields and creates a request",
-                    "ok": false,
-                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "name": "edit modal tab \"Document & History\" renders its panel",
+                    "ok": true,
+                    "detail": "selected=Document & History, controls=8, expected content present=true, text=405 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "a tag chip copies its merge tag to the clipboard",
+                    "ok": true,
+                    "detail": "clicked \"{Name}\"; the clipboard now holds \"{Name}\"",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Signer Inputs: \"Add Field\" adds a field row",
+                    "ok": true,
+                    "detail": "signer field rows 0 -> 1",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Signer Inputs: a field row is editable",
+                    "ok": true,
+                    "detail": "label was \"New Field\"",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "Signer Inputs: removing a field takes it off the list",
+                    "ok": true,
+                    "detail": "signer field rows 1 -> 0",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "edit modal inputs accept real typing",
+                    "ok": true,
+                    "detail": "description=\"edited by ui-admin 0m3haq\" category=\"QA0m3haq\"",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the Active toggle flips when clicked",
+                    "ok": true,
+                    "detail": "checked true -> false",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Save as New Version persists the edited fields",
+                    "ok": true,
+                    "detail": "stored description=\"edited by ui-admin 0m3haq\", category=\"QA0m3haq\" (expected \"edited by ui-admin 0m3haq\" / \"QA0m3haq\")",
                     "severity": "blocker",
-                    "skipped": true
+                    "skipped": false
                 },
                 {
-                    "name": "docGenSignatureSender writes correct DocGen_Signature_Request__c / DocGen_Signer__c rows",
-                    "ok": false,
-                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
-                    "severity": "blocker",
-                    "skipped": true
+                    "name": "Save as New Version really creates a new version record",
+                    "ok": true,
+                    "detail": "template versions 0 -> 1",
+                    "severity": "major",
+                    "skipped": false
                 },
                 {
-                    "name": "docGenButton one-click generation from a record action",
+                    "name": "closing the modal with unsaved edits warns or preserves them",
                     "ok": false,
-                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "detail": "could not re-open the modal: row \"QAUI-0m3haq-Starter\": the menu never offered a visible \"Edit\" item",
                     "severity": "major",
                     "skipped": true
                 },
                 {
-                    "name": "a user without the DocGen permission set gets a clear message, not a broken UI",
-                    "ok": false,
-                    "detail": "needs a second user and a Login-As session; creating a licensed user and switching identity is outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. The template-audience half of this (Required_Permission_Sets__c) IS covered above.",
+                    "name": "Command Hub: \"My Templates\" opens its panel",
+                    "ok": true,
+                    "detail": "panel header \"Template Library Manage your document designs and create new\" -> \"Template Library Manage your document designs and create new\"; body 1842 chars",
                     "severity": "major",
-                    "skipped": true
+                    "skipped": false
+                },
+                {
+                    "name": "Command Hub: \"Bulk Generation\" opens its panel",
+                    "ok": true,
+                    "detail": "panel header \"Template Library Manage your document designs and create new\" -> \"Bulk Generation Create documents for hundreds of records at \"; body 167 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Command Hub: \"Signatures\" opens its panel",
+                    "ok": true,
+                    "detail": "panel header \"Template Library Manage your document designs and create new\" -> \"Signature Settings Configure email branding, site URL, and s\"; body 1399 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Command Hub: \"Assets\" opens its panel",
+                    "ok": true,
+                    "detail": "panel header \"Template Library Manage your document designs and create new\" -> \"Shared Assets Manage reusable images like logos and footers \"; body 481 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Command Hub: \"Email Templates\" opens its panel",
+                    "ok": true,
+                    "detail": "panel header \"Template Library Manage your document designs and create new\" -> \"Email Templates Brand and edit every signature email — reque\"; body 1561 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "Command Hub: \"Learning Center\" opens its panel",
+                    "ok": true,
+                    "detail": "panel header \"Template Library Manage your document designs and create new\" -> \"User Guide The full DocGen User Guide lives on the web — alw\"; body 317 chars",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the Command Hub sidebar stays usable after opening Bulk Generation",
+                    "ok": true,
+                    "detail": "7 nav items reachable throughout",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "no unexpected console errors while driving the admin UI",
+                    "ok": false,
+                    "detail": "1 errors, first: Connecting to 'https://business-business-345-dev-ed.scratch.lightning.force.com/aura?message=%7B%22actions%22%3A%5B%7B%22descriptor%22%3A%22serviceComponent%3A%2F%2Fui.force.components.controllers.empApi.EmpApiController%2FACTION%24getEmpConfig%22%2C%22callingDescriptor%22%3A%22UNKNOWN%22%2C%22params%22%3A%7B%7D%2C%22storable%22%3Atrue%7D%5D%7D&aura.context=%7B%22mode%22%3A%22PROD%22%2C%22fwuid%22%3A%22OUcwT3JDYUZld21JQ2ZOckR1VnppUWtVMjdnTGFERUU2S3FfSVdrcU92bkExNC4xOTIuODM4ODYwOA%22%2C%22app%22%3A%22one%3Aone%22%2C%22loaded%22%3A%7B%22APPLICATION%40markup%3A%2F%2Fone%3Aone%22%3A%224182_nTiZfiIKkPrsNPOydOLRYw%22%7D%2C%22uad%22%3Atrue%7D&aura.isAction=true' violates the following Content Security Policy directive: \"connect-src 'self' https://orgcs.my.salesforce-scrt.com https://orgcs.my.site.com https://b.static.lightning.force.com https://api.bluetail.salesforce.com https://staging.bluetail.salesforce.com https://preprod.bluetail.salesforce.com *.amazonaws.com wss://*.slack.com wss://*.slack-gov.com wss://*.slack-gov-dev.com *.salesforce.com wss://api.salesforce.com *.api.salesforce.com api.salesforce.com wss://*.api.salesforce.com https://cdn.cbweb.code-builder.platform.salesforce.com https://business-business-345-dev-ed.scratch.my.salesforce-scrt.com blob: *.vf.force.com https://o11y.sfproxy-core1.sfdc-lywfpd.svc.sfdcfc.net/ui-telemetry https://*.arcgis.com https://*.sfdcfc.net/ wss://*.sfdcfc.net/ https://business-business-345-dev-ed.scratch.file.force.com https://business-business-345-dev-ed.scratch.my.salesforce-setup.com https://usa262s.sfdc-lywfpd.salesforce.com https://business-business-345-dev-ed.scratch.my.salesforce.com https://notification-service.sfproxy.core1.aws-prod5-uswest2.aws.sfdc.cl wss://notification-service.sfproxy.core1.aws-prod5-uswest2.aws.sfdc.cl https://*.googleapis.com https://*.gstatic.com https://demo.arcade.software https://app.arcade.software\". The action has been blocked.",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "the suite cleans up the templates it created",
+                    "ok": true,
+                    "detail": "3 QAUI- templates deleted",
+                    "severity": "minor",
+                    "skipped": false
                 }
             ],
             "skipped": false,

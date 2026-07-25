@@ -1,94 +1,150 @@
 # DocGen QA report
 
-**Org** `docgen-verify` · **Run** 2026-07-25T16:19:34.230Z · **Duration** 174s
+**Org** `docgen-verify` · **Run** 2026-07-25T16:57:09.313Z · **Duration** 420s
 
 ## Headline
 
-|                       |            |
-| --------------------- | ---------- |
-| Checks evaluated      | 37         |
-| Passed                | 34 (91.9%) |
-| Failed                | 3          |
-| Skipped (not counted) | 8          |
-| Blockers              | 0          |
-| Major                 | 2          |
-| Minor                 | 1          |
+|                       |             |
+| --------------------- | ----------- |
+| Checks evaluated      | 107         |
+| Passed                | 106 (99.1%) |
+| Failed                | 1           |
+| Skipped (not counted) | 2           |
+| Blockers              | 0           |
+| Major                 | 0           |
+| Minor                 | 1           |
 
 ## Coverage by area
 
-| Suite       | Area        | Passed | Failed | Skipped |  Rate |
-| ----------- | ----------- | -----: | -----: | ------: | ----: |
-| `ui-runner` | End-user UI |     34 |      3 |       8 | 91.9% |
+| Suite      | Area     | Passed | Failed | Skipped |  Rate |
+| ---------- | -------- | -----: | -----: | ------: | ----: |
+| `ui-admin` | Admin UI |    106 |      1 |       2 | 99.1% |
 
 ## What to fix
 
 Ordered by severity. The detail column is written to say WHERE to look.
 
-| Severity  | Suite       | Check                                                                     | Evidence                                                                                                                                                                                                                                                                                                     |
-| --------- | ----------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **major** | `ui-runner` | picker hides a template that has no active version                        | "UIQA No Version" is offered in the runner picker but cannot generate — the user gets "No template file found (active or attached)" only after pressing Generate. DocGenController.getTemplatesForObjectInternal filters on Is_Active**c/audience but never checks for an active DocGen_Template_Version**c. |
-| **major** | `ui-runner` | bulk template picker applies the same active/audience rules as the runner | DocGenBulkController.getBulkTemplates has no Is_Active\_\_c filter, so deactivated templates stay selectable for bulk runs. Bulk picker: UIQA Filtered Out, UIQA Good PDF, UIQA Inactive, UIQA Locked Format, UIQA No Version                                                                                |
-| **minor** | `ui-runner` | a filter that matches no records leaves Run disabled                      | Validate returned 0 records but Run Bulk Generation is still enabled — the user can submit a job that will produce nothing. isRunDisabled only requires filterValidated, and runAnalysis() early-returns on a 0 count so no analysis blocks it (docGenBulkRunner.js isRunDisabled / runAnalysis).            |
+| Severity  | Suite      | Check                                                   | Evidence                                                                                                                                                                                                                                                                                                     |
+| --------- | ---------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **minor** | `ui-admin` | no unexpected console errors while driving the admin UI | 1 errors, first: Connecting to 'https://business-business-345-dev-ed.scratch.lightning.force.com/aura?message=%7B%22actions%22%3A%5B%7B%22descriptor%22%3A%22serviceComponent%3A%2F%2Fui.force.components.controllers.empApi.EmpApiController%2FACTION%24getEmpConfig%22%2C%22callingDescriptor%22%3A%22UNKN |
 
 ## Not covered by this run
 
 A skipped check is not a passing one. Each of these is a gap in the evidence.
 
-- `ui-runner` — docGenRunner renders on a record page: no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.
-- `ui-runner` — docGenRunner Generate button produces a document from a record page: no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.
-- `ui-runner` — docGenRunner honours the Save to Record / Download output choice: no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.
-- `ui-runner` — docGenRunner shows the empty state when no template matches the record: no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.
-- `ui-runner` — docGenSignatureSender validates its fields and creates a request: no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.
-- `ui-runner` — docGenSignatureSender writes correct DocGen_Signature_Request**c / DocGen_Signer**c rows: no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.
-- `ui-runner` — docGenButton one-click generation from a record action: no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.
-- `ui-runner` — a user without the DocGen permission set gets a clear message, not a broken UI: needs a second user and a Login-As session; creating a licensed user and switching identity is outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. The template-audience half of this (Required_Permission_Sets\_\_c) IS covered above.
+- `ui-admin` — edit modal tab "Fillable Fields" renders its panel: not offered for an HTML/PDF template — this tab is type-gated and needs a template of the gating type
+- `ui-admin` — closing the modal with unsaved edits warns or preserves them: could not re-open the modal: row "QAUI-0m3haq-Starter": the menu never offered a visible "Edit" item
 
 ## Every check
 
-### ui-runner — End-user UI
+### ui-admin — Admin UI
 
-- ✅ runner template picker offers an active, usable template for the record — picker returned: UIQA Good PDF, UIQA Locked Format, UIQA No Version — DocGenController.getTemplatesForObjectAndRecord
-- ✅ picker hides a template whose Record_Filter**c excludes this record — Record_Filter**c = Industry = 'Agriculture'; the record is Technology. Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version
-- ✅ picker hides a template requiring a permission set the user lacks — Required_Permission_Sets\_\_c = UIQA_No_Such_PermSet. Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version
-- ✅ picker hides an inactive template — Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version
-- ❌ picker hides a template that has no active version — "UIQA No Version" is offered in the runner picker but cannot generate — the user gets "No template file found (active or attached)" only after pressing Generate. DocGenController.getTemplatesForObject
-- ✅ generating from the picked template produces a real document — DocGenService.processDocument returned 66207 bytes
-- ✅ the generated document is titled from the record — title was "UIQA Alpha", expected "UIQA Alpha"
-- ✅ a locked output format cannot be overridden at run time — Lock_Output_Format\_\_c = true, override 'Word' → "This template locks its output format. Override not permitted."
-- ✅ a template with no active version fails with a message, not a blank document — got: Error retrieving template data: No template file found (active or attached).
-- ❌ bulk template picker applies the same active/audience rules as the runner — DocGenBulkController.getBulkTemplates has no Is_Active\_\_c filter, so deactivated templates stay selectable for bulk runs. Bulk picker: UIQA Filtered Out, UIQA Good PDF, UIQA Inactive, UIQA Locked Form
-- ✅ bulk generation UI renders on its tab — {"chars":251,"hasHeading":true,"hasStep1":true}
-- ✅ bulk generation UI boots without a console error
-- ✅ the screen stays usable while a job is still running — template search box is hittable with 1 non-terminal job(s) present
-- ✅ focusing the template box lists the available templates — 16 options offered
-- ✅ typing narrows the template list to the match — after typing "UIQA Good": UIQA Good PDF (Account • PDF)
-- ✅ a search with no matches says so instead of showing an empty box — expected the "No templates found" empty state in the dropdown
-- ✅ a template option can be clicked — found=true hit=ok
-- ✅ selecting a template opens the filter and run steps — Step 2 (Record Filter) and Step 3 (Run Generation) must appear once a template is chosen
-- ✅ the bulk screen offers no file-format override — format stays the template’s — Output Mode options: Individual Files / Print-Ready Packet / Combined + Individual
-- ✅ choosing an output mode is honoured by the UI — after picking "Individual Files" the control reads "Individual Files"
-- ✅ the Validate Filter button is clickable — found=true hit=ok
-- ✅ Validate reports the true number of matching records — expected "2 Records Found" for Name LIKE 'UIQA%' (2 accounts seeded); component text did not contain it
-- ✅ the Run button is clickable once the filter is validated — found=true hit=ok
-- ✅ pressing Run creates a bulk job on the server — DocGen_Job\_\_c a03O500003gzxaXIAQ status Completed
-- ✅ the job generates one document per matching record — status=Completed total=2 success=2 errors=0; error log:
-- ✅ each generated document is attached to its own record — 2 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files
-- ✅ the output honours the template's Output Format (PDF) — extensions produced: pdf
-- ✅ a run where every record fails is reported as failed, not as success — status=Failed success=0 errors=2
-- ✅ the failing job records WHY each record failed — Error_Log\_\_c = 001O5000040js8PIAQ — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached). 001O5000040js8QIAQ — portwoodglobal.DocGenException: Er
-- ✅ the Recent Jobs list shows the error count to the user — Recent Jobs did not show "UIQA-ms0kr7gr-err" with "2 errors" — a user would see the run as finished with no indication anything went wrong
-- ❌ a filter that matches no records leaves Run disabled — Validate returned 0 records but Run Bulk Generation is still enabled — the user can submit a job that will produce nothing. isRunDisabled only requires filterValidated, and runAnalysis() early-returns
-- ✅ the DocGen Command Hub renders with its navigation — {"present":true,"navs":["My Templates","Bulk Generation","Signatures","Assets","Buttons","Email Templates","Learning Center","MoreTabs","API Name Help Info","Type Help Info","Word","PDF"]}
-- ✅ Command Hub "Bulk Generation" mounts its component — rendered 372 chars of text; consoleErrors=none
-- ✅ Command Hub "Signatures" mounts its component — rendered 1400 chars of text; consoleErrors=none
-- ✅ Command Hub "Assets" mounts its component — rendered 489 chars of text; consoleErrors=none
-- ✅ Command Hub "Email Templates" mounts its component — rendered 1564 chars of text; consoleErrors=none
-- ✅ the document Button builder mounts from the Command Hub — rendered 761 chars of text
-- ⊘ docGenRunner renders on a record page — no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickA
-- ⊘ docGenRunner Generate button produces a document from a record page — no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickA
-- ⊘ docGenRunner honours the Save to Record / Download output choice — no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickA
-- ⊘ docGenRunner shows the empty state when no template matches the record — no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickA
-- ⊘ docGenSignatureSender validates its fields and creates a request — no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickA
-- ⊘ docGenSignatureSender writes correct DocGen_Signature_Request**c / DocGen_Signer**c rows — no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickA
-- ⊘ docGenButton one-click generation from a record action — no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickA
-- ⊘ a user without the DocGen permission set gets a clear message, not a broken UI — needs a second user and a Login-As session; creating a licensed user and switching identity is outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. The templ
+- ✅ admin app mounts with its three main tabs — Create New \| Your Templates \| Designer (Beta) \| More Tabs
+- ✅ main tab "Create New" is reachable by a mouse
+- ✅ main tab "Your Templates" is reachable by a mouse
+- ✅ main tab "Designer" is reachable by a mouse
+- ✅ main tab "Your Templates" swaps in its own content
+- ✅ main tab "Create New" swaps in its own content
+- ✅ authoring card "starter" is reachable by a mouse
+- ✅ authoring card "starter" selects and reveals the starter gallery — clicked=true selected=true otherCardsSelected=0 pathContentShown=true
+- ✅ authoring card "ai" is reachable by a mouse
+- ✅ authoring card "ai" selects and reveals the AI intro and its Next button — clicked=true selected=true otherCardsSelected=0 pathContentShown=true
+- ✅ authoring card "scratch" is reachable by a mouse
+- ✅ authoring card "scratch" selects and reveals the blank-page CTA — clicked=true selected=true otherCardsSelected=0 pathContentShown=true
+- ✅ authoring card "file" is reachable by a mouse
+- ✅ authoring card "file" selects and reveals the Type / Output Format pickers — clicked=true selected=true otherCardsSelected=0 pathContentShown=true
+- ✅ the starter gallery renders every predesigned starter — rendered 5: report, invoice, letter, agreement, certificate — expected report, invoice, letter, agreement, certificate
+- ✅ every starter card takes selection when clicked — 5 starters each selected
+- ✅ Advanced options discloses the power-user fields — Data Source radio group visible before=false after=true
+- ✅ creating with an empty name is refused with a visible error — Error notification. Name it first Give the template a name, then create. Press Command + F6 to navigate to the next toas
+- ✅ a refused create writes no template record
+- ✅ wizard Next refuses to advance without a name — error shown; still on step 1 = true
+- ✅ wizard Next advances to step 2 (Pick Your Data)
+- ✅ wizard Back returns to step 1 and keeps what was typed — onStep1=true name="QAUI-0m3haq-File" (expected "QAUI-0m3haq-File")
+- ✅ wizard step 2 refuses an empty query — Error notification. Error Please add at least one field to the query. Press Command + F6 to navigate to the next toast n
+- ✅ wizard step 3 reviews the name, object and query it will save — reviewScreen=true nameEchoed=true queryEchoed=true
+- ✅ the wizard creates a template record end to end — a0BO500000OqwRxMAJ, base object Account
+- ✅ the created template keeps the query the wizard collected — Query_Config\_\_c = Name, Industry, Phone
+- ✅ the AI path reaches the prompt screen
+- ✅ the AI prompt is assembled with merge-tag syntax and the template fields — 7495 chars; contains merge-tag braces = true
+- ✅ the AI prompt rebuilds live from what the author describes — prompt 7296 chars; carries the typed description = true
+- ✅ Copy Prompt puts the whole prompt on the clipboard — clipboard holds 7356 chars; includes the live description = true
+- ✅ the AI paste-back box accepts the returned HTML — textarea holds "<html><body><p>pasted</p></body></html>"
+- ✅ the starter path creates the template record — a0BO500000OrC8TMAV, HTML/PDF
+- ✅ the starter path lands in the designer with the design loaded
+- ✅ the starter body is real content, not an empty page — 11649 chars of HTML — ".dg-pv { background: #fff; max-width: 850px; margin: 0 auto; padding: 48px 56px; box-shadow: 0 2px 1"
+- ✅ panel button "insert" is reachable by a mouse
+- ✅ panel "insert" opens with its contents rendered — title="Insert blocks" (expected "Insert blocks"), interactive children=66, text=1245 chars
+- ✅ panel "insert" is not clipped or covered once open — hit-test says: ok
+- ✅ panel "insert" closes from its own X
+- ✅ panel button "tags" is reachable by a mouse
+- ✅ panel "tags" opens with its contents rendered — title="Merge tags" (expected "Merge tags"), interactive children=75, text=2312 chars
+- ✅ panel "tags" is not clipped or covered once open — hit-test says: ok
+- ✅ panel "tags" closes from its own X
+- ✅ panel button "images" is reachable by a mouse
+- ✅ panel "images" opens with its contents rendered — title="Image assets" (expected "Image assets"), interactive children=2, text=186 chars
+- ✅ panel "images" is not clipped or covered once open — hit-test says: ok
+- ✅ panel "images" closes from its own X
+- ✅ panel button "query" is reachable by a mouse
+- ✅ panel "query" opens with its contents rendered — title="Query fields" (expected "Query fields"), interactive children=37, text=915 chars
+- ✅ panel "query" is not clipped or covered once open — hit-test says: ok
+- ✅ panel "query" closes from its own X
+- ✅ panel button "versions" is reachable by a mouse
+- ✅ panel "versions" opens with its contents rendered — title="Version history" (expected "Version history"), interactive children=1, text=170 chars
+- ✅ panel "versions" is not clipped or covered once open — hit-test says: ok
+- ✅ panel "versions" closes from its own X
+- ✅ panel button "hf" is reachable by a mouse
+- ✅ panel "hf" opens with its contents rendered — title="Header & Footer" (expected "Header & Footer"), interactive children=3, text=502 chars
+- ✅ panel "hf" is not clipped or covered once open — hit-test says: ok
+- ✅ panel "hf" closes from its own X
+- ✅ panel button "watermark" is reachable by a mouse
+- ✅ panel "watermark" opens with its contents rendered — title="Watermark" (expected "Watermark"), interactive children=3, text=260 chars
+- ✅ panel "watermark" is not clipped or covered once open — hit-test says: ok
+- ✅ panel "watermark" closes from its own X
+- ✅ Tags panel: clicking a tag puts it on the page — inserted "Name"
+- ✅ the designer exposes its page size and orientation pickers — 2 page-setup selects found (expected at least size + orientation)
+- ✅ changing page orientation resizes the sheet — sheet width 816 -> 1056 switching to landscape
+- ✅ the template list renders rows — 13 rows; count label "13 templates"
+- ✅ search narrows the list to matching rows only — 13 -> 2 rows for "0m3haq"; every remaining row matches = true
+- ✅ the row-count label reports the filtered subset — label reads "2 of 13 templates"
+- ✅ a search with no matches empties the list instead of ignoring the query — 0 rows survived a nonsense query
+- ✅ clearing the search restores the full list — 13 rows (expected 13)
+- ✅ clicking a column header re-orders the rows both ways — clicked=true; first row "QAUI-0m3haq-Starter HTML PDF" -> asc "Account HTML PDF Account Act" -> desc "Verify — Landscape Precedenc"
+- ✅ Refresh reloads the list without emptying it — hit-test=ok; 13 rows after refresh (expected 13)
+- ✅ "New Template" switches to the Create New wizard
+- ✅ the row-action menu button is reachable by a mouse
+- ✅ row action View opens the template on its Copy-Paste Tags tab — modalOpen=true, selected tabs: Your Templates, Copy-Paste Tags
+- ✅ row action Export downloads a valid .docgen.json bundle — QAUI-0m3haq-Starter.docgen.json — export version 1, template "QAUI-0m3haq-Starter"
+- ✅ Import Template restores an exported bundle as a new template — "QAUI-0m3haq-Imported" exists after import
+- ✅ row action Clone creates a copy and opens it for editing — created "QAUI-0m3haq-File (Copy)" (a0BO500000OrCDJMA3); the edit modal opened = true
+- ✅ row action Delete removes the template — "QAUI-0m3haq-File (Copy)" is gone from the org
+- ✅ deleting a template asks for confirmation first — a confirmation step was shown
+- ✅ row action Design opens that template in the designer
+- ✅ row action Edit opens the edit modal
+- ✅ the modal Save button is reachable (nothing covers the footer)
+- ✅ edit modal tab "Settings" renders its panel — selected=Settings, controls=36, expected content present=true, text=1576 chars
+- ✅ edit modal tab "Header / Footer" renders its panel — selected=Header / Footer, controls=38, expected content present=true, text=680 chars
+- ✅ edit modal tab "Watermark" renders its panel — selected=Watermark / Background, controls=2, expected content present=true, text=569 chars
+- ✅ edit modal tab "Query Configuration" renders its panel — selected=Query Configuration, controls=7, expected content present=true, text=521 chars
+- ✅ edit modal tab "Signer Inputs" renders its panel — selected=Signer Inputs, controls=3, expected content present=true, text=485 chars
+- ✅ edit modal tab "Copy-Paste Tags" renders its panel — selected=Copy-Paste Tags, controls=18, expected content present=true, text=326 chars
+- ⊘ edit modal tab "Fillable Fields" renders its panel — not offered for an HTML/PDF template — this tab is type-gated and needs a template of the gating type
+- ✅ edit modal tab "Document & History" renders its panel — selected=Document & History, controls=8, expected content present=true, text=405 chars
+- ✅ a tag chip copies its merge tag to the clipboard — clicked "{Name}"; the clipboard now holds "{Name}"
+- ✅ Signer Inputs: "Add Field" adds a field row — signer field rows 0 -> 1
+- ✅ Signer Inputs: a field row is editable — label was "New Field"
+- ✅ Signer Inputs: removing a field takes it off the list — signer field rows 1 -> 0
+- ✅ edit modal inputs accept real typing — description="edited by ui-admin 0m3haq" category="QA0m3haq"
+- ✅ the Active toggle flips when clicked — checked true -> false
+- ✅ Save as New Version persists the edited fields — stored description="edited by ui-admin 0m3haq", category="QA0m3haq" (expected "edited by ui-admin 0m3haq" / "QA0m3haq")
+- ✅ Save as New Version really creates a new version record — template versions 0 -> 1
+- ⊘ closing the modal with unsaved edits warns or preserves them — could not re-open the modal: row "QAUI-0m3haq-Starter": the menu never offered a visible "Edit" item
+- ✅ Command Hub: "My Templates" opens its panel — panel header "Template Library Manage your document designs and create new" -> "Template Library Manage your document designs and create new"; body 1842 chars
+- ✅ Command Hub: "Bulk Generation" opens its panel — panel header "Template Library Manage your document designs and create new" -> "Bulk Generation Create documents for hundreds of records at "; body 167 chars
+- ✅ Command Hub: "Signatures" opens its panel — panel header "Template Library Manage your document designs and create new" -> "Signature Settings Configure email branding, site URL, and s"; body 1399 chars
+- ✅ Command Hub: "Assets" opens its panel — panel header "Template Library Manage your document designs and create new" -> "Shared Assets Manage reusable images like logos and footers "; body 481 chars
+- ✅ Command Hub: "Email Templates" opens its panel — panel header "Template Library Manage your document designs and create new" -> "Email Templates Brand and edit every signature email — reque"; body 1561 chars
+- ✅ Command Hub: "Learning Center" opens its panel — panel header "Template Library Manage your document designs and create new" -> "User Guide The full DocGen User Guide lives on the web — alw"; body 317 chars
+- ✅ the Command Hub sidebar stays usable after opening Bulk Generation — 7 nav items reachable throughout
+- ❌ no unexpected console errors while driving the admin UI — 1 errors, first: Connecting to 'https://business-business-345-dev-ed.scratch.lightning.force.com/aura?message=%7B%22actions%22%3A%5B%7B%22descriptor%22%3A%22serviceComponent%3A%2F%2Fui.force.component
+- ✅ the suite cleans up the templates it created — 3 QAUI- templates deleted

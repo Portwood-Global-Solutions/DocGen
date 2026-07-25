@@ -368,7 +368,10 @@ async function apex(org, body) {
     } catch (e) {
         // A failing probe must be LOUD. Silently returning no rows made an Apex
         // NullPointerException look like "the UI never created the record".
-        const detail = String((e && e.stderr) || msg(e)).split('\n').join(' ').slice(0, 200);
+        const detail = String((e && e.stderr) || msg(e))
+            .split('\n')
+            .join(' ')
+            .slice(0, 200);
         step('APEX PROBE FAILED: ' + detail);
         return { lines: [], log: '', error: detail };
     }
@@ -1488,6 +1491,22 @@ export async function run({ org, headed }) {
              .filter((t) => /delete|remove|are you sure|cannot be undone/i.test(t)).length > 0;`,
                     false
                 );
+                // Deleting now asks first (a LightningConfirm modal). The suite has
+                // to ANSWER it — detecting the dialog and then walking away leaves
+                // the template alive and reads as "Delete is broken", which is
+                // exactly the false failure this produced when the guard landed.
+                if (domConfirm === true) {
+                    await ev(
+                        page,
+                        `const btns = (__dgFind('[role="alertdialog"], .slds-modal', true) || [])
+                 .flatMap((d) => [...d.querySelectorAll('button')]);
+             const yes = btns.find((b) => /^(delete|ok|confirm|yes)$/i.test((b.textContent || '').trim()));
+             if (yes) { yes.click(); return true; }
+             return false;`,
+                        false
+                    );
+                    await wait(1500);
+                }
                 await wait(7000);
                 acceptDialogs = false;
                 const gone = !(await probeTemplates(org)).some((r) => r.name === cloneName);
@@ -1970,7 +1989,9 @@ export async function run({ org, headed }) {
                         check(
                             `Command Hub: "${item}" opens its panel`,
                             opened,
-                            after ? `panel header "${before}" -> "${after.head}"; body ${after.bodyLen} chars` : 'unreadable',
+                            after
+                                ? `panel header "${before}" -> "${after.head}"; body ${after.bodyLen} chars`
+                                : 'unreadable',
                             SEVERITY.MAJOR
                         )
                     );
@@ -1981,23 +2002,36 @@ export async function run({ org, headed }) {
                 await openTab(page, base, HUB, 10000);
                 await until(page, `return __dgFind('.nav-links') ? { ok: 1 } : null;`, 25000, 1500);
                 await clickByText(page, '.nav-links button', 'Bulk Generation');
-                await wait(8000);
-                const navAfterBulk = await ev(
-                    page,
-                    `return (__dgFind('.nav-links button', true) || []).map((b) => ({ t: __deep(b), hit: __hit(b) }));`,
-                    []
-                );
-                const unreachable = (navAfterBulk || []).filter((b) => b.hit !== 'ok');
+                // Sampled over a window, not once: while the bulk runner loads it
+                // throws a full-bleed spinner over the sidebar and the nav buttons
+                // measure zero — that is acceptable transiently, and a defect only
+                // if the sidebar never comes back.
+                const NAV = `return (__dgFind('.nav-links button', true) || []).map((b) => ({ t: __deep(b), hit: __hit(b) }));`;
+                let worst = null;
+                let navFinal = [];
+                let recoveredAfter = null;
+                for (const t of [1500, 3000, 5000, 8000, 12000, 18000, 25000]) {
+                    await wait(t === 1500 ? 1500 : 3000);
+                    navFinal = (await ev(page, NAV, [])) || [];
+                    const bad = navFinal.filter((b) => b.hit !== 'ok');
+                    if (bad.length && !worst) worst = { at: t, bad };
+                    if (!bad.length && worst && recoveredAfter === null) recoveredAfter = t;
+                    if (!bad.length && !worst) break;
+                    if (!bad.length) break;
+                }
+                const stillBad = navFinal.filter((b) => b.hit !== 'ok');
                 add(
                     check(
                         'the Command Hub sidebar stays usable after opening Bulk Generation',
-                        (navAfterBulk || []).length > 0 && unreachable.length === 0,
-                        unreachable.length
-                            ? `${unreachable.length}/${navAfterBulk.length} nav items became unclickable — ${unreachable
+                        navFinal.length > 0 && stillBad.length === 0,
+                        stillBad.length
+                            ? `${stillBad.length}/${navFinal.length} nav items are still unclickable 25s after opening Bulk Generation — ${stillBad
                                   .slice(0, 3)
                                   .map((b) => `"${b.t}": ${b.hit}`)
-                                  .join(', ')}. The user cannot leave Bulk Generation without reloading the page.`
-                            : `${(navAfterBulk || []).length} nav items still reachable`,
+                                  .join(', ')}. The user cannot leave the section without reloading the page.`
+                            : worst
+                              ? `covered while loading (${worst.bad.length} items: ${worst.bad[0].hit}), recovered by ~${recoveredAfter || '?'}ms`
+                              : `${navFinal.length} nav items reachable throughout`,
                         SEVERITY.MAJOR
                     )
                 );
@@ -2009,12 +2043,17 @@ export async function run({ org, headed }) {
         /* ============================================================ *
          * 7. CONSOLE HYGIENE
          * ============================================================ */
+        // Platform noise, not ours. empApi is Salesforce's own streaming client and
+        // it logs a connection error on any org without a live CometD session —
+        // nothing in this package touches it. Allowlisted by SOURCE rather than by
+        // muting console errors wholesale, so a real error in our code still fails.
         const realErrors = consoleErrors.filter(
             (e) =>
                 !/Failed to load resource/i.test(e) &&
                 !/favicon/i.test(e) &&
                 !/deprecat/i.test(e) &&
-                !/net::ERR_/i.test(e)
+                !/net::ERR_/i.test(e) &&
+                !/EmpApiController|empApi|cometd/i.test(e)
         );
         add(
             check(

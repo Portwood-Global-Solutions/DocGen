@@ -1422,7 +1422,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleEditModalKeydown(event) {
         if (event.key === 'Escape') {
             event.preventDefault();
-            this.closeEditModal();
+            this.handleCloseEditModal();
         }
     }
     handlePreviewModalKeydown(event) {
@@ -4405,6 +4405,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const row = event.detail.row;
 
         if (actionName === 'delete') {
+            // Deleting used to happen on the click, with nothing in between. One
+            // mis-aim in a six-item row menu destroyed a template permanently —
+            // and the inconsistency made it stark, because deleting a VERSION
+            // (far less destructive, and it refuses to touch the active one)
+            // already confirms first.
+            const confirmed = await LightningConfirm.open({
+                message:
+                    'Delete "' +
+                    (row.Name || 'this template') +
+                    '"? Its versions and generated-document history go with it. This cannot be undone.',
+                label: 'Delete template',
+                theme: 'error'
+            });
+            if (!confirmed) {
+                return null;
+            }
             try {
                 // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
                 await deleteTemplate({ templateId: row.Id });
@@ -4667,6 +4683,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.isCreating = false;
             this.isEditModalOpen = true;
             this._editContext = true;
+            // Baseline for the unsaved-changes warning on close. Taken here, after
+            // every field above has been populated from the record, so the very
+            // act of opening the modal never counts as an edit.
+            this._editSnapshot = this._editFieldSignature();
             this._loadObjectMetadata(this.editTemplateObject);
             // Initialize query tree + sync textarea after DOM renders
             // eslint-disable-next-line @lwc/lwc/no-async-operation
@@ -4684,7 +4704,72 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    /**
+     * A signature of everything the edit modal can change.
+     *
+     * Snapshotted when the modal opens and compared when the user asks to close,
+     * so "you have unsaved changes" is a fact rather than a guess. Cheap: a dozen
+     * scalars stringified, computed twice per modal session.
+     */
+    _editFieldSignature() {
+        return JSON.stringify([
+            this.editTemplateName,
+            this.editTemplateCategory,
+            this.editTemplateType,
+            this.editTemplateObject,
+            this.editTemplateOutputFormat,
+            this.editTemplateDesc,
+            this.editTemplateQuery,
+            this.editFormFieldsConfig,
+            this.editTemplateTestRecordId,
+            this.editTemplateTitleFormat,
+            this.editTemplateIsActive,
+            this.editTemplateIsDefault,
+            this.editTemplateSortOrder,
+            this.editTemplateLockOutputFormat,
+            this.editTemplateSpecificRecordIds,
+            this.editTemplateRequiredPermissionSets,
+            this.editTemplateRecordFilter,
+            this.editTemplateHeaderHtml,
+            this.editTemplateFooterHtml,
+            this.editTemplatePageOrientation,
+            this.editTemplatePageSize,
+            this.editTemplatePageMargins,
+            this.editTemplateCustomMargins,
+            this.editTemplateSignerVerification,
+            this.editTemplatePrefillSignerEmail,
+            this.editTemplateApiName,
+            this.editTemplateDefaultEmailMessage
+        ]);
+    }
+
+    /**
+     * The USER asking to close. Warns before discarding edits.
+     *
+     * Closing used to bin everything typed across eight tabs with no warning at
+     * all — the modal simply set isEditModalOpen = false. Someone could retype a
+     * query config, click the X, and watch it evaporate silently.
+     *
+     * Separate from closeEditModal() on purpose: internal callers close the modal
+     * AFTER saving, and prompting them would be nonsense.
+     */
+    async handleCloseEditModal() {
+        if (this._editSnapshot != null && this._editFieldSignature() !== this._editSnapshot) {
+            const discard = await LightningConfirm.open({
+                message: 'You have unsaved changes to this template. Close and discard them?',
+                label: 'Discard changes?',
+                theme: 'warning'
+            });
+            if (!discard) {
+                return;
+            }
+        }
+        this.closeEditModal();
+    }
+    _editSnapshot = null;
+
     closeEditModal() {
+        this._editSnapshot = null;
         this.isEditModalOpen = false;
         this._editContext = false;
         this.queryTreeNodes = [];
