@@ -1225,6 +1225,48 @@ async function main() {
             );
         }
 
+        // --- 4g. Preview from the model (DESIGNER_PLAN_V2 step 5) ---------------
+        //
+        // The body used to be read from the live canvas while the header and footer
+        // were read from the template FIELDS — two reads at two moments of state
+        // kept in step by an input listener. A header edit that had not yet fired
+        // its input event was simply missing from what was previewed and saved.
+        //
+        // Driven by editing the band and deliberately NOT dispatching input, which
+        // is the exact state that used to be lost. If the model is read from the
+        // live surfaces the edit is there; if it is read from the fields it is not.
+        const modelReport = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const modeBtn = (label) => {
+        const seg = __dgFind('.dg-mode-seg');
+        return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
+      };
+      return (async () => {
+        // Start from Visual so there are bands to read.
+        if (!__dgFind('.dg-chrome-band_header') && modeBtn('Visual')) {
+          modeBtn('Visual').click();
+          await step(1600);
+        }
+        const band = __dgFind('.dg-chrome-band_header');
+        if (!band || !modeBtn('Source')) return { ok:false, why:'no band or mode buttons' };
+        band.focus();
+        band.textContent = 'UNSYNCED9876';   // no input event on purpose
+        await step(200);
+        modeBtn('Source').click();
+        await step(900);
+        const ta = __dgFind('.dg-html-body-editor');
+        const src = (ta && ta.value) || '';
+        return { ok: src.indexOf('UNSYNCED9876') !== -1,
+                 why: src.indexOf('UNSYNCED9876') !== -1 ? '' : 'a header edit with no input event never reached the model' };
+      })();`)
+        );
+        record(
+            'model: chrome is read from the live surfaces, not the last synced field',
+            modelReport.ok,
+            modelReport.why
+        );
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

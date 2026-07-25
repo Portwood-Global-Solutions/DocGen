@@ -7048,8 +7048,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _bandMounted = null;
     _bandSource = { header: null, footer: null };
 
-    /** Serialize a band back to its template field, pills unwrapped to plain tags. */
-    _syncBandToRecord(which, band) {
+    /**
+     * Serialize a band back to its template field, pills unwrapped to plain tags.
+     *
+     * markDirty is false when the caller is only READING the model (preview, View
+     * Source), so looking at the document cannot make it look edited.
+     */
+    _syncBandToRecord(which, band, markDirty = true) {
         const html = this._extractBandHtml(band);
         if (which === 'header') {
             this.editTemplateHeaderHtml = html;
@@ -7059,7 +7064,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Keep the remount guard in step, or the next render would overwrite what the
         // author is typing with the value they started from.
         this._bandSource[which] = html;
-        this.htmlEditorDirty = true;
+        if (markDirty) {
+            this.htmlEditorDirty = true;
+        }
     }
 
     /**
@@ -10364,7 +10371,51 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * ContentVersion; _currentDraftHtml is the renderer-bound view.
      */
     _currentDraftDocument() {
-        return joinRegions(this._currentDraftHtml(), this.editTemplateHeaderHtml, this.editTemplateFooterHtml);
+        const s = this._draftSurfaces();
+        return joinRegions(s.body, s.header, s.footer);
+    }
+
+    /**
+     * The whole document as one model, read in a single pass.
+     *
+     * Previously the body came from the live canvas while the header and footer
+     * came from the template FIELDS — two independent reads, taken at two
+     * different moments, of state kept in step by an input listener. A header
+     * keystroke whose input event had not yet synced produced a preview showing
+     * the body the author was looking at next to the header they had already
+     * changed, and every new surface needed its own copy of that plumbing.
+     *
+     * Reading all three from the live surfaces at the same instant is what
+     * DESIGNER_PLAN_V2 step 5 means by "preview from the model": there is one
+     * document, and the preview renders it. The fields stay the persistence
+     * format and remain the fallback for source mode, where there are no bands.
+     */
+    _draftSurfaces() {
+        const chrome = this._liveChrome();
+        return { body: this._currentDraftHtml() || '', header: chrome.header, footer: chrome.footer };
+    }
+
+    /**
+     * The running header and footer as they stand on the LIVE bands.
+     *
+     * Reads through _syncBandToRecord so the template fields — the persistence
+     * format — are brought current in the same pass. That is what makes an
+     * un-synced keystroke reach Save as well as Preview, instead of each caller
+     * needing its own copy of the plumbing. markDirty is false: reading the
+     * document must not mark it edited.
+     *
+     * In source mode there are no bands, so the fields are the model.
+     */
+    _liveChrome() {
+        if (this.showHtmlBodyVisual) {
+            for (const which of ['header', 'footer']) {
+                const band = this.template.querySelector('.dg-chrome-band_' + which);
+                if (band) {
+                    this._syncBandToRecord(which, band, false);
+                }
+            }
+        }
+        return { header: this.editTemplateHeaderHtml || '', footer: this.editTemplateFooterHtml || '' };
     }
 
     /** Leave visual mode — lossless when nothing changed. */
@@ -10447,7 +10498,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             );
             return;
         }
-        const draftHtml = (this._currentDraftHtml() || '').trim();
+        // ONE read of the model, not three reads of three surfaces — see
+        // _draftSurfaces. Taken before the popup-blocked early return so both
+        // request shapes below send the same document.
+        const draft = this._draftSurfaces();
+        const draftHtml = (draft.body || '').trim();
         if (!draftHtml) {
             this.showToast('Nothing to preview', 'The editor is empty.', 'warning');
             return;
@@ -10468,11 +10523,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 templateId: this.editTemplateId,
                 recordId: this.editTemplateTestRecordId,
                 draftHtml,
-                // The running header/footer are live canvas surfaces now, so the
-                // preview must render the UNSAVED versions or the author is checking
-                // their header edits against whatever was last saved.
-                draftHeaderHtml: this.editTemplateHeaderHtml || '',
-                draftFooterHtml: this.editTemplateFooterHtml || ''
+                draftHeaderHtml: draft.header,
+                draftFooterHtml: draft.footer
             });
             if (res && res.base64) {
                 const raw = atob(res.base64);
@@ -10503,8 +10555,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 templateId: this.editTemplateId,
                 recordId: this.editTemplateTestRecordId,
                 draftHtml,
-                draftHeaderHtml: this.editTemplateHeaderHtml || '',
-                draftFooterHtml: this.editTemplateFooterHtml || ''
+                draftHeaderHtml: draft.header,
+                draftFooterHtml: draft.footer
             });
             if (!res2 || !res2.contentDocumentId) {
                 throw new Error('Preview returned no PDF.');
@@ -10541,6 +10593,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // _visualEnteredDom and rewrite the body — breaking the documented guarantee
         // that an unchanged session restores the original code byte-for-byte.
         this._clearActiveBlockPaint();
+        // Read the chrome off the live bands while they still exist, so View Source
+        // shows the header the author is looking at rather than the last value an
+        // input event happened to sync.
+        const chrome = this._liveChrome();
         const host = this.template.querySelector('.dg-visual-host');
         const pv = host && host.querySelector('.dg-pv');
         const ta = this.template.querySelector('.dg-html-body-editor');
@@ -10572,19 +10628,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 // _currentDraftHtml splits it back apart on the way to the renderer.
                 // Templates with neither header nor footer come back unmarked, so a
                 // plain document's source is byte-for-byte what it always was.
-                ta.value = prettyPrintHtml(
-                    joinRegions(newCode, this.editTemplateHeaderHtml, this.editTemplateFooterHtml)
-                );
+                ta.value = prettyPrintHtml(joinRegions(newCode, chrome.header, chrome.footer));
                 this.htmlEditorDirty = true;
             } else {
                 // Untouched — hand back the original text exactly, but still show
                 // the chrome: the author asked to see the source of the document,
                 // not of the body.
-                ta.value = joinRegions(
-                    this._visualOriginalCode,
-                    this.editTemplateHeaderHtml,
-                    this.editTemplateFooterHtml
-                );
+                ta.value = joinRegions(this._visualOriginalCode, chrome.header, chrome.footer);
             }
         }
         this.showHtmlBodyVisual = false;
