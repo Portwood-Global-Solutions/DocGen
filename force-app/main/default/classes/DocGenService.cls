@@ -9604,6 +9604,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String css = '';
         Boolean hasHeader = String.isNotBlank(header);
         Boolean hasFooter = String.isNotBlank(footer);
+        // A running element lives in the @page margin box, and that box is exactly as
+        // tall as the margin. Content taller than it overflows and paints over the
+        // body — a logo or a multi-line address block in the header landed on top of
+        // the document's first section. Word grows the header area and pushes the body
+        // down; this is the equivalent. Only when WE own the margins: an author who
+        // wrote their own @page keeps it.
+        if (!sourceHasPageRule) {
+            marginsCss = growMarginsForRunningChrome(
+                marginsCss,
+                hasHeader && !headerHasCounters ? header : null,
+                hasFooter && !footerHasCounters ? footer : null
+            );
+        }
         if (!sourceHasPageRule || hasHeader || hasFooter) {
             css = '@page {';
             if (!sourceHasPageRule) {
@@ -9662,6 +9675,130 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return html;
     }
 
+    /** Height the clamp gives an unsized running image, in inches. */
+    private static final Decimal RUNNING_IMG_CLAMP_IN = 0.45;
+    /** Rough line box for chrome text at the 9–11pt sizes headers use, in inches. */
+    private static final Decimal CHROME_LINE_IN = 0.17;
+    /** Breathing room between the running element and the body text below it. */
+    private static final Decimal CHROME_GUTTER_IN = 0.15;
+
+    /**
+     * Grow the top/bottom page margins so the running header/footer actually fits.
+     *
+     * The margin box is exactly as tall as the margin, so anything taller overflows
+     * and paints over the body. Returns the margin shorthand with explicit
+     * margin-top / margin-bottom appended — same rule, later declaration wins — and
+     * only when the chrome needs more room than the author's margin already gives it.
+     */
+    @TestVisible
+    private static String growMarginsForRunningChrome(String marginsCss, String header, String footer) {
+        Decimal needTop = estimateChromeHeightIn(header);
+        Decimal needBottom = estimateChromeHeightIn(footer);
+        if (needTop <= 0 && needBottom <= 0) {
+            return marginsCss;
+        }
+        List<Decimal> sides = parseMarginShorthandIn(marginsCss);
+        String out = marginsCss;
+        if (needTop > 0) {
+            Decimal want = (needTop + CHROME_GUTTER_IN).setScale(2, System.RoundingMode.UP);
+            if (want > sides[0]) {
+                // Leading separator, no trailing one: the caller appends the ';'
+                // that closes the whole declaration list. Getting this wrong emitted
+                // `margin: 1in margin-top: 1.35in;;` — invalid CSS that Flying Saucer
+                // drops silently, taking the page size with it.
+                out += '; margin-top: ' + want + 'in';
+            }
+        }
+        if (needBottom > 0) {
+            Decimal want = (needBottom + CHROME_GUTTER_IN).setScale(2, System.RoundingMode.UP);
+            if (want > sides[2]) {
+                out += '; margin-bottom: ' + want + 'in';
+            }
+        }
+        return out;
+    }
+
+    /** [top, right, bottom, left] from a `margin: …in` shorthand, CSS expansion rules. */
+    private static List<Decimal> parseMarginShorthandIn(String marginsCss) {
+        List<Decimal> vals = new List<Decimal>();
+        Matcher m = Pattern.compile('([0-9]*\\.?[0-9]+)\\s*in').matcher(marginsCss == null ? '' : marginsCss);
+        while (m.find()) {
+            vals.add(Decimal.valueOf(m.group(1)));
+        }
+        if (vals.isEmpty()) {
+            return new List<Decimal>{ 1.0, 1.0, 1.0, 1.0 };
+        }
+        Decimal t = vals[0];
+        Decimal r = vals.size() >= 2 ? vals[1] : t;
+        Decimal b = vals.size() >= 3 ? vals[2] : t;
+        Decimal l = vals.size() >= 4 ? vals[3] : r;
+        return new List<Decimal>{ t, r, b, l };
+    }
+
+    /**
+     * How tall a running header/footer will render, in inches.
+     *
+     * Apex cannot measure a layout, so this is an estimate — but a bounded one, and
+     * far better than the previous assumption that chrome always fits whatever
+     * margin the template happened to specify. Images and text in a header normally
+     * sit SIDE BY SIDE (logo left, address right), so the height is the taller of
+     * the two rather than their sum.
+     */
+    @TestVisible
+    private static Decimal estimateChromeHeightIn(String chrome) {
+        if (String.isBlank(chrome)) {
+            return 0;
+        }
+        Decimal tallestImage = 0;
+        Matcher im = Pattern.compile('(?i)<img\\b[^>]*>').matcher(chrome);
+        while (im.find()) {
+            Decimal h = imageHeightIn(im.group());
+            if (h > tallestImage) {
+                tallestImage = h;
+            }
+        }
+        // Every block start is a new line; <br> likewise. Starts at one for the
+        // text that precedes any markup.
+        Integer lines = 1;
+        Matcher bm = Pattern.compile('(?i)<(?:p|div|br|tr|h[1-6])\\b').matcher(chrome);
+        while (bm.find()) {
+            lines++;
+        }
+        Decimal textHeight = lines * CHROME_LINE_IN;
+        return tallestImage > textHeight ? tallestImage : textHeight;
+    }
+
+    /** An <img>'s effective height in inches — author sizing, else the clamp. */
+    private static Decimal imageHeightIn(String tag) {
+        Matcher sm = Pattern.compile('(?i)(?:^|[;\\s"\'])height\\s*:\\s*([0-9]*\\.?[0-9]+)\\s*(in|pt|px|cm|mm)')
+            .matcher(tag);
+        if (sm.find()) {
+            return toInches(Decimal.valueOf(sm.group(1)), sm.group(2).toLowerCase());
+        }
+        Matcher am = Pattern.compile('(?i)\\sheight\\s*=\\s*["\']?([0-9]*\\.?[0-9]+)').matcher(tag);
+        if (am.find()) {
+            return toInches(Decimal.valueOf(am.group(1)), 'px');
+        }
+        // Unsized — clampRunningImages will give it this height.
+        return RUNNING_IMG_CLAMP_IN;
+    }
+
+    private static Decimal toInches(Decimal v, String unit) {
+        if (unit == 'in') {
+            return v;
+        }
+        if (unit == 'pt') {
+            return v / 72;
+        }
+        if (unit == 'cm') {
+            return v / 2.54;
+        }
+        if (unit == 'mm') {
+            return v / 25.4;
+        }
+        return v / 96; // px
+    }
+
     /**
      * Running header/footer images with no author sizing render at intrinsic
      * size — a full-resolution logo overflows the margin box across the whole
@@ -9681,7 +9818,20 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             out += chrome.substring(last, m.start());
             String tag = m.group();
             Boolean sizedAttr = Pattern.compile('(?i)\\s(width|height)\\s*=').matcher(tag).find();
-            Boolean sizedStyle = Pattern.compile('(?i)style\\s*=\\s*["\'][^"\']*(width|height)\\s*:')
+            // The property must start at a declaration boundary. Without the boundary
+            // this matched the `width:` INSIDE `max-width:` — and max-width is exactly
+            // what the Designer puts on an asset image that the author never sized. The
+            // image was therefore treated as author-sized, skipped the clamp, and
+            // rendered at full intrinsic height: a logo that overflowed the top margin
+            // box and collided with the body on every page.
+            // The property must be a declaration START: either first in the style
+            // attribute, or preceded by a `;` / whitespace. Matching it anywhere hit
+            // the `width:` INSIDE `max-width:` — and max-width is exactly what the
+            // Designer puts on an asset image the author never sized, so the image
+            // was treated as author-sized, skipped the clamp, and rendered at full
+            // intrinsic height: a logo that overflowed the top margin box and painted
+            // over the body on every page.
+            Boolean sizedStyle = Pattern.compile('(?i)style\\s*=\\s*["\'](?:[^"\']*[;\\s])?(width|height)\\s*:')
                 .matcher(tag)
                 .find();
             if (!sizedAttr && !sizedStyle) {

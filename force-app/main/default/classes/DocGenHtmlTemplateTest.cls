@@ -872,7 +872,9 @@ private class DocGenHtmlTemplateTest {
         Map<String, Object> result = DocGenController.previewDraftPdf(
             tmplId,
             acct.Id,
-            '<html><body><h1>DRAFT ONLY {Name} — {Industry}</h1></body></html>'
+            '<html><body><h1>DRAFT ONLY {Name} — {Industry}</h1></body></html>',
+            null,
+            null
         );
         Test.stopTest();
 
@@ -900,7 +902,9 @@ private class DocGenHtmlTemplateTest {
         Map<String, Object> res = DocGenController.previewDraftPdfData(
             tmplId,
             acct.Id,
-            '<html><body><p>{Name} draft</p></body></html>'
+            '<html><body><p>{Name} draft</p></body></html>',
+            null,
+            null
         );
         System.assert(res.containsKey('base64'), 'Data preview must return base64');
         System.assert(String.isNotBlank((String) res.get('base64')), 'base64 must be non-empty');
@@ -915,7 +919,7 @@ private class DocGenHtmlTemplateTest {
         Id tmplId = createHtmlTemplate(null, null, '<html><body><p>{Name}</p></body></html>');
         Boolean threw = false;
         try {
-            DocGenController.previewDraftPdf(tmplId, acct.Id, '   ');
+            DocGenController.previewDraftPdf(tmplId, acct.Id, '   ', null, null);
         } catch (AuraHandledException e) {
             threw = true;
         }
@@ -979,5 +983,90 @@ private class DocGenHtmlTemplateTest {
             outp.contains('docgen-running-header"><img style="height:0.45in"'),
             'Header images must be clamped inside the running element: ' + outp
         );
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfClampsMaxWidthOnlyHeaderImages() {
+        // The Designer puts `max-width` on an asset image the author never sized.
+        // The size probe matched the `width:` INSIDE `max-width:`, concluded the
+        // image was author-sized, and skipped the clamp — so the logo rendered at
+        // full intrinsic height, overflowed the top margin box and painted over the
+        // body. Reported as "the header shows up correctly in the designer but gets
+        // plopped underneath in the preview".
+        String hdr = '<img style="vertical-align:middle;max-width:220px" src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
+        String outp = DocGenService.wrapHtmlForPdf('<p>x</p>', null, hdr, null);
+        System.assert(
+            outp.contains('height:0.45in'),
+            'A max-width-only image is NOT author-sized and must still be clamped: ' + outp
+        );
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfLeavesGenuinelySizedHeaderImagesAlone() {
+        // The boundary fix must not start clamping images the author DID size.
+        String hdr = '<img style="height:1.2in" src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
+        String outp = DocGenService.wrapHtmlForPdf('<p>x</p>', null, hdr, null);
+        System.assert(outp.contains('height:1.2in'), 'Author height must survive: ' + outp);
+        System.assert(!outp.contains('height:0.45in'), 'Author-sized image must not be re-clamped: ' + outp);
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfGrowsTopMarginToFitRunningHeader() {
+        // A running element lives in the @page margin box, which is exactly as tall
+        // as the margin — anything taller overflows and paints over the body. A
+        // 1.2in logo cannot fit a 1in default margin, so the margin has to grow.
+        String hdr = '<img style="height:1.2in" src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
+        String outp = DocGenService.wrapHtmlForPdf('<p>body</p>', null, hdr, null);
+        // Assert the WELL-FORMED declaration list, not just the substring: an
+        // earlier revision emitted `margin: 1in margin-top: 1.35in;;`, which is
+        // invalid CSS that Flying Saucer drops silently — the assertion passed and
+        // the page geometry was broken.
+        System.assert(
+            outp.contains('margin: 1in; margin-top: 1.35in;'),
+            'Top margin must grow to the header height plus a gutter, as valid CSS: ' + outp
+        );
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfLeavesMarginsAloneWhenChromeFits() {
+        // A one-line text header fits any normal margin — no growth, no surprise
+        // change to the author's page geometry.
+        String outp = DocGenService.wrapHtmlForPdf('<p>body</p>', null, '<p>Confidential</p>', null);
+        System.assert(!outp.contains('margin-top:'), 'A header that fits must not move the margin: ' + outp);
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfGrowsBottomMarginForTallFooter() {
+        String ftr = '<img style="height:1.5in" src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
+        String outp = DocGenService.wrapHtmlForPdf('<p>body</p>', null, null, ftr);
+        System.assert(
+            outp.contains('margin: 1in; margin-bottom: 1.65in;'),
+            'Bottom margin must fit the footer, as valid CSS: ' + outp
+        );
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfRespectsAuthorPageRuleOverChromeGrowth() {
+        // When the author wrote their own @page the engine emits no margins at all,
+        // so it must not start injecting margin-top either — v1.90's "source wins".
+        String hdr = '<img style="height:2in" src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
+        String src = '@page { size: Letter portrait; margin: 0.4in; }';
+        String outp = DocGenService.wrapHtmlForPdf('<p>body</p>', src, hdr, null);
+        System.assert(!outp.contains('margin-top:'), 'Author @page must not be overridden: ' + outp);
+    }
+
+    @IsTest
+    static void estimateChromeHeightUsesTallerOfImageAndText() {
+        // Logo left, address right — side by side, so the height is the taller of
+        // the two, not their sum.
+        Decimal imageWins = DocGenService.estimateChromeHeightIn(
+            '<div><img style="height:1in" src="x"><p>a</p><p>b</p></div>'
+        );
+        System.assertEquals(1, imageWins, 'A 1in image beats two short lines');
+        Decimal textWins = DocGenService.estimateChromeHeightIn(
+            '<p>1</p><p>2</p><p>3</p><p>4</p><p>5</p><p>6</p><p>7</p><p>8</p>'
+        );
+        System.assert(textWins > 1.3, 'Eight lines must estimate taller than an inch: ' + textWins);
+        System.assertEquals(0, DocGenService.estimateChromeHeightIn(null), 'No chrome, no height');
     }
 }
