@@ -173,6 +173,10 @@ async function main() {
         void t;
         // Undo/redo cannot be asserted after a programmatic DOM reset — the browser's
         // undo stack does not track our manual DOM writes. Zoom is a view control.
+        // Menu triggers open chrome rather than mutating the document; they have
+        // their own popover assertions. Leaving them in this loop also left their
+        // menus OPEN, which then toggled shut under the later tests.
+        if (b.getAttribute('aria-haspopup') === 'true' || b.dataset.menu) return false;
         return b.dataset.cmd !== 'undo' && b.dataset.cmd !== 'redo' && !b.dataset.zstep && !b.dataset.szstep;
       });
       for (const b of clickable) {
@@ -385,6 +389,113 @@ async function main() {
         );
         record('block handle: appears and reorders blocks', blocks.ok, blocks.why);
 
+        // Word-style grid picker: 4x3 must produce a 4-column, 4-row table (3 body
+        // rows + header) that does NOT overhang the sheet.
+        const grid = await page.evaluate(
+            inPage(`
+      const bar = __dgFind('.dg-format-bar');
+      const pv = __dgFind('.dg-pv');
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+      const p = document.createElement('p'); p.textContent = 'anchor'; pv.appendChild(p);
+      pv.focus();
+      const rr = document.createRange(); rr.selectNodeContents(p); rr.collapse(false);
+      const ss = window.getSelection(); ss.removeAllRanges(); ss.addRange(rr);
+
+      const trigger = [...bar.querySelectorAll('button')].find(b => /Table/.test(b.textContent||''));
+      if (!trigger) return { ok:false, why:'grid trigger missing' };
+      // LWC re-renders ASYNCHRONOUSLY, so a synchronous re-check after click always
+      // sees the old DOM. Click, WAIT, then decide whether a second click is needed
+      // (a previous test may have left the menu open, making the first click a close).
+      const clickTrigger = () => {
+        trigger.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        trigger.click();
+      };
+      clickTrigger();
+      return new Promise((resolve) => setTimeout(() => {
+        if (!__dgFind('.dg-grid-menu')) {
+          clickTrigger();
+        }
+        setTimeout(() => {
+        const menu = __dgFind('.dg-grid-menu');
+        if (!menu) return resolve({ ok:false, why:'grid did not open' });
+        const cs = getComputedStyle(menu);
+        if (cs.position !== 'fixed') return resolve({ ok:false, why:'grid not fixed: ' + cs.position });
+        const cell = menu.querySelector('[data-r="3"][data-c="4"]');
+        if (!cell) return resolve({ ok:false, why:'no 4x3 cell' });
+        cell.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true, composed:true}));
+        cell.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        cell.click();
+        setTimeout(() => {
+          const t = pv.querySelector('table');
+          if (!t) return resolve({ ok:false, why:'no table inserted' });
+          const cols = t.rows[0] ? t.rows[0].children.length : 0;
+          const rows = t.rows.length;
+          // Must not overhang the sheet.
+          const pcs = getComputedStyle(pv);
+          const contentW = pv.getBoundingClientRect().width
+            - (parseFloat(pcs.paddingLeft)||0) - (parseFloat(pcs.paddingRight)||0);
+          const overhang = t.getBoundingClientRect().width > contentW + 1;
+          resolve({ ok: cols === 4 && rows === 4 && !overhang,
+                    why: 'cols=' + cols + ' rows=' + rows + ' overhang=' + overhang });
+        }, 300);
+        }, 450);
+      }, 450));`)
+        );
+        record('insert-table grid: 4x3 picker inserts and fits the page', grid.ok, grid.why);
+
+        // Tables must never extend past the canvas, including after edits that grow
+        // them (adding columns is the common way this happens).
+        const overflow = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const t = pv.querySelector('table');
+      if (!t) return { ok:false, why:'no table to test' };
+      const bar = __dgFind('.dg-format-bar');
+      // Put the caret in the table so the contextual tools appear.
+      const td = t.querySelector('td, th');
+      const r = document.createRange(); r.selectNodeContents(td);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return new Promise((resolve) => setTimeout(() => {
+        const addCol = bar.querySelector('[data-taction="colAfter"]');
+        if (!addCol) return resolve({ ok:false, why:'no add-column control' });
+        // Add several columns — enough to overhang without a clamp.
+        for (let i = 0; i < 6; i++) {
+          addCol.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+          addCol.click();
+        }
+        setTimeout(() => {
+          const pcs = getComputedStyle(pv);
+          const contentW = pv.getBoundingClientRect().width
+            - (parseFloat(pcs.paddingLeft)||0) - (parseFloat(pcs.paddingRight)||0);
+          const w = t.getBoundingClientRect().width;
+          resolve({ ok: w <= contentW + 1, why: 'table ' + Math.round(w) + 'px vs content ' + Math.round(contentW) + 'px' });
+        }, 350);
+      }, 400));`)
+        );
+        record('table never extends past the canvas after adding columns', overflow.ok, overflow.why);
+
+        // Cell-selection highlight must not linger.
+        const stale = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const t = pv.querySelector('table');
+      if (!t) return { ok:false, why:'no table' };
+      const cells = [...t.querySelectorAll('td, th')];
+      // Mark cells the way a drag-select does, then click elsewhere to clear.
+      cells.slice(0, 3).forEach(c => { c.setAttribute('data-dg-selcell','1'); c.style.boxShadow = 'inset 0 0 0 2px #7c3aed'; });
+      const p = document.createElement('p'); p.textContent = 'outside'; pv.appendChild(p);
+      p.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+      p.dispatchEvent(new MouseEvent('click', {bubbles:true, composed:true, cancelable:true}));
+      return new Promise((resolve) => setTimeout(() => {
+        const left = pv.querySelectorAll('[data-dg-selcell]').length;
+        resolve({ ok: left === 0, why: left + ' cells still marked selected' });
+      }, 350));`)
+        );
+        record('cell selection highlight does not hang', stale.ok, stale.why);
+
         // --- 4c. Selection bubble: appears, is unclipped, and actually formats ----
         // The bubble is position: fixed precisely so no ancestor can clip it. Assert
         // that property directly rather than trusting the CSS — this is the same
@@ -538,6 +649,38 @@ async function main() {
             );
             record(`popover ${menuKey}: opens, unclipped, hit-testable, formats`, r.ok, r.why);
         }
+
+        // --- 4c-3. Header/footer must BE the sheet, not panels above and below ----
+        // "Part of the canvas" is measurable: same width as the page, horizontally
+        // aligned with it, and no visible gap between band and page.
+        const sheet = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const hdr = __dgFind('.dg-chrome-band_header');
+      const ftr = __dgFind('.dg-chrome-band_footer');
+      const sheetEl = __dgFind('.dg-sheet');
+      if (!hdr || !ftr) return { ok:false, why:'bands missing' };
+      if (!sheetEl) return { ok:false, why:'no .dg-sheet wrapper' };
+      if (!(sheetEl.contains(pv) && sheetEl.contains(hdr) && sheetEl.contains(ftr))) {
+        return { ok:false, why:'bands and page are not in the same sheet' };
+      }
+      const p = pv.getBoundingClientRect();
+      const h = hdr.getBoundingClientRect();
+      const f = ftr.getBoundingClientRect();
+      const widthMatch = Math.abs(h.width - p.width) <= 2 && Math.abs(f.width - p.width) <= 2;
+      const leftMatch = Math.abs(h.left - p.left) <= 2 && Math.abs(f.left - p.left) <= 2;
+      // Flush: the header's bottom edge should meet the page's top edge.
+      const gapTop = p.top - h.bottom;
+      const gapBottom = f.top - p.bottom;
+      const flush = Math.abs(gapTop) <= 3 && Math.abs(gapBottom) <= 3;
+      return {
+        ok: widthMatch && leftMatch && flush,
+        why: 'w ' + Math.round(h.width) + '/' + Math.round(p.width) +
+             ' left ' + Math.round(h.left) + '/' + Math.round(p.left) +
+             ' gaps ' + Math.round(gapTop) + ',' + Math.round(gapBottom)
+      };`)
+        );
+        record('header/footer are part of the sheet (width, alignment, flush)', sheet.ok, sheet.why);
 
         // --- 4d. Invisible chrome must never intercept clicks --------------------
         // opacity: 0 does NOT remove an element from hit-testing. Any overlay left at

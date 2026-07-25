@@ -6345,6 +6345,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             pv.style.minHeight = h + 'px';
             pv.style.padding = pad + 'px';
         }
+        // The running header/footer are the sheet's top and bottom MARGIN ZONES, not
+        // panels parked above and below it. They must match the page exactly — same
+        // width, same horizontal padding — or the header text will not line up with
+        // the body text directly beneath it and the illusion of one continuous sheet
+        // breaks. This is what makes them read as part of the canvas.
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band) {
+                band.style.width = w + 'px';
+                band.style.maxWidth = w + 'px';
+                band.style.paddingLeft = pad + 'px';
+                band.style.paddingRight = pad + 'px';
+            }
+        }
     }
 
     // --- Format Code + Code ⇄ Preview (shared by the HTML editor and the DOCX viewer) ---
@@ -6898,6 +6912,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 getBoundingClientRect: () => r
             };
             this._positionFloating(anchor, bubbleEl, { gap: 8, prefer: 'top', align: 'center' });
+            // _positionFloating clamps into the viewport, and that clamp can land the
+            // bubble back on top of the very text it is meant to format — there is no
+            // room above near the top of the screen, and the flip below can still be
+            // pulled back up. Detect the overlap and force it to the side with room.
+            const full = sel.getRangeAt(0).getBoundingClientRect();
+            const br = bubbleEl.getBoundingClientRect();
+            const overlaps = br.bottom > full.top + 2 && br.top < full.bottom - 2;
+            if (overlaps) {
+                const vh = document.documentElement.clientHeight;
+                const below = full.bottom + 8;
+                const above = full.top - br.height - 8;
+                // Prefer whichever side actually fits; below wins ties because the
+                // sticky toolbar occupies the top of the canvas.
+                const top = below + br.height <= vh ? below : Math.max(2, above);
+                bubbleEl.style.top = Math.round(top) + 'px';
+            }
         } catch (e) {
             /* best effort */
         }
@@ -7521,6 +7551,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 ref.insertAdjacentElement('beforebegin', clone);
             }
         }
+        this._clampTablesToCanvas();
         this.htmlEditorDirty = true;
         this.tableOverlay = null;
     }
@@ -7603,6 +7634,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 ref.insertAdjacentElement('beforebegin', c);
             }
         }
+        this._clampTablesToCanvas();
         this.htmlEditorDirty = true;
         this.tableOverlay = null;
     }
@@ -7621,6 +7653,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!table.querySelector('td, th')) {
             table.remove();
         }
+        this._clampTablesToCanvas();
         this.htmlEditorDirty = true;
         this.tableOverlay = null;
     }
@@ -7642,6 +7675,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             c.removeAttribute('rowspan');
         }
         row.insertAdjacentElement('beforebegin', clone);
+        this._clampTablesToCanvas();
         this.htmlEditorDirty = true;
         this.tableOverlay = null;
     }
@@ -7659,6 +7693,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!table.querySelector('tr')) {
             table.remove();
         }
+        this._clampTablesToCanvas();
         this.htmlEditorDirty = true;
         this.tableOverlay = null;
     }
@@ -7720,17 +7755,82 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._cellSel = sel;
     }
 
+    /**
+     * Clear the Excel-style cell selection.
+     *
+     * Sweeps the DOM for the selection marker rather than only walking the tracked
+     * array. Any cell that left the array — replaced by a re-render, moved by a
+     * row/column insert, or orphaned when _cellSel was reassigned — kept its
+     * data-dg-selcell attribute and its highlight, so the table appeared to have more
+     * cells selected than it did and the highlight "hung" until the canvas was rebuilt.
+     * The array is still cleared first so detached nodes are handled too.
+     */
     _clearCellSel() {
         for (const el of this._cellSel || []) {
             try {
                 el.removeAttribute('data-dg-selcell');
                 el.style.boxShadow = '';
                 el.style.backgroundClip = '';
+                if (!el.getAttribute('style')) {
+                    el.removeAttribute('style');
+                }
             } catch (e) {
                 /* detached */
             }
         }
         this._cellSel = null;
+        for (const surface of this._allSurfaces()) {
+            let stragglers;
+            try {
+                stragglers = surface.querySelectorAll('[data-dg-selcell]');
+            } catch (e) {
+                continue;
+            }
+            for (const el of stragglers) {
+                el.removeAttribute('data-dg-selcell');
+                el.style.boxShadow = '';
+                el.style.backgroundClip = '';
+                if (!el.getAttribute('style')) {
+                    el.removeAttribute('style');
+                }
+            }
+        }
+    }
+
+    /**
+     * A table must never extend past the sheet.
+     *
+     * _fitOversizeTables only runs once, at mount, so a table that GREW after that —
+     * a column added, a border dragged, a merge undone — could overhang the page with
+     * nothing to pull it back. This runs after every table mutation. Silent by design:
+     * the overflow is a direct consequence of the edit the author just made, so a toast
+     * would fire on their own action every time.
+     */
+    _clampTablesToCanvas() {
+        for (const surface of this._allSurfaces()) {
+            let cs;
+            try {
+                cs = getComputedStyle(surface);
+            } catch (e) {
+                continue;
+            }
+            const contentW =
+                surface.getBoundingClientRect().width -
+                (parseFloat(cs.paddingLeft) || 0) -
+                (parseFloat(cs.paddingRight) || 0);
+            if (!(contentW > 0)) {
+                continue;
+            }
+            for (const t of surface.querySelectorAll('table')) {
+                // max-width alone is not enough: table-layout:auto refuses to shrink
+                // below min-content, so a table of wide cells still overhangs.
+                t.style.maxWidth = '100%';
+                if (t.getBoundingClientRect().width > contentW + 1) {
+                    t.style.width = '100%';
+                    t.style.tableLayout = 'fixed';
+                }
+            }
+        }
     }
 
     _selectedTableCell() {
@@ -7957,6 +8057,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._lastBorderMode = action;
             this._applyBorders(action, table);
         }
+        // Any structural change can push the table past the sheet edge.
+        this._clampTablesToCanvas();
         this.htmlEditorDirty = true;
     }
 
@@ -11516,7 +11618,116 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Table group's "+ Table": a styled 3-column data table at the caret. */
-    handleInsertTable() {
+    // ===== Word-style insert-table grid picker ===============================
+    //
+    // The old button dropped a fixed 3-column table and left the author to add or
+    // delete their way to the shape they wanted. This is the Word/Google Docs
+    // affordance: hover a grid, see "4 x 3 table", click to place exactly that.
+    @track tableGrid = null;
+    static GRID_MAX_COLS = 8;
+    static GRID_MAX_ROWS = 8;
+
+    handleTableGridToggle(event) {
+        if (this.tableGrid) {
+            this.tableGrid = null;
+            this._watchFloatingLayer(!!this.selectionBubble);
+            return;
+        }
+        // Remember where the caret was BEFORE the picker took focus, or the table
+        // lands at the end of the document instead of where the author was working.
+        this.tableGrid = { rows: 0, cols: 0, label: 'Pick a size' };
+        this._floatAnchor = event.currentTarget;
+        this._watchFloatingLayer(true);
+    }
+
+    /** Cells for the picker, flagged so the hovered rectangle lights up. */
+    get tableGridCells() {
+        const cells = [];
+        const hotR = this.tableGrid ? this.tableGrid.rows : 0;
+        const hotC = this.tableGrid ? this.tableGrid.cols : 0;
+        for (let r = 1; r <= DocGenAdmin.GRID_MAX_ROWS; r++) {
+            for (let c = 1; c <= DocGenAdmin.GRID_MAX_COLS; c++) {
+                cells.push({
+                    key: r + 'x' + c,
+                    r,
+                    c,
+                    cls: r <= hotR && c <= hotC ? 'dg-grid-cell dg-grid-cell_on' : 'dg-grid-cell'
+                });
+            }
+        }
+        return cells;
+    }
+
+    get tableGridLabel() {
+        if (!this.tableGrid || !this.tableGrid.rows) {
+            return 'Pick a size';
+        }
+        return `${this.tableGrid.cols} × ${this.tableGrid.rows} table`;
+    }
+
+    handleTableGridHover(event) {
+        const r = parseInt(event.currentTarget.dataset.r, 10);
+        const c = parseInt(event.currentTarget.dataset.c, 10);
+        if (!isNaN(r) && !isNaN(c)) {
+            this.tableGrid = { rows: r, cols: c };
+        }
+    }
+
+    handleTableGridPick(event) {
+        const rows = parseInt(event.currentTarget.dataset.r, 10);
+        const cols = parseInt(event.currentTarget.dataset.c, 10);
+        this.tableGrid = null;
+        this._watchFloatingLayer(!!this.selectionBubble);
+        if (isNaN(rows) || isNaN(cols)) {
+            return;
+        }
+        this.handleInsertTable(cols, rows);
+    }
+
+    /**
+     * @param cols  columns to build (default 3 — the historic behaviour)
+     * @param bodyRows  body rows BENEATH the header row (default 2)
+     */
+    handleInsertTable(cols, bodyRows) {
+        const nCols = typeof cols === 'number' && cols > 0 ? cols : 3;
+        const nRows = typeof bodyRows === 'number' && bodyRows > 0 ? bodyRows : 2;
+        const thStyle = 'background: #1f3a5f; color: #ffffff; text-align: left; padding: 5pt 7pt; font-size: 9.5pt';
+        const tdStyle = 'padding: 5pt 7pt; border-bottom: 0.75pt solid #dddddd';
+        let head = '';
+        for (let c = 1; c <= nCols; c++) {
+            head += '<th style="' + thStyle + '">Column ' + c + '</th>';
+        }
+        let body = '';
+        for (let r = 0; r < nRows; r++) {
+            body += '<tr style="page-break-inside: avoid">';
+            for (let c = 0; c < nCols; c++) {
+                body += '<td style="' + tdStyle + '">&nbsp;</td>';
+            }
+            body += '</tr>';
+        }
+        // width:100% + table-layout:fixed so an 8-column table cannot overhang the
+        // sheet the moment it is created.
+        const markup =
+            '\n<table style="width: 100%; border-collapse: collapse; table-layout: fixed; max-width: 100%">' +
+            '<thead><tr>' +
+            head +
+            '</tr></thead><tbody>' +
+            body +
+            '</tbody></table>\n';
+        if (this.showHtmlBodyVisual) {
+            this._insertIntoVisualPage(markup);
+            this._clampTablesToCanvas();
+        } else {
+            this._insertAtEditorCursor(markup);
+        }
+        this.showToast(
+            'Table added',
+            `${nCols} × ${nRows + 1} table inserted. Drag a cell edge to resize columns; hover the table for row and column controls.`,
+            'success'
+        );
+    }
+
+    _legacyInsertTableUnused() {
         const th = 'background: #1f3a5f; color: #ffffff; text-align: left; padding: 5pt 7pt; font-size: 9.5pt';
         const cell = 'padding: 5pt 7pt; border-bottom: 0.75pt solid #dddddd';
         const snippet =

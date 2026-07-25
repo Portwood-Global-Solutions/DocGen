@@ -528,16 +528,127 @@
    Styled to read as page CHROME rather than body content: dimmed, dashed, labelled.
    They are real editing surfaces (the format bar, rail chips and table tools all work
    in them), but they write Header_Html__c / Footer_Html__c, not the body. */
+/* Word-style insert-table grid picker. */
+.dg-grid-menu {
+    min-width: 0;
+    gap: 6px;
+}
+
+.dg-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 18px);
+    gap: 2px;
+}
+
+.dg-grid-cell {
+    width: 18px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    border-radius: 2px;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px #d8dde6;
+    cursor: pointer;
+    transition: background-color 0.06s linear;
+}
+
+.dg-grid-cell_on {
+    background: #c4aef7;
+    box-shadow: inset 0 0 0 1px #7c3aed;
+}
+
+.dg-grid-label {
+    font-size: 0.72rem;
+    color: #5b6b83;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The sheet: header band + page + footer band as ONE piece of paper. The grey
+   "desk" gradient lives here rather than on the canvas host, and the host is
+   stripped to a pure scroll viewport — the host previously drew its own panel AND a
+   border between the header band and the page, a visible seam that made the header
+   read as a separate widget floating above the paper. */
+.dg-sheet {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 18px 0;
+    background: radial-gradient(ellipse at 50% 0%, #eceef4 0%, #dde1ea 70%, #d4d9e4 100%);
+    border: 1px solid #d3d0e6;
+    border-radius: 8px;
+}
+
+/* The host stops being a scroll viewport and becomes plain flow.
+   While it had its own fixed height and internal scrollbar, the footer band was
+   laid out after the VIEWPORT rather than after the PAGE — a 1000px gap opened
+   between the bottom of the sheet and its own footer, and the bands scrolled
+   independently of the content they belong to. Letting the sheet size to its
+   content and handing scrolling to .dg-designer-canvas-col (already overflow-y:
+   auto) makes header, page and footer one object that moves together, which is
+   the whole point of them being page chrome. */
+.dg-sheet .dg-visual-host,
+.dg-sheet .dg-visual-host.dg-designer-size {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    width: 100%;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible;
+    display: flex;
+    justify-content: center;
+}
+
+.dg-sheet .dg-canvas-wrap {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Word's in-margin label, on hover/focus only so it never competes with content. */
+.dg-chrome-band::before {
+    content: attr(data-band-label);
+    position: absolute;
+    top: 2px;
+    left: 8px;
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #b9b7c8;
+    opacity: 0;
+    transition: opacity 0.12s ease-in-out;
+    pointer-events: none;
+}
+
+.dg-chrome-band_footer::before {
+    top: auto;
+    bottom: 2px;
+}
+
+.dg-chrome-band:hover::before,
+.dg-chrome-band:focus::before,
+.dg-chrome-band:focus-within::before {
+    opacity: 1;
+}
+
 .dg-chrome-band {
-    border: 1px dashed #c9c7e0;
-    border-radius: 4px;
-    background: #fbfaff;
-    padding: 6px 10px;
-    min-height: 34px;
+    box-sizing: border-box;
+    background: #fff;
+    border: none;
+    min-height: 42px;
     font-size: 0.8rem;
-    color: #3e3e4a;
+    /* Dimmed until focused — Word greys inactive header/footer text. */
+    color: #9a9aa8;
     cursor: text;
+    margin: 0 auto;
+    position: relative;
     overflow-x: auto;
+    transition: color 0.12s ease-in-out;
 }
 
 .dg-chrome-band:focus,
@@ -549,11 +660,17 @@
 }
 
 .dg-chrome-band_header {
-    margin-bottom: 4px;
+    border-bottom: 1px dashed #d6d3e6;
+    border-radius: 6px 6px 0 0;
+    padding-top: 14px;
+    padding-bottom: 6px;
 }
 
 .dg-chrome-band_footer {
-    margin-top: 4px;
+    border-top: 1px dashed #d6d3e6;
+    border-radius: 0 0 6px 6px;
+    padding-top: 6px;
+    padding-bottom: 14px;
 }
 
 .dg-chrome-band-label {
