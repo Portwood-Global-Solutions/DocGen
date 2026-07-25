@@ -125,13 +125,13 @@ call site and cannot drift out of sync with the operation they describe.
 
 ## Sequencing
 
-| #   | Work                                    | Size | Status                                                                                                                                          |
-| --- | --------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Undo stack (B)**                      | M    | **DONE** — `9aa6df5`. Gate 50/50.                                                                                                               |
-| 2   | **Regions (A)**                         | M    | **DONE** — `55fb6cd`. Gate 59/59.                                                                                                               |
-| 3   | **Word `<w:hdr>`/`<w:ftr>` extraction** | M    | **DONE** — `a415f28`. RendererTest 126/126, MiscTests 396/396.                                                                                  |
-| 4   | **Header visual polish**                | S    | **OPEN** — measured flush and identical width already, so what remains is aesthetic. Still needs a screenshot of what reads wrong. Not guessed. |
-| 5   | **Preview from model**                  | S    | **DONE** — `e170243`. Gate 60/60.                                                                                                               |
+| #   | Work                                    | Size | Status                                                                                                 |
+| --- | --------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------ |
+| 1   | **Undo stack (B)**                      | M    | **DONE** — `9aa6df5`. Gate 50/50.                                                                      |
+| 2   | **Regions (A)**                         | M    | **DONE** — `55fb6cd`. Gate 59/59.                                                                      |
+| 3   | **Word `<w:hdr>`/`<w:ftr>` extraction** | M    | **DONE** — `a415f28`. RendererTest 126/126, MiscTests 396/396.                                         |
+| 4   | **Header visual polish**                | S    | **DONE** — `e02685b`. Screenshotted rather than guessed; found a functional bug behind it. Gate 63/63. |
+| 5   | **Preview from model**                  | S    | **DONE** — `e170243`. Gate 60/60.                                                                      |
 
 Each step: implement → deploy to `docgen-verify` → `npm run smoke` → screenshot →
 commit. Revert immediately on a red gate rather than patching forward.
@@ -172,6 +172,37 @@ other.
 Known limitation: only the DEFAULT header/footer pair is marked. The `-first`
 (`w:titlePg`) variants have no field to be adopted into — there is one `Header_Html__c`,
 not one per page context — so they keep today's behaviour of staying inline.
+
+**4 — Header polish, and the bug underneath it.** The screenshot this was waiting on
+was taken with Playwright against `docgen-verify`. Three visual defects, and one
+functional one that only showed up because the screenshot prompted a look at how the
+bands actually behave:
+
+- The dashed editing outline was on `.dg-pv`, so it boxed the BODY and left the running
+  header outside it. The sheet said "one piece of paper"; the outline said "the document
+  is this rectangle and the header is not in it". It also drew a second dashed line 6px
+  from each band's own margin rule, so every seam showed two parallel dashes meaning
+  different things. Moved to a `.dg-sheet-paper` wrapper enclosing all three surfaces.
+- The bands rendered in the Salesforce UI font, at a UI size, in UI grey, while the page
+  rendered in the document's typeface — so the one surface whose entire point is "what
+  you see is what prints" showed something that would never appear in the PDF.
+- The first attempt at dimming used element `opacity`, which made the band's white
+  background translucent so the grey desk showed through. Dimming is alpha on the
+  document's own ink instead.
+
+**The functional bug: inserts never reached the header.** `_insertIntoVisualPage`
+resolved its target as the body canvas unconditionally, so with the caret in a band the
+containment test failed for every candidate range and the insert fell through to
+appending at the end of the body. The drag paths had the same assumption, and the bands
+accepted `dragover` but had no `drop` handler at all. Headers containing images or merge
+tags were not buildable from the rail — which rules out every header more complex than a
+line of static text.
+
+**The scatter.** Header and footer had three editors for two fields: the bands, a
+floating panel of raw-HTML textareas, and the Edit Template modal. The panel's textareas
+are gone; it now only jumps the caret to a band. Its one unique feature — page-counter
+tokens, meaningless outside a running header — became a contextual toolbar cluster on
+the same idiom as the table row.
 
 **5 — Preview from model.** The real defect was subtler than "preview renders from the
 saved record". The body was read from the live canvas while the chrome was read from the
