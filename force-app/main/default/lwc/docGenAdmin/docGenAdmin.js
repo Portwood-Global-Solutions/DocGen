@@ -7245,6 +7245,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._overlayLastRun = now;
         try {
             this._updateTableOverlay(event);
+            this._updateBlockHandle(event);
         } catch (e) {
             // Was silently swallowed, which hid the handles never rendering at all.
             // Still non-fatal, but no longer invisible.
@@ -7257,7 +7258,110 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleCanvasMouseLeave() {
         this.tableOverlay = null;
         this._overlayTable = null;
+        this.blockHandle = null;
         this._highlightTableBand(null);
+    }
+
+    // ===== Block gutter handle (Notion) ======================================
+    //
+    // A handle in the left gutter of whichever block the pointer is over: `+` to add
+    // a paragraph beneath it, `⋮⋮` to grab and reorder. This is the affordance that
+    // makes a document feel composable rather than typed-into.
+    //
+    // Rendered as an LWC-owned sibling of the canvas (same as the table handles), so
+    // no block chrome can ever reach the serialized template body.
+    @track blockHandle = null;
+
+    /** Track which block the pointer is over, for the gutter handle. */
+    _updateBlockHandle(event) {
+        const pv = this._bodyCanvas();
+        const wrap = this.template.querySelector('.dg-canvas-wrap');
+        if (!pv || !wrap) {
+            return;
+        }
+        let node = event.target;
+        while (node && node.nodeType === 3) {
+            node = node.parentNode;
+        }
+        const blk =
+            node && node.closest ? node.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, table, div.dg-band') : null;
+        // Never offer a handle for the canvas itself or for content inside a table
+        // cell — the table gutters own that space.
+        if (!blk || blk === pv || !this._isInCanvas(blk, pv) || (blk.closest && blk.closest('td, th'))) {
+            if (this.blockHandle) {
+                this.blockHandle = null;
+                this._handleBlockEl = null;
+            }
+            return;
+        }
+        if (this._handleBlockEl === blk && this.blockHandle) {
+            return;
+        }
+        this._handleBlockEl = blk;
+        const r = blk.getBoundingClientRect();
+        const wrapRect = wrap.getBoundingClientRect();
+        if (r.bottom < wrapRect.top || r.top > wrapRect.bottom) {
+            this.blockHandle = null;
+            return;
+        }
+        this.blockHandle = {
+            style: `left:${r.left - wrapRect.left - 42}px; top:${r.top - wrapRect.top + 1}px;`
+        };
+    }
+    _handleBlockEl = null;
+
+    /** `+` — insert an empty paragraph directly after the hovered block. */
+    handleBlockInsertAfter() {
+        const blk = this._handleBlockEl;
+        if (!blk || !blk.isConnected) {
+            return;
+        }
+        const p = document.createElement('p');
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+        p.innerHTML = '<br/>';
+        blk.insertAdjacentElement('afterend', p);
+        this.htmlEditorDirty = true;
+        try {
+            const r = document.createRange();
+            r.selectNodeContents(p);
+            r.collapse(true);
+            const s = window.getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            p.scrollIntoView({ block: 'nearest' });
+        } catch (e) {
+            /* caret placement is best effort */
+        }
+        this.blockHandle = null;
+    }
+
+    /** Grab handle — move the hovered block up or down one position. */
+    handleBlockMove(event) {
+        const blk = this._handleBlockEl;
+        if (!blk || !blk.isConnected) {
+            return;
+        }
+        const dir = event.currentTarget.dataset.dir;
+        const sibling = dir === 'up' ? blk.previousElementSibling : blk.nextElementSibling;
+        // Never reorder past the canvas's scoped <style> — moving a block above it
+        // would put content before the stylesheet and drop the page styling.
+        if (!sibling || sibling.tagName === 'STYLE') {
+            return;
+        }
+        if (dir === 'up') {
+            sibling.insertAdjacentElement('beforebegin', blk);
+        } else {
+            sibling.insertAdjacentElement('afterend', blk);
+        }
+        this.htmlEditorDirty = true;
+        try {
+            blk.scrollIntoView({ block: 'nearest' });
+        } catch (e) {
+            /* best effort */
+        }
+        // Reposition against the block's new location.
+        this._handleBlockEl = null;
+        this.blockHandle = null;
     }
 
     /** Recompute the handle strip for whichever table the pointer is over. */

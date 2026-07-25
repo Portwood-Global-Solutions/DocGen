@@ -638,6 +638,50 @@
     border-color: #c23934;
 }
 
+/* Block gutter handle (Notion). Sits in the left margin of the block under the
+   pointer: add a paragraph beneath, or move the block up/down. Same visibility
+   contract as every other overlay — pointer-events none while invisible. */
+.dg-blk-handle {
+    position: absolute;
+    z-index: 19;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.dg-canvas-wrap:hover .dg-blk-handle {
+    opacity: 0.65;
+    pointer-events: auto;
+}
+
+.dg-blk-handle:hover {
+    opacity: 1;
+}
+
+.dg-blk-handle-btn {
+    width: 13px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: #9aa8bd;
+    font-size: 9px;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        background-color 0.09s ease,
+        color 0.09s ease;
+}
+
+.dg-blk-handle-btn:hover {
+    background: #ede7fd;
+    color: #5a21b6;
+}
+
 /* Insert seam — a circular + on the boundary where the new column/row lands.
    Same visibility contract as the handles: pointer-events must be none while
    invisible, or it becomes a dead click target over the page. */

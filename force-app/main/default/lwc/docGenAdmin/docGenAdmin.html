@@ -2789,6 +2789,42 @@
                                                     </button>
                                                 </div>
                                             </template>
+                                        </template>
+                                        <!-- Block gutter handle (Notion): appears in
+                                             the left margin of the block under the
+                                             pointer. LWC-owned sibling of the canvas,
+                                             so it can never reach the saved body. -->
+                                        <template if:true={blockHandle}>
+                                            <div class="dg-blk-handle" style={blockHandle.style}>
+                                                <button
+                                                    class="dg-blk-handle-btn"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleBlockInsertAfter}
+                                                    title="Insert a paragraph below this block"
+                                                >
+                                                    +
+                                                </button>
+                                                <button
+                                                    class="dg-blk-handle-btn"
+                                                    data-dir="up"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleBlockMove}
+                                                    title="Move this block up"
+                                                >
+                                                    &#9650;
+                                                </button>
+                                                <button
+                                                    class="dg-blk-handle-btn"
+                                                    data-dir="down"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleBlockMove}
+                                                    title="Move this block down"
+                                                >
+                                                    &#9660;
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <template if:true={tableOverlay}>
                                             <!-- Insert seams — a circular + centred on
                                                  the boundary where the new column/row
                                                  will land, so the insertion point is

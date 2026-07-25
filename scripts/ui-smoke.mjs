@@ -351,6 +351,40 @@ async function main() {
         );
         record('table seams: render, no ghost targets, insert a column', seams.ok, seams.why);
 
+        // Block gutter handle: appears for the hovered block, inserts, and reorders.
+        const blocks = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+      const a = document.createElement('p'); a.textContent = 'AAA'; pv.appendChild(a);
+      const b = document.createElement('p'); b.textContent = 'BBB'; pv.appendChild(b);
+      const r = a.getBoundingClientRect();
+      a.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+        clientX: Math.round(r.left + 10), clientY: Math.round(r.top + 5)}));
+      return new Promise((resolve) => setTimeout(() => {
+        const h = __dgFind('.dg-blk-handle');
+        if (!h) return resolve({ ok:false, why:'handle did not appear' });
+        const cs = getComputedStyle(h);
+        if (parseFloat(cs.opacity) < 0.02 && cs.pointerEvents !== 'none') {
+          return resolve({ ok:false, why:'ghost click target' });
+        }
+        const btns = [...h.querySelectorAll('button')];
+        const down = btns.find(x => x.dataset.dir === 'down');
+        if (!down) return resolve({ ok:false, why:'no move control' });
+        const orderBefore = [...pv.querySelectorAll('p')].map(p => p.textContent).join(',');
+        down.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        down.click();
+        setTimeout(() => {
+          const orderAfter = [...pv.querySelectorAll('p')].map(p => p.textContent).join(',');
+          resolve({ ok: orderBefore === 'AAA,BBB' && orderAfter === 'BBB,AAA',
+                    why: orderBefore + ' -> ' + orderAfter });
+        }, 250);
+      }, 500));`)
+        );
+        record('block handle: appears and reorders blocks', blocks.ok, blocks.why);
+
         // --- 4c. Selection bubble: appears, is unclipped, and actually formats ----
         // The bubble is position: fixed precisely so no ancestor can clip it. Assert
         // that property directly rather than trusting the CSS — this is the same
