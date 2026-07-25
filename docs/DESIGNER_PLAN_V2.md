@@ -9,7 +9,7 @@ what the last round of testing surfaced, and the re-architecture those bugs poin
 
 **Branch** `fix/v3.45.0-designer-and-render-batch` → PR #249. **Org** `docgen-verify`
 (namespaced, expires 2026-08-07). **Gate** `npm run smoke -- --org docgen-verify` —
-44/44.
+60/60 (44/44 when this plan was written; steps 1, 2 and 5 added sixteen).
 
 Shipped and verified: behavioural smoke harness; surface abstraction (body + running
 header/footer with full toolbar parity); sheet-level zoom with pill spreading;
@@ -125,33 +125,90 @@ call site and cannot drift out of sync with the operation they describe.
 
 ## Sequencing
 
-| #   | Work                                    | Size | Notes                                                                                                                                          |
-| --- | --------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Undo stack (B)**                      | M    | Highest user-visible pain. Independent of regions — do it first, ship it alone.                                                                |
-| 2   | **Regions (A)**                         | M    | Unlocks Word headers and collapses the surface-parity tax.                                                                                     |
-| 3   | **Word `<w:hdr>`/`<w:ftr>` extraction** | M    | Depends on 2 having somewhere to put them. Renderer work in `DocGenHtmlRenderer`.                                                              |
-| 4   | **Header visual polish**                | S    | Measured flush and identical width already, so what remains is aesthetic — needs a screenshot of what still reads wrong before guessing again. |
-| 5   | **Preview from model**                  | S    | Falls out of 1 + 2; retires the per-surface draft plumbing added for the header/footer preview fix.                                            |
+| #   | Work                                    | Size | Status                                                                                                                                          |
+| --- | --------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Undo stack (B)**                      | M    | **DONE** — `9aa6df5`. Gate 50/50.                                                                                                               |
+| 2   | **Regions (A)**                         | M    | **DONE** — `55fb6cd`. Gate 59/59.                                                                                                               |
+| 3   | **Word `<w:hdr>`/`<w:ftr>` extraction** | M    | **DONE** — `a415f28`. RendererTest 126/126, MiscTests 396/396.                                                                                  |
+| 4   | **Header visual polish**                | S    | **OPEN** — measured flush and identical width already, so what remains is aesthetic. Still needs a screenshot of what reads wrong. Not guessed. |
+| 5   | **Preview from model**                  | S    | **DONE** — `e170243`. Gate 60/60.                                                                                                               |
 
 Each step: implement → deploy to `docgen-verify` → `npm run smoke` → screenshot →
 commit. Revert immediately on a red gate rather than patching forward.
 
+### What shipped, and where it differs from this plan
+
+**1 — Undo.** As specified, with one deliberate divergence. The plan said native
+`execCommand` undo would keep handling plain typing while the stack owned only the DOM
+surgery. It doesn't: the stack owns typing too, captured on `beforeinput` and coalesced
+into ~700ms bursts, and Ctrl+Z is `preventDefault`-ed. Two undo stacks racing over one
+document is the exact failure being fixed — whichever the browser picks, the other's
+history is silently wrong. The plan already implied this by asking for typing-burst
+coalescing, which only makes sense if typing is in the stack.
+
+Discovered while building it: the caret highlight is `data-dg-paint` plus inline style on
+a live block, so a naive snapshot restores a purple tint onto a block the caret has since
+left, and makes two identical documents compare unequal — which defeats the dedupe that
+stops the stack filling with no-ops. `_snapshotSurfaces` strips it and puts it straight
+back, the same discipline `_extractVisualBody` already used before saving.
+
+**2 — Regions.** As specified. The bands stay where they are visually: regions live in
+the SOURCE string, and the designer decomposes them into surfaces on entry and recomposes
+on exit. `_adoptRegions` is wired into `_processAndSaveHtmlBody`, which turns out to be
+the single choke point every body reaches on the way to a ContentVersion — so an author
+can now also upload an HTML file carrying region markers and have its chrome land in the
+right fields.
+
+**3 — Word headers.** Smaller than the plan assumed. `extractBodyContent` concatenating
+`<w:hdr>` inline only affects `convertToHtmlFragment` / `convertToHtmlWithHeaderFooter`,
+which are test-only. The live path already routed headers through the
+`DOCGEN_HEADER_START` markers into Flying Saucer running elements — the PDF was never
+wrong. What was missing was a way for the Designer to tell chrome from content, so the
+fix is a `data-dg-region` annotation on the `#docgen-header` / `#docgen-footer` divs.
+Flying Saucer selects them by `#id` and ignores unknown data attributes, so PDF output is
+unchanged, and the test asserts both halves so a future edit cannot trade one for the
+other.
+
+Known limitation: only the DEFAULT header/footer pair is marked. The `-first`
+(`w:titlePg`) variants have no field to be adopted into — there is one `Header_Html__c`,
+not one per page context — so they keep today's behaviour of staying inline.
+
+**5 — Preview from model.** The real defect was subtler than "preview renders from the
+saved record". The body was read from the live canvas while the chrome was read from the
+template fields, so a header keystroke whose `input` event had not yet fired was missing
+from both preview AND save. `_liveChrome()` reads the bands through `_syncBandToRecord`
+(with a new `markDirty=false`), so one pass brings the fields current and every caller
+gets the same document.
+
+### Harness
+
+Sixteen new assertions, written before the code they protect. The undo ones compare
+CANONICALIZED serialized HTML — full tree, sorted attributes, sorted style declarations —
+rather than raw `innerHTML`, because re-parsing a fragment reorders attributes and LWC
+re-stamps its `lwc-xxxxx` scoping attribute; that is still serialized-HTML equality, just
+insensitive to ordering the browser owns. Two rounds of false failures came from getting
+this wrong, and the second round (`outline-offset`, which carries no colour to filter on)
+was only found because the stricter comparison replaced a regex that had been silently
+masking real differences.
+
 ---
 
-## Harness work this needs
+## Harness work this needs — DONE
 
-The smoke gate has caught six real regressions, including two I introduced. It needs
-extending for the above, and these are the assertions to write **before** the code:
+All written before the code they protect. The gate is now **60/60**.
 
-- **Undo**: after a table insert, delete, block move and column resize, Ctrl+Z restores
-  the previous DOM exactly. Assert on serialized HTML equality, not on element counts.
-- **Regions**: a save/load round-trip preserves header, body and footer content, and no
-  `data-dg-region` marker survives into what reaches the renderer.
-- **Legacy templates**: a template with no region markers still loads, edits and saves
-  correctly. This is the backwards-compatibility guarantee and it must be asserted, not
-  assumed.
-- **Word import**: a DOCX with a header produces header-region content and a body that
-  does _not_ contain it.
+- **Undo** ✅ — table insert, table delete, block move, redo, header-band coverage, and
+  the toolbar's enabled state. Serialized HTML equality (canonicalized), not element
+  counts. Column resize is capture-sited but asserted only indirectly; a direct drag
+  assertion is still worth adding.
+- **Regions** ✅ — round-trip preserves header, body and footer; the header does not leak
+  into the body canvas; no `data-dg-region` marker reaches the renderer.
+- **Legacy templates** ✅ — a document with no markers loads, and crucially does **not**
+  blank a header that lives only in `Header_Html__c`.
+- **Word import** ✅ — asserted in Apex (`testRunningHeaderFooterCarryDesignerRegionMarkers`)
+  rather than the browser: the marker is present AND the running-element CSS plus `@page`
+  margin box are untouched, so the import cannot be bought at the cost of the PDF.
+- **Model** ✅ — a header edit with no `input` event still reaches View Source.
 
 ---
 
@@ -194,3 +251,12 @@ Carried from earlier sessions, unrelated to the above:
    every popover, bubble, seam and block-handle rule.
 7. **`pv.contains()` is unreliable under LWS.** Use `_surfaceContaining` /
    `_isInCanvas`. It has broken four separate features.
+8. **Compare documents, not serializations.** Raw `innerHTML` equality reports
+   differences that are not differences — re-parsing reorders attributes, LWC re-stamps
+   its scoping attribute, and the caret highlight is editor chrome. Canonicalize (sorted
+   attributes, sorted style declarations, chrome excluded) or the assertion tests the
+   browser rather than the code.
+9. **A loose comparison that passes is worse than a strict one that fails.** The first
+   undo assertions passed against a regex that was stripping whole style attributes; the
+   real differences only surfaced once the comparison got stricter. If an assertion has
+   to be loosened to go green, find out exactly what it is hiding first.
