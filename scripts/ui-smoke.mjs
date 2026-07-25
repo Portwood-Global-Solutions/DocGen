@@ -1748,6 +1748,70 @@ async function main() {
             record('table handles track the pointer over a header table', !!parity.handles, '');
         }
 
+        // --- 4n. Tab walks table cells and grows the table ----------------------
+        //
+        // Without this Tab moved FOCUS out of the editor: the caret was lost and the
+        // author had to click back in for every cell. Real key presses, because a
+        // synthetic Tab neither moves focus nor proves we suppressed it.
+        const tabSeed = inPage(`
+      const pv = __dgFind('.dg-pv');
+      if (!pv) return false;
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+      const t = document.createElement('table');
+      t.innerHTML = '<tr><td>a1</td><td>a2</td></tr><tr><td>b1</td><td>b2</td></tr>';
+      pv.appendChild(t);
+      pv.focus();
+      const first = t.querySelector('td');
+      const r = document.createRange(); r.selectNodeContents(first); r.collapse(true);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return true;`);
+        const cellAt = inPage(`
+      const pv = __dgFind('.dg-pv');
+      const t = pv.querySelector('table');
+      let txt = '';
+      try {
+        const s = window.getSelection();
+        const n = s && s.rangeCount ? s.getRangeAt(0).startContainer : null;
+        const el = n && n.nodeType === 3 ? n.parentElement : n;
+        const td = el && el.closest ? el.closest('td, th') : null;
+        txt = td ? (td.textContent || '').trim() : '';
+      } catch (e) { txt = 'ERR'; }
+      return { cell: txt, rows: t ? t.rows.length : 0 };`);
+
+        const tabSeeded = await page.evaluate(tabSeed);
+        if (!tabSeeded) {
+            record('Tab moves between table cells', false, 'could not seed a table');
+        } else {
+            await page.waitForTimeout(500);
+            await page.keyboard.press('Tab');
+            await page.waitForTimeout(400);
+            const afterTab = await page.evaluate(cellAt);
+            record('Tab moves to the next cell', afterTab.cell === 'a2', 'landed in ' + JSON.stringify(afterTab));
+
+            await page.keyboard.press('Shift+Tab');
+            await page.waitForTimeout(400);
+            const afterShift = await page.evaluate(cellAt);
+            record('Shift+Tab moves back a cell', afterShift.cell === 'a1', 'landed in ' + JSON.stringify(afterShift));
+
+            // Walk to the last cell, then one more Tab must grow the table.
+            await page.keyboard.press('Tab');
+            await page.keyboard.press('Tab');
+            await page.keyboard.press('Tab');
+            await page.waitForTimeout(400);
+            const atLast = await page.evaluate(cellAt);
+            await page.keyboard.press('Tab');
+            await page.waitForTimeout(600);
+            const grown = await page.evaluate(cellAt);
+            record(
+                'Tab in the last cell adds a row and lands in it',
+                grown.rows === atLast.rows + 1,
+                'rows ' + atLast.rows + ' -> ' + grown.rows + ' (from cell ' + atLast.cell + ')'
+            );
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

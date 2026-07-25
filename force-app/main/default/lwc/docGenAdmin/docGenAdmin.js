@@ -1744,6 +1744,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             if (this._slashMenuKeydown(e)) {
                                 return;
                             }
+                            // Tab walks the table cells (and grows the table at the
+                            // end) before Enter gets a look in.
+                            if (this._handleTabKey(e)) {
+                                return;
+                            }
                             // Enter = line break, Shift+Enter = new paragraph. After
                             // the slash menu, which owns Enter while it is open.
                             if (this._handleEnterKey(e)) {
@@ -6992,6 +6997,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 if (this._slashMenuKeydown(e)) {
                     return;
                 }
+                if (this._handleTabKey(e)) {
+                    return;
+                }
                 // Tight line spacing matters most of all in a running header, where
                 // an address block is the common case and a paragraph gap between
                 // its lines is never what the author wanted.
@@ -7791,6 +7799,84 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         surface.addEventListener('beforeinput', (e) => {
             this._pushUndo('type:' + ((e && e.inputType) || 'text'));
         });
+    }
+
+    /**
+     * Tab moves to the next cell; Tab in the last cell adds a row.
+     *
+     * The Word/Excel contract, and the reason tables are quick to fill in there.
+     * Without it Tab moved FOCUS out of the editor entirely — the author lost their
+     * caret and had to click back in for every cell.
+     *
+     * Shift+Tab walks backwards and stops at the first cell rather than wrapping,
+     * because wrapping to the end of the table is never what someone reaching
+     * backwards wants. Outside a table Tab is left alone, so keyboard navigation
+     * out of the editor still works.
+     *
+     * The new cell's contents are SELECTED rather than the caret collapsed into
+     * them, so typing replaces the placeholder the way it does in a spreadsheet.
+     */
+    _handleTabKey(e) {
+        if (!e || e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) {
+            return false;
+        }
+        const cell = this._selectedTableCell();
+        if (!cell) {
+            return false;
+        }
+        const table = cell.closest ? cell.closest('table') : null;
+        if (!table) {
+            return false;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        const cells = Array.prototype.slice.call(table.querySelectorAll('td, th'));
+        const idx = cells.indexOf(cell);
+        let target = null;
+        if (e.shiftKey) {
+            if (idx <= 0) {
+                return true; // already at the first cell — stay put
+            }
+            target = cells[idx - 1];
+        } else if (idx > -1 && idx < cells.length - 1) {
+            target = cells[idx + 1];
+        } else {
+            // Last cell: grow the table, the way Word does.
+            this._pushUndo('table:tab-row');
+            const lastRow = table.rows[table.rows.length - 1];
+            if (!lastRow) {
+                return true;
+            }
+            const clone = lastRow.cloneNode(true);
+            for (const c of clone.children) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('rowspan');
+            }
+            lastRow.insertAdjacentElement('afterend', clone);
+            this._clampTablesToCanvas();
+            this.htmlEditorDirty = true;
+            target = clone.children[0];
+        }
+        if (!target) {
+            return true;
+        }
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(target);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            const surface = this._surfaceOwning(target);
+            if (surface) {
+                surface.focus();
+            }
+            this._recordCaret(target, surface);
+            target.scrollIntoView({ block: 'nearest' });
+        } catch (err) {
+            /* caret placement is best-effort */
+        }
+        return true;
     }
 
     /**
