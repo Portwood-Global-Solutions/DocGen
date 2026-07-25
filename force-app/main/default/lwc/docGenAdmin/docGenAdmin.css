@@ -638,6 +638,149 @@
     border-color: #c23934;
 }
 
+/* ===== Toolbar popovers =================================================
+   Colour and font collapse from 19 permanent controls to 3 triggers.
+   position: fixed is load-bearing: it removes the popover from every ancestor's
+   overflow context. The previous attempt used position: absolute inside the bar,
+   overflow-x: auto coerced overflow-y to auto with it, and every menu rendered
+   invisibly inside a 38px box. Coordinates come from _positionFloating. */
+.dg-fmt-menu-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Trigger carries a live underbar of the colour it will apply, so the current
+   value is readable without opening anything — this is what lets 13 swatches
+   leave the bar without losing information. */
+.dg-fmt-trigger {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 30px;
+    height: 28px;
+    padding: 0 6px;
+}
+
+.dg-fmt-trigger-glyph {
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.dg-fmt-trigger-bar {
+    width: 16px;
+    height: 3px;
+    border-radius: 1px;
+    box-shadow: inset 0 0 0 1px rgba(22, 50, 92, 0.18);
+}
+
+.dg-fmt-trigger_wide {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.dg-fmt-caret {
+    font-size: 0.55rem;
+    color: #5b6b83;
+    line-height: 1;
+}
+
+.dg-fmt-menu {
+    position: fixed;
+    z-index: 9000;
+    min-width: 172px;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #e4e8ef;
+    border-radius: 10px;
+    box-shadow:
+        0 2px 4px -1px rgba(22, 50, 92, 0.1),
+        0 10px 24px -6px rgba(22, 50, 92, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: dg-pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dg-pop-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.dg-fmt-menu_list {
+    min-width: 200px;
+}
+
+.dg-fmt-menu-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #5b6b83;
+}
+
+.dg-fmt-menu-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 20px);
+    gap: 4px;
+}
+
+/* Ring as an inset shadow, not a border — a 1px border on a 20px swatch eats
+   10% of the colour area it exists to show. */
+.dg-fmt-menu-grid .dg-fmt-swatch {
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 3px;
+    box-shadow: inset 0 0 0 1px rgba(22, 50, 92, 0.14);
+    cursor: pointer;
+}
+
+.dg-fmt-menu-grid .dg-fmt-swatch:hover {
+    box-shadow:
+        inset 0 0 0 1px rgba(22, 50, 92, 0.14),
+        0 0 0 2px #fff,
+        0 0 0 4px #a684f2;
+}
+
+.dg-fmt-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 0.85rem;
+    color: #16325c;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.dg-fmt-menu-item:hover {
+    background: #f4f1fe;
+}
+
+.dg-fmt-menu-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.72rem;
+    color: #5b6b83;
+    white-space: nowrap;
+}
+
 /* Selection bubble — floating format toolbar over the current text selection.
    position: fixed is load-bearing, not stylistic: it takes the element out of every
    ancestor's overflow context, which is the only reliable way to stop a scrolling

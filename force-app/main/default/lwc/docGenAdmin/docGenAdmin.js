@@ -6804,6 +6804,53 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return (this.textColorSwatches || []).slice(0, 5);
     }
 
+    // ===== Toolbar popovers ==================================================
+    //
+    // 13 colour swatches, 4 font buttons and an alignment row sat permanently in the
+    // bar — a menu pretending to be a toolbar. They move behind three triggers here.
+    //
+    // This is the change that broke the editor last time, so it is built differently:
+    // the popover uses the PROVEN fixed-position floating layer (_positionFloating,
+    // already covered by smoke assertions for clipping and hit-testing), and the
+    // inline controls are only removed after the popover is verified green.
+    @track openFmtMenu = null;
+
+    handleFmtMenuToggle(event) {
+        const which = event.currentTarget.dataset.menu;
+        const next = this.openFmtMenu === which ? null : which;
+        this.openFmtMenu = next;
+        this._floatAnchor = next ? event.currentTarget : null;
+        this._watchFloatingLayer(!!next || !!this.selectionBubble);
+    }
+
+    closeFmtMenu() {
+        this.openFmtMenu = null;
+        this._watchFloatingLayer(!!this.selectionBubble);
+    }
+
+    get isTextColorMenuOpen() {
+        return this.openFmtMenu === 'textColor';
+    }
+    get isHighlightMenuOpen() {
+        return this.openFmtMenu === 'highlight';
+    }
+    get isFontMenuOpen() {
+        return this.openFmtMenu === 'font';
+    }
+    get isAlignMenuOpen() {
+        return this.openFmtMenu === 'align';
+    }
+
+    /** Current text colour, painted as the underbar on the trigger. */
+    get textColorBarStyle() {
+        return 'background:' + (this._lastTextColor || '#16325c') + ';';
+    }
+    get highlightBarStyle() {
+        return 'background:' + (this._lastHighlight || '#fef3c7') + ';';
+    }
+    _lastTextColor = '#16325c';
+    _lastHighlight = '#fef3c7';
+
     /** Show/hide the bubble as the selection changes inside any editing surface. */
     _syncSelectionBubble() {
         if (!this.showHtmlBodyVisual) {
@@ -8536,6 +8583,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // does take focus land in this handler too. Restoring is idempotent when the
         // caret never moved.
         this._restoreCaret();
+        // Keep the trigger's underbar showing the colour that was actually applied,
+        // and dismiss the popover the way every other menu in Lightning does.
+        if (cmd === 'foreColor' && value) {
+            this._lastTextColor = value;
+        } else if (cmd === 'hiliteColor' && value) {
+            this._lastHighlight = value;
+        }
+        if (this.openFmtMenu) {
+            this.closeFmtMenu();
+        }
         // Lists via DOM surgery — LWS quietly breaks execCommand's list
         // commands, and this way numbers/bullets always render.
         if (cmd === 'insertUnorderedList' || cmd === 'insertOrderedList') {

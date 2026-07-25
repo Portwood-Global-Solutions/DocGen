@@ -199,50 +199,6 @@ async function main() {
             record(`toolbar: ${c.label}`, c.changed, c.changed ? '' : 'clicking it changed nothing');
         }
 
-        // --- 2. Popovers render AND are hit-testable ------------------------------
-        // This is the assertion that would have caught the overflow-clipping bug:
-        // a menu can exist in the DOM, have a sane rect, and still be invisible
-        // because an ancestor clips it. Hit-testing at its centre is the only
-        // honest check.
-        const menuKeys = controlReport.controls.filter((c) => c.menuKey).map((c) => c.menuKey);
-        for (const key of menuKeys) {
-            const r = await page.evaluate(
-                inPage(`
-        const key = '${key}';
-        const bar = __dgFind('.dg-format-bar');
-        const btn = [...bar.querySelectorAll('button')].find(b => b.dataset.menu === key);
-        if (!btn) return { ok:false, why:'toggle button missing' };
-        btn.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
-        btn.click();
-        const menu = __dgFind('.dg-fmt-menu');
-        if (!menu) return { ok:false, why:'menu did not open' };
-        const mr = menu.getBoundingClientRect();
-        if (mr.width < 4 || mr.height < 4) return { ok:false, why:'menu has no size' };
-        // Is the menu's own centre actually the top-most element there?
-        const cx = Math.round(mr.left + mr.width/2), cy = Math.round(mr.top + mr.height/2);
-        let top = document.elementFromPoint(cx, cy), guard = 0;
-        while (top && top.shadowRoot && guard++ < 10) {
-          const inner = top.shadowRoot.elementFromPoint(cx, cy);
-          if (!inner || inner === top) break;
-          top = inner;
-        }
-        const inside = !!(top && menu.contains(top));
-        // Clipping ancestors are the specific failure mode we regressed on.
-        let clipper = null;
-        let el = menu.parentElement;
-        while (el && !clipper) {
-          const cs = getComputedStyle(el);
-          if ((cs.overflowY !== 'visible' || cs.overflowX !== 'visible') && el.getBoundingClientRect().height < mr.height) {
-            clipper = (el.className && typeof el.className === 'string' ? el.className.split(' ')[0] : el.tagName) +
-                      ' overflow:' + cs.overflowX + '/' + cs.overflowY;
-          }
-          el = el.parentElement;
-        }
-        return { ok: inside && !clipper, why: clipper ? ('clipped by ' + clipper) : (inside ? '' : 'centre not hit-testable') };`)
-            );
-            record(`popover: ${key}`, r.ok, r.why);
-        }
-
         // --- 3. Header / footer surfaces get the same treatment as the body -------
         for (const which of ['header', 'footer']) {
             const r = await page.evaluate(
@@ -429,6 +385,85 @@ async function main() {
             record('bubble: centre is hit-testable', !!bubble.hitTestable, '');
             record('bubble: does not cover the selection', !bubble.coversSelection, '');
             record('bubble: bold actually formats', !!bubble.formatted, '');
+        }
+
+        // --- 4c-2. Toolbar popovers: open, unclipped, hit-testable, functional ----
+        // The exact thing that broke the editor before. Every trigger is opened and
+        // its popover checked for the properties CSS review cannot see.
+        for (const menuKey of ['textColor', 'highlight', 'font']) {
+            const r = await page.evaluate(
+                inPage(`
+        const key = '${menuKey}';
+        const bar = __dgFind('.dg-format-bar');
+        const pv = __dgFind('.dg-pv');
+        const trigger = bar.querySelector('[data-menu="' + key + '"]');
+        if (!trigger) return { ok:false, why:'trigger missing' };
+
+        // Seed a selection so the command has something to act on.
+        const style = pv.querySelector('style');
+        while (pv.firstChild) pv.removeChild(pv.firstChild);
+        if (style) pv.appendChild(style);
+        const p = document.createElement('p');
+        // Background included so a "no highlight" choice is a real change rather
+        // than a legitimate no-op on unhighlighted text.
+        p.innerHTML = '<span style="color:#111;font-family:Times,serif;background-color:#ffe9a8">popover probe</span>';
+        pv.appendChild(p);
+        pv.focus();
+        const sr = document.createRange(); sr.selectNodeContents(p);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(sr);
+
+        trigger.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        trigger.click();
+        return new Promise((resolve) => setTimeout(() => {
+          const menu = __dgFind('.dg-fmt-menu');
+          if (!menu) return resolve({ ok:false, why:'menu did not open' });
+          const mr = menu.getBoundingClientRect();
+          const cs = getComputedStyle(menu);
+          if (mr.width < 8 || mr.height < 8) return resolve({ ok:false, why:'menu has no size' });
+          if (cs.position !== 'fixed') return resolve({ ok:false, why:'not position:fixed, got ' + cs.position });
+
+          // Clipping ancestor check.
+          let clipper = null, node = menu.parentElement;
+          while (node && !clipper) {
+            const ncs = getComputedStyle(node);
+            if (ncs.overflowX !== 'visible' || ncs.overflowY !== 'visible') {
+              const nr = node.getBoundingClientRect();
+              if (nr.height < mr.height - 1 || nr.width < mr.width - 1) {
+                clipper = (typeof node.className === 'string' && node.className ? node.className.split(' ')[0] : node.tagName)
+                          + ' overflow:' + ncs.overflowX + '/' + ncs.overflowY;
+              }
+            }
+            node = node.parentElement;
+          }
+          if (clipper) return resolve({ ok:false, why:'clipped by ' + clipper });
+
+          // Centre hit-test.
+          const cx = Math.round(mr.left + mr.width/2), cy = Math.round(mr.top + mr.height/2);
+          let top = document.elementFromPoint(cx, cy), guard = 0;
+          while (top && top.shadowRoot && guard++ < 10) {
+            const inner = top.shadowRoot.elementFromPoint(cx, cy);
+            if (!inner || inner === top) break;
+            top = inner;
+          }
+          if (!(top && menu.contains(top))) return resolve({ ok:false, why:'centre not hit-testable' });
+
+          // On screen.
+          if (mr.left < 0 || mr.top < 0 || mr.right > innerWidth + 1 || mr.bottom > innerHeight + 1) {
+            return resolve({ ok:false, why:'off screen' });
+          }
+
+          // A choice inside it must actually format.
+          const choice = menu.querySelector('.dg-fmt-swatch, .dg-fmt-menu-item');
+          if (!choice) return resolve({ ok:false, why:'no choices inside' });
+          const before = pv.innerHTML;
+          choice.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+          choice.click();
+          setTimeout(() => {
+            resolve({ ok: pv.innerHTML !== before, why: pv.innerHTML !== before ? '' : 'choice did not format' });
+          }, 200);
+        }, 350));`)
+            );
+            record(`popover ${menuKey}: opens, unclipped, hit-testable, formats`, r.ok, r.why);
         }
 
         // --- 4d. Invisible chrome must never intercept clicks --------------------

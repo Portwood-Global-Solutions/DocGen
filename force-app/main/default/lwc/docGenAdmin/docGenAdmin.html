@@ -2167,71 +2167,129 @@
                                             +
                                         </button>
                                         <span class="dg-fmt-sep"></span>
-                                        <span class="dg-fmt-label" title="Text color">A</span>
-                                        <template for:each={textColorSwatches} for:item="sw">
+                                        <!-- Colour + font collapse from 19 permanent
+                                             controls to 3 triggers. The popovers use the
+                                             fixed-position floating layer, which is
+                                             covered by smoke assertions for clipping and
+                                             hit-testing — the failure mode that killed
+                                             the previous attempt at this. -->
+                                        <div class="dg-fmt-menu-wrap">
                                             <button
-                                                key={sw.key}
-                                                class="dg-fmt-swatch"
-                                                style={sw.style}
-                                                data-cmd="foreColor"
-                                                data-value={sw.value}
+                                                class="dg-fmt-btn dg-fmt-trigger"
+                                                data-menu="textColor"
                                                 onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title={sw.title}
-                                            ></button>
-                                        </template>
-                                        <input
-                                            type="color"
-                                            class="dg-fmt-colorpick"
-                                            data-cmd="foreColor"
-                                            value="#1f3a5f"
-                                            onmousedown={handleColorPickMouseDown}
-                                            onchange={handleColorPickChange}
-                                            title="Custom text color — any color you want"
-                                        />
-                                        <span class="dg-fmt-sep"></span>
-                                        <span class="dg-fmt-label" title="Highlight color">BG</span>
-                                        <template for:each={highlightSwatches} for:item="sw">
-                                            <button
-                                                key={sw.key}
-                                                class="dg-fmt-swatch"
-                                                style={sw.style}
-                                                data-cmd="hiliteColor"
-                                                data-value={sw.value}
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title={sw.title}
-                                            ></button>
-                                        </template>
-                                        <input
-                                            type="color"
-                                            class="dg-fmt-colorpick"
-                                            data-cmd="hiliteColor"
-                                            value="#fef3c7"
-                                            onmousedown={handleColorPickMouseDown}
-                                            onchange={handleColorPickChange}
-                                            title="Custom highlight color"
-                                        />
-                                        <span class="dg-fmt-sep"></span>
-                                        <span
-                                            class="dg-fmt-label"
-                                            title="Font — the PDF engine ships exactly these four"
-                                            >Font</span
-                                        >
-                                        <template for:each={fontChoices} for:item="font">
-                                            <button
-                                                key={font.key}
-                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                style={font.style}
-                                                data-cmd="fontName"
-                                                data-value={font.value}
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleFormatAction}
-                                                title={font.title}
+                                                onclick={handleFmtMenuToggle}
+                                                title="Text colour"
+                                                aria-haspopup="true"
                                             >
-                                                {font.label}
+                                                <span class="dg-fmt-trigger-glyph">A</span>
+                                                <span class="dg-fmt-trigger-bar" style={textColorBarStyle}></span>
                                             </button>
-                                        </template>
+                                            <template if:true={isTextColorMenuOpen}>
+                                                <div class="dg-fmt-menu" role="menu">
+                                                    <div class="dg-fmt-menu-label">Text colour</div>
+                                                    <div class="dg-fmt-menu-grid">
+                                                        <template for:each={textColorSwatches} for:item="sw">
+                                                            <button
+                                                                key={sw.key}
+                                                                class="dg-fmt-swatch"
+                                                                style={sw.style}
+                                                                data-cmd="foreColor"
+                                                                data-value={sw.value}
+                                                                onmousedown={handleFmtMouseDown}
+                                                                onclick={handleFormatAction}
+                                                                title={sw.title}
+                                                            ></button>
+                                                        </template>
+                                                    </div>
+                                                    <label class="dg-fmt-menu-row">
+                                                        <span>Custom</span>
+                                                        <input
+                                                            type="color"
+                                                            class="dg-fmt-colorpick"
+                                                            data-cmd="foreColor"
+                                                            value="#1f3a5f"
+                                                            onmousedown={handleColorPickMouseDown}
+                                                            onchange={handleColorPickChange}
+                                                        />
+                                                    </label>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <div class="dg-fmt-menu-wrap">
+                                            <button
+                                                class="dg-fmt-btn dg-fmt-trigger"
+                                                data-menu="highlight"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFmtMenuToggle}
+                                                title="Highlight colour"
+                                                aria-haspopup="true"
+                                            >
+                                                <span class="dg-fmt-trigger-glyph">&#9646;</span>
+                                                <span class="dg-fmt-trigger-bar" style={highlightBarStyle}></span>
+                                            </button>
+                                            <template if:true={isHighlightMenuOpen}>
+                                                <div class="dg-fmt-menu" role="menu">
+                                                    <div class="dg-fmt-menu-label">Highlight</div>
+                                                    <div class="dg-fmt-menu-grid">
+                                                        <template for:each={highlightSwatches} for:item="sw">
+                                                            <button
+                                                                key={sw.key}
+                                                                class="dg-fmt-swatch"
+                                                                style={sw.style}
+                                                                data-cmd="hiliteColor"
+                                                                data-value={sw.value}
+                                                                onmousedown={handleFmtMouseDown}
+                                                                onclick={handleFormatAction}
+                                                                title={sw.title}
+                                                            ></button>
+                                                        </template>
+                                                    </div>
+                                                    <label class="dg-fmt-menu-row">
+                                                        <span>Custom</span>
+                                                        <input
+                                                            type="color"
+                                                            class="dg-fmt-colorpick"
+                                                            data-cmd="hiliteColor"
+                                                            value="#fef3c7"
+                                                            onmousedown={handleColorPickMouseDown}
+                                                            onchange={handleColorPickChange}
+                                                        />
+                                                    </label>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <div class="dg-fmt-menu-wrap">
+                                            <button
+                                                class="dg-fmt-btn dg-fmt-btn_word dg-fmt-trigger_wide"
+                                                data-menu="font"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleFmtMenuToggle}
+                                                title="Font — the PDF engine ships exactly these four"
+                                                aria-haspopup="true"
+                                            >
+                                                Aa<span class="dg-fmt-caret">&#9662;</span>
+                                            </button>
+                                            <template if:true={isFontMenuOpen}>
+                                                <div class="dg-fmt-menu dg-fmt-menu_list" role="menu">
+                                                    <div class="dg-fmt-menu-label">Font</div>
+                                                    <template for:each={fontChoices} for:item="font">
+                                                        <button
+                                                            key={font.key}
+                                                            class="dg-fmt-menu-item"
+                                                            style={font.style}
+                                                            data-cmd="fontName"
+                                                            data-value={font.value}
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleFormatAction}
+                                                            title={font.title}
+                                                        >
+                                                            {font.label}
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
                                         <span class="dg-fmt-sep"></span>
                                         <button
                                             class="dg-fmt-btn dg-fmt-btn_word"
