@@ -421,10 +421,44 @@ This section gives you the rules and a paste-ready prompt for ChatGPT / Claude /
 | `padding`, `margin`                      | `gap` (CSS 3 grid/flex gap)                        | `padding` on cells, `margin` on blocks                |
 | Fixed `width`/`height` in `pt`/`in`/`px` | `calc(...)`, CSS variables (`--foo`, `var(--foo)`) | Compute the literal value in your template            |
 | `font-size` in `pt`                      | `rem`, `em` based on a non-default root            | Pt is most predictable for print                      |
-| `border`, `border-radius` (basic)        | `box-shadow`, `text-shadow`                        | Drop shadows; they're print-noisy anyway              |
+| `border` — incl. `dashed` and `dotted`   | `border-radius`, `box-shadow`, `text-shadow`       | Corners stay square; see "Rounded corners" below      |
+| Hex colours (`#eaf2fb`)                  | `rgba(...)`, `hsla(...)`                           | Pre-compute the tint as a flat hex                    |
+| Full-strength colour                     | `opacity`                                          | Pick a lighter hex instead                            |
 | `:nth-child(even)` for zebra striping    | `:has(...)`, `:is(...)`, container queries         | nth-child + nth-of-type are supported                 |
 | `<table>`-based two/three-column layouts | `column-count`, `columns`                          | Tables work everywhere                                |
 | `text-align`, `vertical-align` on `<td>` | `place-items`, `align-self`                        | Old-school alignment on cells                         |
+
+##### Rounded corners, shadows and tints — the honest answer
+
+**There are no rounded corners.** `border-radius` is ignored in _every_ form: on a
+`<div>`, on a `<td>`, on a `<table>` with `border-collapse: separate`, in the
+four-value corner shorthand, and via the engine's own `-fs-border-radius`. Boxes
+render square. This is measured, not inferred — `scripts/css-capability-probe.apex`
+renders a labelled swatch per property and compares each against a control, and
+the rendered proof is in `docs/css-capability-probe.png`.
+
+An earlier version of this table listed "`border-radius` (basic)" as supported.
+It is not, and a template built on that advice renders square with no warning.
+
+What you can use for visual interest, all CSS 2.1 and all confirmed working:
+
+- **`border: 2pt dashed #2b6cb0`** and **`border: 2pt dotted #b02b2b`** — these
+  genuinely render. They are the only border decoration available.
+- Solid fills, contrasting borders, and `:nth-child(even)` zebra striping.
+- A background **image** if you truly need a rounded shape — draw it once and
+  reference it; the engine will place it faithfully.
+
+Two failure modes that look similar and are not:
+
+- **`linear-gradient(...)` is discarded when the stylesheet is parsed.** The
+  cascade then falls back to any solid `background` set earlier, so the element
+  keeps a sensible colour. Harmless.
+- **`rgba(...)` is not.** It parses, resolves to nothing, and the background
+  disappears entirely — so a tinted panel renders **invisible** rather than
+  falling back to a colour. This is the one that quietly ruins a layout. Compute
+  the tint yourself and write it as a flat hex.
+
+`opacity`, `box-shadow`, `transform`, `calc()` and `outline` are all ignored too.
 
 ##### Paste-ready LLM prompt
 
@@ -441,16 +475,25 @@ HARD RULES — never use these (Flying Saucer drops them):
 - calc(...), CSS variables (--name, var(--name))
 - transform, transition, animation, @keyframes
 - position: absolute or position: fixed (use @page running elements only)
-- box-shadow, text-shadow
+- box-shadow, text-shadow, outline
+- border-radius — in EVERY form, including on a <td>, on a <table> with
+  border-collapse: separate, and the -fs-border-radius variant. There are no
+  rounded corners. Every box is square. Do not attempt a workaround.
+- rgba(...) and hsla(...) — these do not fall back to a solid colour, the
+  background disappears completely. Write a pre-computed flat hex instead.
+- opacity — pick a lighter hex colour instead.
 - :has(), :is(), :where(), container queries
 
 USE INSTEAD:
 - <table> for any side-by-side layout. One <tr>, columns are <td>s with explicit widths.
-- Solid background-color (no gradients).
+- Solid background-color as a HEX value (no gradients, no rgba).
 - padding/margin in pt or in. gap is not a thing.
 - font-size in pt. Standard fonts: Helvetica, Arial, "Times New Roman", Courier.
 - text-align / vertical-align on <td> for alignment.
 - Fixed width/height in pt or in.
+- For visual interest use solid fills, contrasting borders, and :nth-child(even)
+  zebra striping. border: dashed and border: dotted DO work and are the only
+  border decoration available.
 
 PAGE SETUP — put a single <style> in <head> with:
   @page { size: 8.5in 11in; margin: 0.6in; }    /* US Letter portrait */
