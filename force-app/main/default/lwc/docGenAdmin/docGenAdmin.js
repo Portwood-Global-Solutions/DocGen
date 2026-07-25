@@ -1438,6 +1438,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             document.removeEventListener('mousedown', this._onDocMouseDown, true);
             this._docMouseListenerAdded = false;
         }
+        if (this._surfaceRo) {
+            try {
+                this._surfaceRo.disconnect();
+            } catch (e) {
+                /* already gone */
+            }
+            this._surfaceRo = null;
+            this._surfaceRoSeen = null;
+        }
         // #244 — Ctrl/Cmd + wheel zoom is bound to the canvas node, not the document.
         if (this._wheelBoundPv) {
             this._wheelBoundPv.removeEventListener('wheel', this.handleCanvasWheel);
@@ -7306,17 +7315,79 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             try {
                 el.style.transformOrigin = 'top center';
                 el.style.transform = z === 1 ? '' : `scale(${z})`;
-                // A transform does not change the element's layout box, so the scroll
-                // container has no idea the page got taller. Pad the difference back in
-                // or the bottom of a zoomed-in document becomes unreachable.
-                const natural = el.offsetHeight || 0;
-                el.style.marginBottom = z > 1 ? Math.round((z - 1) * natural) + 'px' : '';
             } catch (e) {
                 /* zoom is cosmetic — never let it break editing */
             }
         }
+        this._reserveZoomSpace();
+        this._watchSurfaceGrowth();
         this._applyPillSpread();
     }
+
+    /**
+     * Give each scaled surface the layout space its transform actually occupies.
+     *
+     * `transform: scale()` does NOT change an element's layout box, so at 150% a
+     * 189px-tall running header paints 284px tall while the flow still believes it
+     * is 189px. The page therefore starts 73px INSIDE the header, and because the
+     * band is an earlier sibling it loses the paint order and disappears behind the
+     * page — "the header does not push the body down and ends up behind it".
+     *
+     * The margin was already being reserved, but only at the moment the zoom
+     * CHANGED. A band that grew afterwards — which is the entire lifecycle of a
+     * header being authored — kept the reservation computed for its old height.
+     * That is why it took a big header to show up.
+     */
+    _reserveZoomSpace() {
+        const z = this.designerZoom || 1;
+        for (const el of this._allSurfaces()) {
+            try {
+                if (z <= 1) {
+                    if (el.style.marginBottom) {
+                        el.style.marginBottom = '';
+                    }
+                    continue;
+                }
+                // offsetHeight is the LAYOUT height, unaffected by the transform.
+                const want = Math.round((z - 1) * (el.offsetHeight || 0)) + 'px';
+                if (el.style.marginBottom !== want) {
+                    el.style.marginBottom = want;
+                }
+            } catch (e) {
+                /* cosmetic */
+            }
+        }
+    }
+
+    /**
+     * Recompute the reservation whenever a surface changes size, whatever caused it.
+     *
+     * Hooking the input handlers would miss every other growth path — an inserted
+     * table, an undo, an image finishing loading, a webfont settling. Observing the
+     * elements catches all of them for one listener. Setting margin-bottom does not
+     * change an observed element's own box, so this cannot feed back on itself.
+     */
+    _watchSurfaceGrowth() {
+        if (typeof ResizeObserver === 'undefined') {
+            return;
+        }
+        try {
+            if (!this._surfaceRo) {
+                this._surfaceRo = new ResizeObserver(() => this._reserveZoomSpace());
+            }
+            const seen = this._surfaceRoSeen || (this._surfaceRoSeen = new Set());
+            for (const el of this._allSurfaces()) {
+                if (!seen.has(el)) {
+                    seen.add(el);
+                    this._surfaceRo.observe(el);
+                }
+            }
+        } catch (e) {
+            /* observation is an optimisation — _applyZoom still reserves on change */
+        }
+    }
+    _surfaceRo = null;
+    _surfaceRoSeen = null;
 
     /** Body canvas + both chrome bands — every region the author can type into. */
     _allSurfaces() {
@@ -7855,6 +7926,29 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Recompute the handle strip for whichever table the pointer is over. */
+    /**
+     * Is the pointer still inside the band of space this table's chrome occupies?
+     *
+     * Scaled with the zoom, because the gutters are: at 1.5x a 50px row gutter is
+     * 75 screen px, and a fixed tolerance would strand the handles again.
+     */
+    _pointerNearTable(event, table) {
+        try {
+            const r = table.getBoundingClientRect();
+            // Must cover the widest chrome — the row gutter (50) plus the handle
+            // itself — with a little slack for pointer travel.
+            const pad = Math.round(72 * (this.designerZoom || 1));
+            return (
+                event.clientX >= r.left - pad &&
+                event.clientX <= r.right + pad &&
+                event.clientY >= r.top - pad &&
+                event.clientY <= r.bottom + pad
+            );
+        } catch (e) {
+            return false;
+        }
+    }
+
     _updateTableOverlay(event) {
         if (!this.showHtmlBodyVisual) {
             return;
@@ -7870,6 +7964,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const table = node && node.closest ? node.closest('table') : null;
         if (!table || !this._isInCanvas(table, pv)) {
+            // Do NOT drop the overlay the instant the pointer leaves the table.
+            //
+            // The handles and seams are deliberately positioned OUTSIDE the table
+            // edge (8px for a seam, up to 50px for a row handle), so moving the
+            // pointer towards one necessarily leaves the table first — which cleared
+            // the overlay and made the + vanish out from under the cursor mid-click.
+            // Keep it alive while the pointer is still within the gutter the chrome
+            // occupies; leaving the canvas entirely is handled by mouseleave.
+            if (this.tableOverlay && this._overlayTable && this._pointerNearTable(event, this._overlayTable)) {
+                return;
+            }
             if (this.tableOverlay) {
                 this.tableOverlay = null;
                 this._overlayTable = null;
@@ -10284,6 +10389,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
             }
             node.parentNode.replaceChild(frag, node);
+            // An asset tag becomes the real image, the same as one dropped in from
+            // the rail. Only the INSERT paths ran _assetImgFor, so a tag the author
+            // typed (or pasted) stayed a green text pill and they could not see the
+            // logo they had just placed. Done before the caret is parked, because
+            // imagifying swaps the node the caret would be anchored to.
+            if (lastPill && /^\{%asset:/i.test(lastPill.textContent || '')) {
+                const img = this._assetImgFor((lastPill.textContent || '').trim(), doc);
+                if (img) {
+                    this._safeReplace(lastPill, img);
+                    lastPill = img;
+                }
+            }
             if (lastPill) {
                 const r = doc.createRange();
                 r.setStartAfter(lastPill);
@@ -10333,18 +10450,28 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return img;
     }
 
+    /**
+     * Turn {%asset:key} pills into the real image, on EVERY surface.
+     *
+     * This walked the body canvas only, so an asset dropped into a running header
+     * stayed a green text pill on the sheet and only became an image in the PDF
+     * preview — the author could not see their own logo while placing it, in the
+     * one place a logo almost always goes.
+     *
+     * It matters that this runs over the bands and not just at pillify time: the
+     * asset URL map arrives asynchronously, so a band mounted before the assets
+     * load has text pills that only this pass can upgrade.
+     */
     _imagifyAssetPills() {
         try {
-            const pv = this._getVisualPv();
-            if (!pv) {
-                return;
-            }
-            const doc = pv.ownerDocument || document;
-            for (const pill of Array.from(pv.querySelectorAll('span[data-dg-tag]'))) {
-                const tag = (pill.textContent || '').trim();
-                const img = this._assetImgFor(tag, doc);
-                if (img) {
-                    this._safeReplace(pill, img);
+            for (const surface of this._allSurfaces()) {
+                const doc = surface.ownerDocument || document;
+                for (const pill of Array.from(surface.querySelectorAll('span[data-dg-tag]'))) {
+                    const tag = (pill.textContent || '').trim();
+                    const img = this._assetImgFor(tag, doc);
+                    if (img) {
+                        this._safeReplace(pill, img);
+                    }
                 }
             }
         } catch (e) {

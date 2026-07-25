@@ -917,6 +917,21 @@
     pointer-events: auto;
 }
 
+/* A 16px circle is a small target for a control you have to travel to. This
+   grows the HIT area to 32px without growing the dot, so the pointer can arrive
+   slightly off and still land. It inherits the button's pointer-events, so while
+   the seam is hidden (pointer-events: none) this cannot eat clicks on the
+   document — the ghost-target rule the smoke gate enforces. */
+.dg-tbl-seam::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    right: -8px;
+    bottom: -8px;
+    border-radius: 50%;
+}
+
 .dg-tbl-seam:hover {
     opacity: 1;
     background: #7c3aed;

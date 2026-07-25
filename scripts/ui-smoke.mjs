@@ -1357,6 +1357,138 @@ async function main() {
             );
         }
 
+        // --- 4i. Three reported defects --------------------------------------
+        //
+        // (1) The table +/- seams vanished as you moved towards them: they sit
+        //     OUTSIDE the table edge, and the overlay was dropped the instant the
+        //     pointer left the table, so the target disappeared mid-approach.
+        // (2) A running header showed asset merge tags as text pills instead of the
+        //     image — the imagify pass walked the body canvas only.
+        // (3) A tall header at zoom overlapped the page and rendered behind it:
+        //     transform: scale() reserves no layout space, and the reservation was
+        //     computed once at zoom-change time, not when the band later grew.
+        const defects = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const modeBtn = (label) => {
+        const seg = __dgFind('.dg-mode-seg');
+        return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
+      };
+      const out = {};
+      return (async () => {
+        if (!__dgFind('.dg-pv') && modeBtn('Visual')) { modeBtn('Visual').click(); await step(1800); }
+        const pv = __dgFind('.dg-pv');
+        const band = __dgFind('.dg-chrome-band_header');
+        const bar = __dgFind('.dg-format-bar');
+        if (!pv || !band) return { setup: 'no canvas or band' };
+        out.setup = 'ok';
+
+        // --- (1) seams survive the trip from the table to the seam ------------
+        const style = pv.querySelector('style');
+        while (pv.firstChild) pv.removeChild(pv.firstChild);
+        if (style) pv.appendChild(style);
+        const t = document.createElement('table');
+        t.innerHTML = '<tr><td>c1</td><td>c2</td></tr><tr><td>c3</td><td>c4</td></tr>';
+        pv.appendChild(t);
+        await step(300);
+        const cell = t.querySelector('td');
+        const cr = cell.getBoundingClientRect();
+        cell.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+          clientX: Math.round(cr.left + 6), clientY: Math.round(cr.top + 6)}));
+        await step(600);
+        const seams = __dgFind('.dg-tbl-seam', true) || [];
+        if (!seams.length) { out.seamAlive = 'no seams rendered'; }
+        else {
+          // Move the pointer to just OUTSIDE the table, where the seams live. The
+          // canvas still gets the mousemove, and the overlay must survive it.
+          const tr = t.getBoundingClientRect();
+          pv.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+            clientX: Math.round(tr.left - 6), clientY: Math.round(tr.top - 6)}));
+          await step(400);
+          const still = (__dgFind('.dg-tbl-seam', true) || []).length;
+          out.seamAlive = still > 0 ? 'ok' : 'seams vanished when the pointer left the table';
+        }
+
+        // --- (2) an asset placed in the header renders as an image ------------
+        // The real workflow: caret in the header, click an asset in the rail.
+        {
+          band.textContent = 'LOGO HERE ';
+          band.focus();
+          const rr = document.createRange();
+          rr.selectNodeContents(band); rr.collapse(false);
+          const ss = window.getSelection(); ss.removeAllRanges(); ss.addRange(rr);
+          document.dispatchEvent(new Event('selectionchange'));
+          await step(400);
+          const imgBtn = __dgFind('[data-panel="images"]');
+          if (!imgBtn) { out.headerImage = 'skip: no images panel'; }
+          else {
+            imgBtn.click();
+            await step(1800);
+            const thumb = __dgFind('.dg-image-thumb');
+            if (!thumb) { out.headerImage = 'skip: no assets in this org'; imgBtn.click(); }
+            else {
+              const tag = thumb.dataset.snippet;
+              thumb.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+              thumb.click();
+              await step(1200);
+              const b2 = __dgFind('.dg-chrome-band_header');
+              out.headerImage = b2 && b2.querySelector('img') ? 'ok'
+                : ('asset stayed a text pill in the header (' + tag + '); band=' + (b2 ? b2.innerHTML.slice(0,120) : 'gone'));
+              const close = __dgFind('[data-panel="images"]');
+              if (close) close.click();
+              await step(400);
+            }
+          }
+        }
+
+        // --- (3) a tall header at zoom must not overlap the page --------------
+        // Find by the OPTION LIST, not the current selection — an earlier probe
+        // leaves this on "Fit width", which has no % in its label.
+        const sel = [...bar.querySelectorAll('select')].find(s => [...s.options].some(o => /%/.test(o.text)));
+        if (!sel) { out.zoomOverlap = 'no zoom control'; }
+        else {
+          sel.value = '1.5';
+          sel.dispatchEvent(new Event('change', {bubbles:true, composed:true}));
+          await step(500);
+          band.innerHTML = '';
+          for (let i = 0; i < 8; i++) {
+            const p = document.createElement('p');
+            p.textContent = 'Header line ' + (i+1) + ' — a tall multi-line running header.';
+            band.appendChild(p);
+          }
+          band.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+          await step(1200);
+          const b = band.getBoundingClientRect();
+          const p2 = __dgFind('.dg-pv').getBoundingClientRect();
+          const gap = Math.round(p2.top - b.bottom);
+          out.zoomOverlap = gap >= -1 ? 'ok' : ('header overlaps the page by ' + (-gap) + 'px at 150%');
+          sel.value = '1';
+          sel.dispatchEvent(new Event('change', {bubbles:true, composed:true}));
+          await step(300);
+        }
+        return out;
+      })();`)
+        );
+        if (defects.setup !== 'ok') {
+            record('defects: designer exposes canvas + band', false, defects.setup);
+        } else {
+            record('table seams survive the pointer leaving the table', defects.seamAlive === 'ok', defects.seamAlive);
+            if (String(defects.headerImage).startsWith('skip')) {
+                console.log(`  SKIP  header renders asset tags as images — ${defects.headerImage}`);
+            } else {
+                record(
+                    'header renders asset tags as images, not text pills',
+                    defects.headerImage === 'ok',
+                    defects.headerImage
+                );
+            }
+            record(
+                'a tall header at zoom does not overlap the page',
+                defects.zoomOverlap === 'ok',
+                defects.zoomOverlap
+            );
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',
