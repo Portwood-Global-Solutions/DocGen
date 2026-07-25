@@ -46,7 +46,8 @@ function columnsSectionSnippet(n) {
 }
 
 // Apex
-import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
+import getTemplateList from '@salesforce/apex/DocGenController.getTemplateList';
+import getTemplateById from '@salesforce/apex/DocGenController.getTemplateById';
 import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
 import saveTemplate from '@salesforce/apex/DocGenController.saveTemplate';
 import generateDocumentData from '@salesforce/apex/DocGenController.generateDocumentData';
@@ -1279,7 +1280,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isInstallingSamples = false;
     _samplesChecked = false;
 
-    @wire(getAllTemplates)
+    // LIST light, LOAD heavy on demand. getTemplateList returns only what the
+    // grid, the search and the pickers read — no long-text bodies, no attached
+    // document subquery. openEditModal fetches the full record for the one
+    // template being opened. See DocGenController.getTemplateList.
+    @wire(getTemplateList)
     wiredTemplates(result) {
         this.wiredTemplatesResult = result;
         if (result.data) {
@@ -4245,7 +4250,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
             this.activeMainTab = 'list';
             this.activeEditTab = 'document';
-            this.openEditModal(newRow, 'document');
+            await this.openEditModal(newRow, 'document');
             if (authoringMode === 'starter') {
                 await this._ensureLogoAsset(record.id);
                 await this._applyStarterBody(record.id, starterKey, starterShape, chosenLogoTag);
@@ -4504,7 +4509,43 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     // --- Edit Modal ---
-    openEditModal(row, activeTab) {
+    /**
+     * Light list row -> full record. A row that already has the heavy fields is
+     * returned untouched, so this is safe to call from any path.
+     */
+    async _hydrateTemplateRow(row) {
+        if (!row || !row.Id) {
+            return row;
+        }
+        // Query_Config__c is on every full record and on no light one, so its
+        // presence is the marker. `in` rather than a truthiness check: a template
+        // with an empty config still has the key.
+        if (F.QueryConfig in row) {
+            return row;
+        }
+        try {
+            return await getTemplateById({ templateId: row.Id });
+        } catch (error) {
+            const msg = error && error.body && error.body.message ? error.body.message : 'Could not load the template.';
+            this.showToast('Error opening template', msg, 'error');
+            return null;
+        }
+    }
+
+    /**
+     * Open a template for editing, fetching its full record first.
+     *
+     * The list only carries what the grid needs, so `row` here is a light record —
+     * every heavy field (query config, header/footer HTML, signer config, page
+     * setup, the attached document link) arrives with this fetch. Rows that are
+     * already complete are passed straight through, so callers that hand over a
+     * full record cost nothing.
+     */
+    async openEditModal(row, activeTab) {
+        row = await this._hydrateTemplateRow(row);
+        if (!row) {
+            return;
+        }
         try {
             this._editContext = true;
             this.editTemplateId = row.Id;
@@ -12254,7 +12295,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     async openDesignerForRow(row) {
-        this.openEditModal(row, 'document');
+        // AWAITED: openEditModal fetches the template's full record now, and
+        // _openDesignerSurface reads the fields it populates. Without the await the
+        // designer mounted against an empty template and simply did not open.
+        await this.openEditModal(row, 'document');
         this.isEditModalOpen = false;
         await this._openDesignerSurface();
     }

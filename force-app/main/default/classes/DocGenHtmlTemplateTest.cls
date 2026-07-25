@@ -976,6 +976,73 @@ private class DocGenHtmlTemplateTest {
     }
 
     @IsTest
+    static void templateListIsLightAndDetailIsFull() {
+        // The list/detail split. getAllTemplates returned ~28 fields per row —
+        // including the Header_Html__c / Footer_Html__c long-text fields and a
+        // ContentDocumentLinks subquery — on every load of the admin component. At a
+        // few hundred templates that is a large payload transferred and parsed before
+        // the admin has clicked anything, for data only needed once one is opened.
+        Id tmplId = createHtmlTemplate(
+            '<div>Header {Name}</div>',
+            '<div>Footer</div>',
+            '<html><body><p>{Name}</p></body></html>'
+        );
+
+        Test.startTest();
+        List<DocGen_Template__c> listRows = DocGenController.getTemplateList();
+        DocGen_Template__c full = DocGenController.getTemplateById(tmplId);
+        Test.stopTest();
+
+        System.assert(!listRows.isEmpty(), 'The list must return rows');
+        DocGen_Template__c row = null;
+        for (DocGen_Template__c t : listRows) {
+            if (t.Id == tmplId) {
+                row = t;
+            }
+        }
+        System.assertNotEquals(null, row, 'The new template must appear in the list');
+        System.assertNotEquals(null, row.Name, 'The list carries what the grid renders');
+
+        // The heavy fields must NOT be on the list row. Reading an unqueried field
+        // throws SObjectException, which is exactly the assertion.
+        Boolean headerAbsent = false;
+        try {
+            String ignored = row.Header_Html__c;
+            System.debug(ignored);
+        } catch (SObjectException e) {
+            headerAbsent = true;
+        }
+        System.assert(headerAbsent, 'Header_Html__c must not be queried for the list');
+
+        Boolean configAbsent = false;
+        try {
+            String ignored = row.Query_Config__c;
+            System.debug(ignored);
+        } catch (SObjectException e) {
+            configAbsent = true;
+        }
+        System.assert(configAbsent, 'Query_Config__c must not be queried for the list');
+
+        // ...and must all be present on the detail read, which is what the edit
+        // modal and the designer populate themselves from.
+        System.assertEquals(tmplId, full.Id, 'Detail read returns the right record');
+        System.assertEquals('<div>Header {Name}</div>', full.Header_Html__c, 'Detail carries the header');
+        System.assertEquals('<div>Footer</div>', full.Footer_Html__c, 'Detail carries the footer');
+        System.assertNotEquals(null, full.Query_Config__c, 'Detail carries the query config');
+    }
+
+    @IsTest
+    static void getTemplateByIdRejectsMissingId() {
+        Boolean threw = false;
+        try {
+            DocGenController.getTemplateById(null);
+        } catch (Exception e) {
+            threw = true;
+        }
+        System.assert(threw, 'A null id must be rejected rather than returning something arbitrary');
+    }
+
+    @IsTest
     static void wrapHtmlForPdfClampsHeaderImages() {
         String hdr = '<img src="/sfc/servlet.shepherd/version/download/068000000000AAA">';
         String outp = DocGenService.wrapHtmlForPdf('<p>x</p>', null, hdr, null);
