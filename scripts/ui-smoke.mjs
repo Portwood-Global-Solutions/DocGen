@@ -1646,6 +1646,108 @@ async function main() {
             );
         }
 
+        // --- 4l. The insert menu opens in the running header too ----------------
+        //
+        // _maybeOpenSlashMenu was always surface-aware, but only the body canvas
+        // ever called it — so the ` / [ menu could not be opened in a band at all.
+        const bandSlash = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const modeBtn = (label) => {
+        const seg = __dgFind('.dg-mode-seg');
+        return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
+      };
+      return (async () => {
+        if (!__dgFind('.dg-chrome-band_header') && modeBtn('Visual')) { modeBtn('Visual').click(); await step(1800); }
+        const band = __dgFind('.dg-chrome-band_header');
+        if (!band) return { ok:false, why:'no header band' };
+        band.textContent = '';
+        band.focus();
+        const tn = document.createTextNode('\\u0060');
+        band.appendChild(tn);
+        const r = document.createRange();
+        r.setStart(tn, 1); r.collapse(true);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        band.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        await step(600);
+        const menu = __dgFind('.dg-slash-menu') || __dgFind('[class*="slash"]');
+        return { ok: !!menu, why: menu ? '' : 'backtick in the header opened nothing' };
+      })();`)
+        );
+        record('backtick opens the insert menu in the running header', !!bandSlash.ok, bandSlash.why);
+
+        // --- 4m. The header behaves exactly like the body -----------------------
+        //
+        // Interactions were written against the body canvas, and the bands got
+        // whichever ones somebody remembered. _wireSurfaceInteractions now applies
+        // one list to every surface; these assert the ones that were missing.
+        const parity = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const modeBtn = (label) => {
+        const seg = __dgFind('.dg-mode-seg');
+        return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
+      };
+      return (async () => {
+        if (!__dgFind('.dg-chrome-band_header') && modeBtn('Visual')) { modeBtn('Visual').click(); await step(1800); }
+        const band = __dgFind('.dg-chrome-band_header');
+        const bar = __dgFind('.dg-format-bar');
+        if (!band) return { setup:'no header band' };
+        const out = { setup:'ok' };
+
+        // A table in the header, the same as one in the body.
+        band.innerHTML = '<table><tr><td>h1</td><td>h2</td></tr></table>';
+        band.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        await step(400);
+        const cell = band.querySelector('td');
+
+        // Right-click must open the contextual menu.
+        const cr = cell.getBoundingClientRect();
+        cell.dispatchEvent(new MouseEvent('contextmenu', {bubbles:true, composed:true, cancelable:true,
+          clientX: Math.round(cr.left + 8), clientY: Math.round(cr.top + 8)}));
+        await step(500);
+        out.ctx = !!__dgFind('.dg-ctx-menu') || !!__dgFind('[class*="dg-ctx"]');
+        // Close it again.
+        band.dispatchEvent(new MouseEvent('click', {bubbles:true, composed:true}));
+        await step(300);
+
+        // Caret in the header cell -> table tools appear and operate on THAT table.
+        const r = document.createRange(); r.selectNodeContents(cell); r.collapse(true);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        document.dispatchEvent(new Event('selectionchange'));
+        await step(500);
+        const addRow = bar.querySelector('[data-taction="rowAfter"]');
+        out.tools = !!addRow;
+        if (addRow) {
+          const before = band.querySelectorAll('tr').length;
+          addRow.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+          addRow.click();
+          await step(400);
+          const after = __dgFind('.dg-chrome-band_header').querySelectorAll('tr').length;
+          out.rowAdded = after === before + 1;
+          out.rowDetail = before + ' -> ' + after;
+        }
+
+        // Table handles must track the pointer over a header table too.
+        const c2 = __dgFind('.dg-chrome-band_header').querySelector('td');
+        const c2r = c2.getBoundingClientRect();
+        c2.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+          clientX: Math.round(c2r.left + 6), clientY: Math.round(c2r.top + 6)}));
+        await step(600);
+        out.handles = ((__dgFind('.dg-tbl-seam', true) || []).length > 0) ||
+                      ((__dgFind('.dg-tbl-handle', true) || []).length > 0);
+        return out;
+      })();`)
+        );
+        if (parity.setup !== 'ok') {
+            record('header/body parity harness', false, parity.setup);
+        } else {
+            record('right-click opens the context menu in the header', !!parity.ctx, '');
+            record('table tools appear for a table in the header', !!parity.tools, '');
+            record('table tools operate on the header table', !!parity.rowAdded, parity.rowDetail || '');
+            record('table handles track the pointer over a header table', !!parity.handles, '');
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

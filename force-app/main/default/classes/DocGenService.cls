@@ -9809,6 +9809,13 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (String.isBlank(chrome)) {
             return 0;
         }
+        // A TABLE stacks: its rows sit one under another, so its height is the SUM
+        // of its rows, not the tallest thing in it. Treating a table like a
+        // paragraph is what let a multi-row header table overlap the body exactly
+        // the way an oversized logo did.
+        if (chrome.containsIgnoreCase('<tr')) {
+            return estimateStackedRowsIn(chrome);
+        }
         Decimal tallestImage = 0;
         Matcher im = Pattern.compile('(?i)<img\\b[^>]*>').matcher(chrome);
         while (im.find()) {
@@ -9820,12 +9827,46 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // Every block start is a new line; <br> likewise. Starts at one for the
         // text that precedes any markup.
         Integer lines = 1;
-        Matcher bm = Pattern.compile('(?i)<(?:p|div|br|tr|h[1-6])\\b').matcher(chrome);
+        Matcher bm = Pattern.compile('(?i)<(?:p|div|br|h[1-6])\\b').matcher(chrome);
         while (bm.find()) {
             lines++;
         }
         Decimal textHeight = lines * CHROME_LINE_IN;
         return tallestImage > textHeight ? tallestImage : textHeight;
+    }
+
+    /**
+     * Height of chrome containing a table: the sum of its rows.
+     *
+     * Within one row, content sits side by side, so the row is as tall as its
+     * tallest cell — the same "beside, not below" rule used for a logo next to
+     * text. Anything outside the rows is added on top, since it stacks with them.
+     */
+    private static Decimal estimateStackedRowsIn(String chrome) {
+        Decimal total = 0;
+        Matcher rows = Pattern.compile('(?is)<tr\\b[^>]*>(.*?)</tr\\s*>').matcher(chrome);
+        String outsideRows = chrome;
+        while (rows.find()) {
+            String row = rows.group(1);
+            outsideRows = outsideRows.replace(rows.group(), '');
+            Decimal tallest = CHROME_LINE_IN;
+            Matcher im = Pattern.compile('(?i)<img\\b[^>]*>').matcher(row);
+            while (im.find()) {
+                Decimal h = imageHeightIn(im.group());
+                if (h > tallest) {
+                    tallest = h;
+                }
+            }
+            // Cell padding and borders — a table row is never as tight as a bare
+            // line of text.
+            total += tallest + 0.06;
+        }
+        // Whatever sits outside the table (a title above it, a note below) stacks.
+        String stripped = outsideRows.replaceAll('(?is)<table\\b[^>]*>|</table\\s*>', '');
+        if (String.isNotBlank(stripped.replaceAll('(?is)<[^>]+>', '').trim())) {
+            total += estimateChromeHeightIn(stripped);
+        }
+        return total;
     }
 
     /** An <img>'s effective height in inches — author sizing, else a safe floor. */

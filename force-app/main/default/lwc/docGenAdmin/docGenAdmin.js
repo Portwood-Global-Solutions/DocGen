@@ -1691,23 +1691,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // Drag targets: tag chips and image thumbnails drop
                         // exactly where the user points — with a live insertion
                         // marker so the drop point is never a guess.
-                        pv.addEventListener('dragover', (e) => {
-                            e.preventDefault();
-                            this._showDropMarker(e, pv);
-                        });
-                        pv.addEventListener('dragleave', (e) => {
-                            if (e.target === pv) {
-                                this._hideDropMarker(pv);
-                            }
-                        });
-                        pv.addEventListener('drop', (e) => this._handleVisualDrop(e, pv));
-                        // Undo capture for plain typing. beforeinput fires BEFORE the
-                        // browser mutates the DOM, which is the only moment the
-                        // pre-edit state still exists to snapshot. Coalescing inside
-                        // _pushUndo turns a burst into one step.
-                        pv.addEventListener('beforeinput', (e) => {
-                            this._pushUndo('type:' + ((e && e.inputType) || 'text'));
-                        });
+                        // Every interaction that must behave the same on the page
+                        // and in the running header/footer is wired in ONE place.
+                        // Keeping two copies is what left the bands without a
+                        // right-click menu, without pill double-click editing,
+                        // without table handles and without toolbar state — each
+                        // found and fixed separately, which is the tax this removes.
+                        this._wireSurfaceInteractions(pv);
                         // Live dirty signal while typing in the page — and
                         // type-to-pill: a completed {tag} snaps into a pill.
                         pv.addEventListener('input', () => {
@@ -1719,105 +1709,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         });
                         // Click a pill → its formatting menu; click elsewhere closes it.
                         // Double-click a pill → edit its tag text in place.
-                        pv.addEventListener('click', (e) => {
-                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
-                            if (pill && pill.getAttribute('contenteditable') !== 'true') {
-                                e.preventDefault();
-                                this._openPillMenu(pill);
-                            } else if (!pill && e.target && e.target.tagName === 'IMG') {
-                                // Plain body image: toolbar target (align etc.)
-                                // without a pill menu.
-                                this._activePill = e.target;
-                                this.pillMenu = null;
-                            } else if (!pill) {
-                                this.pillMenu = null;
-                                this._activePill = null;
-                                this._closeSlashMenu();
-                                this.ctxMenu = null;
-                                // A plain click clears the cell selection —
-                                // except the mouseup that just finished the
-                                // drag-select (toolbar/right-click don't fire
-                                // a pv click, so the selection survives them).
-                                if (!this._cellSelecting) {
-                                    this._clearCellSel();
-                                }
-                            }
-                        });
-                        pv.addEventListener('dblclick', (e) => {
-                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
-                            if (pill) {
-                                e.preventDefault();
-                                this._beginPillEdit(pill);
-                                return;
-                            }
-                            // Word-style click-and-type: double-click empty page
-                            // space starts a cursor right there.
-                            this._placeCaretAtPoint(e, pv);
-                        });
-                        // Right-click: contextual menu (pill menu on pills;
-                        // insert/format/table actions elsewhere).
-                        pv.addEventListener('contextmenu', (e) => {
-                            e.preventDefault();
-                            this._closeSlashMenu();
-                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
-                            if (pill && pill.getAttribute('contenteditable') !== 'true') {
-                                this.ctxMenu = null;
-                                this._openPillMenu(pill);
-                                return;
-                            }
-                            this.pillMenu = null;
-                            this._placeCaretAtPoint(e, pv);
-                            const col = this.template.querySelector('.dg-designer-canvas-col');
-                            const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
-                            this._ctxPoint = { x: e.clientX, y: e.clientY };
-                            this._ctxCell = e.target && e.target.closest ? e.target.closest('td, th') : null;
-                            try {
-                                const cs = window.getSelection();
-                                this._ctxRange = cs && cs.rangeCount ? cs.getRangeAt(0).cloneRange() : null;
-                            } catch (err) {
-                                this._ctxRange = null;
-                            }
-                            this._focusCtxSearch = true;
-                            this.ctxMenu = {
-                                inTable: !!(e.target && e.target.closest && e.target.closest('td, th')),
-                                posStyle:
-                                    'left: ' +
-                                    Math.max(0, e.clientX - colRect.left) +
-                                    'px; top: ' +
-                                    (e.clientY - colRect.top + 4) +
-                                    'px;'
-                            };
-                        });
-                        // Column resize: grab a cell's right edge and drag.
-                        pv.addEventListener('mousemove', (e) => {
-                            this._imgResizeHover(e);
-                            this._cellSelMove(e, pv);
-                            this._tableResizeHover(e, pv);
-                        });
-                        pv.addEventListener('mousedown', (e) => {
-                            // Nested-contenteditable blur is unreliable — a click
-                            // outside an in-edit pill commits it explicitly, so
-                            // the user is never "caught" inside the pill.
-                            if (this._editingPill && !this._editingPill.contains(e.target) && this._finishPillEdit) {
-                                this._finishPillEdit();
-                            }
-                            if (this._imgResizeStart(e, pv)) {
-                                return;
-                            }
-                            this._cellSelDown(e, pv);
-                            this._tableResizeStart(e, pv);
-                        });
-                        // Caret moved (typing, clicking, arrow keys) — update
-                        // which format buttons read as pressed.
-                        pv.addEventListener('keyup', () => this._refreshFmtState());
-                        pv.addEventListener('mouseup', () => {
-                            // After the click's selection settles.
-                            setTimeout(() => this._refreshFmtState(), 0);
-                        });
-                        // Chip drops staged by the document-level drag listener
-                        // execute HERE — pv listeners are the context where DOM
-                        // insertion reliably works under LWS.
-                        pv.addEventListener('mouseup', () => this._performPendingDropInsert());
                         // Keep keystrokes OURS: Lightning binds "/" (and more) to
                         // global shortcuts via a capture-phase listener high in the
                         // tree, so stopping propagation at the page is too late.
@@ -1958,13 +1849,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         if (this._wheelBoundPv !== pv) {
                             if (this._wheelBoundPv) {
                                 this._wheelBoundPv.removeEventListener('wheel', this.handleCanvasWheel);
-                                this._wheelBoundPv.removeEventListener('mousemove', this.handleCanvasMouseMove);
                             }
                             pv.addEventListener('wheel', this.handleCanvasWheel, { passive: false });
-                            // #241 — table handles follow the pointer.
-                            pv.addEventListener('mousemove', this.handleCanvasMouseMove);
                             this._wheelBoundPv = pv;
                         }
+                        // #241 — the table-handle mousemove moved into
+                        // _wireSurfaceInteractions so the bands get it too; binding it
+                        // here as well would run the overlay twice per pointer move.
                         // Snapshot AFTER pillify so "unchanged" compares
                         // like-for-like on exit.
                         // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
@@ -6601,6 +6492,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /**
+     * Which surface a node belongs to, WITHOUT changing the active one.
+     *
+     * _surfaceContaining doubles as the setter for _activeSurface, which is right
+     * for the caret and wrong for anything driven by the pointer — hover chrome
+     * must not decide what the toolbar is acting on.
+     */
+    _surfaceOwning(node) {
+        if (!node) {
+            return null;
+        }
+        for (const surface of this._allSurfaces()) {
+            if (this._isInCanvas(node, surface)) {
+                return surface;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Single writer for _activeSurface, mirroring it into a tracked flag.
      *
      * The flag drives the contextual header/footer tools in the format bar — the
@@ -7062,25 +6972,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // Same undo capture as the body canvas — the bands are edit surfaces
             // for two template fields, and Ctrl+Z has to mean the same thing in all
             // three or the author learns it is unreliable.
-            band.addEventListener('beforeinput', (e) => {
-                this._pushUndo('type:' + ((e && e.inputType) || 'text'));
-            });
             band.addEventListener('input', () => {
                 this._setActiveSurface(which);
                 this._syncBandToRecord(which, band);
                 this._maybePillifyTyped();
+                // The ` / [ insert menu. _maybeOpenSlashMenu resolves its surface
+                // through _surfaceContaining and has always handled the bands — it
+                // was simply never called from one, so the menu could only ever be
+                // opened in the body.
+                this._maybeOpenSlashMenu();
             });
-            band.addEventListener('click', (e) => {
-                const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
-                if (pill && pill.getAttribute('contenteditable') !== 'true') {
-                    e.preventDefault();
-                    this._openPillMenu(pill);
-                }
-            });
-            // Same reason the body canvas traps keydown: Lightning's "/" global-search
-            // hotkey would otherwise swallow the keystroke.
             band.addEventListener('keydown', (e) => {
                 if (this._undoKeydown(e)) {
+                    return;
+                }
+                // BEFORE the Enter handler, exactly as on the body canvas: while the
+                // insert menu is open it owns arrows/Enter/Escape, and Enter there
+                // means "pick this item", not "break the line".
+                if (this._slashMenuKeydown(e)) {
                     return;
                 }
                 // Tight line spacing matters most of all in a running header, where
@@ -7099,33 +7008,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // image rather than resizing it: "resizing images in the header adds
             // additional images and duplicates it". _imgResizeStart preventDefaults
             // on mousedown, which is what stops the native drag ever starting.
-            band.addEventListener('mousemove', (e) => {
-                this._imgResizeHover(e);
-                this._cellSelMove(e, band);
-                this._tableResizeHover(e, band);
-            });
-            band.addEventListener('mousedown', (e) => {
-                if (this._imgResizeStart(e, band)) {
-                    return;
-                }
-                this._cellSelDown(e, band);
-                this._tableResizeStart(e, band);
-            });
-            band.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                this._showDropMarker(e, band);
-            });
-            band.addEventListener('dragleave', (e) => {
-                if (e.target === band) {
-                    this._hideDropMarker(band);
-                }
-            });
-            // The bands accepted dragover but had no drop handler, so a tag chip or
-            // image asset dragged onto the running header was silently discarded —
-            // the drop had nowhere to go. Complex headers are exactly the case where
-            // dragging beats typing, so they get the same handler as the body.
-            band.addEventListener('drop', (e) => this._handleVisualDrop(e, band));
-            band.addEventListener('mouseup', () => this._performPendingDropInsert());
+            // Everything else behaves exactly as it does on the page — one list,
+            // one place. See _wireSurfaceInteractions.
+            this._wireSurfaceInteractions(band);
         }
         this._bandMounted = this.template.querySelector('.dg-chrome-band_header');
     }
@@ -7778,6 +7663,137 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /**
+     * Wire every interaction that must behave IDENTICALLY on all three editable
+     * surfaces — the page body and the two running bands.
+     *
+     * These used to be written out against the body canvas only, and the bands got
+     * whichever ones somebody remembered. The result was a long tail of "it works
+     * on the page but not in the header": no right-click menu, no double-click pill
+     * editing, no table row/column handles, no toolbar state following the caret,
+     * inserts landing in the wrong surface, drops silently discarded, image resizes
+     * duplicating the image. Every one was found separately, by a person, after
+     * shipping.
+     *
+     * One list, applied to every surface, is what stops that recurring. Anything
+     * genuinely surface-specific (the body's caret-floor guard, the bands' field
+     * sync) stays with its own surface.
+     */
+    _wireSurfaceInteractions(surface) {
+        surface.addEventListener('click', (e) => {
+            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+            if (pill && pill.getAttribute('contenteditable') !== 'true') {
+                e.preventDefault();
+                this._openPillMenu(pill);
+            } else if (!pill && e.target && e.target.tagName === 'IMG') {
+                // Plain image: a toolbar target (align etc.) without a pill menu.
+                this._activePill = e.target;
+                this.pillMenu = null;
+            } else if (!pill) {
+                this.pillMenu = null;
+                this._activePill = null;
+                this._closeSlashMenu();
+                this.ctxMenu = null;
+                // A plain click clears the cell selection — except the mouseup that
+                // just finished a drag-select (the toolbar and right-click do not
+                // fire a surface click, so the selection survives them).
+                if (!this._cellSelecting) {
+                    this._clearCellSel();
+                }
+            }
+        });
+        surface.addEventListener('dblclick', (e) => {
+            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+            if (pill) {
+                e.preventDefault();
+                this._beginPillEdit(pill);
+                return;
+            }
+            // Word-style click-and-type: double-click empty space starts a cursor.
+            this._placeCaretAtPoint(e, surface);
+        });
+        // Right-click: contextual menu (pill menu on pills; insert/format/table
+        // actions elsewhere).
+        surface.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this._closeSlashMenu();
+            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+            if (pill && pill.getAttribute('contenteditable') !== 'true') {
+                this.ctxMenu = null;
+                this._openPillMenu(pill);
+                return;
+            }
+            this.pillMenu = null;
+            this._placeCaretAtPoint(e, surface);
+            const col = this.template.querySelector('.dg-designer-canvas-col');
+            const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
+            this._ctxPoint = { x: e.clientX, y: e.clientY };
+            this._ctxCell = e.target && e.target.closest ? e.target.closest('td, th') : null;
+            try {
+                const cs = window.getSelection();
+                this._ctxRange = cs && cs.rangeCount ? cs.getRangeAt(0).cloneRange() : null;
+            } catch (err) {
+                this._ctxRange = null;
+            }
+            this._focusCtxSearch = true;
+            this.ctxMenu = {
+                inTable: !!(e.target && e.target.closest && e.target.closest('td, th')),
+                posStyle:
+                    'left: ' +
+                    Math.max(0, e.clientX - colRect.left) +
+                    'px; top: ' +
+                    (e.clientY - colRect.top + 4) +
+                    'px;'
+            };
+        });
+        surface.addEventListener('mousemove', (e) => {
+            this._imgResizeHover(e);
+            this._cellSelMove(e, surface);
+            this._tableResizeHover(e, surface);
+        });
+        // Table row/column handles and the block gutter handle follow the pointer.
+        surface.addEventListener('mousemove', this.handleCanvasMouseMove);
+        surface.addEventListener('mousedown', (e) => {
+            // Nested-contenteditable blur is unreliable — a click outside an in-edit
+            // pill commits it explicitly, so the user is never caught inside it.
+            if (this._editingPill && !this._editingPill.contains(e.target) && this._finishPillEdit) {
+                this._finishPillEdit();
+            }
+            if (this._imgResizeStart(e, surface)) {
+                return;
+            }
+            this._cellSelDown(e, surface);
+            this._tableResizeStart(e, surface);
+        });
+        surface.addEventListener('keyup', () => this._refreshFmtState());
+        surface.addEventListener('mouseup', () => {
+            // After the click's selection settles.
+            // eslint-disable-next-line @lwc/lwc/no-async-operation
+            setTimeout(() => this._refreshFmtState(), 0);
+        });
+        // Chip drops staged by the document-level drag listener execute HERE —
+        // surface listeners are the context where DOM insertion reliably works
+        // under LWS.
+        surface.addEventListener('mouseup', () => this._performPendingDropInsert());
+        // Drag targets: tag chips and image thumbnails drop exactly where the user
+        // points, with a live insertion marker so the drop point is never a guess.
+        surface.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this._showDropMarker(e, surface);
+        });
+        surface.addEventListener('dragleave', (e) => {
+            if (e.target === surface) {
+                this._hideDropMarker(surface);
+            }
+        });
+        surface.addEventListener('drop', (e) => this._handleVisualDrop(e, surface));
+        // Undo capture for plain typing. beforeinput fires BEFORE the browser
+        // mutates the DOM, the only moment the pre-edit state still exists.
+        surface.addEventListener('beforeinput', (e) => {
+            this._pushUndo('type:' + ((e && e.inputType) || 'text'));
+        });
+    }
+
+    /**
      * Enter inserts a LINE BREAK; Shift+Enter starts a NEW PARAGRAPH.
      *
      * Both are handled here. Neither can be delegated: the browser's plain Enter
@@ -8088,7 +8104,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             node = node.parentNode;
         }
         const table = node && node.closest ? node.closest('table') : null;
-        if (!table || !this._isInCanvas(table, pv)) {
+        // Resolve the surface from what the POINTER is over, not from _canvas(),
+        // which follows FOCUS. Hovering a table in the running header while the
+        // caret was still in the body resolved to the body canvas, the containment
+        // test failed, and the handles never appeared for header/footer tables.
+        //
+        // _surfaceOwning, not _surfaceContaining: the latter also SETS the active
+        // surface, so merely moving the pointer over the header would have
+        // redirected the toolbar away from where the caret actually is.
+        const owner = (table && this._surfaceOwning(table)) || pv;
+        if (!table || !this._isInCanvas(table, owner)) {
             // Do NOT drop the overlay the instant the pointer leaves the table.
             //
             // The handles and seams are deliberately positioned OUTSIDE the table
@@ -8108,6 +8133,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         this._overlayTable = table;
         const wrapRect = wrap.getBoundingClientRect();
+        // The overlay elements are positioned inside .dg-canvas-wrap, which spans the
+        // PAGE only — but a table can live in a running band, which sits above or
+        // below it. Culling against the wrap therefore discarded every column and row
+        // of a header/footer table as "off-screen" and the handles never rendered.
+        // Cull against the whole sheet instead; the offsets stay relative to the wrap
+        // and simply go negative for a header, which absolute positioning handles.
+        const paper = this.template.querySelector('.dg-sheet-paper');
+        const clipRect = paper ? paper.getBoundingClientRect() : wrapRect;
         // Gutter offsets are in SCREEN pixels, but the page is transform-scaled. A
         // fixed 20px gutter is only ~12 document px at 1.6x, which slides the handles
         // on top of the table. Scale the offsets so the gutter stays proportional.
@@ -8143,7 +8176,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 // Skip anything scrolled out of view — the handles are absolutely
                 // positioned in a non-scrolling wrapper, so an off-screen handle would
                 // float over unrelated chrome.
-                if (r.bottom < wrapRect.top || r.top > wrapRect.bottom) {
+                if (r.bottom < clipRect.top || r.top > clipRect.bottom) {
                     i += cell.colSpan || 1;
                     continue;
                 }
@@ -8178,7 +8211,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const tRect2 = table.getBoundingClientRect();
         for (const tr of table.rows) {
             const r = tr.getBoundingClientRect();
-            if (r.bottom < wrapRect.top || r.top > wrapRect.bottom) {
+            if (r.bottom < clipRect.top || r.top > clipRect.bottom) {
                 ri++;
                 continue;
             }

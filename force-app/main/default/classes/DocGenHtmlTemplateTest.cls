@@ -1089,6 +1089,41 @@ private class DocGenHtmlTemplateTest {
     }
 
     @IsTest
+    static void estimateChromeHeightSumsTableRowsRatherThanTakingTheTallest() {
+        // A table STACKS: three rows sit one under another. Treating it like a
+        // paragraph made a multi-row header table overlap the body exactly the way
+        // an oversized logo did.
+        String oneRow = '<table><tr><td>a</td><td>b</td></tr></table>';
+        String threeRows = '<table><tr><td>a</td></tr><tr><td>b</td></tr><tr><td>c</td></tr></table>';
+        Decimal h1 = DocGenService.estimateChromeHeightIn(oneRow);
+        Decimal h3 = DocGenService.estimateChromeHeightIn(threeRows);
+        System.assert(h3 > h1 * 2.5, 'Three rows must estimate ~3x one row, got ' + h1 + ' vs ' + h3);
+        // Within a row, cells sit SIDE BY SIDE — two cells are not two lines.
+        Decimal twoCells = DocGenService.estimateChromeHeightIn('<table><tr><td>a</td><td>b</td></tr></table>');
+        System.assertEquals(h1, twoCells, 'Cells in one row do not stack');
+        // A tall image in a row makes that row tall.
+        Decimal withImg = DocGenService.estimateChromeHeightIn(
+            '<table><tr><td><img style="height:1in" src="x"></td></tr></table>'
+        );
+        System.assert(withImg > 1, 'A 1in image in a row must make the row at least that tall: ' + withImg);
+    }
+
+    @IsTest
+    static void wrapHtmlForPdfGrowsMarginForATallHeaderTable() {
+        // The end-to-end contract: a header table pushes the body down instead of
+        // being overlapped by it.
+        String hdr =
+            '<table><tr><td><img style="height:0.8in" src="x"></td></tr>' +
+            '<tr><td>row two</td></tr><tr><td>row three</td></tr></table>';
+        String src = '@page { size: Letter portrait; margin: 0.75in; }';
+        String outp = DocGenService.wrapHtmlForPdf('<p>body</p>', src, hdr, null);
+        System.assert(
+            outp.contains('margin-top:'),
+            'A three-row header table taller than the margin must grow it: ' + outp
+        );
+    }
+
+    @IsTest
     static void parseSourcePageMarginsReadsShorthandAndUnits() {
         List<Decimal> four = DocGenService.parseSourcePageMargins('@page { margin: 1in 2in 3in 4in; }');
         System.assertEquals(1, four[0]);
