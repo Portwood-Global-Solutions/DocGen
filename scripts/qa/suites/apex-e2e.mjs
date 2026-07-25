@@ -30,6 +30,9 @@ export const E2E_SEQUENCE = [
     // BLOCKER, not MAJOR: this is the only script that proves a real template
     // renders to a real signed document that reaches the record.
     ['e2e-06c-signing.apex', 'Signature redemption', SEVERITY.BLOCKER],
+    // 06d is the PIN gate and the decline path. e2e-06 proved a PIN is STAMPED;
+    // nothing proved it is ever CHECKED, or that guessing is capped.
+    ['e2e-06d-pin-and-decline.apex', 'PIN gate + decline', SEVERITY.BLOCKER],
     ['e2e-07-syntax1.apex', 'Merge-tag syntax', SEVERITY.BLOCKER],
     ['e2e-07-syntax2.apex', 'Merge-tag syntax', SEVERITY.BLOCKER],
     ['e2e-07-syntax3.apex', 'Merge-tag syntax', SEVERITY.BLOCKER],
