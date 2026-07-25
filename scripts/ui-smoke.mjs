@@ -431,6 +431,63 @@ async function main() {
             record('bubble: bold actually formats', !!bubble.formatted, '');
         }
 
+        // --- 4d. Invisible chrome must never intercept clicks --------------------
+        // opacity: 0 does NOT remove an element from hit-testing. Any overlay left at
+        // pointer-events: auto while invisible becomes a dead zone over the document.
+        const ghosts = await page.evaluate(
+            inPage(`
+      const offenders = [];
+      const check = (sel) => {
+        for (const el of (__dgFind(sel, true) || [])) {
+          const cs = getComputedStyle(el);
+          const invisible = parseFloat(cs.opacity) < 0.02 || cs.visibility === 'hidden';
+          if (invisible && cs.pointerEvents !== 'none') {
+            const r = el.getBoundingClientRect();
+            if (r.width > 2 && r.height > 2) {
+              offenders.push(sel + ' @' + Math.round(r.left) + ',' + Math.round(r.top));
+            }
+          }
+        }
+      };
+      check('.dg-tbl-handle');
+      check('.dg-drop-marker');
+      check('.dg-sel-bubble');
+      return { offenders };`)
+        );
+        record(
+            'no invisible chrome intercepts clicks',
+            ghosts.offenders.length === 0,
+            ghosts.offenders.slice(0, 3).join(', ')
+        );
+
+        // Clicking the page must always land on the page, never on hidden chrome.
+        const canvasClickable = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const r = pv.getBoundingClientRect();
+      // The toolbar is sticky and CORRECTLY covers the top of the canvas once the
+      // page scrolls under it, so probe strictly below its bottom edge — otherwise
+      // this asserts a bug that isn't one.
+      const bar = __dgFind('.dg-format-bar');
+      const barBottom = bar ? bar.getBoundingClientRect().bottom : 0;
+      const top0 = Math.max(r.top, barBottom) + 24;
+      const pts = [[r.left + r.width/2, top0], [r.left + 40, top0 + 80], [r.right - 40, top0 + 160]];
+      const bad = [];
+      for (const [x, y] of pts) {
+        let top = document.elementFromPoint(Math.round(x), Math.round(y)), guard = 0;
+        while (top && top.shadowRoot && guard++ < 10) {
+          const inner = top.shadowRoot.elementFromPoint(Math.round(x), Math.round(y));
+          if (!inner || inner === top) break;
+          top = inner;
+        }
+        if (!(top && (top === pv || pv.contains(top)))) {
+          bad.push(Math.round(x)+','+Math.round(y)+' -> ' + (top ? (top.className || top.tagName) : 'null'));
+        }
+      }
+      return { bad };`)
+        );
+        record('canvas click points reach the page', canvasClickable.bad.length === 0, canvasClickable.bad.join(' | '));
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

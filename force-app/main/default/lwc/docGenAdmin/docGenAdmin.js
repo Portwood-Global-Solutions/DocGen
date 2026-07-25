@@ -1593,6 +1593,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._positionSelectionBubble(bubble);
             }
         }
+        if (this.pillMenu && this._floatAnchor && this._floatAnchor.isConnected) {
+            const pm = this.template.querySelector('.dg-pill-menu');
+            if (pm) {
+                this._positionFloating(this._floatAnchor, pm, { gap: 6, prefer: 'bottom', align: 'start' });
+            }
+        }
         // Sync native textarea DOM value with tracked property after re-render
         if (this.currentWizardStep === '2' && this.newTemplateQuery) {
             const ta = this.template.querySelector('.wizard-query-textarea');
@@ -6760,6 +6766,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (bubble && this.selectionBubble) {
             this._positionSelectionBubble(bubble);
         }
+        const pm = this.template.querySelector('.dg-pill-menu');
+        if (pm && this._floatAnchor && this._floatAnchor.isConnected) {
+            this._positionFloating(this._floatAnchor, pm, { gap: 6 });
+        }
     };
 
     _watchFloatingLayer(on) {
@@ -9035,17 +9045,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
             ];
         }
-        // Position the menu just under the pill, relative to the canvas column.
-        const col = this.template.querySelector('.dg-designer-canvas-col');
-        const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
-        const rect = pill.getBoundingClientRect();
+        // The menu was positioned absolutely against .dg-designer-canvas-col — which is
+        // `overflow-y: auto`, so the menu was clipped by the scroll container and
+        // scrolled away with the content. Same defect class as the toolbar popovers.
+        // It now joins the fixed floating layer and is placed from the pill's viewport
+        // rect in renderedCallback, once the element exists and can be measured.
+        this._floatAnchor = pill;
         this.pillMenu = {
             tagText: raw,
             sections,
             hasOptions: sections.length > 0,
-            posStyle:
-                'left: ' + Math.max(0, rect.left - colRect.left) + 'px; top: ' + (rect.bottom - colRect.top + 6) + 'px;'
+            posStyle: 'left: -9999px; top: -9999px;'
         };
+        this._watchFloatingLayer(true);
     }
 
     handlePillTransform(event) {

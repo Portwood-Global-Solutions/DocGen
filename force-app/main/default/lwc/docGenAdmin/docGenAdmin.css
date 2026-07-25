@@ -587,12 +587,17 @@
     gap: 2px;
     z-index: 20;
     opacity: 0;
-    transition: opacity 0.12s ease-in-out;
-    pointer-events: auto;
+    transition: opacity 0.12s cubic-bezier(0.2, 0.8, 0.3, 1);
+    /* MUST be none while invisible. opacity: 0 does NOT remove an element from
+       hit-testing, so handles left at pointer-events: auto sat over the page as
+       invisible click targets and swallowed clicks meant for the document —
+       placing a caret near a table could silently do nothing. */
+    pointer-events: none;
 }
 
 .dg-canvas-wrap:hover .dg-tbl-handle {
     opacity: 0.55;
+    pointer-events: auto;
 }
 
 .dg-tbl-handle:hover {
@@ -1080,9 +1085,13 @@
     position: relative;
 }
 
+/* Joins the fixed floating layer. It was position: absolute inside
+   .dg-designer-canvas-col, which is overflow-y: auto — so it was clipped by the
+   scroll container and scrolled away with the content. Coordinates come from
+   _positionFloating in renderedCallback. */
 .dg-pill-menu {
-    position: absolute;
-    z-index: 120;
+    position: fixed;
+    z-index: 9000;
     background: #fff;
     border: 1px solid #c9b8f5;
     border-radius: 8px;
