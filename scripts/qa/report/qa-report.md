@@ -1,667 +1,223 @@
 # DocGen QA report
 
-**Org** `docgen-verify` · **Run** 2026-07-25T15:21:59.246Z · **Duration** 0s
+**Org** `docgen-verify` · **Run** 2026-07-25T15:39:25.333Z · **Duration** 12s
 
 ## Headline
 
-|                       |             |
-| --------------------- | ----------- |
-| Checks evaluated      | 476         |
-| Passed                | 318 (66.8%) |
-| Failed                | 158         |
-| Skipped (not counted) | 0           |
-| Blockers              | 0           |
-| Major                 | 34          |
-| Minor                 | 124         |
+|                       |            |
+| --------------------- | ---------- |
+| Checks evaluated      | 180        |
+| Passed                | 180 (100%) |
+| Failed                | 0          |
+| Skipped (not counted) | 4          |
+| Blockers              | 0          |
+| Major                 | 0          |
+| Minor                 | 0          |
 
 ## Coverage by area
 
-| Suite            | Area     | Passed | Failed | Skipped |  Rate |
-| ---------------- | -------- | -----: | -----: | ------: | ----: |
-| `metadata-audit` | Metadata |    318 |    158 |       0 | 66.8% |
+| Suite        | Area       | Passed | Failed | Skipped | Rate |
+| ------------ | ---------- | -----: | -----: | ------: | ---: |
+| `merge-tags` | Merge tags |    180 |      0 |       4 | 100% |
 
 ## What to fix
 
-Ordered by severity. The detail column is written to say WHERE to look.
+Nothing — every evaluated check passed.
 
-| Severity  | Suite            | Check                                                                                    | Evidence                                                                                                                                                                                 |
-| --------- | ---------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **major** | `metadata-audit` | DocGen_Asset\_\_c has a page layout                                                      | no layout file references this object                                                                                                                                                    |
-| **major** | `metadata-audit` | DocGen_Asset**c.Asset_Key**c is on the page layout                                       | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.               |
-| **major** | `metadata-audit` | DocGen_Asset**c.Asset_Type**c is on the page layout                                      | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.               |
-| **major** | `metadata-audit` | DocGen_Asset**c.Category**c is on the page layout                                        | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.               |
-| **major** | `metadata-audit` | DocGen_Asset**c.Is_Active**c is on the page layout                                       | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.               |
-| **major** | `metadata-audit` | DocGen_Email_Template\_\_c has a page layout                                             | no layout file references this object                                                                                                                                                    |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Body_Html**c is on the page layout                              | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Body_Plain**c is on the page layout                             | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Brand_Color**c is on the page layout                            | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Description**c is on the page layout                            | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Footer_Text**c is on the page layout                            | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Is_Active**c is on the page layout                              | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Layout_Mode**c is on the page layout                            | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Logo_Asset_Key**c is on the page layout                         | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Logo_Height**c is on the page layout                            | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Logo_Url_Extended**c is on the page layout                      | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Logo_Url**c is on the page layout                               | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Subject**c is on the page layout                                | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Email_Template**c.Type**c is on the page layout                                   | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.      |
-| **major** | `metadata-audit` | DocGen_Job**c.Error_Log**c is on the page layout                                         | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.                 |
-| **major** | `metadata-audit` | DocGen_Job**c.Merged_PDF_CV**c is on the page layout                                     | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.                 |
-| **major** | `metadata-audit` | DocGen_Job**c.Parent_Record_Id**c is on the page layout                                  | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.                 |
-| **major** | `metadata-audit` | DocGen_Signature_Placement**c.Render_Inline**c is on the page layout                     | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Placement\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason. |
-| **major** | `metadata-audit` | DocGen_Signature_Request**c.Frozen_Document**c is on the page layout                     | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Request\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.   |
-| **major** | `metadata-audit` | DocGen_Signature_Request**c.Snapshot_Taken_At**c is on the page layout                   | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Request\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.   |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Custom_Margins**c is on the page layout                       | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Document_Title_Format**c is on the page layout                | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Footer_Html**c is on the page layout                          | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Header_Html**c is on the page layout                          | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Output_Format**c is on the page layout                        | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Page_Margins**c is on the page layout                         | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Page_Orientation**c is on the page layout                     | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Page_Size**c is on the page layout                            | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **major** | `metadata-audit` | DocGen_Template_Version**c.Watermark_Image_CV_Id**c is on the page layout                | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.    |
-| **minor** | `metadata-audit` | DocGen_Asset**c.Asset_Key**c has a description or help text                              | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Asset**c.Asset_Type**c has a description or help text                             | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Asset**c.Category**c has a description or help text                               | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Asset**c.Is_Active**c has a description or help text                              | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Button**mdt.Object_API_Name**c has a description or help text                     | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Button**mdt.Output_Format_Override**c has a description or help text              | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Button**mdt.Record_Type_Developer_Names**c has a description or help text         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Button**mdt.Save_To_Record**c has a description or help text                      | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Button**mdt.Template_API_Name**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Button**mdt.Template_Id**c has a description or help text                         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Body_Html**c has a description or help text                     | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Body_Plain**c has a description or help text                    | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Brand_Color**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Footer_Text**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Is_Active**c has a description or help text                     | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Layout_Mode**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Logo_Asset_Key**c has a description or help text                | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Logo_Height**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Logo_Url_Extended**c has a description or help text             | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Logo_Url**c has a description or help text                      | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Subject**c has a description or help text                       | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Email_Template**c.Type**c has a description or help text                          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Error_Log**c.Exception_Type**c has a description or help text                     | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Error_Log**c.Severity**c has a description or help text                           | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Guest_Render**e.Job_Id**c has a description or help text                          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Error_Count**c has a description or help text                              | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Error_Log**c has a description or help text                                | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Label**c has a description or help text                                    | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Merge_Only**c has a description or help text                               | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Parent_Record_Id**c has a description or help text                         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Status**c has a description or help text                                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Success_Count**c has a description or help text                            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Template**c has a description or help text                                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Job**c.Total_Records**c has a description or help text                            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Company_Name**c has a description or help text                        | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Experience_Site_Url**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Email_Brand_Color**c has a description or help text         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Email_Footer_Text**c has a description or help text         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Email_Logo_Url**c has a description or help text            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Email_Message**c has a description or help text             | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Email_Subject**c has a description or help text             | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Expiration_Days**c has a description or help text           | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_OWA_Id**c has a description or help text                    | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Prefill_Signer_Email**c has a description or help text      | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Reminder_Enabled**c has a description or help text          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Reminder_Hours**c has a description or help text            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Reminder_Schedule**c has a description or help text         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Settings**c.Signature_Skip_Email_Verification**c has a description or help text   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.Contact**c has a description or help text                      | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.Document_Hash_SHA256**c has a description or help text         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.IP_Address**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.Signature_Request**c has a description or help text            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.Signed_Date**c has a description or help text                  | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.Signer_Email**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.Signer_Name**c has a description or help text                  | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.Signer**c has a description or help text                       | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.User_Agent**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Audit**c.Verification_Method**c has a description or help text          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Document_Index**c has a description or help text           | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Placement_Type**c has a description or help text           | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Render_Inline**c has a description or help text            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Section_Context**c has a description or help text          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Sequence_Order**c has a description or help text           | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Signature_Request**c has a description or help text        | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Signed_At**c has a description or help text                | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Signed_Value**c has a description or help text             | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Signer**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Status**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Placement**c.Tag_Text**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Document_Title_Format**c has a description or help text      | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Email_Status**c has a description or help text               | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Expires_At**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Frozen_Document**c has a description or help text            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Prefill_Signer_Email**c has a description or help text       | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Related_Record_Id**c has a description or help text          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Require_Email_Verification**c has a description or help text | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Signer_Email**c has a description or help text               | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Signer_Name**c has a description or help text                | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Signing_Order**c has a description or help text              | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Snapshot_Taken_At**c has a description or help text          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Status**c has a description or help text                     | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Template_Ids**c has a description or help text               | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signature_Request**c.Template**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Contact**c has a description or help text                               | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Decline_Reason**c has a description or help text                        | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Reminder_Sent_At**c has a description or help text                      | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Reminders_Sent**c has a description or help text                        | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Signature_Request**c has a description or help text                     | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Signer_Email**c has a description or help text                          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Signer_Name**c has a description or help text                           | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Sort_Order**c has a description or help text                            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Signer**c.Status**c has a description or help text                                | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Base_Object_API**c has a description or help text             | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Category**c has a description or help text                    | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Custom_Margins**c has a description or help text              | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Description**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Document_Title_Format**c has a description or help text       | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Footer_Html**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Header_Html**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Output_Format**c has a description or help text               | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Page_Orientation**c has a description or help text            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Page_Size**c has a description or help text                   | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Pre_Decomposition_Status**c has a description or help text    | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Type**c has a description or help text                        | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template_Version**c.Watermark_Image_CV_Id**c has a description or help text       | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.API_Name**c has a description or help text                            | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Custom_Margins**c has a description or help text                      | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Default_Email_Message**c has a description or help text               | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Footer_Html**c has a description or help text                         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Form_Fields_Config**c has a description or help text                  | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Header_Html**c has a description or help text                         | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Is_Active**c has a description or help text                           | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Is_Default**c has a description or help text                          | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Page_Margins**c has a description or help text                        | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Page_Orientation**c has a description or help text                    | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Page_Size**c has a description or help text                           | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Prefill_Signer_Email**c has a description or help text                | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Record_Filter**c has a description or help text                       | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Signer_Verification**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | DocGen_Template**c.Specific_Record_Ids**c has a description or help text                 | no <description> or <inlineHelpText> — the admin has no idea what it does                                                                                                                |
-| **minor** | `metadata-audit` | docGenAuthenticator (app page) is reachable from a tab                                   | no tab references it — reachable only via a hand-built Lightning page                                                                                                                    |
-| **minor** | `metadata-audit` | docGenQueryBuilder (app page) is reachable from a tab                                    | no tab references it — reachable only via a hand-built Lightning page                                                                                                                    |
-| **minor** | `metadata-audit` | docGenRunner (app page) is reachable from a tab                                          | no tab references it — reachable only via a hand-built Lightning page                                                                                                                    |
-| **minor** | `metadata-audit` | docGenTreeBuilder (app page) is reachable from a tab                                     | no tab references it — reachable only via a hand-built Lightning page                                                                                                                    |
+## Not covered by this run
+
+A skipped check is not a passing one. Each of these is a gap in the evidence.
+
+- `merge-tags` — HTML-template escaping ({Field} newline → <br/>) behaves correctly: processXmlForTest(xml, data, templateType) is @TestVisible private and unreachable from anonymous Apex, so every check here runs the Word branch; HTML/Excel/PowerPoint escaping needs a unit test or a real HTML template render
+- `merge-tags` — {PageNumber}/{TotalPages} render real page numbers in the PDF: processXml only preserves the tokens; the @page counter substitution happens in wrapHtmlForPdf and can only be verified on a rendered PDF (output-formats suite)
+- `merge-tags` — {%ImageField} with a real ContentVersion renders an embedded image: needs an uploaded ContentVersion fixture and a real DOCX/PDF render; covered by scripts/e2e-09-images.apex, not by this parser-level probe
+- `merge-tags` — The giant-query parent path resolves the same tag surface: DocGenGiantQueryAssembler.resolveParentMergeTags / resolveGiantChartBuckets do not go through processXmlForTest and need >2000 child rows to exercise
 
 ## Every check
 
-### metadata-audit — Metadata
+### merge-tags — Merge tags
 
-- ❌ DocGen_Asset\_\_c has a page layout — no layout file references this object
-- ❌ DocGen_Asset**c.Asset_Key**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ❌ DocGen_Asset**c.Asset_Key**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Asset**c.Asset_Type**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Asset**c.Asset_Type**c is granted on DocGen_Admin
-- ❌ DocGen_Asset**c.Asset_Type**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Asset**c.Category**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Asset**c.Category**c is granted on DocGen_Admin
-- ❌ DocGen_Asset**c.Category**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Asset**c.Is_Active**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Asset**c.Is_Active**c is granted on DocGen_Admin
-- ❌ DocGen_Asset**c.Is_Active**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Button**mdt.Active**c has a description or help text
-- ✅ DocGen_Button**mdt.Document_Title**c has a description or help text
-- ❌ DocGen_Button**mdt.Object_API_Name**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Button**mdt.Output_Format_Override**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Button**mdt.Record_Type_Developer_Names**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Button**mdt.Save_To_Record**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Button**mdt.Sort_Order**c has a description or help text
-- ❌ DocGen_Button**mdt.Template_API_Name**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Button**mdt.Template_Id**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template\_\_c has a page layout — no layout file references this object
-- ❌ DocGen_Email_Template**c.Body_Html**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Body_Html**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Body_Html**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Body_Plain**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Body_Plain**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Body_Plain**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Brand_Color**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Brand_Color**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Brand_Color**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Description**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Description**c is granted on DocGen_Admin
-- ✅ DocGen_Email_Template**c.Description**c has a description or help text
-- ❌ DocGen_Email_Template**c.Footer_Text**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Footer_Text**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Footer_Text**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Is_Active**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Is_Active**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Is_Active**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Layout_Mode**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Layout_Mode**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Layout_Mode**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Logo_Asset_Key**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Logo_Asset_Key**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Logo_Asset_Key**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Logo_Height**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Logo_Height**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Logo_Height**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Logo_Url_Extended**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Logo_Url_Extended**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Logo_Url_Extended**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Logo_Url**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Logo_Url**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Logo_Url**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Subject**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Email_Template**c.Subject**c is granted on DocGen_Admin
-- ❌ DocGen_Email_Template**c.Subject**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Email_Template**c.Type**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ❌ DocGen_Email_Template**c.Type**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Error_Log\_\_c has a page layout
-- ✅ DocGen_Error_Log**c.Additional_Info**c is on the page layout
-- ✅ DocGen_Error_Log**c.Additional_Info**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Additional_Info**c has a description or help text
-- ✅ DocGen_Error_Log**c.Context**c is on the page layout
-- ✅ DocGen_Error_Log**c.Context**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Context**c has a description or help text
-- ✅ DocGen_Error_Log**c.Exception_Type**c is on the page layout
-- ✅ DocGen_Error_Log**c.Exception_Type**c is granted on DocGen_Admin
-- ❌ DocGen_Error_Log**c.Exception_Type**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Error_Log**c.Flow_Interview_Guid**c is on the page layout
-- ✅ DocGen_Error_Log**c.Flow_Interview_Guid**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Flow_Interview_Guid**c has a description or help text
-- ✅ DocGen_Error_Log**c.Job_Id**c is on the page layout
-- ✅ DocGen_Error_Log**c.Job_Id**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Job_Id**c has a description or help text
-- ✅ DocGen_Error_Log**c.Message**c is on the page layout
-- ✅ DocGen_Error_Log**c.Message**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Message**c has a description or help text
-- ✅ DocGen_Error_Log**c.Operation**c is on the page layout
-- ✅ DocGen_Error_Log**c.Operation**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Operation**c has a description or help text
-- ✅ DocGen_Error_Log**c.Record_Id**c is on the page layout
-- ✅ DocGen_Error_Log**c.Record_Id**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Record_Id**c has a description or help text
-- ✅ DocGen_Error_Log**c.Severity**c is on the page layout
-- ✅ DocGen_Error_Log**c.Severity**c is granted on DocGen_Admin
-- ❌ DocGen_Error_Log**c.Severity**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Error_Log**c.Stack_Trace**c is on the page layout
-- ✅ DocGen_Error_Log**c.Stack_Trace**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Stack_Trace**c has a description or help text
-- ✅ DocGen_Error_Log**c.Template_Id**c is on the page layout
-- ✅ DocGen_Error_Log**c.Template_Id**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.Template_Id**c has a description or help text
-- ✅ DocGen_Error_Log**c.User_Id**c is on the page layout
-- ✅ DocGen_Error_Log**c.User_Id**c is granted on DocGen_Admin
-- ✅ DocGen_Error_Log**c.User_Id**c has a description or help text
-- ✅ DocGen_Field_Writeback**e.Request_Id**c has a description or help text
-- ❌ DocGen_Guest_Render**e.Job_Id**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Guest_Render**e.Record_Id**c has a description or help text
-- ✅ DocGen_Guest_Render**e.Template_Id**c has a description or help text
-- ✅ DocGen_Job\_\_c has a page layout
-- ✅ DocGen_Job**c.Data_Cache_CV**c is kept OFF the page layout
-- ✅ DocGen_Job**c.Error_Count**c is on the page layout
-- ✅ DocGen_Job**c.Error_Count**c is granted on DocGen_Admin
-- ❌ DocGen_Job**c.Error_Count**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Job**c.Error_Log**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Job**c.Error_Log**c is granted on DocGen_Admin
-- ❌ DocGen_Job**c.Error_Log**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Job**c.Giant_Query_Config**c is kept OFF the page layout
-- ✅ DocGen_Job**c.Label**c is on the page layout
-- ✅ DocGen_Job**c.Label**c is granted on DocGen_Admin
-- ❌ DocGen_Job**c.Label**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Job**c.Merge_Only**c is on the page layout
-- ✅ DocGen_Job**c.Merge_Only**c is granted on DocGen_Admin
-- ❌ DocGen_Job**c.Merge_Only**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Job**c.Merged_PDF_CV**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Job**c.Merged_PDF_CV**c is granted on DocGen_Admin
-- ✅ DocGen_Job**c.Merged_PDF_CV**c has a description or help text
-- ❌ DocGen_Job**c.Parent_Record_Id**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Job**c.Parent_Record_Id**c is granted on DocGen_Admin
-- ❌ DocGen_Job**c.Parent_Record_Id**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Job**c.Query_Condition**c is on the page layout
-- ✅ DocGen_Job**c.Query_Condition**c is granted on DocGen_Admin
-- ✅ DocGen_Job**c.Query_Condition**c has a description or help text
-- ✅ DocGen_Job**c.Status**c is on the page layout
-- ✅ DocGen_Job**c.Status**c is granted on DocGen_Admin
-- ❌ DocGen_Job**c.Status**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Job**c.Success_Count**c is on the page layout
-- ✅ DocGen_Job**c.Success_Count**c is granted on DocGen_Admin
-- ❌ DocGen_Job**c.Success_Count**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Job**c.Template**c is on the page layout
-- ❌ DocGen_Job**c.Template**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Job**c.Total_Records**c is on the page layout
-- ✅ DocGen_Job**c.Total_Records**c is granted on DocGen_Admin
-- ❌ DocGen_Job**c.Total_Records**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Saved_Query\_\_c has a page layout
-- ✅ DocGen_Saved_Query**c.Description**c is on the page layout
-- ✅ DocGen_Saved_Query**c.Description**c is granted on DocGen_Admin
-- ✅ DocGen_Saved_Query**c.Description**c has a description or help text
-- ✅ DocGen_Saved_Query**c.DocGen_Template**c is on the page layout
-- ✅ DocGen_Saved_Query**c.DocGen_Template**c has a description or help text
-- ✅ DocGen_Saved_Query**c.Query_Condition**c is on the page layout
-- ✅ DocGen_Saved_Query**c.Query_Condition**c is granted on DocGen_Admin
-- ✅ DocGen_Saved_Query**c.Query_Condition**c has a description or help text
-- ❌ DocGen_Settings**c.Company_Name**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Experience_Site_Url**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Email_Brand_Color**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Email_Footer_Text**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Email_Logo_Url**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Email_Message**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Email_Subject**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Expiration_Days**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_OWA_Id**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Prefill_Signer_Email**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Reminder_Enabled**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Reminder_Hours**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Reminder_Schedule**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Settings**c.Signature_Skip_Email_Verification**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit\_\_c has a page layout
-- ✅ DocGen_Signature_Audit**c.Consent_Captured**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Consent_Captured**c is granted on DocGen_Admin
-- ✅ DocGen_Signature_Audit**c.Consent_Captured**c has a description or help text
-- ✅ DocGen_Signature_Audit**c.Contact**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Contact**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.Contact**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.Document_Hash_SHA256**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Document_Hash_SHA256**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.Document_Hash_SHA256**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.Error_Message**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Error_Message**c is granted on DocGen_Admin
-- ✅ DocGen_Signature_Audit**c.Error_Message**c has a description or help text
-- ✅ DocGen_Signature_Audit**c.IP_Address**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.IP_Address**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.IP_Address**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.PIN_Verified_At**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.PIN_Verified_At**c is granted on DocGen_Admin
-- ✅ DocGen_Signature_Audit**c.PIN_Verified_At**c has a description or help text
-- ✅ DocGen_Signature_Audit**c.Signature_Request**c is on the page layout
-- ❌ DocGen_Signature_Audit**c.Signature_Request**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.Signed_Date**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Signed_Date**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.Signed_Date**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.Signer_Email**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Signer_Email**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.Signer_Email**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.Signer_Name**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Signer_Name**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.Signer_Name**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.Signer**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Signer**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.Signer**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.User_Agent**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.User_Agent**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.User_Agent**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Audit**c.Verification_Method**c is on the page layout
-- ✅ DocGen_Signature_Audit**c.Verification_Method**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Audit**c.Verification_Method**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_PDF**e.Request_Id**c has a description or help text
-- ✅ DocGen_Signature_Placement\_\_c has a page layout
-- ✅ DocGen_Signature_Placement**c.Document_Index**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Document_Index**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Document_Index**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Placement_Type**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Placement_Type**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Placement_Type**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Signature_Placement**c.Render_Inline**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Placement\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Signature_Placement**c.Render_Inline**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Render_Inline**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Section_Context**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Section_Context**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Section_Context**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Sequence_Order**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Sequence_Order**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Sequence_Order**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Signature_Request**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Signature_Request**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Signature_Request**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Signed_At**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Signed_At**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Signed_At**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Signed_Value**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Signed_Value**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Signed_Value**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Signer**c is on the page layout
-- ❌ DocGen_Signature_Placement**c.Signer**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Status**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Status**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Status**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Placement**c.Tag_Text**c is on the page layout
-- ✅ DocGen_Signature_Placement**c.Tag_Text**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Placement**c.Tag_Text**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request\_\_c has a page layout
-- ✅ DocGen_Signature_Request**c.Document_Title_Format**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Document_Title_Format**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Document_Title_Format**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Email_Status**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Email_Status**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Email_Status**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Expires_At**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Expires_At**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Expires_At**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Frozen_Document_CV_Id**c is kept OFF the page layout
-- ❌ DocGen_Signature_Request**c.Frozen_Document**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Request\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Signature_Request**c.Frozen_Document**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Frozen_Document**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Prefill_Signer_Email**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Prefill_Signer_Email**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Prefill_Signer_Email**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Related_Record_Id**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Related_Record_Id**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Related_Record_Id**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Render_Data_Snapshot**c is kept OFF the page layout
-- ✅ DocGen_Signature_Request**c.Require_Email_Verification**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Require_Email_Verification**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Require_Email_Verification**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Secure_Token**c is kept OFF the page layout
-- ✅ DocGen_Signature_Request**c.Signature_Data**c is kept OFF the page layout
-- ✅ DocGen_Signature_Request**c.Signer_Email**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Signer_Email**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Signer_Email**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Signer_Name**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Signer_Name**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Signer_Name**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Signing_Order**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Signing_Order**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Signing_Order**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Snapshot_Hash**c is kept OFF the page layout
-- ❌ DocGen_Signature_Request**c.Snapshot_Taken_At**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Request\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Signature_Request**c.Snapshot_Taken_At**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Snapshot_Taken_At**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Source_Document_Id**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Source_Document_Id**c is granted on DocGen_Admin
-- ✅ DocGen_Signature_Request**c.Source_Document_Id**c has a description or help text
-- ✅ DocGen_Signature_Request**c.Status**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Status**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Status**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Template_Ids**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Template_Ids**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Template_Ids**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signature_Request**c.Template**c is on the page layout
-- ✅ DocGen_Signature_Request**c.Template**c is granted on DocGen_Admin
-- ❌ DocGen_Signature_Request**c.Template**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer\_\_c has a page layout
-- ✅ DocGen_Signer**c.Consent_Captured**c is on the page layout
-- ✅ DocGen_Signer**c.Consent_Captured**c is granted on DocGen_Admin
-- ✅ DocGen_Signer**c.Consent_Captured**c has a description or help text
-- ✅ DocGen_Signer**c.Contact**c is on the page layout
-- ✅ DocGen_Signer**c.Contact**c is granted on DocGen_Admin
-- ❌ DocGen_Signer**c.Contact**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer**c.Decline_Reason**c is on the page layout
-- ✅ DocGen_Signer**c.Decline_Reason**c is granted on DocGen_Admin
-- ❌ DocGen_Signer**c.Decline_Reason**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer**c.Field_Data_Json**c is kept OFF the page layout
-- ✅ DocGen_Signer**c.PIN_Attempts**c is on the page layout
-- ✅ DocGen_Signer**c.PIN_Attempts**c is granted on DocGen_Admin
-- ✅ DocGen_Signer**c.PIN_Attempts**c has a description or help text
-- ✅ DocGen_Signer**c.PIN_Expires_At**c is on the page layout
-- ✅ DocGen_Signer**c.PIN_Expires_At**c is granted on DocGen_Admin
-- ✅ DocGen_Signer**c.PIN_Expires_At**c has a description or help text
-- ✅ DocGen_Signer**c.PIN_Hash**c is kept OFF the page layout
-- ✅ DocGen_Signer**c.PIN_Verified_At**c is on the page layout
-- ✅ DocGen_Signer**c.PIN_Verified_At**c is granted on DocGen_Admin
-- ✅ DocGen_Signer**c.PIN_Verified_At**c has a description or help text
-- ✅ DocGen_Signer**c.Reminder_Sent_At**c is on the page layout
-- ✅ DocGen_Signer**c.Reminder_Sent_At**c is granted on DocGen_Admin
-- ❌ DocGen_Signer**c.Reminder_Sent_At**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer**c.Reminders_Sent**c is on the page layout
-- ✅ DocGen_Signer**c.Reminders_Sent**c is granted on DocGen_Admin
-- ❌ DocGen_Signer**c.Reminders_Sent**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer**c.Role_Name**c is on the page layout
-- ✅ DocGen_Signer**c.Role_Name**c is granted on DocGen_Admin
-- ✅ DocGen_Signer**c.Role_Name**c has a description or help text
-- ✅ DocGen_Signer**c.Secure_Token**c is kept OFF the page layout
-- ✅ DocGen_Signer**c.Signature_Data**c is on the page layout
-- ✅ DocGen_Signer**c.Signature_Data**c is granted on DocGen_Admin
-- ✅ DocGen_Signer**c.Signature_Data**c has a description or help text
-- ✅ DocGen_Signer**c.Signature_Request**c is on the page layout
-- ❌ DocGen_Signer**c.Signature_Request**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer**c.Signer_Email**c is on the page layout
-- ✅ DocGen_Signer**c.Signer_Email**c is granted on DocGen_Admin
-- ❌ DocGen_Signer**c.Signer_Email**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer**c.Signer_Name**c is on the page layout
-- ✅ DocGen_Signer**c.Signer_Name**c is granted on DocGen_Admin
-- ❌ DocGen_Signer**c.Signer_Name**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer**c.Sort_Order**c is on the page layout
-- ✅ DocGen_Signer**c.Sort_Order**c is granted on DocGen_Admin
-- ❌ DocGen_Signer**c.Sort_Order**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Signer**c.Status**c is on the page layout
-- ✅ DocGen_Signer**c.Status**c is granted on DocGen_Admin
-- ❌ DocGen_Signer**c.Status**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template_Version\_\_c has a page layout
-- ✅ DocGen_Template_Version**c.Base_Object_API**c is on the page layout
-- ✅ DocGen_Template_Version**c.Base_Object_API**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Base_Object_API**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template_Version**c.Category**c is on the page layout
-- ✅ DocGen_Template_Version**c.Category**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Category**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template_Version**c.Content_Version_Id**c is on the page layout
-- ✅ DocGen_Template_Version**c.Content_Version_Id**c is granted on DocGen_Admin
-- ✅ DocGen_Template_Version**c.Content_Version_Id**c has a description or help text
-- ❌ DocGen_Template_Version**c.Custom_Margins**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Custom_Margins**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Custom_Margins**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template_Version**c.Description**c is on the page layout
-- ✅ DocGen_Template_Version**c.Description**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Description**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Template_Version**c.Document_Title_Format**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Document_Title_Format**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Document_Title_Format**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Template_Version**c.Footer_Html**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Footer_Html**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Footer_Html**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Template_Version**c.Header_Html**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Header_Html**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Header_Html**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template_Version**c.Is_Active**c is on the page layout
-- ✅ DocGen_Template_Version**c.Is_Active**c is granted on DocGen_Admin
-- ✅ DocGen_Template_Version**c.Is_Active**c has a description or help text
-- ❌ DocGen_Template_Version**c.Output_Format**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Output_Format**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Output_Format**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Template_Version**c.Page_Margins**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Page_Margins**c is granted on DocGen_Admin
-- ✅ DocGen_Template_Version**c.Page_Margins**c has a description or help text
-- ❌ DocGen_Template_Version**c.Page_Orientation**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Page_Orientation**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Page_Orientation**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Template_Version**c.Page_Size**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Page_Size**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Page_Size**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template_Version**c.Pre_Decomposition_Status**c is on the page layout
-- ✅ DocGen_Template_Version**c.Pre_Decomposition_Status**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Pre_Decomposition_Status**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template_Version**c.Query_Config**c is on the page layout
-- ✅ DocGen_Template_Version**c.Query_Config**c is granted on DocGen_Admin
-- ✅ DocGen_Template_Version**c.Query_Config**c has a description or help text
-- ✅ DocGen_Template_Version**c.Template**c is on the page layout
-- ✅ DocGen_Template_Version**c.Template**c has a description or help text
-- ✅ DocGen_Template_Version**c.Type**c is on the page layout
-- ✅ DocGen_Template_Version**c.Type**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Type**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ❌ DocGen_Template_Version**c.Watermark_Image_CV_Id**c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version\_\_c-\*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
-- ✅ DocGen_Template_Version**c.Watermark_Image_CV_Id**c is granted on DocGen_Admin
-- ❌ DocGen_Template_Version**c.Watermark_Image_CV_Id**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template\_\_c has a page layout
-- ✅ DocGen_Template**c.API_Name**c is on the page layout
-- ✅ DocGen_Template**c.API_Name**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.API_Name**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Base_Object_API**c is on the page layout
-- ✅ DocGen_Template**c.Base_Object_API**c has a description or help text
-- ✅ DocGen_Template**c.Category**c is on the page layout
-- ✅ DocGen_Template**c.Category**c is granted on DocGen_Admin
-- ✅ DocGen_Template**c.Category**c has a description or help text
-- ✅ DocGen_Template**c.Custom_Margins**c is on the page layout
-- ✅ DocGen_Template**c.Custom_Margins**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Custom_Margins**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Default_Email_Message**c is on the page layout
-- ✅ DocGen_Template**c.Default_Email_Message**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Default_Email_Message**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Description**c is on the page layout
-- ✅ DocGen_Template**c.Description**c is granted on DocGen_Admin
-- ✅ DocGen_Template**c.Description**c has a description or help text
-- ✅ DocGen_Template**c.Document_Title_Format**c is on the page layout
-- ✅ DocGen_Template**c.Document_Title_Format**c is granted on DocGen_Admin
-- ✅ DocGen_Template**c.Document_Title_Format**c has a description or help text
-- ✅ DocGen_Template**c.Footer_Html**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Footer_Html**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Form_Fields_Config**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Form_Fields_Config**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Header_Html**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Header_Html**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Is_Active**c is on the page layout
-- ✅ DocGen_Template**c.Is_Active**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Is_Active**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Is_Default**c is on the page layout
-- ✅ DocGen_Template**c.Is_Default**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Is_Default**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Lock_Output_Format**c is on the page layout
-- ✅ DocGen_Template**c.Lock_Output_Format**c is granted on DocGen_Admin
-- ✅ DocGen_Template**c.Lock_Output_Format**c has a description or help text
-- ✅ DocGen_Template**c.Output_Format**c is on the page layout
-- ✅ DocGen_Template**c.Output_Format**c has a description or help text
-- ✅ DocGen_Template**c.Page_Margins**c is on the page layout
-- ✅ DocGen_Template**c.Page_Margins**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Page_Margins**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Page_Orientation**c is on the page layout
-- ✅ DocGen_Template**c.Page_Orientation**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Page_Orientation**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Page_Size**c is on the page layout
-- ✅ DocGen_Template**c.Page_Size**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Page_Size**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Prefill_Signer_Email**c is on the page layout
-- ✅ DocGen_Template**c.Prefill_Signer_Email**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Prefill_Signer_Email**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Query_Config**c is granted on DocGen_Admin
-- ✅ DocGen_Template**c.Query_Config**c has a description or help text
-- ✅ DocGen_Template**c.Record_Filter**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Record_Filter**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Required_Permission_Sets**c is on the page layout
-- ✅ DocGen_Template**c.Required_Permission_Sets**c is granted on DocGen_Admin
-- ✅ DocGen_Template**c.Required_Permission_Sets**c has a description or help text
-- ✅ DocGen_Template**c.Signer_Verification**c is on the page layout
-- ✅ DocGen_Template**c.Signer_Verification**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Signer_Verification**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Sort_Order**c is on the page layout
-- ✅ DocGen_Template**c.Sort_Order**c is granted on DocGen_Admin
-- ✅ DocGen_Template**c.Sort_Order**c has a description or help text
-- ✅ DocGen_Template**c.Specific_Record_Ids**c is granted on DocGen_Admin
-- ❌ DocGen_Template**c.Specific_Record_Ids**c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
-- ✅ DocGen_Template**c.Test_Record_Id**c is on the page layout
-- ✅ DocGen_Template**c.Test_Record_Id**c is granted on DocGen_Admin
-- ✅ DocGen_Template**c.Test_Record_Id**c has a description or help text
-- ✅ DocGen_Template**c.Type**c is on the page layout
-- ✅ DocGen_Template**c.Type**c has a description or help text
-- ✅ Product2.Product_Image\_\_c has a description or help text
-- ✅ docGenAdmin is exposed and declares at least one target — lightning**AppPage, lightning**HomePage, lightning\_\_Tab
-- ✅ docGenAdmin (app page) is reachable from a tab
-- ✅ docGenAdminGuide is exposed and declares at least one target — lightning**AppPage, lightning**RecordPage, lightning**HomePage, lightning**Tab
-- ✅ docGenAdminGuide (app page) is reachable from a tab
-- ✅ docGenAuthenticator is exposed and declares at least one target — lightningCommunity**Page, lightning**AppPage
-- ❌ docGenAuthenticator (app page) is reachable from a tab — no tab references it — reachable only via a hand-built Lightning page
-- ✅ docGenBulkRunner is exposed and declares at least one target — lightning**AppPage, lightning**HomePage, lightning\_\_Tab
-- ✅ docGenBulkRunner (app page) is reachable from a tab
-- ✅ docGenButton is exposed and declares at least one target — lightning\_\_RecordAction
-- ✅ docGenCommandHub is exposed and declares at least one target — lightning**AppPage, lightning**HomePage, lightning\_\_Tab
-- ✅ docGenCommandHub (app page) is reachable from a tab
-- ✅ docGenQueryBuilder is exposed and declares at least one target — lightning**AppPage, lightning**RecordPage, lightning\_\_HomePage
-- ❌ docGenQueryBuilder (app page) is reachable from a tab — no tab references it — reachable only via a hand-built Lightning page
-- ✅ docGenRunner is exposed and declares at least one target — lightning**RecordPage, lightning**AppPage, lightning**FlowScreen, lightning**UtilityBar, lightningCommunity**Page, lightningCommunity**Default
-- ❌ docGenRunner (app page) is reachable from a tab — no tab references it — reachable only via a hand-built Lightning page
-- ✅ docGenSetupWizard is exposed and declares at least one target — lightning**AppPage, lightning**HomePage, lightning**RecordPage, lightning**Tab
-- ✅ docGenSetupWizard (app page) is reachable from a tab
-- ✅ docGenSignatureSender is exposed and declares at least one target — lightning**RecordAction, lightning**RecordPage
-- ✅ docGenTreeBuilder is exposed and declares at least one target — lightning**AppPage, lightning**RecordPage, lightning\_\_HomePage
-- ❌ docGenTreeBuilder (app page) is reachable from a tab — no tab references it — reachable only via a hand-built Lightning page
+- ✅ probe "fields+built-ins" stays under the 20,000-char anonymous Apex limit — 5494 chars
+- ✅ {Name} resolves a plain field — actual: Acme Corp
+- ✅ {Account.Name} resolves a parent relationship field — actual: Parent Co
+- ✅ {Account.Owner.Name} resolves two hops up — actual: Deep Owner
+- ✅ {name} resolves case-insensitively — actual: Acme Corp
+- ✅ {!Name} (Salesforce-style prefix) resolves like {Name} — actual: Acme Corp
+- ✅ { Name } tolerates whitespace inside the braces — actual: Acme Corp
+- ✅ {Missing} (no such key) renders empty, not the raw tag — actual: <empty>
+- ✅ {NullF} (key present, value null) renders empty — actual: <empty>
+- ✅ {Blank} (empty-string value) renders empty — actual: <empty>
+- ✅ {Account.Missing} (missing subfield) renders empty — actual: <empty>
+- ✅ {Nope.Sub} (missing relationship) renders empty, no throw — actual: <empty>
+- ✅ {Nope.A.B.C} (deep missing path) renders empty, no throw — actual: <empty>
+- ✅ Text around an unresolved tag survives intact — actual: before after
+- ✅ Two tags in one text node both resolve — actual: Acme Corp/Won
+- ✅ {Today:yyyy-MM-dd} equals the org calendar date — actual: 2026-07-25
+- ✅ {Today:MMMM d, yyyy} formats the date — actual: July 25, 2026
+- ✅ {Today} renders a date containing the current year — actual: 2026-07-25 07:00:00
+- ✅ {Now:yyyy-MM-dd HH:mm} formats a timestamp — actual: 2026-07-25 08:39
+- ✅ {RunningUser.Name} resolves the executing user — actual: User User
+- ✅ {RunningUser.Email} resolves the executing user email — actual: dave@portwood.dev
+- ✅ {runninguser.name} resolves case-insensitively — actual: User User
+- ✅ {RunningUser.ProfileId} (outside the allowlist) renders empty — actual: <empty>
+- ✅ {PageNumber} survives processXml verbatim for the PDF counter layer — actual: {PageNumber}
+- ✅ {TotalPages} survives processXml verbatim — actual: {TotalPages}
+- ✅ {pagenumber} is preserved case-insensitively — actual: {pagenumber}
+- ✅ "Page {PageNumber} of {TotalPages}" passes through untouched — actual: Page {PageNumber} of {TotalPages}
+- ✅ probe "formats" stays under the 20,000-char anonymous Apex limit — 5167 chars
+- ✅ {Amt:currency} formats US dollars with separators — actual: $75,000.50
+- ✅ {Amt:currency:EUR} uses the euro symbol — actual: €75,000.50
+- ✅ {Amt:currency:EUR:de_DE} uses German separators — actual: 75.000,50 €
+- ✅ {Amt:currency:JPY} rounds to zero decimals — actual: ¥75,001
+- ✅ {Amt:currency:auto} falls back to $ when no ISO is on the record — actual: $75,000.50
+- ✅ {Rate:percent} renders a percent sign — actual: 15.5%
+- ✅ {Qty:number} groups thousands — actual: 1,234,567
+- ✅ {Qty:#,##0} honours a custom numeric pattern — actual: 1,234,567
+- ✅ {Amt:0.00} honours a two-decimal pattern — actual: 75,000.50
+- ✅ {Text:currency} on non-numeric text degrades to the raw value — actual: not-a-number
+- ✅ {Active:checkbox} renders [X] when true — actual: [X]
+- ✅ {Inactive:checkbox} renders [ ] when false — actual: [ ]
+- ✅ {D:MM/dd/yyyy} formats a DateTime — actual: 04/08/2026
+- ✅ {D:MMMM d, yyyy} formats a DateTime long-form — actual: April 8, 2026
+- ✅ {D:HH:mm} formats the time component — actual: 13:45
+- ✅ {D:date:de_DE} uses the German date pattern — actual: 08.04.2026
+- ✅ {D:date} renders a locale date, not an ISO timestamp — actual: 04/08/2026
+- ✅ {DateStr:MM/dd/yyyy} re-types a "yyyy-MM-dd" string and formats it — actual: 04/08/2026
+- ✅ {DateStr} on a date-string shows no 00:00:00 time tail — actual: 04/08/2026
+- ✅ {DateStr} keeps the calendar day (no timezone shift) — actual: 04/08/2026
+- ✅ {IsoStr:yyyy} re-types an ISO datetime string — actual: 2026
+- ✅ {Stage:label} falls back to the raw value with no label map — actual: Won
+- ✅ {Name:upper} (unsupported suffix) is ignored, not printed — actual: Acme Corp
+- ✅ probe "sections+loops" stays under the 20,000-char anonymous Apex limit — 8152 chars
+- ✅ {#Items}...{/Items} repeats the body once per row — actual: [Item A][Item B][Item C]
+- ✅ {#Items} over an empty list renders nothing and leaks no tag — actual: <empty>
+- ✅ {#Empty}...{:else}... renders the else branch for 0 rows — actual: none
+- ✅ {#Rel} iterates a {totalSize, records} relationship wrapper — actual: [W1][W2]
+- ✅ {#Rel} over non-record entries renders nothing rather than throwing — actual: <empty>
+- ✅ {#Rows} over 60 rows emits every row (crosses the heap-check boundary) — actual: 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
+- ✅ {#Rows} over 60 rows includes the last row — actual: 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
+- ✅ Nested {#Orders}{#Lines} loops expand inner rows per outer row — actual: [O1(L1a)(L1b)][O2(L2a)]
+- ✅ A parent field inside {#Items} is out of scope (renders empty) — actual: [][][]
+- ✅ {index} inside a plain {#Items} loop leaks no literal tag — actual: [][][]
+- ✅ {count} inside a plain {#Items} loop leaks no literal tag — actual: [][][]
+- ✅ {#Flag} shows the body when the field is true — actual: Yes
+- ✅ {#Flag} hides the body when the field is false — actual: <empty>
+- ✅ {#Field} treats a non-blank string as truthy — actual: Y
+- ✅ {#Field} treats an empty string as falsy — actual: <empty>
+- ✅ {#Field} treats visually-blank rich text (<p><br></p>) as falsy — actual: <empty>
+- ✅ {^Field} shows for visually-blank rich text (symmetric with {#}) — actual: N
+- ✅ {^Flag} shows the body when the field is false — actual: No
+- ✅ {^Flag} hides the body when the field is true — actual: <empty>
+- ✅ {#Flag}Y{:else}N{/Flag} takes the true branch — actual: Y
+- ✅ {#Flag}Y{:else}N{/Flag} takes the else branch — actual: N
+- ✅ {^Flag}Y{:else}N{/Flag} takes the else branch when truthy — actual: N
+- ✅ {#Parent}{Field}{/Parent} scopes into a related map — actual: Parent Co
+- ✅ {#IF Amount > 10000} evaluates a numeric comparison — actual: Big
+- ✅ {#IF Amount &gt; 10000} works with the OOXML-escaped operator — actual: Big
+- ✅ {#IF Amount < 100} is false for a large value — actual: <empty>
+- ✅ {#IF Stage = 'Won'} matches a single-quoted literal — actual: C
+- ✅ {#IF Stage = "Won"} matches a double-quoted literal — actual: C
+- ✅ {#IF Stage != 'Lost'} evaluates inequality — actual: A
+- ✅ {#IF a AND b} evaluates a conjunction — actual: B
+- ✅ {#IF a OR b} evaluates a disjunction — actual: B
+- ✅ {#IF NOT(...)} negates a comparison — actual: B
+- ✅ {#IF ...}{:else}... falls to the else branch on a missing field — actual: Y
+- ✅ Nested {#IF} blocks pair with the right {/IF} — actual: D
+- ✅ A conditional inside a loop evaluates per row — actual: [Item A][Item B]
+- ✅ A loop inside <w:tr> clones the whole table row per record — actual: <w:tbl><w:tr><w:tc><w:t>Item A</w:t></w:tc></w:tr><w:tr><w:tc><w:t>Item B</w:t></w:tc></w:tr><w:tr><w:tc><w:t>Item C</w:t></w:tc></w:tr></w:tbl>
+- ✅ A loop inside <w:tr> keeps every row value — actual: <w:tbl><w:tr><w:tc><w:t>Item A</w:t></w:tc></w:tr><w:tr><w:tc><w:t>Item B</w:t></w:tc></w:tr><w:tr><w:tc><w:t>Item C</w:t></w:tc></w:tr></w:tbl>
+- ✅ probe "aggregates+media" stays under the 20,000-char anonymous Apex limit — 6193 chars
+- ✅ {SUM:Items.Amount} totals a child collection — actual: 350
+- ✅ {COUNT:Items} counts a child collection — actual: 3
+- ✅ {AVG:Items.Amount} averages a child collection — actual: 116.67
+- ✅ {MIN:Items.Amount} returns the smallest value — actual: 50
+- ✅ {MAX:Items.Amount} returns the largest value — actual: 200
+- ✅ {sum:Items.Amount} accepts a lower-case function name — actual: 350
+- ✅ {SUM:Items.Amount:currency} applies a format suffix to the total — actual: $350.00
+- ✅ {COUNT:Empty} over an empty collection renders 0 — actual: 0
+- ✅ {SUM:Empty.Amount} over an empty collection renders 0 — actual: 0
+- ✅ {COUNT:Nope} on a missing relationship renders 0, no throw — actual: 0
+- ✅ {SUM:Items.Nope} on a missing field renders 0, no throw — actual: 0
+- ✅ {Nope:bar} (colon tag, unknown function) renders empty, not an error — actual: <empty>
+- ✅ {\*Field} defaults to a code128 barcode marker — actual: ##BARCODE:code128::ABC-123&amp;X##
+- ✅ {\*Field:qr} emits a QR marker — actual: ##BARCODE:qr::ABC-123&amp;X##
+- ✅ {\*Field:qr:200} carries the size through — actual: ##BARCODE:qr:200:ABC-123&amp;X##
+- ✅ {\*Field:code128:300x80} carries a WxH size through — actual: ##BARCODE:code128:300x80:ABC-123&amp;X##
+- ✅ {\*Field:code39} emits a code39 marker — actual: ##BARCODE:code39::ABC-123&amp;X##
+- ✅ {\*Field} XML-escapes the barcode value — actual: ##BARCODE:qr::ABC-123&amp;X##
+- ✅ {\*NullF:qr} on a null value emits nothing — actual: <empty>
+- ✅ {%Field} on a null image field emits nothing (no broken markup) — actual: <empty>
+- ✅ {%Field:200x100} on a null image field emits nothing — actual: <empty>
+- ✅ {%Image:1} with no attached image emits nothing — actual: <empty>
+- ✅ {%asset:key} for an unknown asset renders a visible placeholder — actual: [missing asset: dgqa_no_such_asset]
+- ✅ {%asset:key} inside src="" emits a URL, not a nested <img> — actual: <img src="">
+- ✅ probe "edge cases" stays under the 20,000-char anonymous Apex limit — 7195 chars
+- ✅ A value containing "<" is XML-escaped — actual: R&amp;D &lt;Widgets&gt; &quot;Q1&quot; it&apos;s
+- ✅ A value containing "<" leaves no raw markup in the output — actual: R&amp;D &lt;Widgets&gt; &quot;Q1&quot; it&apos;s
+- ✅ A value containing "&" is XML-escaped — actual: R&amp;D &lt;Widgets&gt; &quot;Q1&quot; it&apos;s
+- ✅ A value containing quotes is XML-escaped — actual: R&amp;D &lt;Widgets&gt; &quot;Q1&quot; it&apos;s
+- ✅ A tag inside href="" escapes the query-string ampersand — actual: <a href="https://ex.test/a?b=1&amp;c=2">x</a>
+- ✅ A tag inside href="" keeps the attribute well-formed — actual: <a href="https://ex.test/a?b=1&amp;c=2">x</a>
+- ✅ A unicode + emoji value round-trips unchanged — actual: Zürich 東京 😀
+- ✅ A 4,000-character value is not truncated — actual: 0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789<T
+- ✅ A multi-line value becomes Word line breaks, not literal newlines — actual: <w:r><w:t>Line1</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">Line2</w:t></w:r>
+- ✅ A multi-line value keeps both lines — actual: <w:r><w:t>Line1</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">Line2</w:t></w:r>
+- ✅ A field value that looks like a merge tag is not re-parsed — actual: {Secret}
+- ✅ A field value that looks like a merge tag renders literally — actual: {Secret}
+- ✅ {unclosed (no closing brace) throws a named error — actual: THREW portwoodglobal.DocGenException: Malformed merge tag: missing closing "}" near "{unclosed b". Check for an unclosed tag in the template.
+- ✅ {#Items} with no {/Items} throws a named error — actual: THREW portwoodglobal.DocGenException: Malformed loop tag: missing closing "{/Items}" for "{#Items}" opened near "{#Items}{Name}".
+- ✅ {^Flag} with no {/Flag} throws a named error — actual: THREW portwoodglobal.DocGenException: Malformed inverse tag: missing closing "{/Active}" for "{^Active}" opened near "{^Active}x".
+- ✅ A malformed-loop error names the offending tag — actual: THREW portwoodglobal.DocGenException: Malformed loop tag: missing closing "{/Items}" for "{#Items}" opened near "{#Items}{Name}".
+- ✅ {} (empty tag) renders nothing and does not throw — actual: ab
+- ✅ {/Orphan} with no opener is emitted literally so the author sees the typo — actual: a{/Orphan}b
+- ✅ {{nested}} resolves the inner tag to empty and passes the trailing brace through — actual: }
+- ✅ {{nested}} does not print the inner tag name — actual: }
+- ✅ A tag split across <w:r> runs resolves after run de-fragmentation — actual: <w:r><w:t>Acme Corp</w:t></w:r><w:r><w:t></w:t></w:r>
+- ✅ A tag with a format suffix split across runs resolves — actual: <w:r><w:t>$75,000.50</w:t></w:r><w:r><w:t></w:t></w:r>
+- ✅ A split tag does NOT resolve without de-fragmentation (documents the dependency) — actual: <w:r><w:t></w:t></w:r>
+- ✅ {RepeatHeader} injects <w:tblHeader/> into its table row — actual: <w:tbl><w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:p><w:r><w:t>Head</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+- ✅ {RepeatHeader} text is stripped from the rendered row — actual: <w:tbl><w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:p><w:r><w:t>Head</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+- ✅ {RepeatHeader} never renders as literal text even without a table row — actual: xy
+- ✅ {@Signature_X} is stripped during normal generation — actual: ab
+- ✅ {@Signature_X} is preserved when preserveSignatureTags is on — actual: {@Signature_Buyer}
+- ✅ {?key} is preserved until the finalize re-render — actual: {?title}
+- ✅ {?key} resolves from \_\_formFields at finalize — actual: CTO
+- ✅ {?key\|fallback} uses the fallback when unanswered — actual: N/A
+- ✅ {?key} XML-escapes the collected value — actual: &lt;b&gt;&amp;
+- ✅ probe "chart buckets (in-memory)" stays under the 20,000-char anonymous Apex limit — 6157 chars
+- ✅ {#ChartBucket:rel:field} buckets by value, sorted desc by count — actual: [Bus:3][Car:2][Ash:1][Bike:1][:1]
+- ✅ {#ChartBucket} breaks count ties alphabetically by key — actual: Bus,Car,Ash,Bike,,
+- ✅ {percent} is the share of all rows — actual: [37.5][25.0][12.5][12.5][12.5]
+- ✅ {max_percent} is 100 for the largest bucket — actual: [100.0][66.7][33.3][33.3][33.3]
+- ✅ {max_percent} scales the runner-up against the largest bucket — actual: [100.0][66.7][33.3][33.3][33.3]
+- ✅ {index} is a 1-based bucket counter — actual: 1,2,3,4,5,
+- ✅ {color} cycles the default palette starting at #3b82f6 — actual: [#3b82f6][#10b981][#f59e0b][#ef4444][#8b5cf6]
+- ✅ {color_hex} emits raw hex with no leading # (for Word w:shd) — actual: [3b82f6][10b981][f59e0b][ef4444][8b5cf6]
+- ✅ {key_label} labels a null/blank bucket "Not Specified" — actual: [Bus][Car][Ash][Bike][Not Specified]
+- ✅ {key} for a null value is empty, not the "**null**" sentinel — actual: [Bus][Car][Ash][Bike][]
+- ✅ colors= overrides the palette, cycling by row index — actual: [#111111][#222222][#111111][#222222][#111111]
+- ✅ split=; splits multi-select values per respondent — actual: [Bus:2][Car:2][Bike:1]
+- ✅ split=; counts every selection, not just the first — actual: [Bus:2][Car:2][Bike:1]
+- ✅ split=; produces no combined "Bus;Car" bucket — actual: [Bus][Car][Bike]
+- ✅ colors= and split= compose in one tag — actual: [Bus#111111][Car#111111][Bike#111111]
+- ✅ {#ChartBucket} over an empty collection renders nothing, leaks no tag — actual: xy
+- ✅ {#ChartBucket} nested inside a loop resolves against the iteration item — actual: [Inner]
+- ✅ {#ChartBucket} on an unknown relationship renders nothing, no throw — actual: xy
+- ✅ {#ChartBucket} on an unknown field buckets everything as blank, no throw — actual: [:8]
+- ✅ {#ChartBucket:onlyOneArg} fails loudly instead of rendering garbage — actual: THREW portwoodglobal.DocGenException: Malformed loop tag: missing closing "{/ChartBucket:Answers}" for "{#ChartBucket:Answers}" opened near "{#ChartBucket:Answers}[{key}]{/ChartBuck".
+- ✅ Two {#ChartBucket} tags on one page each get their own bucket list — actual: [Bus][Car][Ash][Bike][]&#124;[Bus][Bus;Car][Car;Bike]
+- ✅ probe "chart buckets (SOQL modifiers)" stays under the 20,000-char anonymous Apex limit — 5068 chars
+- ✅ {#ChartBucket} falls back to a SOQL aggregate when the relationship is not pre-loaded — actual: [Bus:3][Car:1][Bike:1]
+- ✅ The SOQL fallback returns every bucket, not just the largest — actual: [Bus:3][Car:1][Bike:1]
+- ✅ where= filters the aggregate server-side — actual: [Bus:2][Bike:1]
+- ✅ where= excludes non-matching rows entirely — actual: [Bus][Bike]
+- ✅ where= with an injection attempt renders nothing rather than running — actual: <empty>
+- ✅ groupBy= builds a cross-tab with a {#cols} sub-list — actual: [Bus(Eng:2)(Sales:1)(Total:3)][Bike(Eng:1)(Sales:0)(Total:1)][Car(Eng:0)(Sales:1)(Total:1)]
+- ✅ groupBy= counts the right cell (Bus x Eng = 2) — actual: [Bus(Eng:2)(Sales:1)(Total:3)][Bike(Eng:1)(Sales:0)(Total:1)][Car(Eng:0)(Sales:1)(Total:1)]
+- ✅ groupBy= appends a synthetic Total column last — actual: [Bus(Eng:2)(Sales:1)(Total:3)][Bike(Eng:1)(Sales:0)(Total:1)][Car(Eng:0)(Sales:1)(Total:1)]
+- ✅ colSort= orders the pivot columns as the author named them — actual: [(Sales)(Eng)(Total)][(Sales)(Eng)(Total)][(Sales)(Eng)(Total)]
+- ✅ {#ChartBucket} on a field the child object lacks renders nothing, no throw — actual: xy
+- ⊘ HTML-template escaping ({Field} newline → <br/>) behaves correctly — processXmlForTest(xml, data, templateType) is @TestVisible private and unreachable from anonymous Apex, so every check here runs the Word branch; HTML/Excel/PowerPoint escaping needs a unit test or a
+- ⊘ {PageNumber}/{TotalPages} render real page numbers in the PDF — processXml only preserves the tokens; the @page counter substitution happens in wrapHtmlForPdf and can only be verified on a rendered PDF (output-formats suite)
+- ⊘ {%ImageField} with a real ContentVersion renders an embedded image — needs an uploaded ContentVersion fixture and a real DOCX/PDF render; covered by scripts/e2e-09-images.apex, not by this parser-level probe
+- ⊘ The giant-query parent path resolves the same tag surface — DocGenGiantQueryAssembler.resolveParentMergeTags / resolveGiantChartBuckets do not go through processXmlForTest and need >2000 child rows to exercise
