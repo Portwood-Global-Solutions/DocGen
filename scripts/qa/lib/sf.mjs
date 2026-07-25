@@ -73,8 +73,12 @@ export function debugMap(log) {
     return map;
 }
 
-export async function soql(org, query) {
-    const raw = await sf(['data', 'query', '--target-org', org, '-q', query, '--json'], { retries: 2 });
+export async function soql(org, query, { tooling = false } = {}) {
+    const args = ['data', 'query', '--target-org', org, '-q', query, '--json'];
+    if (tooling) {
+        args.push('--use-tooling-api');
+    }
+    const raw = await sf(args, { retries: 2 });
     try {
         return JSON.parse(raw).result.records || [];
     } catch (e) {
@@ -89,23 +93,83 @@ export async function soql(org, query) {
  * --class-names flag builds a command line the CLI rejects outright — 43 flags
  * was enough — and it is what the release checklist runs anyway.
  */
-export async function runApexTests(org, classNames, { timeout = 3600000 } = {}) {
-    const args = ['apex', 'run', 'test', '--target-org', org, '--wait', '60', '--result-format', 'json'];
+export async function runApexTests(org, classNames, { timeout = 3600000, coverage = false } = {}) {
+    // human, not json, when coverage is on: the JSON payload for a full
+    // RunLocalTests WITH --code-coverage is big enough to exhaust the CLI's own
+    // node heap ("Last few GCs ... JavaScript heap out of memory"). The numbers
+    // are read back from the Tooling API instead — see apexCoverage().
+    const format = coverage ? 'human' : 'json';
+    const args = ['apex', 'run', 'test', '--target-org', org, '--wait', '60', '--result-format', format];
+    if (coverage) {
+        args.push('--code-coverage');
+    }
     if (classNames && classNames.length && classNames.length <= 20) {
         for (const c of classNames) args.push('--class-names', c);
     } else {
         args.push('--test-level', 'RunLocalTests');
     }
     const raw = await sf(args, { timeout });
+    if (format === 'human') {
+        return { summary: null, tests: [], coverage: [], human: raw };
+    }
     const jsonStart = raw.indexOf('{');
     if (jsonStart === -1) return { summary: null, tests: [] };
     try {
         const parsed = JSON.parse(raw.slice(jsonStart));
         const r = parsed.result || parsed;
-        return { summary: r.summary || null, tests: r.tests || [] };
+        return {
+            summary: r.summary || null,
+            tests: r.tests || [],
+            // Real per-class coverage beats guessing from test-class NAMES, which
+            // reports a class covered by a shared test file (DocGenMiscTests) as
+            // untested. See apex-unit.mjs.
+            coverage: r.coverage && r.coverage.coverage ? r.coverage.coverage : []
+        };
     } catch (e) {
         return { summary: null, tests: [], raw };
     }
 }
 
 export { sf };
+
+/**
+ * Per-class coverage, read from the Tooling API after a run.
+ *
+ * ApexCodeCoverageAggregate is populated by any test run that collected
+ * coverage, and the payload is a few hundred rows rather than the megabytes the
+ * CLI's own --code-coverage JSON produces.
+ */
+export async function apexCoverage(org) {
+    const rows = await soql(
+        org,
+        'SELECT ApexClassOrTrigger.Name, NumLinesCovered, NumLinesUncovered FROM ApexCodeCoverageAggregate',
+        { tooling: true }
+    );
+    return rows
+        .map((r) => {
+            const total = (r.NumLinesCovered || 0) + (r.NumLinesUncovered || 0);
+            return {
+                name: r.ApexClassOrTrigger ? r.ApexClassOrTrigger.Name : null,
+                covered: r.NumLinesCovered || 0,
+                total,
+                percent: total ? Math.round((r.NumLinesCovered / total) * 100) : null
+            };
+        })
+        .filter((r) => r.name);
+}
+
+/** Outcome + per-class failures from a human-format test run. */
+export function parseHumanTestRun(text) {
+    const out = { outcome: null, ran: null, passRate: null, failures: [] };
+    const m = /Outcome\s+(\w+)/.exec(text || '');
+    if (m) out.outcome = m[1];
+    const r = /Tests Ran\s+(\d+)/.exec(text || '');
+    if (r) out.ran = Number(r[1]);
+    const p = /Pass Rate\s+([\d.]+)%/.exec(text || '');
+    if (p) out.passRate = Number(p[1]);
+    for (const line of String(text || '').split('\n')) {
+        const f = /^\s*(\S+\.\S+)\s+Fail\s+(.*)$/.exec(line);
+        if (f) out.failures.push({ test: f[1], message: f[2].trim().slice(0, 200) });
+    }
+    return out;
+}

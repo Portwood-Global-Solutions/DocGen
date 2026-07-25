@@ -91,3 +91,28 @@ bakes in what it can; the rest is on you.
    toolbar rewrite once measured perfectly and was completely broken.
 6. **Prove a control is reachable**, not just present, with `HIT_TEST` —
    `opacity: 0` does not remove an element from hit-testing.
+
+## Measure, do not infer
+
+Four of this harness's own early findings were bugs in the harness, not the
+product. That is the failure mode to guard against hardest, because a report
+that cries wolf gets switched off:
+
+- Two "blockers" in the first full run were a namespace matcher that prefixed
+  `Object.Field` once instead of both halves, and a CLI command line too long to
+  execute.
+- **32 classes were reported as "untested surface"** by a check that asked
+  whether a \*Test class NAME contained the production class name. Classes
+  covered by shared test files like `DocGenMiscTests` read as untested. That was
+  a guess presented as a measurement; coverage now comes from
+  `ApexCodeCoverageAggregate`.
+- A delete check failed the moment a confirmation dialog was added, because
+  detecting a dialog is not the same as answering one.
+
+So: read the number from the system that owns it. If a check cannot measure the
+thing it claims to measure, make it a `skip` with the reason — never a pass, and
+never a proxy dressed up as the real thing.
+
+Two suites also disagreed with each other about the same field, which is worse
+than either being wrong. Shared policy lives in `lib/field-policy.mjs` for
+exactly that reason.
