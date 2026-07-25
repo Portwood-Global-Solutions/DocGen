@@ -1778,6 +1778,34 @@
 
                         <div class="dg-designer-layout">
                             <div class="dg-designer-canvas-col">
+                                <!-- The insert-table grid picker is rendered HERE, not inside
+                                 the format bar. .dg-format-bar is a sticky element with a
+                                 z-index, which makes it a STACKING CONTEXT — a popover
+                                 inside it is capped at the bar's z-index and was painted
+                                 over by the chrome row above (z-40), so the grid's top
+                                 rows could not be clicked and a 1-column table was
+                                 impossible to pick. It is position: fixed and placed from
+                                 its anchor by _positionFloating, so where it lives in the
+                                 DOM affects only stacking, never position. -->
+                                <template if:true={tableGrid}>
+                                    <div class="dg-fmt-menu dg-grid-menu" role="menu">
+                                        <div class="dg-grid">
+                                            <template for:each={tableGridCells} for:item="g">
+                                                <button
+                                                    key={g.key}
+                                                    class={g.cls}
+                                                    data-r={g.r}
+                                                    data-c={g.c}
+                                                    onmouseenter={handleTableGridHover}
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleTableGridPick}
+                                                    title={tableGridLabel}
+                                                ></button>
+                                            </template>
+                                        </div>
+                                        <div class="dg-grid-label">{tableGridLabel}</div>
+                                    </div>
+                                </template>
                                 <template if:true={pillMenu}>
                                     <div class="dg-pill-menu" style={pillMenu.posStyle} role="menu">
                                         <div class="dg-pill-menu-head">
@@ -2379,25 +2407,6 @@
                                             >
                                                 &#8862; Table<span class="dg-fmt-caret">&#9662;</span>
                                             </button>
-                                            <template if:true={tableGrid}>
-                                                <div class="dg-fmt-menu dg-grid-menu" role="menu">
-                                                    <div class="dg-grid">
-                                                        <template for:each={tableGridCells} for:item="g">
-                                                            <button
-                                                                key={g.key}
-                                                                class={g.cls}
-                                                                data-r={g.r}
-                                                                data-c={g.c}
-                                                                onmouseenter={handleTableGridHover}
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleTableGridPick}
-                                                                title={tableGridLabel}
-                                                            ></button>
-                                                        </template>
-                                                    </div>
-                                                    <div class="dg-grid-label">{tableGridLabel}</div>
-                                                </div>
-                                            </template>
                                         </div>
                                         <!-- Header/footer tools are CONTEXTUAL, same idiom as the
                                          table row below: page counters are meaningless in the
@@ -2734,7 +2743,7 @@
                                          it" — the opposite of what the sheet is for.
                                          Sized by its widest child, so it is exactly the
                                          page width with no measurement to keep in sync. -->
-                                        <div class="dg-sheet-paper">
+                                        <div class="dg-sheet-paper" onmouseleave={handleCanvasMouseLeave}>
                                             <div
                                                 class="dg-chrome-band dg-chrome-band_header"
                                                 lwc:dom="manual"
@@ -2824,7 +2833,7 @@
                                                     </button>
                                                 </div>
                                             </template>
-                                            <div class="dg-canvas-wrap" onmouseleave={handleCanvasMouseLeave}>
+                                            <div class="dg-canvas-wrap">
                                                 <div
                                                     class="dg-html-preview-frame dg-visual-host dg-designer-size"
                                                     lwc:dom="manual"

@@ -1812,6 +1812,121 @@ async function main() {
             );
         }
 
+        // --- 4o. Menus reach the front, and handles work in every band ----------
+        //
+        // .dg-format-bar carried a backdrop-filter, which makes an element a
+        // CONTAINING BLOCK for position: fixed descendants and a stacking context.
+        // Every popover in that bar is position: fixed, so they were re-anchored to
+        // the toolbar and their z-index capped at the bar's — the insert-table grid
+        // fell behind the page and its bottom rows could not be clicked, making a
+        // 1-column table impossible to pick.
+        const frontReport = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      return (async () => {
+        const bar = __dgFind('.dg-format-bar');
+        const out = {};
+        // No ancestor of a toolbar popover may create a fixed-positioning
+        // containing block. This is the rule, not just this one symptom.
+        const cs = getComputedStyle(bar);
+        out.barClean = cs.backdropFilter === 'none' && cs.filter === 'none' && cs.transform === 'none';
+        out.barDetail = 'backdrop=' + cs.backdropFilter + ' filter=' + cs.filter + ' transform=' + cs.transform;
+
+        const btn = [...bar.querySelectorAll('button')].find(b => /Table/.test(b.textContent||''));
+        if (!btn) return Object.assign(out, { grid: 'no table button' });
+        btn.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        btn.click();
+        await step(700);
+        const cells = __dgFind('.dg-grid-cell', true) || [];
+        if (!cells.length) return Object.assign(out, { grid: 'grid did not open' });
+        // EVERY cell must be clickable — the bottom-left one is what a 1-column
+        // table needs, and it was the first to be lost.
+        let blocked = null;
+        for (const c of cells) {
+          const r = c.getBoundingClientRect();
+          const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+          let top = document.elementFromPoint(x, y), guard = 0;
+          while (top && top.shadowRoot && guard++ < 10) {
+            const inner = top.shadowRoot.elementFromPoint(x, y);
+            if (!inner || inner === top) break;
+            top = inner;
+          }
+          if (top !== c) { blocked = 'cell ' + c.dataset.r + 'x' + c.dataset.c + ' covered by ' + (top ? (top.className || top.tagName) : 'null'); break; }
+        }
+        out.grid = blocked || 'ok';
+        // Close it again.
+        btn.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        btn.click();
+        await step(300);
+        return out;
+      })();`)
+        );
+        record(
+            'toolbar creates no fixed-positioning containing block',
+            !!frontReport.barClean,
+            frontReport.barDetail || ''
+        );
+        record('every insert-table grid cell is clickable', frontReport.grid === 'ok', frontReport.grid || '');
+
+        // Table handles must stay reachable while the pointer is over a BAND.
+        // Driven with a REAL pointer: the visibility gate is a CSS :hover rule, and
+        // :hover does not respond to synthetic mouse events, so a dispatched
+        // mousemove reports every handle as invisible whether or not it is.
+        const bandSeeded = await page.evaluate(
+            inPage(`
+      const band = __dgFind('.dg-chrome-band_header');
+      if (!band) return null;
+      band.innerHTML = '<table><tr><td>h1</td><td>h2</td></tr></table>';
+      band.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+      // Earlier probes scroll the page; the band can be off-screen by now, and a
+      // real pointer move to a stale coordinate lands on nothing.
+      band.scrollIntoView({ block: 'center' });
+      return true;`)
+        );
+        if (!bandSeeded) {
+            record('table handles are visible and clickable over a header table', false, 'no header band');
+        } else {
+            await page.waitForTimeout(600);
+            const pt = await page.evaluate(
+                inPage(`
+      const band = __dgFind('.dg-chrome-band_header');
+      const cell = band && band.querySelector('td');
+      if (!cell) return null;
+      const c = cell.getBoundingClientRect();
+      return { x: Math.round(c.left + c.width / 2), y: Math.round(c.top + c.height / 2) };`)
+            );
+            if (pt) {
+                await page.mouse.move(pt.x, pt.y);
+                await page.mouse.move(pt.x + 2, pt.y + 1);
+            }
+            await page.waitForTimeout(700);
+            const bandHandles = await page.evaluate(
+                inPage(`
+      const seams = __dgFind('.dg-tbl-seam', true) || [];
+      const handles = __dgFind('.dg-tbl-handle', true) || [];
+      const all = seams.concat(handles);
+      if (!all.length) return { ok:false, why:'no handles rendered for a header table' };
+      const live = all.filter(el => {
+        const cs = getComputedStyle(el);
+        return parseFloat(cs.opacity) > 0.02 && cs.pointerEvents !== 'none';
+      });
+      const paper = __dgFind('.dg-sheet-paper');
+      const band = __dgFind('.dg-chrome-band_header');
+      const br = band ? band.getBoundingClientRect() : null;
+      const at = br ? document.elementFromPoint(Math.round(br.left + br.width/2), Math.round(br.top + br.height/2)) : null;
+      const one = all[0];
+      const ocs = one ? getComputedStyle(one) : null;
+      return { ok: live.length > 0,
+               why: live.length ? (live.length + '/' + all.length + ' interactive')
+                                : (all.length + ' rendered but all invisible/unclickable'
+                                   + ' | paperHover=' + (paper ? paper.matches(':hover') : 'no paper')
+                                   + ' | bandHover=' + (band ? band.matches(':hover') : 'no band')
+                                   + ' | elementAtBand=' + (at ? (at.className || at.tagName) : 'null')
+                                   + ' | seam0 opacity=' + (ocs ? ocs.opacity : '?') + ' pe=' + (ocs ? ocs.pointerEvents : '?')) };`)
+            );
+            record('table handles are visible and clickable over a header table', !!bandHandles.ok, bandHandles.why);
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

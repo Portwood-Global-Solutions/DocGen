@@ -1608,6 +1608,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._positionFloating(this._floatAnchor, pm, { gap: 6, prefer: 'bottom', align: 'start' });
             }
         }
+        // Toolbar popovers are position: fixed, so they need placing the moment they
+        // open — not only when something scrolls. Without this the grid picker fell
+        // back to its static position, which is why moving it out of the toolbar (to
+        // escape that stacking context) needed this to land with it.
+        if (this._floatAnchor && this._floatAnchor.isConnected) {
+            const fm = this.template.querySelector('.dg-fmt-menu');
+            if (fm) {
+                this._positionFloating(this._floatAnchor, fm, { gap: 6, prefer: 'bottom', align: 'start' });
+            }
+        }
         // Sync native textarea DOM value with tracked property after re-render
         if (this.currentWizardStep === '2' && this.newTemplateQuery) {
             const ta = this.template.querySelector('.wizard-query-textarea');

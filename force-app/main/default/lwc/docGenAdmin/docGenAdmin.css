@@ -798,7 +798,7 @@
     pointer-events: none;
 }
 
-.dg-canvas-wrap:hover .dg-tbl-handle {
+.dg-sheet-paper:hover .dg-tbl-handle {
     opacity: 0.55;
     pointer-events: auto;
 }
@@ -855,7 +855,7 @@
     transition: opacity 0.12s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-.dg-canvas-wrap:hover .dg-blk-handle {
+.dg-sheet-paper:hover .dg-blk-handle {
     opacity: 0.65;
     pointer-events: auto;
 }
@@ -912,7 +912,7 @@
         color 0.09s ease;
 }
 
-.dg-canvas-wrap:hover .dg-tbl-seam {
+.dg-sheet-paper:hover .dg-tbl-seam {
     opacity: 0.85;
     pointer-events: auto;
 }
@@ -1205,9 +1205,10 @@
     position: sticky;
     top: 0;
     z-index: 40;
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    /* No backdrop-filter — see .dg-format-bar. It would make this chrome a
+       containing block for every position: fixed popover inside it, re-anchoring
+       them to the chrome instead of the viewport. */
+    background: rgba(255, 255, 255, 0.97);
     border: 1px solid #e2e0ef;
     border-top: 3px solid #7c3aed;
     border-radius: 0 0 12px 12px;
@@ -1327,9 +1328,16 @@
     flex-wrap: wrap;
     gap: 4px;
     padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.94);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    /* NO backdrop-filter here.
+       A backdrop-filter makes an element a CONTAINING BLOCK for position: fixed
+       descendants, and a stacking context. Every popover in this bar is
+       position: fixed, so the blur silently re-anchored them to the toolbar
+       instead of the viewport and capped their z-index at the bar's 30 — the
+       insert-table grid picker fell behind the page and its bottom rows could
+       not be reached, so a 1-column table was impossible to pick.
+       The background is 0.94 opaque; the blur was contributing almost nothing
+       visually and was costing the entire floating layer. */
+    background: rgba(255, 255, 255, 0.97);
     border: 1px solid #e2e0ef;
     border-radius: 10px;
     margin-bottom: 6px;
