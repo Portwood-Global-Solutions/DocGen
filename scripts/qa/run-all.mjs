@@ -62,7 +62,11 @@ const SUITES = [
     { id: 'ui-designer', file: './suites/ui-designer.mjs', needsOrg: true, heavy: true },
     { id: 'ui-admin', file: './suites/ui-admin.mjs', needsOrg: true, heavy: true },
     { id: 'ui-runner', file: './suites/ui-runner.mjs', needsOrg: true, heavy: true },
-    { id: 'record-pages', file: './suites/record-pages.mjs', needsOrg: true, heavy: false }
+    { id: 'record-pages', file: './suites/record-pages.mjs', needsOrg: true, heavy: false },
+    // Reads the generated PDF's TEXT. The only suite that can see the
+    // v2.5.0 missing-chrome class of regression, which produced a valid
+    // PDF of a plausible size with its title and headers silently gone.
+    { id: 'pdf-content', file: './suites/pdf-content.mjs', needsOrg: true, heavy: true }
 ];
 
 const args = process.argv.slice(2);

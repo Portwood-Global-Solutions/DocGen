@@ -1,660 +1,132 @@
 {
     "meta": {
         "org": "docgen-verify",
-        "startedAt": "2026-07-25T22:34:55.256Z",
-        "durationMs": 339716,
-        "args": "--org docgen-verify --suite ui-runner"
+        "startedAt": "2026-07-25T23:33:13.045Z",
+        "durationMs": 13243,
+        "args": "--org docgen-verify --suite pdf-content"
     },
     "tally": {
-        "passed": 75,
-        "failed": 3,
-        "skipped": 2,
-        "evaluated": 78,
-        "total": 80,
-        "rate": 96.2,
+        "passed": 14,
+        "failed": 0,
+        "skipped": 1,
+        "evaluated": 14,
+        "total": 15,
+        "rate": 100,
         "bySeverity": {
             "blocker": 0,
-            "major": 2,
-            "minor": 1
+            "major": 0,
+            "minor": 0
         }
     },
     "suites": [
         {
-            "suite": "ui-runner",
-            "area": "End-user UI",
+            "suite": "pdf-content",
+            "area": "PDF content",
             "checks": [
                 {
-                    "name": "runner template picker offers an active, usable template for the record",
+                    "name": "the dataset is large enough to exercise multi-page rendering",
                     "ok": true,
-                    "detail": "picker returned: UIQA Good PDF, UIQA Locked Format, UIQA No Version — DocGenController.getTemplatesForObjectAndRecord",
+                    "detail": "2100 child rows across many pages (the giant branch is chosen on estimated heap, not on this count)",
                     "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
+                    "skipped": false
                 },
                 {
-                    "name": "picker hides a template whose Record_Filter__c excludes this record",
+                    "name": "the giant template generates",
                     "ok": true,
-                    "detail": "Record_Filter__c = Industry = 'Agriculture'; the record is Technology. Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "picker hides a template requiring a permission set the user lacks",
-                    "ok": true,
-                    "detail": "Required_Permission_Sets__c = UIQA_No_Such_PermSet. Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "picker hides an inactive template",
-                    "ok": true,
-                    "detail": "Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "picker hides a template that has no active version",
-                    "ok": false,
-                    "detail": "\"UIQA No Version\" is offered in the runner picker but cannot generate — the user gets \"No template file found (active or attached)\" only after pressing Generate. DocGenController.getTemplatesForObjectInternal filters on Is_Active__c/audience but never checks for an active DocGen_Template_Version__c.",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "generating from the picked template produces a real document",
-                    "ok": true,
-                    "detail": "DocGenService.processDocument returned 66207 bytes",
+                    "detail": "442611 bytes in 5216ms (CPU 4666ms of 10000)",
                     "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
+                    "skipped": false
                 },
                 {
-                    "name": "the generated document's title resolves merge tokens against the record",
+                    "name": "the giant render leaves CPU headroom",
                     "ok": true,
-                    "detail": "Document_Title_Format__c = \"UIQA-ms0y5ulm {Name}\" → title was \"UIQA-ms0y5ulm UIQA Alpha\", expected \"UIQA-ms0y5ulm UIQA Alpha\"",
+                    "detail": "4666ms of the 10000ms synchronous limit (47%) at 2100 rows",
                     "severity": "minor",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
+                    "skipped": false
                 },
                 {
-                    "name": "a locked output format cannot be overridden at run time",
+                    "name": "the giant document spans many pages",
                     "ok": true,
-                    "detail": "Lock_Output_Format__c = true, override 'Word' → \"This template locks its output format. Override not permitted.\"",
+                    "detail": "59 pages from 2100 rows",
                     "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
+                    "skipped": false
                 },
                 {
-                    "name": "a template with no active version fails with a message, not a blank document",
+                    "name": "the document title survives the giant-query path",
                     "ok": true,
-                    "detail": "got: Error retrieving template data: No template file found (active or attached).",
+                    "detail": "\"PDFQA Master Roster\" is on the page",
                     "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
+                    "skipped": false
                 },
                 {
-                    "name": "bulk template picker excludes deactivated templates",
+                    "name": "text above the table survives the giant-query path",
                     "ok": true,
-                    "detail": "matches the single-record runner",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
+                    "detail": "intro paragraph present",
+                    "severity": "blocker",
+                    "skipped": false
                 },
                 {
-                    "name": "a record-filtered template is not silently applied to excluded records in bulk",
+                    "name": "the column headers are rendered",
+                    "ok": true,
+                    "detail": "\"Contact Full Name\" present",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "the table header repeats on later pages (giant path)",
                     "ok": false,
-                    "detail": "\"UIQA Filtered Out\" carries a Record_Filter__c and is offered for bulk, where the filter is never evaluated — DocGenBulkController passes null to filterTemplatesForSender and the batch never calls the per-record check. Documents can be generated for records the template excludes. Either the batch must apply the filter, or the picker must exclude it.",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (server contract)"
-                },
-                {
-                    "name": "the runner shows an actionable empty state when no template matches the record",
-                    "ok": true,
-                    "detail": "with every Account template inactive the runner rendered 565 chars; Create Document disabled=true. The user must be told WHY there is nothing to pick, and must not be able to press a button that cannot work.",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "docGenRunner renders on a record page",
-                    "ok": true,
-                    "detail": "rendered 521 chars, 2 picker(s), 1 primary button(s)",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the runner shows neither an error nor an empty state on a record that has templates",
-                    "ok": true,
-                    "detail": "component text starts: DocGen Create or combine documents for this record. Create Document Document Packet Combine PDFs Category All Categories Test UIQA (Uncategorized) Select Template Choose a template... Account [Test] E",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "docGenRunner boots without a console error",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the record-page template picker lists a template the user can actually run",
-                    "ok": true,
-                    "detail": "picker showed: Choose a template... / Account / [Test] E2E Test Template / ffff / playa / test / Test2 / test3 / test345 / test99 / [UIQA] UIQA Good PDF / [UIQA] UIQA Locked Format / [UIQA] UIQA No Version / Verify — Cell Wrap + VAlign / Verify — Designer (pill-dense) / Verify — Landscape Precedence",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the record-page picker applies the active and audience rules",
-                    "ok": true,
-                    "detail": "Inactive, Record_Filter__c-excluded and permission-gated templates were all withheld",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the template picker is reachable by a mouse",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "choosing a category narrows the template list to that category",
-                    "ok": true,
-                    "detail": "after picking category \"UIQA\" the picker showed: [UIQA] UIQA Good PDF / [UIQA] UIQA Locked Format / [UIQA] UIQA No Version",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the Save to Record output choice is reachable",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "choosing Save to Record is honoured by the UI",
-                    "ok": true,
-                    "detail": "output pills after the click: download, save(active)",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the Create Document button is reachable",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "pressing Create Document in Save to Record mode puts the document ON the record",
-                    "ok": true,
-                    "detail": "ContentDocument \"UIQA-ms0y5ulm UIQA Alpha\" linked to 001O5000040nvS4IAI",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the saved file is in the template's own output format",
-                    "ok": true,
-                    "detail": "Output_Format__c = PDF, file extension = .pdf",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "choosing Download is honoured by the UI",
-                    "ok": true,
-                    "detail": "output pills after the click: download(active), save",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "pressing Create Document in Download mode downloads the document to the browser",
-                    "ok": true,
-                    "detail": "the browser received \"UIQA-ms0y5ulm UIQA Alpha.pdf\"",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "Download does NOT also attach the document to the record",
-                    "ok": true,
-                    "detail": "files linked to the record: 3 before the run, 3 after. Download and Save to Record are the two halves of one choice; honouring it means Download leaves the record untouched.",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "a template with Lock_Output_Format__c exposes no runtime file-format control",
-                    "ok": true,
-                    "detail": "with the locked template selected the runner offered 2 picker(s) (category + template) and the choice widgets [download, save], which are output DESTINATIONS, not formats. The server half of this contract — an explicit override being refused — is asserted in the server-contract area.",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the Document Packet tab renders its template chooser and it is reachable",
-                    "ok": true,
-                    "detail": "packet tab active=true, dual listboxes=1, source list hit=ok",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the packet chooser offers the record's PDF templates",
-                    "ok": true,
-                    "detail": "chooser offered 15 template(s): Account / E2E Test Template / ffff / playa / test / Test2",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the Create Packet button is reachable and refuses to run with nothing chosen",
-                    "ok": true,
-                    "detail": "button hit=ok, disabled=true",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the Combine PDFs tab lists the record's existing PDFs and they are reachable",
-                    "ok": true,
-                    "detail": "tab active=true, source list hit=ok, it offered 2 file(s) of which 2 are the two PDFs this suite attached to the record",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "the Combine PDFs button is reachable and refuses to run with fewer than two files chosen",
-                    "ok": true,
-                    "detail": "button hit=ok, disabled=true with nothing moved into the Combine list",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Runner (record page)"
-                },
-                {
-                    "name": "docGenSignatureSender renders on a record page",
-                    "ok": true,
-                    "detail": "rendered 321 chars with its template picker, signer table and send button",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "docGenSignatureSender boots without a console error",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "the send button refuses to send with no document and no signer details",
-                    "ok": true,
-                    "detail": "found=true disabled=true",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "the signature document picker is reachable",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "the signature document picker offers the record’s templates and they can be clicked",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "a document alone is not enough to send — the signer is still required",
-                    "ok": true,
-                    "detail": "with a template chosen and the signer row blank, the send button is disabled=true",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "every signer field is reachable by a mouse",
-                    "ok": true,
-                    "detail": "role=ok name=ok email=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "a signer with no email address cannot be sent to",
-                    "ok": true,
-                    "detail": "role and name filled, email blank → send button disabled=true",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "a complete document + signer enables the send button",
-                    "ok": true,
-                    "detail": "role, name and email all filled → send button disabled=false",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "the send button is reachable by a mouse",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "sending a signature request tells the user it worked",
-                    "ok": true,
-                    "detail": "component text: Signature Links Generated! Provide each signer with their unique secure link: UIQA-ms0y5ulm Signer Signer https://<CONFIGURE_SITE_URL_IN_SETUP>/apex/portwoodglobal__DocGenSignaturePdf?token=a9a1df2f6a9184b55aff79b50412a1",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "sending writes a DocGen_Signature_Request__c tied to this record and template",
-                    "ok": true,
-                    "detail": "request a08O5000013z1xsIAA: record=001O5000040nvS4IAI (expected 001O5000040nvS4IAI), status=Sent, order=Parallel, sourceDoc=068O500000MI909IAD",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "sending writes exactly one DocGen_Signer__c carrying what was typed",
-                    "ok": true,
-                    "detail": "1 signer row(s) (expected 1); first = name \"UIQA-ms0y5ulm Signer\" (typed \"UIQA-ms0y5ulm Signer\"), email \"uiqa-ms0y5ulm@example.com\" (typed \"uiqa-ms0y5ulm@example.com\"), role \"Signer\" (typed \"Signer\"), status \"Pending\" (expected \"Pending\"), sort order 1 (expected 1)",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Signature sender (record page)"
-                },
-                {
-                    "name": "bulk generation UI renders on its tab",
-                    "ok": true,
-                    "detail": "{\"chars\":251,\"hasHeading\":true,\"hasStep1\":true}",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "bulk generation UI boots without a console error",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the screen stays usable while a job is still running",
-                    "ok": true,
-                    "detail": "template search box is hittable with 1 non-terminal job(s) present",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "focusing the template box lists the available templates",
-                    "ok": true,
-                    "detail": "16 options offered",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "typing narrows the template list to the match",
-                    "ok": true,
-                    "detail": "after typing \"UIQA Good\": UIQA Good PDF (Account • PDF)",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "a search with no matches says so instead of showing an empty box",
-                    "ok": true,
-                    "detail": "expected the \"No templates found\" empty state in the dropdown",
+                    "detail": "this render took the ORDINARY path — no -fs-table-paginate in the output, 2101 rows in one table — so per-page headers were never promised for it, and the headings correctly appear on 1 of 59 pages. The giant branch is chosen on an estimated HEAP, not a row count, so slim rows never reach it however many there are. Covering the repeat needs a seed whose rows are fat enough to cross that estimate.",
                     "severity": "minor",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "a template option can be clicked",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "selecting a template opens the filter and run steps",
-                    "ok": true,
-                    "detail": "Step 2 (Record Filter) and Step 3 (Run Generation) must appear once a template is chosen",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the bulk screen offers no file-format override — format stays the template’s",
-                    "ok": true,
-                    "detail": "Output Mode options: Individual Files / Print-Ready Packet / Combined + Individual",
-                    "severity": "minor",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "choosing an output mode is honoured by the UI",
-                    "ok": true,
-                    "detail": "after picking \"Individual Files\" the control reads \"Individual Files\"",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the Validate Filter button is clickable",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "Validate reports the true number of matching records",
-                    "ok": true,
-                    "detail": "expected \"2 Records Found\" for Name LIKE 'UIQA%' (2 accounts seeded); component text did not contain it",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the Run button is clickable once the filter is validated",
-                    "ok": true,
-                    "detail": "found=true hit=ok",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "pressing Run creates a bulk job on the server",
-                    "ok": true,
-                    "detail": "DocGen_Job__c a03O500003h4rElIAI status Completed",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the job generates one document per matching record",
-                    "ok": true,
-                    "detail": "status=Completed total=2 success=2 errors=0; error log: ",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "each generated document is attached to its own record",
-                    "ok": true,
-                    "detail": "5 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the output honours the template's Output Format (PDF)",
-                    "ok": true,
-                    "detail": "extensions produced: pdf",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "a run where every record fails is reported as failed, not as success",
-                    "ok": true,
-                    "detail": "status=Failed success=0 errors=2",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the failing job records WHY each record failed",
-                    "ok": true,
-                    "detail": "Error_Log__c = 001O5000040nvS4IAI — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached).\n001O5000040nvS5IAI — portwoodglobal.DocGenException: Error retrieving ",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the Recent Jobs list shows the error count to the user",
-                    "ok": true,
-                    "detail": "Recent Jobs did not show \"UIQA-ms0y5ulm-err\" with \"2 errors\" — a user would see the run as finished with no indication anything went wrong",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "a filter that matches no records leaves Run disabled",
-                    "ok": false,
-                    "detail": "Validate returned 0 records but Run Bulk Generation is still enabled — the user can submit a job that will produce nothing. isRunDisabled only requires filterValidated, and runAnalysis() early-returns on a 0 count so no analysis blocks it (docGenBulkRunner.js isRunDisabled / runAnalysis).",
-                    "severity": "minor",
-                    "skipped": false,
-                    "area": "Bulk runner"
-                },
-                {
-                    "name": "the DocGen Command Hub renders with its navigation",
-                    "ok": true,
-                    "detail": "{\"present\":true,\"navs\":[\"My Templates\",\"Bulk Generation\",\"Signatures\",\"Assets\",\"Buttons\",\"Email Templates\",\"Learning Center\",\"MoreTabs\",\"API Name Help Info\",\"Type Help Info\",\"Word\",\"PDF\"]}",
-                    "severity": "blocker",
-                    "skipped": false,
-                    "area": "Command Hub"
-                },
-                {
-                    "name": "Command Hub \"Bulk Generation\" mounts its component",
-                    "ok": true,
-                    "detail": "rendered 372 chars of text; consoleErrors=none",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
-                },
-                {
-                    "name": "Command Hub \"Signatures\" mounts its component",
-                    "ok": true,
-                    "detail": "rendered 1263 chars of text; consoleErrors=none",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
-                },
-                {
-                    "name": "Command Hub \"Assets\" mounts its component",
-                    "ok": true,
-                    "detail": "rendered 489 chars of text; consoleErrors=none",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
-                },
-                {
-                    "name": "Command Hub \"Email Templates\" mounts its component",
-                    "ok": true,
-                    "detail": "rendered 1544 chars of text; consoleErrors=none",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
-                },
-                {
-                    "name": "the document Button builder mounts from the Command Hub",
-                    "ok": true,
-                    "detail": "rendered 994 chars of text",
-                    "severity": "major",
-                    "skipped": false,
-                    "area": "Command Hub"
-                },
-                {
-                    "name": "the DocGen quick action is reachable by a mouse",
-                    "ok": true,
-                    "detail": "clickable on the highlights panel",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "a retired or wrong-object button configuration never appears",
-                    "ok": true,
-                    "detail": "getButtons returned only QA_Account_Doc — the inactive fixture and the Contact fixture were both withheld, so the component takes its run-immediately branch",
-                    "severity": "blocker",
-                    "skipped": false
-                },
-                {
-                    "name": "pressing the record action does not error",
-                    "ok": true,
-                    "detail": "the action screen had already closed itself, which it only does after a successful generate",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "the record action delivers a document to the browser",
-                    "ok": true,
-                    "detail": "downloaded \"QA Button Document.pdf\"",
-                    "severity": "blocker",
-                    "skipped": false
-                },
-                {
-                    "name": "Save To Record = false leaves the record untouched",
-                    "ok": true,
-                    "detail": "4 files before and after",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "a user without the DocGen permission set gets a clear message, not a broken UI",
-                    "ok": false,
-                    "detail": "the restricted user could not be signed in — no session cookie was set and the browser is still on https://business-business-345-dev-ed.scratch.my.salesforce.com/. A scratch org often refuses a password login for a freshly created user until the identity is verified.",
-                    "severity": "major",
                     "skipped": true
                 },
                 {
-                    "name": "the Combine PDFs and Document Packet runs produce a real merged document",
-                    "ok": false,
-                    "detail": "both tabs are proved to render, list their sources and gate their button (section 2g/2h), but actually running them means driving a dual-listbox move — select an option, then press the listbox's own arrow button — and then a multi-megabyte client-side PDF merge. Neither the move nor the merge is exercised here, so \"the packet is correct\" is NOT claimed.",
+                    "name": "the footer appears on every page",
+                    "ok": true,
+                    "detail": "footer on 59 of 59 pages",
                     "severity": "major",
-                    "skipped": true
+                    "skipped": false
+                },
+                {
+                    "name": "the running header appears on every page",
+                    "ok": true,
+                    "detail": "header on 59 of 59 pages",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "page-number tags resolve rather than printing literally",
+                    "ok": true,
+                    "detail": "counters resolved",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "the footer reports the true page total",
+                    "ok": true,
+                    "detail": "footer says \"of 59\", matching the actual page count",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "merged child data is on the page",
+                    "ok": true,
+                    "detail": "first seeded row and an email address both present",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "no unresolved merge tag is printed",
+                    "ok": true,
+                    "detail": "no raw tags on the page",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "the last child row is present, not truncated",
+                    "ok": true,
+                    "detail": "row 2100 of 2100 rendered",
+                    "severity": "blocker",
+                    "skipped": false
                 }
             ],
             "skipped": false,
