@@ -1927,6 +1927,69 @@ async function main() {
             record('table handles are visible and clickable over a header table', !!bandHandles.ok, bandHandles.why);
         }
 
+        // --- 4p. An author's cell fill survives the editor's own tints ----------
+        //
+        // The row/column hover tint paints OVER whatever fill the author set, and
+        // restores it from a captured style attribute. The caret-highlight sweep
+        // used to blanket-clear backgroundColor on every [data-dg-paint] node —
+        // including those — so the fill was wiped before the restore could run.
+        const fillReport = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const modeBtn = (label) => {
+        const seg = __dgFind('.dg-mode-seg');
+        return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
+      };
+      return (async () => {
+        if (!__dgFind('.dg-pv') && modeBtn('Visual')) { modeBtn('Visual').click(); await step(1800); }
+        const pv = __dgFind('.dg-pv');
+        if (!pv) return { ok:false, why:'no canvas' };
+        const style = pv.querySelector('style');
+        while (pv.firstChild) pv.removeChild(pv.firstChild);
+        if (style) pv.appendChild(style);
+        const t = document.createElement('table');
+        t.innerHTML = '<tr><td>c1</td><td>c2</td></tr><tr><td>c3</td><td>c4</td></tr>';
+        pv.appendChild(t);
+        const cell = t.querySelector('td');
+        // The author's own fill, exactly as handleTableAction('cellFill') writes it.
+        cell.style.background = 'rgb(255, 214, 0)';
+        const want = cell.style.backgroundColor;
+
+        // Hover the row so the band tint paints over it.
+        const cr = cell.getBoundingClientRect();
+        cell.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+          clientX: Math.round(cr.left + 6), clientY: Math.round(cr.top + 6)}));
+        await step(500);
+
+        // Put the caret in and type — this is the snapshot/clear path that wiped it.
+        pv.focus();
+        const r = document.createRange(); r.selectNodeContents(cell); r.collapse(false);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        document.dispatchEvent(new Event('selectionchange'));
+        await step(300);
+        pv.dispatchEvent(new InputEvent('beforeinput', {bubbles:true, composed:true, inputType:'insertText', data:'x'}));
+        pv.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        await step(500);
+
+        // Move the pointer away so the hover tint is released, and the CARET to
+        // another cell so its own highlight is released too. Both are transient
+        // chrome painted over the fill; the assertion is about what the cell is
+        // left holding once neither is on it.
+        pv.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+          clientX: Math.round(cr.left + 6), clientY: Math.round(cr.bottom + 300)}));
+        const other = __dgFind('.dg-pv').querySelectorAll('td')[3];
+        const r2 = document.createRange(); r2.selectNodeContents(other); r2.collapse(false);
+        const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r2);
+        document.dispatchEvent(new Event('selectionchange'));
+        await step(700);
+
+        const live = __dgFind('.dg-pv').querySelector('td');
+        const now = live ? live.style.backgroundColor : '';
+        return { ok: now === want, why: now === want ? '' : ('fill ' + JSON.stringify(want) + ' became ' + JSON.stringify(now)) };
+      })();`)
+        );
+        record('an author cell fill survives hover tint + typing', !!fillReport.ok, fillReport.why);
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

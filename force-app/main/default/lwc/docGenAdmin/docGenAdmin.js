@@ -6667,7 +6667,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         for (const surface of this._allSurfaces()) {
             let stragglers;
             try {
-                stragglers = surface.querySelectorAll('[data-dg-paint]');
+                // ONLY the caret highlight. This used to sweep every [data-dg-paint],
+                // which included the row/column hover tint — and that tint is applied
+                // OVER the author's own cell fill. Blanket-clearing backgroundColor
+                // therefore deleted the fill, permanently: the hover system restores
+                // from a captured style attribute, but by the time it ran the value
+                // had already been wiped. It showed up as "tables keep overwriting
+                // fill colors" once _pushUndo started snapshotting (and so clearing
+                // paint) on every keystroke, and once the handles became reachable
+                // over every surface. Each system now undoes only its own tint.
+                stragglers = surface.querySelectorAll('[data-dg-paint="block"]');
             } catch (e) {
                 continue;
             }
@@ -6682,6 +6691,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
             }
         }
+    }
+
+    /**
+     * Drop every transient editor tint, each undone by the system that applied it.
+     *
+     * The caret highlight restores four properties; the row/column hover tint
+     * restores a captured style attribute verbatim, because it paints over whatever
+     * fill the author already set. Anything that serializes or snapshots the canvas
+     * must go through here, or it bakes editor chrome into the saved template.
+     */
+    _clearEditorPaint() {
+        this._highlightTableBand(null);
+        this._clearActiveBlockPaint();
     }
 
     _paintedEl = null;
@@ -7104,7 +7126,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * namespace sandbox cloneNode silently drops nodes native contenteditable inserted.
      */
     _extractBandHtml(band) {
-        this._clearActiveBlockPaint();
+        this._clearEditorPaint();
         const tpl = document.createElement('template');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip of a live band; re-cleaned below, never cloneNode (LWS drops browser-inserted nodes)
         tpl.innerHTML = band.innerHTML;
@@ -7523,7 +7545,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return null;
         }
         const painted = this._paintedEl;
-        this._clearActiveBlockPaint();
+        this._clearEditorPaint();
         const snap = { body: body.innerHTML, header: null, footer: null };
         for (const which of ['header', 'footer']) {
             const band = this.template.querySelector('.dg-chrome-band_' + which);
@@ -11002,10 +11024,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * upload path (see _sanitizeStagedHtml, which uses the same technique).
      */
     _extractVisualBody(pv) {
-        // #238 — drop the caret highlight before the string round-trip. It is applied
-        // as inline style (component CSS can't reach manual-DOM nodes), so leaving it
-        // on would bake a purple tint into the saved template body.
-        this._clearActiveBlockPaint();
+        // #238 — drop EVERY editor tint before the string round-trip. They are applied
+        // as inline style (component CSS can't reach manual-DOM nodes), so leaving one
+        // on would bake a purple tint into the saved template body — and the
+        // row/column tint sits on top of the author's own cell fill.
+        this._clearEditorPaint();
         const tpl = document.createElement('template');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip of the live canvas; re-cleaned below, never cloneNode (LWS drops browser-inserted nodes)
         tpl.innerHTML = pv.innerHTML;
@@ -11127,7 +11150,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // inline style, so leaving it on makes an untouched session compare unequal to
         // _visualEnteredDom and rewrite the body — breaking the documented guarantee
         // that an unchanged session restores the original code byte-for-byte.
-        this._clearActiveBlockPaint();
+        this._clearEditorPaint();
         // Read the chrome off the live bands while they still exist, so View Source
         // shows the header the author is looking at rather than the last value an
         // input event happened to sync.
