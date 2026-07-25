@@ -1516,10 +1516,26 @@
                             <p class="dg-designer-empty__title">Choose a template to design</p>
                             <template if:true={hasDesignerTemplates}>
                                 <p class="dg-designer-empty__hint">
-                                    HTML templates can be edited visually. Pick one to open it.
+                                    HTML templates can be edited visually — most recently edited first.
                                 </p>
+                                <!-- Searched, recency-ordered and CAPPED. A flat list of
+                                     every template is unusable in an org with hundreds, and
+                                     renders hundreds of nodes on a tab you have not started
+                                     working on yet. This DOM is the same size at 5 templates
+                                     or 5000. -->
+                                <div class="dg-designer-open-search">
+                                    <lightning-icon icon-name="utility:search" size="x-small"></lightning-icon>
+                                    <input
+                                        type="text"
+                                        class="dg-designer-open-search__input"
+                                        placeholder="Search by name, category or object…"
+                                        value={designerPickerQuery}
+                                        oninput={handleDesignerPickerSearch}
+                                        onkeydown={handleDesignerPickerKeydown}
+                                    />
+                                </div>
                                 <div class="dg-designer-open-list">
-                                    <template for:each={designerTemplateOptions} for:item="opt">
+                                    <template for:each={designerOpenList} for:item="opt">
                                         <button
                                             key={opt.value}
                                             class="dg-designer-open-item"
@@ -1528,8 +1544,23 @@
                                             title="Open this template in the designer"
                                         >
                                             <lightning-icon icon-name="utility:page" size="x-small"></lightning-icon>
-                                            <span class="dg-designer-open-item__name">{opt.label}</span>
+                                            <span class="dg-designer-open-item__text">
+                                                <span class="dg-designer-open-item__name">{opt.label}</span>
+                                                <span class="dg-designer-open-item__meta">{opt.meta}</span>
+                                            </span>
                                             <span class="dg-designer-open-item__go">Design &#8594;</span>
+                                        </button>
+                                    </template>
+                                </div>
+                                <div class="dg-designer-open-foot">
+                                    <span class="dg-designer-open-count">{designerPickerSummary}</span>
+                                    <template if:true={designerPickerHasMore}>
+                                        <button
+                                            class="dg-designer-open-more"
+                                            onclick={handleDesignerPickerMore}
+                                            title="Show more templates"
+                                        >
+                                            Show more
                                         </button>
                                     </template>
                                 </div>

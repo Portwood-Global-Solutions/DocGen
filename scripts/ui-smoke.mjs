@@ -2025,6 +2025,61 @@ async function main() {
             record('cell fill harness', false, fillReport.setup);
         } else {
             record('the fill swatch applies a fill', fillReport.applied === 'ok', fillReport.applied);
+            // MULTI-CELL fill: drag-select a rectangle, then fill it. Covered separately
+            // because the single-cell path passed while this was completely broken —
+            // _pushUndo snapshotted, the snapshot cleared the selection, and the fill
+            // landed on one cell.
+            const multiFill = await page.evaluate(
+                inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const norm = (c) => (c || '').split(' ').join('');
+      return (async () => {
+        const pv = __dgFind('.dg-pv');
+        const bar = __dgFind('.dg-format-bar');
+        if (!pv) return { setup:'no canvas' };
+        const style = pv.querySelector('style');
+        while (pv.firstChild) pv.removeChild(pv.firstChild);
+        if (style) pv.appendChild(style);
+        const t = document.createElement('table');
+        t.innerHTML = '<tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr>';
+        pv.appendChild(t);
+        await step(300);
+        const cells = [...t.querySelectorAll('td')];
+        const at = (el) => { const r = el.getBoundingClientRect();
+          return { clientX: Math.round(r.left + r.width/2), clientY: Math.round(r.top + r.height/2) }; };
+
+        // Drag-select all four cells.
+        pv.focus();
+        cells[0].dispatchEvent(new MouseEvent('mousedown', Object.assign({bubbles:true, composed:true, cancelable:true}, at(cells[0]))));
+        // buttons: 1 — _cellSelMove requires a held button, and a synthetic
+        // MouseEvent reports buttons: 0 unless it is asked for.
+        cells[1].dispatchEvent(new MouseEvent('mousemove', Object.assign({bubbles:true, composed:true, buttons:1}, at(cells[1]))));
+        cells[3].dispatchEvent(new MouseEvent('mousemove', Object.assign({bubbles:true, composed:true, buttons:1}, at(cells[3]))));
+        document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, composed:true}));
+        await step(500);
+        const selected = t.querySelectorAll('[data-dg-selcell]').length;
+        if (selected < 4) return { setup:'ok', selected, filled: 'only ' + selected + ' cells got selected' };
+
+        const swatch = [...bar.querySelectorAll('[data-taction="cellFill"][data-value]')]
+          .find(b => /^#/.test(b.dataset.value || ''));
+        if (!swatch) return { setup:'ok', selected, filled: 'no coloured swatch' };
+        const probe = document.createElement('div');
+        probe.style.background = swatch.dataset.value;
+        const want = norm(probe.style.backgroundColor);
+        swatch.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        swatch.click();
+        await step(600);
+        const live = [...__dgFind('.dg-pv').querySelectorAll('td')];
+        const got = live.filter(c => norm(c.style.background || c.style.backgroundColor).indexOf(want) !== -1).length;
+        return { setup:'ok', selected, filled: got === 4 ? 'ok' : (got + '/4 cells took the fill') };
+      })();`)
+            );
+            record(
+                'fill applies to every cell in a multi-cell selection',
+                multiFill.filled === 'ok',
+                multiFill.filled || multiFill.setup
+            );
+
             record(
                 'the fill STAYS through hover, typing and caret moves',
                 fillReport.stayed === 'ok',
@@ -2062,6 +2117,41 @@ async function main() {
             emptyState.list && emptyState.count > 0,
             JSON.stringify(emptyState)
         );
+
+        // SCALE: the rendered list must stay bounded no matter how many templates
+        // the org has, and search must be able to reach one that is not shown.
+        const scale = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      return (async () => {
+        const items = () => (__dgFind('.dg-designer-open-item', true) || []).length;
+        const foot = () => { const el = __dgFind('.dg-designer-open-count'); return el ? el.textContent.trim() : ''; };
+        const out = { rendered: items(), summary: foot() };
+        // Whatever the org holds, the DOM must not be one node per template.
+        out.bounded = out.rendered <= 8;
+        const input = __dgFind('.dg-designer-open-search__input');
+        if (!input) return Object.assign(out, { search: 'no search box' });
+        // A query that cannot match anything must empty the list, not the page.
+        input.value = 'zzz-no-such-template-zzz';
+        input.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        await step(500);
+        out.search = items() === 0 ? 'ok' : (items() + ' items survived a no-match query');
+        out.emptySummary = foot();
+        // And clearing it brings the list back.
+        input.value = '';
+        input.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+        await step(500);
+        out.restored = items() > 0;
+        return out;
+      })();`)
+        );
+        record(
+            'template list stays bounded regardless of org size',
+            !!scale.bounded,
+            scale.rendered + ' rendered · ' + scale.summary
+        );
+        record('template search filters the list', scale.search === 'ok', scale.search);
+        record('clearing the search restores the list', !!scale.restored, '');
         if (emptyState.count > 0) {
             await page.evaluate(
                 inPage(`

@@ -2240,11 +2240,81 @@
     outline: none;
 }
 
-.dg-designer-open-item__name {
+.dg-designer-open-item__text {
     flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.dg-designer-open-item__name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Enough context to tell two templates called "Invoice" apart, quiet enough not
+   to compete with the name. */
+.dg-designer-open-item__meta {
+    font-size: 0.72rem;
+    color: #8b8ba7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dg-designer-open-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 520px;
+    margin: 0 auto 10px;
+    padding: 7px 12px;
+    background: #fff;
+    border: 1px solid #e2e0ef;
+    border-radius: 10px;
+}
+
+.dg-designer-open-search:focus-within {
+    border-color: #b49aef;
+    box-shadow: 0 0 0 3px rgba(180, 154, 239, 0.18);
+}
+
+.dg-designer-open-search__input {
+    flex: 1 1 auto;
+    border: none;
+    outline: none;
+    font-size: 0.9rem;
+    color: #2c2c38;
+    background: transparent;
+}
+
+.dg-designer-open-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 520px;
+    margin: 10px auto 0;
+    font-size: 0.78rem;
+    color: #8b8ba7;
+}
+
+.dg-designer-open-more {
+    border: 1px solid #e2e0ef;
+    background: #fff;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #7c3aed;
+    cursor: pointer;
+}
+
+.dg-designer-open-more:hover {
+    border-color: #b49aef;
+    background: #faf8ff;
 }
 
 /* The affordance only needs to be loud on the row you are actually on. */

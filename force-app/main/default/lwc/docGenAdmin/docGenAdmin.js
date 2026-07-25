@@ -6741,22 +6741,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _clearEditorPaint() {
         this._highlightTableBand(null);
         this._clearActiveBlockPaint();
-        this._clearCellSel();
-        // Belt and braces before anything serializes: sweep any element still
-        // carrying a chrome marker and strip only the chrome channels. A tint that
-        // survived its own system's cleanup — a re-render mid-hover, a node moved by
-        // a row insert — must not be baked into the saved template.
+        // Deliberately does NOT touch the cell SELECTION.
+        //
+        // The selection is a model (_cellSel) as well as a highlight, and it is what
+        // "fill these four cells" means. Clearing it here destroyed multi-cell fill
+        // outright: handleTableAction captures undo first, undo snapshots, the
+        // snapshot cleared the selection, and the fill then had nothing left to
+        // apply to but the caret's own cell. Its chrome is stripped from the
+        // serialized COPY by _unpillifyTags, which is the right place — that strips
+        // what is being saved without touching what the author has selected.
         for (const surface of this._allSurfaces()) {
             let residue;
             try {
-                residue = surface.querySelectorAll('[data-dg-paint], [data-dg-selcell]');
+                residue = surface.querySelectorAll('[data-dg-paint]');
             } catch (e) {
                 continue;
             }
             for (const el of residue) {
                 this._stripChromeProps(el);
                 el.removeAttribute('data-dg-paint');
-                el.removeAttribute('data-dg-selcell');
             }
         }
     }
@@ -8717,9 +8720,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // Drag from one cell into another to select a rectangle (purple tint).
     // The selection SURVIVES right-clicks and toolbar clicks — Fill, Merge,
     // and row/column ops act on it. Click outside a table to clear.
+    // _isInCanvas, not pv.contains: contains() is unreliable under the LWS namespace
+    // sandbox and has already broken four features. It matters more here now that
+    // these run on the running header and footer as well as the page.
     _cellSelDown(e, pv) {
         const cell = e.target && e.target.closest ? e.target.closest('td, th') : null;
-        this._cellSelAnchor = cell && pv.contains(cell) ? cell : null;
+        this._cellSelAnchor = cell && this._isInCanvas(cell, pv) ? cell : null;
         this._cellSelecting = false;
     }
 
@@ -8728,7 +8734,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         const cell = e.target && e.target.closest ? e.target.closest('td, th') : null;
-        if (!cell || !pv.contains(cell)) {
+        if (!cell || !this._isInCanvas(cell, pv)) {
             return;
         }
         const table = this._cellSelAnchor.closest('table');
@@ -11504,8 +11510,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Switch templates without leaving the designer. */
+    /**
+     * The in-designer switcher. Ordered by what you touched last, so the top of the
+     * dropdown is useful in an org with hundreds rather than alphabetical-by-accident.
+     *
+     * Deliberately NOT capped: capping would make templates unreachable from the
+     * switcher, and losing capability is a worse answer to scale than a long
+     * dropdown. The searched, bounded picker on the empty state is the route that
+     * scales; this is the "switch to something I was just in" shortcut.
+     */
     get designerTemplateOptions() {
-        return (this.templates || []).filter((t) => t[F.Type] === 'HTML').map((t) => ({ label: t.Name, value: t.Id }));
+        return this._designerCandidates().map((t) => ({ label: t.Name, value: t.Id }));
     }
 
     // --- Right-click context menu handlers ---
@@ -12132,8 +12147,94 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Row action / modal button → full-screen designer for HTML templates. */
+    // ===== Designer tab: choosing a template at scale =========================
+    //
+    // An org with 400 templates is not an edge case, and a flat list of every one
+    // is unusable at that size AND expensive — 400 buttons is 400 DOM nodes on a
+    // tab you have not started working on yet. The list is therefore SEARCHED,
+    // ordered by what you touched last, and capped: you see the handful you
+    // probably want, the count tells you what is behind the filter, and the DOM
+    // stays the same size whether the org has 5 templates or 5000.
+    @track designerPickerQuery = '';
+    @track designerPickerLimit = 8;
+    /** How many more to reveal per click of "Show more". */
+    DESIGNER_PICKER_PAGE = 25;
+
     get hasDesignerTemplates() {
-        return (this.designerTemplateOptions || []).length > 0;
+        return this._designerCandidates().length > 0;
+    }
+
+    /** Every template the designer can open, most recently modified first. */
+    _designerCandidates() {
+        const rows = (this.templates || []).filter((t) => t[F.Type] === 'HTML');
+        return rows.sort((a, b) => String(b.LastModifiedDate || '').localeCompare(String(a.LastModifiedDate || '')));
+    }
+
+    _designerMatches() {
+        const q = (this.designerPickerQuery || '').trim().toLowerCase();
+        const rows = this._designerCandidates();
+        if (!q) {
+            return rows;
+        }
+        return rows.filter((t) =>
+            [t.Name, t[F.Category], t[F.BaseObject], t.displayBaseObject, t[F.ApiName], t[F.Desc]]
+                .filter(Boolean)
+                .some((v) => String(v).toLowerCase().includes(q))
+        );
+    }
+
+    get designerOpenList() {
+        return this._designerMatches()
+            .slice(0, this.designerPickerLimit)
+            .map((t) => ({
+                value: t.Id,
+                label: t.Name,
+                // One quiet line of context, so two templates called "Invoice" are
+                // still tellable apart without opening them.
+                meta: [t[F.Category], t.displayBaseObject].filter(Boolean).join(' · ')
+            }));
+    }
+
+    get designerPickerSummary() {
+        const total = this._designerCandidates().length;
+        const matched = this._designerMatches().length;
+        const shown = Math.min(matched, this.designerPickerLimit);
+        if (matched === 0) {
+            return 'No templates match “' + this.designerPickerQuery + '”';
+        }
+        if (matched === total && matched <= shown) {
+            return total === 1 ? '1 template' : total + ' templates';
+        }
+        return (
+            'Showing ' + shown + ' of ' + matched + (matched === total ? '' : ' matching') + ' · ' + total + ' total'
+        );
+    }
+
+    get designerPickerHasMore() {
+        return this._designerMatches().length > this.designerPickerLimit;
+    }
+
+    handleDesignerPickerSearch(event) {
+        this.designerPickerQuery = event.target.value || '';
+        // A new search starts from the top again, or "show more" state from the
+        // previous query silently widens this one.
+        this.designerPickerLimit = 8;
+    }
+
+    /** Enter opens the best match — the fastest path when you know the name. */
+    handleDesignerPickerKeydown(event) {
+        if (event.key !== 'Enter') {
+            return;
+        }
+        event.preventDefault();
+        const first = this._designerMatches()[0];
+        if (first) {
+            this.openDesignerForRow(first);
+        }
+    }
+
+    handleDesignerPickerMore() {
+        this.designerPickerLimit += this.DESIGNER_PICKER_PAGE;
     }
 
     /**
