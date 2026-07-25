@@ -1,0 +1,3363 @@
+{
+    "meta": {
+        "org": "docgen-verify",
+        "startedAt": "2026-07-25T15:21:59.246Z",
+        "durationMs": 28,
+        "args": "--offline --suite metadata-audit"
+    },
+    "tally": {
+        "passed": 318,
+        "failed": 158,
+        "skipped": 0,
+        "evaluated": 476,
+        "total": 476,
+        "rate": 66.8,
+        "bySeverity": {
+            "blocker": 0,
+            "major": 34,
+            "minor": 124
+        }
+    },
+    "suites": [
+        {
+            "suite": "metadata-audit",
+            "area": "Metadata",
+            "checks": [
+                {
+                    "name": "DocGen_Asset__c has a page layout",
+                    "ok": false,
+                    "detail": "no layout file references this object",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Asset_Key__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Asset_Key__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Asset_Type__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Asset_Type__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Asset_Type__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Category__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Category__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Category__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Is_Active__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Asset__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Is_Active__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Asset__c.Is_Active__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Active__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Document_Title__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Object_API_Name__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Output_Format_Override__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Record_Type_Developer_Names__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Save_To_Record__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Sort_Order__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Template_API_Name__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Button__mdt.Template_Id__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c has a page layout",
+                    "ok": false,
+                    "detail": "no layout file references this object",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Body_Html__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Body_Html__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Body_Html__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Body_Plain__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Body_Plain__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Body_Plain__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Brand_Color__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Brand_Color__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Brand_Color__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Description__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Description__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Description__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Footer_Text__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Footer_Text__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Footer_Text__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Is_Active__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Is_Active__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Is_Active__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Layout_Mode__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Layout_Mode__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Layout_Mode__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Asset_Key__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Asset_Key__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Asset_Key__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Height__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Height__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Height__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Url_Extended__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Url_Extended__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Url_Extended__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Url__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Url__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Logo_Url__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Subject__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Subject__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Subject__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Type__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Email_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Email_Template__c.Type__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Additional_Info__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Additional_Info__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Additional_Info__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Context__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Context__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Context__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Exception_Type__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Exception_Type__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Exception_Type__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Flow_Interview_Guid__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Flow_Interview_Guid__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Flow_Interview_Guid__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Job_Id__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Job_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Job_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Message__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Message__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Message__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Operation__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Operation__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Operation__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Record_Id__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Record_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Record_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Severity__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Severity__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Severity__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Stack_Trace__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Stack_Trace__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Stack_Trace__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Template_Id__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Template_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.Template_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.User_Id__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.User_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Error_Log__c.User_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Field_Writeback__e.Request_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Guest_Render__e.Job_Id__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Guest_Render__e.Record_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Guest_Render__e.Template_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Data_Cache_CV__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Error_Count__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Error_Count__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Error_Count__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Error_Log__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Error_Log__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Error_Log__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Giant_Query_Config__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Label__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Label__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Label__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Merge_Only__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Merge_Only__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Merge_Only__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Merged_PDF_CV__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Merged_PDF_CV__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Merged_PDF_CV__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Parent_Record_Id__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Parent_Record_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Parent_Record_Id__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Query_Condition__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Query_Condition__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Query_Condition__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Status__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Status__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Status__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Success_Count__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Success_Count__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Success_Count__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Template__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Template__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Total_Records__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Total_Records__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Job__c.Total_Records__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c.Description__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c.Description__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c.Description__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c.DocGen_Template__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c.DocGen_Template__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c.Query_Condition__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c.Query_Condition__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Saved_Query__c.Query_Condition__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Company_Name__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Experience_Site_Url__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Email_Brand_Color__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Email_Footer_Text__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Email_Logo_Url__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Email_Message__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Email_Subject__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Expiration_Days__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_OWA_Id__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Prefill_Signer_Email__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Reminder_Enabled__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Reminder_Hours__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Reminder_Schedule__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Settings__c.Signature_Skip_Email_Verification__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Consent_Captured__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Consent_Captured__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Consent_Captured__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Contact__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Contact__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Contact__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Document_Hash_SHA256__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Document_Hash_SHA256__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Document_Hash_SHA256__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Error_Message__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Error_Message__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Error_Message__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.IP_Address__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.IP_Address__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.IP_Address__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.PIN_Verified_At__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.PIN_Verified_At__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.PIN_Verified_At__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signature_Request__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signature_Request__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signed_Date__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signed_Date__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signed_Date__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer_Email__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer_Email__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer_Email__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer_Name__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer_Name__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer_Name__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Signer__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.User_Agent__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.User_Agent__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.User_Agent__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Verification_Method__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Verification_Method__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Audit__c.Verification_Method__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_PDF__e.Request_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Document_Index__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Document_Index__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Document_Index__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Placement_Type__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Placement_Type__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Placement_Type__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Render_Inline__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Placement__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Render_Inline__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Render_Inline__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Section_Context__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Section_Context__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Section_Context__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Sequence_Order__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Sequence_Order__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Sequence_Order__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signature_Request__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signature_Request__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signature_Request__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signed_At__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signed_At__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signed_At__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signed_Value__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signed_Value__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signed_Value__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signer__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Signer__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Status__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Status__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Status__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Tag_Text__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Tag_Text__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Placement__c.Tag_Text__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Document_Title_Format__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Document_Title_Format__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Document_Title_Format__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Email_Status__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Email_Status__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Email_Status__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Expires_At__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Expires_At__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Expires_At__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Frozen_Document_CV_Id__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Frozen_Document__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Request__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Frozen_Document__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Frozen_Document__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Prefill_Signer_Email__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Prefill_Signer_Email__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Prefill_Signer_Email__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Related_Record_Id__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Related_Record_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Related_Record_Id__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Render_Data_Snapshot__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Require_Email_Verification__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Require_Email_Verification__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Require_Email_Verification__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Secure_Token__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signature_Data__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signer_Email__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signer_Email__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signer_Email__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signer_Name__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signer_Name__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signer_Name__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signing_Order__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signing_Order__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Signing_Order__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Snapshot_Hash__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Snapshot_Taken_At__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Signature_Request__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Snapshot_Taken_At__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Snapshot_Taken_At__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Source_Document_Id__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Source_Document_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Source_Document_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Status__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Status__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Status__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Template_Ids__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Template_Ids__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Template_Ids__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Template__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Template__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signature_Request__c.Template__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Consent_Captured__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Consent_Captured__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Consent_Captured__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Contact__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Contact__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Contact__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Decline_Reason__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Decline_Reason__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Decline_Reason__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Field_Data_Json__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Attempts__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Attempts__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Attempts__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Expires_At__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Expires_At__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Expires_At__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Hash__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Verified_At__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Verified_At__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.PIN_Verified_At__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Reminder_Sent_At__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Reminder_Sent_At__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Reminder_Sent_At__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Reminders_Sent__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Reminders_Sent__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Reminders_Sent__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Role_Name__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Role_Name__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Role_Name__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Secure_Token__c is kept OFF the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signature_Data__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signature_Data__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signature_Data__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signature_Request__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signature_Request__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signer_Email__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signer_Email__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signer_Email__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signer_Name__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signer_Name__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Signer_Name__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Sort_Order__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Sort_Order__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Sort_Order__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Status__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Status__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Signer__c.Status__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Base_Object_API__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Base_Object_API__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Base_Object_API__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Category__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Category__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Category__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Content_Version_Id__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Content_Version_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Content_Version_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Custom_Margins__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Custom_Margins__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Custom_Margins__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Description__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Description__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Description__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Document_Title_Format__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Document_Title_Format__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Document_Title_Format__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Footer_Html__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Footer_Html__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Footer_Html__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Header_Html__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Header_Html__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Header_Html__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Is_Active__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Is_Active__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Is_Active__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Output_Format__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Output_Format__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Output_Format__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Margins__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Margins__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Margins__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Orientation__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Orientation__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Orientation__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Size__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Size__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Page_Size__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Pre_Decomposition_Status__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Pre_Decomposition_Status__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Pre_Decomposition_Status__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Query_Config__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Query_Config__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Query_Config__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Template__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Template__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Type__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Type__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Type__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Watermark_Image_CV_Id__c is on the page layout",
+                    "ok": false,
+                    "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template_Version__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Watermark_Image_CV_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template_Version__c.Watermark_Image_CV_Id__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c has a page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.API_Name__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.API_Name__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.API_Name__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Base_Object_API__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Base_Object_API__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Category__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Category__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Category__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Custom_Margins__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Custom_Margins__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Custom_Margins__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Default_Email_Message__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Default_Email_Message__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Default_Email_Message__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Description__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Description__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Description__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Document_Title_Format__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Document_Title_Format__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Document_Title_Format__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Footer_Html__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Footer_Html__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Form_Fields_Config__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Form_Fields_Config__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Header_Html__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Header_Html__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Is_Active__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Is_Active__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Is_Active__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Is_Default__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Is_Default__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Is_Default__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Lock_Output_Format__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Lock_Output_Format__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Lock_Output_Format__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Output_Format__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Output_Format__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Margins__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Margins__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Margins__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Orientation__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Orientation__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Orientation__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Size__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Size__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Page_Size__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Prefill_Signer_Email__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Prefill_Signer_Email__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Prefill_Signer_Email__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Query_Config__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Query_Config__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Record_Filter__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Record_Filter__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Required_Permission_Sets__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Required_Permission_Sets__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Required_Permission_Sets__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Signer_Verification__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Signer_Verification__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Signer_Verification__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Sort_Order__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Sort_Order__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Sort_Order__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Specific_Record_Ids__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Specific_Record_Ids__c has a description or help text",
+                    "ok": false,
+                    "detail": "no <description> or <inlineHelpText> — the admin has no idea what it does",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Test_Record_Id__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Test_Record_Id__c is granted on DocGen_Admin",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Test_Record_Id__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Type__c is on the page layout",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "DocGen_Template__c.Type__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "Product2.Product_Image__c has a description or help text",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenAdmin is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__AppPage, lightning__HomePage, lightning__Tab",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenAdmin (app page) is reachable from a tab",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenAdminGuide is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__AppPage, lightning__RecordPage, lightning__HomePage, lightning__Tab",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenAdminGuide (app page) is reachable from a tab",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenAuthenticator is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightningCommunity__Page, lightning__AppPage",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenAuthenticator (app page) is reachable from a tab",
+                    "ok": false,
+                    "detail": "no tab references it — reachable only via a hand-built Lightning page",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenBulkRunner is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__AppPage, lightning__HomePage, lightning__Tab",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenBulkRunner (app page) is reachable from a tab",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenButton is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__RecordAction",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenCommandHub is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__AppPage, lightning__HomePage, lightning__Tab",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenCommandHub (app page) is reachable from a tab",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenQueryBuilder is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__AppPage, lightning__RecordPage, lightning__HomePage",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenQueryBuilder (app page) is reachable from a tab",
+                    "ok": false,
+                    "detail": "no tab references it — reachable only via a hand-built Lightning page",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenRunner is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__RecordPage, lightning__AppPage, lightning__FlowScreen, lightning__UtilityBar, lightningCommunity__Page, lightningCommunity__Default",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenRunner (app page) is reachable from a tab",
+                    "ok": false,
+                    "detail": "no tab references it — reachable only via a hand-built Lightning page",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenSetupWizard is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__AppPage, lightning__HomePage, lightning__RecordPage, lightning__Tab",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenSetupWizard (app page) is reachable from a tab",
+                    "ok": true,
+                    "detail": "",
+                    "severity": "minor",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenSignatureSender is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__RecordAction, lightning__RecordPage",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenTreeBuilder is exposed and declares at least one target",
+                    "ok": true,
+                    "detail": "lightning__AppPage, lightning__RecordPage, lightning__HomePage",
+                    "severity": "major",
+                    "skipped": false
+                },
+                {
+                    "name": "docGenTreeBuilder (app page) is reachable from a tab",
+                    "ok": false,
+                    "detail": "no tab references it — reachable only via a hand-built Lightning page",
+                    "severity": "minor",
+                    "skipped": false
+                }
+            ],
+            "skipped": false,
+            "reason": ""
+        }
+    ]
+}

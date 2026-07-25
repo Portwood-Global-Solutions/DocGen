@@ -13,7 +13,9 @@
         "format": "prettier --write \"force-app/**/*.{cls,trigger,page,component,cmp,html,js,xml}\" \"scripts/**/*.apex\" \"*.{json,md,yml,yaml}\"",
         "format:check": "prettier --check \"force-app/**/*.{cls,trigger,page,component,cmp,html,js,xml}\" \"scripts/**/*.apex\" \"*.{json,md,yml,yaml}\"",
         "prepare": "husky",
-        "smoke": "node scripts/ui-smoke.mjs"
+        "smoke": "node scripts/ui-smoke.mjs",
+        "qa": "node scripts/qa/run-all.mjs",
+        "qa:offline": "node scripts/qa/run-all.mjs --offline"
     },
     "devDependencies": {
         "@prettier/plugin-xml": "3.4.2",
