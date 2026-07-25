@@ -13,6 +13,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     // Designer live PDF preview: when set, HTML-template merges render this
     // draft body instead of the saved one. See mergeTemplate().
     public static String draftHtmlBodyOverride;
+    // Designer live preview: the UNSAVED running header/footer. Without these the
+    // preview rendered the header/footer from the SAVED record, so header edits never
+    // appeared in the PDF the author was checking them against. Null means "use the
+    // saved values"; empty string is a deliberate "the author cleared it".
+    public static String draftHeaderHtmlOverride;
+    public static String draftFooterHtmlOverride;
     // Signer form fields ({?key} tags): preserved verbatim during the send-time
     // merge / snapshot freeze (so the placeholder survives into the signed-doc
     // template), then resolved when the signature finalize re-render flips this
@@ -669,8 +675,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 mr,
                 base64File,
                 recordDataMap,
-                (String) dataMap.get('headerHtml'),
-                (String) dataMap.get('footerHtml'),
+                draftHeaderHtmlOverride != null ? draftHeaderHtmlOverride : (String) dataMap.get('headerHtml'),
+                draftFooterHtmlOverride != null ? draftFooterHtmlOverride : (String) dataMap.get('footerHtml'),
                 (String) dataMap.get('titleFormat')
             );
         }

@@ -3975,12 +3975,22 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * ContentVersion + native file-preview path.
      */
     @AuraEnabled
-    public static Map<String, Object> previewDraftPdfData(Id templateId, Id recordId, String draftHtml) {
+    public static Map<String, Object> previewDraftPdfData(
+        Id templateId,
+        Id recordId,
+        String draftHtml,
+        String draftHeaderHtml,
+        String draftFooterHtml
+    ) {
         if (String.isBlank(draftHtml)) {
             throw DocGenService.ahe('Nothing to preview — the editor is empty.');
         }
         try {
             DocGenService.draftHtmlBodyOverride = draftHtml;
+            // The running header/footer are edited live in the canvas now, so the
+            // preview has to render THOSE, not whatever was last saved.
+            DocGenService.draftHeaderHtmlOverride = draftHeaderHtml;
+            DocGenService.draftFooterHtmlOverride = draftFooterHtml;
             Map<String, Object> result = DocGenService.generatePdfBlob(templateId, recordId);
             Blob pdfBlob = (Blob) result.get('blob');
             // ~6MB AuraEnabled response ceiling; base64 inflates 4/3.
@@ -3997,6 +4007,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe('Preview failed: ' + e.getMessage());
         } finally {
             DocGenService.draftHtmlBodyOverride = null;
+            DocGenService.draftHeaderHtmlOverride = null;
+            DocGenService.draftFooterHtmlOverride = null;
         }
     }
 
@@ -4009,12 +4021,20 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * large for the Aura payload).
      */
     @AuraEnabled
-    public static Map<String, Object> previewDraftPdf(Id templateId, Id recordId, String draftHtml) {
+    public static Map<String, Object> previewDraftPdf(
+        Id templateId,
+        Id recordId,
+        String draftHtml,
+        String draftHeaderHtml,
+        String draftFooterHtml
+    ) {
         if (String.isBlank(draftHtml)) {
             throw DocGenService.ahe('Nothing to preview — the editor is empty.');
         }
         try {
             DocGenService.draftHtmlBodyOverride = draftHtml;
+            DocGenService.draftHeaderHtmlOverride = draftHeaderHtml;
+            DocGenService.draftFooterHtmlOverride = draftFooterHtml;
             Map<String, Object> result = DocGenService.generatePdfBlob(templateId, recordId);
             Blob pdfBlob = (Blob) result.get('blob');
             // Persist as a ContentVersion so the LWC can open Salesforce's
@@ -4059,6 +4079,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe(e, 'PDF preview failed. Check the template HTML and sample record.');
         } finally {
             DocGenService.draftHtmlBodyOverride = null;
+            DocGenService.draftHeaderHtmlOverride = null;
+            DocGenService.draftFooterHtmlOverride = null;
         }
     }
 

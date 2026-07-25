@@ -1820,6 +1820,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             // Steer the caret into real content BEFORE the
                             // browser's default edit runs.
                             this._normalizeRootCaret(pv);
+                            this._guardCanvasFloor(e, pv);
                             // Open slash menu drives arrows/Enter/Escape.
                             if (this._slashMenuKeydown(e)) {
                                 return;
@@ -6622,6 +6623,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (this._paintedEl === target) {
                 return;
             }
+            // Sweep EVERY painted element, not just the one we think we painted.
+            // Three systems tint things — the active block, the Excel-style cell
+            // selection and the table band hover — and each kept its own bookkeeping.
+            // When one repainted an element another had already touched, the restore
+            // bookkeeping went stale and the tint was stranded, so moving block to
+            // block or cell to cell left several areas lit at once.
             this._clearActiveBlockPaint();
             if (!target || target === pv) {
                 return;
@@ -6629,11 +6636,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._paintedEl = target;
             // null when the element had no style attribute at all — restore removes it.
             this._paintedPrevStyle = target.getAttribute('style');
+            target.setAttribute('data-dg-paint', 'block');
             const isCell = target.tagName === 'TD' || target.tagName === 'TH';
             target.style.backgroundColor = 'rgba(124, 58, 237, 0.06)';
             if (isCell) {
-                // Inside a grid an outline reads correctly; a left bar collides with
-                // the cell border.
                 target.style.outline = '2px solid #7c3aed';
                 target.style.outlineOffset = '-2px';
             } else {
@@ -6644,24 +6650,47 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    /** Restore the author's original style attribute on the highlighted element. */
+    /**
+     * Remove every editor highlight, whoever applied it. Sweeping by marker rather
+     * than by remembered reference is what stops tints being stranded when the canvas
+     * re-renders or two systems touch the same element.
+     */
     _clearActiveBlockPaint() {
         const el = this._paintedEl;
         this._paintedEl = null;
-        if (!el) {
-            return;
-        }
-        try {
-            if (this._paintedPrevStyle === null || this._paintedPrevStyle === undefined) {
-                el.removeAttribute('style');
-            } else {
-                el.setAttribute('style', this._paintedPrevStyle);
+        if (el) {
+            try {
+                if (this._paintedPrevStyle === null || this._paintedPrevStyle === undefined) {
+                    el.removeAttribute('style');
+                } else {
+                    el.setAttribute('style', this._paintedPrevStyle);
+                }
+                el.removeAttribute('data-dg-paint');
+            } catch (e) {
+                /* detached */
             }
-        } catch (e) {
-            /* best effort */
         }
         this._paintedPrevStyle = null;
+        for (const surface of this._allSurfaces()) {
+            let stragglers;
+            try {
+                stragglers = surface.querySelectorAll('[data-dg-paint]');
+            } catch (e) {
+                continue;
+            }
+            for (const node of stragglers) {
+                node.style.backgroundColor = '';
+                node.style.boxShadow = '';
+                node.style.outline = '';
+                node.style.outlineOffset = '';
+                node.removeAttribute('data-dg-paint');
+                if (!node.getAttribute('style')) {
+                    node.removeAttribute('style');
+                }
+            }
+        }
     }
+
     _paintedEl = null;
     _paintedPrevStyle = null;
 
@@ -7744,6 +7773,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             } else {
                 el.setAttribute('style', prev);
             }
+            el.removeAttribute('data-dg-paint');
         }
         this._bandPainted = [];
         const table = this._overlayTable;
@@ -7769,6 +7799,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         for (const cell of targets) {
             this._bandPainted.push([cell, cell.getAttribute('style')]);
+            cell.setAttribute('data-dg-paint', 'band');
             cell.style.backgroundColor = 'rgba(124, 58, 237, 0.14)';
         }
     }
@@ -9725,6 +9756,58 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * community report, Edge). Move such a caret to the start of the first
      * real content node so native editing always acts on content.
      */
+    /**
+     * Backspace/Delete must not be able to destroy the document's floor.
+     *
+     * On a new or nearly-empty page, holding Backspace ate the last block and then
+     * the scoped <style> element that gives the canvas its page styling — the white
+     * sheet vanished and the editor became unusable with no obvious way back. Nothing
+     * short of reloading recovered it.
+     *
+     * Two guards: refuse a deleting keystroke that would leave no editable block, and
+     * refuse one whose selection has swallowed the <style>.
+     */
+    _guardCanvasFloor(e, pv) {
+        if (!e || (e.key !== 'Backspace' && e.key !== 'Delete')) {
+            return;
+        }
+        try {
+            const style = this._pvStyleEl;
+            const blocks = pv.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, div, blockquote, table');
+            const sel = window.getSelection();
+
+            // A selection that spans the stylesheet would take it with it.
+            if (style && sel && sel.rangeCount && !sel.isCollapsed) {
+                const r = sel.getRangeAt(0);
+                if (r.intersectsNode && r.intersectsNode(style)) {
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // Last block, caret at its very start, nothing selected: the next
+            // Backspace merges it into the canvas root and strands the caret before
+            // the stylesheet. Keep one empty paragraph as the floor.
+            if (blocks.length <= 1 && e.key === 'Backspace' && sel && sel.isCollapsed) {
+                const only = blocks[0];
+                const atStart =
+                    !only ||
+                    (sel.anchorNode === only && sel.anchorOffset === 0) ||
+                    (sel.anchorNode &&
+                        sel.anchorNode.nodeType === 3 &&
+                        sel.anchorOffset === 0 &&
+                        only &&
+                        only.contains(sel.anchorNode) &&
+                        (only.textContent || '').length <= 1);
+                if (atStart) {
+                    e.preventDefault();
+                }
+            }
+        } catch (err) {
+            /* never let a guard break typing */
+        }
+    }
+
     _normalizeRootCaret(pv) {
         try {
             const sel = window.getSelection();
@@ -10022,7 +10105,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const res = await previewDraftPdfData({
                 templateId: this.editTemplateId,
                 recordId: this.editTemplateTestRecordId,
-                draftHtml
+                draftHtml,
+                // The running header/footer are live canvas surfaces now, so the
+                // preview must render the UNSAVED versions or the author is checking
+                // their header edits against whatever was last saved.
+                draftHeaderHtml: this.editTemplateHeaderHtml || '',
+                draftFooterHtml: this.editTemplateFooterHtml || ''
             });
             if (res && res.base64) {
                 const raw = atob(res.base64);
@@ -10052,7 +10140,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const res2 = await previewDraftPdf({
                 templateId: this.editTemplateId,
                 recordId: this.editTemplateTestRecordId,
-                draftHtml
+                draftHtml,
+                draftHeaderHtml: this.editTemplateHeaderHtml || '',
+                draftFooterHtml: this.editTemplateFooterHtml || ''
             });
             if (!res2 || !res2.contentDocumentId) {
                 throw new Error('Preview returned no PDF.');
@@ -11304,9 +11394,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._closeSlashMenu();
                 return;
             }
-            const host = this.template.querySelector('.dg-visual-host');
-            const pv = host && host.querySelector('.dg-pv');
-            if (!pv || !pv.contains(node) || (node.parentElement && node.parentElement.closest('[data-dg-tag]'))) {
+            // pv.contains() is the LWS-unreliable call documented in #240; a false
+            // negative here meant the ` / [ insert menu simply never opened. It also
+            // could not see the running header/footer bands at all.
+            const pv = this._surfaceContaining(node);
+            if (!pv || (node.parentElement && node.parentElement.closest('[data-dg-tag]'))) {
                 this._closeSlashMenu();
                 return;
             }

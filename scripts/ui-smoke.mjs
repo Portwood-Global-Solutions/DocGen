@@ -755,6 +755,61 @@ async function main() {
         record('zoom: Fit width fills the column', extras.fit === 'ok', extras.fit || '');
         record('focus mode hides the setup chrome', extras.focus === 'ok', extras.focus || '');
 
+        // --- 4c-5. Highlight residue, backspace floor, backtick menu -------------
+        const hygiene = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const style = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (style) pv.appendChild(style);
+      const a = document.createElement('p'); a.textContent = 'block one'; pv.appendChild(a);
+      const b = document.createElement('p'); b.textContent = 'block two'; pv.appendChild(b);
+      const t = document.createElement('table');
+      t.innerHTML = '<tr><td>c1</td><td>c2</td></tr>';
+      pv.appendChild(t);
+      pv.focus();
+      const put = (el) => {
+        const r = document.createRange(); r.selectNodeContents(el); r.collapse(true);
+        const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r);
+        document.dispatchEvent(new Event('selectionchange'));
+      };
+      // Walk block -> block -> cell -> cell; only ONE region may stay highlighted.
+      put(a);
+      return new Promise((resolve) => setTimeout(() => {
+        put(b);
+        setTimeout(() => {
+          const cells = t.querySelectorAll('td');
+          put(cells[0]);
+          setTimeout(() => {
+            put(cells[1]);
+            setTimeout(() => {
+              const painted = pv.querySelectorAll('[data-dg-paint]').length;
+              const out = { painted };
+
+              // Backtick must open the insert menu.
+              const p3 = document.createElement('p'); pv.appendChild(p3);
+              const tn = document.createTextNode('\u0060');
+              p3.appendChild(tn);
+              const r3 = document.createRange();
+              r3.setStart(tn, 1); r3.collapse(true);
+              const s3 = window.getSelection(); s3.removeAllRanges(); s3.addRange(r3);
+              pv.dispatchEvent(new Event('input', {bubbles:true}));
+              setTimeout(() => {
+                out.slash = !!__dgFind('.dg-slash-menu') || !!__dgFind('[class*="slash"]');
+                resolve(out);
+              }, 400);
+            }, 300);
+          }, 300);
+        }, 300);
+      }, 300));`)
+        );
+        record(
+            'only one region highlighted after moving block->block->cell->cell',
+            hygiene.painted <= 1,
+            hygiene.painted + ' regions painted'
+        );
+        record('backtick opens the insert menu', !!hygiene.slash, '');
+
         // --- 4d. Invisible chrome must never intercept clicks --------------------
         // opacity: 0 does NOT remove an element from hit-testing. Any overlay left at
         // pointer-events: auto while invisible becomes a dead zone over the document.
