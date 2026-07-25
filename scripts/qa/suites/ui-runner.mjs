@@ -16,32 +16,49 @@
  * document was produced — every generation check ends in a SOQL query for the
  * DocGen_Job__c row and the ContentVersion rows that should now exist.
  *
- * WHAT IT COULD NOT REACH (see the skip checks at the bottom, and the report's
- * "Not covered by this run" section)
- * ---------------------------------------------------------------------------
- * docGenRunner, docGenSignatureSender and docGenButton are lightning__RecordPage /
- * lightning__RecordAction components. The package ships tabs for the admin
- * surfaces but NO Lightning record page and NO quick action, and the verify org
- * has none either (`SELECT DeveloperName, Type FROM FlexiPage` returns only
- * UtilityBar rows). There is no supported URL that renders an LWC on a record
- * without a page assignment, so reaching them means hand-building a Lightning
- * record page — which this suite is not allowed to deploy. Those components are
- * therefore recorded as SKIPPED checks with that reason, and their server
- * contract (what the runner's wires and buttons actually call) is exercised
- * through the same Apex the component calls, clearly labelled as such.
+ * HOW THE RECORD-PAGE COMPONENTS ARE REACHED
+ * ------------------------------------------
+ * docGenRunner and docGenSignatureSender are lightning__RecordPage components and
+ * the package deliberately ships no FlexiPage — customers place them themselves.
+ * There is no supported URL that renders an LWC on a record without a page
+ * assignment, so for a long time both were recorded here as SKIPPED. They are now
+ * hosted by a QA-ONLY FlexiPage, `QA_DocGen_Account_Record`, which lives in
+ * scripts/qa/fixtures/ (OUTSIDE force-app, so a package build cannot pick it up)
+ * and is deployed to the verify org by scripts/qa/fixtures/deploy.sh. It is
+ * assigned as the org-default Account record page, so openRecord(page, base,
+ * <accountId>) renders both components. If those checks start reporting the host
+ * as missing, re-run that deploy script — do NOT re-skip them.
+ *
+ * docGenButton is still unreachable: it is lightning__RecordAction ONLY, and no
+ * quick action hosts it. That remains a skip, with that reason.
+ *
+ * WHAT IT COULD NOT REACH
+ * -----------------------
+ * See the skip checks at the bottom and the report's "Not covered by this run"
+ * section. A skipped check is never counted as a pass.
  *
  * HOUSE RULES OBSERVED (from scripts/ui-smoke.mjs)
- *   1. Assert behaviour + server state, not layout.
+ *   1. login() busts Lightning's IndexedDB cache. It is never skipped — and any
+ *      navigation in this file that must NOT see a cached @AuraEnabled(cacheable)
+ *      payload goes through clearLightningCache() first (the empty-state check
+ *      would otherwise assert against a template list captured seconds earlier).
  *   2. HIT_TEST every control before believing it is usable — "it is in the DOM"
  *      has hidden at least one blocker in this very component (see the spinner
  *      overlay check below, which is a real defect this suite found).
  *   3. CSS :hover ignores synthetic events — drive with page.mouse.
- *   4. Synthetic keydown is not typing — drive with page.keyboard.
+ *   4. Synthetic keydown is not typing — drive with page.keyboard. The one
+ *      exception is the runner's NATIVE <select> controls, which are driven with
+ *      Playwright's own selectOption(): a native dropdown popup is an OS-level
+ *      window that page.mouse cannot reach, and selectOption is a real Playwright
+ *      action (it fires the browser's own input/change), not a dispatched event.
  *   5. inPage() bodies are TEMPLATE LITERALS: a backslash-s becomes a literal
  *      "s". No regex escapes are used in any evaluated body below.
+ *   6. host.textContent on an LWC is the EMPTY STRING — content lives in the
+ *      shadow root. Everything that reads component text goes through the
+ *      shadow-walking helpers, never textContent on a host.
  */
 import { check, skip, suiteResult, suiteSkipped, SEVERITY } from '../lib/report.mjs';
-import { launch, login, openTab, inPage, HIT_TEST } from '../lib/browser.mjs';
+import { launch, login, openTab, openRecord, inPage, HIT_TEST } from '../lib/browser.mjs';
 import { runAnonymous, debugMap, soql } from '../lib/sf.mjs';
 
 /** Everything this suite creates is prefixed so a repeat run can clean up first. */
@@ -62,8 +79,18 @@ const OUT_MODES = ['Individual Files', 'Print-Ready Packet', 'Combined + Individ
  *   Filtered Out  — Record_Filter__c that excludes the test records
  *   Needs PermSet — Required_Permission_Sets__c the running user does not hold
  *   Inactive      — Is_Active__c = false
+ *
+ * `runTag` is stamped into Good PDF's Document_Title_Format__c (on BOTH the
+ * template and its active version — the render path prefers the version's
+ * snapshot) so the file the record-page runner produces can be identified by
+ * name in a shared org. Without it, "a PDF appeared on the Account" proves
+ * nothing: this suite's own bulk phase and every previous run leave PDFs there.
+ *
+ * Two ready-made PDFs are also attached to Alpha so the Combine PDFs tab has
+ * something to list. Its dual listbox is populated from getRecordPdfs at wire
+ * time, so they must exist BEFORE the page loads.
  */
-const SEED_APEX = `
+const seedApex = (runTag) => `
 List<DocGen_Template__c> old = [SELECT Id FROM DocGen_Template__c WHERE Name LIKE '${PREFIX}%'];
 if (!old.isEmpty()) {
     Set<Id> ids = new Set<Id>();
@@ -85,7 +112,8 @@ String body = '<html><body><h1>{Name}</h1><p>{Industry}</p></body></html>';
 String qc = 'Name, Industry';
 
 DocGen_Template__c good = new DocGen_Template__c(Name = '${PREFIX} Good PDF', Base_Object_API__c = 'Account',
-    Type__c = 'HTML', Output_Format__c = 'PDF', Query_Config__c = qc, Is_Active__c = true, Category__c = '${PREFIX}');
+    Type__c = 'HTML', Output_Format__c = 'PDF', Query_Config__c = qc, Is_Active__c = true, Category__c = '${PREFIX}',
+    Document_Title_Format__c = '${runTag} {Name}');
 DocGen_Template__c noVer = new DocGen_Template__c(Name = '${PREFIX} No Version', Base_Object_API__c = 'Account',
     Type__c = 'HTML', Output_Format__c = 'PDF', Query_Config__c = qc, Is_Active__c = true, Category__c = '${PREFIX}');
 DocGen_Template__c locked = new DocGen_Template__c(Name = '${PREFIX} Locked Format', Base_Object_API__c = 'Account',
@@ -114,10 +142,20 @@ Integer i = 0;
 for (DocGen_Template__c t : withBody) {
     vers.add(new DocGen_Template_Version__c(Template__c = t.Id, Is_Active__c = true, Type__c = 'HTML',
         Output_Format__c = 'PDF', Base_Object_API__c = 'Account', Query_Config__c = qc,
-        Content_Version_Id__c = cvs[i].Id));
+        Content_Version_Id__c = cvs[i].Id,
+        Document_Title_Format__c = t.Id == good.Id ? '${runTag} {Name}' : null));
     i++;
 }
 insert vers;
+
+// Two PDFs on Alpha so the Combine PDFs tab has a populated source list.
+Blob sample = Blob.toPdf('<html><body><p>${PREFIX} merge source</p></body></html>');
+insert new List<ContentVersion>{
+    new ContentVersion(Title = '${PREFIX} merge source A', PathOnClient = 'uiqa-merge-a.pdf',
+        VersionData = sample, FirstPublishLocationId = accts[0].Id),
+    new ContentVersion(Title = '${PREFIX} merge source B', PathOnClient = 'uiqa-merge-b.pdf',
+        VersionData = sample, FirstPublishLocationId = accts[0].Id)
+};
 
 // A job parked in a non-terminal status. Recent Jobs renders a spinner for it,
 // which is the precondition for the overlay check in the browser phase — seeded
@@ -127,6 +165,8 @@ insert new DocGen_Job__c(Template__c = good.Id, Status__c = 'Queued', Label__c =
 
 System.debug('NS=' + DocGen_Template__c.sObjectType.getDescribe().getName());
 System.debug('ACCT=' + accts[0].Id);
+System.debug('GOOD=' + good.Id);
+System.debug('LOCKED=' + locked.Id);
 System.debug('SEEDED=' + [SELECT COUNT() FROM DocGen_Template__c WHERE Name LIKE '${PREFIX}%'] + ',' +
     [SELECT COUNT() FROM Account WHERE Name LIKE '${PREFIX}%']);
 `;
@@ -136,15 +176,17 @@ System.debug('SEEDED=' + [SELECT COUNT() FROM DocGen_Template__c WHERE Name LIKE
  *
  * These call the SAME Apex the docGenRunner component's wire and Generate button
  * call — getTemplatesForObjectAndRecord for the picker, processDocument for the
- * output. They are NOT a substitute for driving the component; they are here
- * because the component itself cannot be reached (see the header), and a picker
- * that offers an unusable template is a user-visible defect either way.
+ * output. The component IS driven in the browser further down; these exist
+ * because a few of its contracts have no UI surface at all. The clearest is the
+ * output-format lock: the runner removed its format picker in v1.74, so "the
+ * format cannot be overridden at run time" can only be proved by asking the
+ * server to override it and watching it refuse.
  *
  * Only DocGenException-throwing entry points are used: an @AuraEnabled method
  * that throws AuraHandledException cannot be caught in anonymous Apex, and an
  * uncatchable throw would roll the whole probe back with no output.
  */
-const PROBE_APEX = `
+const probeApex = (runTag) => `
 Id acctId = [SELECT Id FROM Account WHERE Name = '${PREFIX} Alpha' LIMIT 1].Id;
 Map<String, Id> byName = new Map<String, Id>();
 for (DocGen_Template__c t : [SELECT Id, Name FROM DocGen_Template__c WHERE Name LIKE '${PREFIX}%']) {
@@ -188,10 +230,52 @@ try {
 `;
 
 /**
+ * Hides every Account template so the runner's "no templates for this record"
+ * empty state can actually be observed.
+ *
+ * There is no other way to reach it: the picker keys on
+ * `Base_Object_API__c = :objectApiName AND Is_Active__c != FALSE`, and the QA
+ * FlexiPage is Account-only, so a record with no matching template does not
+ * exist while any active Account template does. The previous Is_Active__c value
+ * of every row is returned as JSON and re-applied immediately afterwards (and
+ * again from the suite's finally block), so the flip is restored even if the
+ * assertion throws. It is deliberately the FIRST browser check, to keep the
+ * window in which the org is modified as short as possible.
+ */
+const HIDE_ACCOUNT_TEMPLATES_APEX = `
+List<DocGen_Template__c> all = [SELECT Id, Is_Active__c FROM DocGen_Template__c WHERE Base_Object_API__c = 'Account'];
+List<Map<String, Object>> snap = new List<Map<String, Object>>();
+for (DocGen_Template__c t : all) {
+    snap.add(new Map<String, Object>{ 'i' => String.valueOf(t.Id), 'a' => t.Is_Active__c });
+    t.Is_Active__c = false;
+}
+update all;
+System.debug('SNAP=' + JSON.serialize(snap));
+`;
+
+/** Re-applies the exact Is_Active__c value each template had before the hide. */
+const restoreAccountTemplatesApex = (snapJson) => `
+List<Object> rows = (List<Object>) JSON.deserializeUntyped('${String(snapJson).replace(/'/g, "\\'")}');
+List<DocGen_Template__c> ups = new List<DocGen_Template__c>();
+for (Object o : rows) {
+    Map<String, Object> m = (Map<String, Object>) o;
+    ups.add(new DocGen_Template__c(Id = (Id) m.get('i'), Is_Active__c = (Boolean) m.get('a')));
+}
+update ups;
+System.debug('RESTORED=' + ups.size());
+`;
+
+/**
  * Cleanup. Note DocGen_Error_Log__c.Template_Id__c is a TEXT field, not a
  * lookup — binding a Set<Id> to it does not compile, and a compile failure here
  * would silently leave every seeded row (including the parked Queued job, which
  * would then break the Bulk Generation screen for anyone else using the org).
+ *
+ * The signature rows are removed BEFORE the templates they point at, and the two
+ * ContentVersions a signature request creates are removed by Id: the viewing
+ * document is titled after the template (so the '${PREFIX}%' sweep would catch
+ * it) but the frozen snapshot is titled `docgen_sig_frozen`, which that sweep
+ * would miss and which would then accumulate on every run.
  */
 const CLEANUP_APEX = `
 List<DocGen_Template__c> mine = [SELECT Id FROM DocGen_Template__c WHERE Name LIKE '${PREFIX}%'];
@@ -199,6 +283,22 @@ Set<Id> ids = new Set<Id>();
 Set<String> idStrings = new Set<String>();
 for (DocGen_Template__c t : mine) { ids.add(t.Id); idStrings.add(String.valueOf(t.Id)); }
 if (!ids.isEmpty()) {
+    List<DocGen_Signature_Request__c> reqs = [
+        SELECT Id, Source_Document_Id__c, Frozen_Document_CV_Id__c
+        FROM DocGen_Signature_Request__c WHERE Template__c IN :ids];
+    Set<Id> cvIds = new Set<Id>();
+    for (DocGen_Signature_Request__c r : reqs) {
+        if (String.isNotBlank(r.Source_Document_Id__c)) cvIds.add((Id) r.Source_Document_Id__c);
+        if (String.isNotBlank(r.Frozen_Document_CV_Id__c)) cvIds.add((Id) r.Frozen_Document_CV_Id__c);
+    }
+    if (!reqs.isEmpty()) {
+        Set<Id> reqIds = new Map<Id, DocGen_Signature_Request__c>(reqs).keySet();
+        delete [SELECT Id FROM DocGen_Signer__c WHERE Signature_Request__c IN :reqIds];
+        delete reqs;
+    }
+    if (!cvIds.isEmpty()) {
+        delete [SELECT Id FROM ContentDocument WHERE LatestPublishedVersionId IN :cvIds];
+    }
     delete [SELECT Id FROM DocGen_Error_Log__c WHERE Template_Id__c IN :idStrings];
     delete [SELECT Id FROM DocGen_Job__c WHERE Template__c IN :ids];
     delete [SELECT Id FROM DocGen_Saved_Query__c WHERE DocGen_Template__c IN :ids];
@@ -248,11 +348,12 @@ const host = (kebab) => `portwoodglobal-${kebab}, c-${kebab}`;
  * control that is merely below the fold, which is not a defect — a person would
  * scroll to it. What it must still catch is something ON TOP of the control.
  */
-async function locate(page, sel) {
+async function locate(page, sel, nth = 0) {
+    const pick = `const el = __dgFind(${JSON.stringify(sel)}, true)[${nth}] || null;`;
     const r = await ev(
         page,
         `
-    const el = __dgFind(${JSON.stringify(sel)});
+    ${pick}
     if (!el) return false;
     el.scrollIntoView({ block: 'center', inline: 'center' });
     return true;
@@ -264,7 +365,7 @@ async function locate(page, sel) {
         page,
         `
     ${HIT_TEST}
-    const el = __dgFind(${JSON.stringify(sel)});
+    ${pick}
     if (!el) return { found: false, hit: 'missing' };
     const b = el.getBoundingClientRect();
     return { found: true, hit: __dgHittable(el),
@@ -333,10 +434,196 @@ async function locateByText(page, sel, text) {
     );
 }
 
+/**
+ * Descends THROUGH the shadow roots of one element to the first `sel` inside it.
+ *
+ * __dgFind searches the whole document; this is scoped to a single host, which is
+ * the only way to tell three identically-rendered `<input class="slds-input">`
+ * elements apart. A lightning-input's real input is two shadow roots down
+ * (lightning-input → lightning-primitive-input-simple → input) and the host has
+ * NO light children, so `host.querySelector('input')` returns null — the walk has
+ * to start at the host's OWN shadow root, not at the host.
+ */
+const DEEP = `
+  const __dgDeep = (root, sel) => {
+    const walk = (n) => {
+      if (!n || !n.querySelectorAll) return null;
+      const hit = n.querySelector(sel);
+      if (hit) return hit;
+      for (const el of n.querySelectorAll('*')) {
+        if (el.shadowRoot) { const r = walk(el.shadowRoot); if (r) return r; }
+      }
+      return null;
+    };
+    return (root && root.shadowRoot ? walk(root.shadowRoot) : null) || walk(root);
+  };`;
+
+/**
+ * The real `<input>` of a lightning-input, identified by the host's `label`
+ * property (and `data-index` for the repeated signer rows).
+ *
+ * Matching on a CSS selector is not possible here: the signer row's Name and
+ * Email inputs carry no name, no placeholder and only a generated id.
+ */
+async function locateLightningInput(page, label, index) {
+    // The data-index clause is composed HERE, in node — an `index === undefined`
+    // test written inside the evaluated body would reference a variable that
+    // does not exist in the page and throw ReferenceError.
+    const byIndex = index === undefined ? '' : ` && (x.dataset || {}).index === ${JSON.stringify(index)}`;
+    const finder = `
+    ${DEEP}
+    const host = __dgFind('lightning-input', true).find(
+      x => x.label === ${JSON.stringify(label)}${byIndex});
+    const el = host ? __dgDeep(host, 'input') : null;`;
+    const found = await ev(
+        page,
+        `${finder}\n if (!el) return false; el.scrollIntoView({ block: 'center' }); return true;`
+    );
+    if (!found) return { found: false, hit: 'missing' };
+    await page.waitForTimeout(300);
+    return ev(
+        page,
+        `
+    ${HIT_TEST}
+    ${finder}
+    if (!el) return { found: false, hit: 'missing' };
+    const b = el.getBoundingClientRect();
+    return { found: true, hit: __dgHittable(el),
+             x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) };
+  `
+    );
+}
+
 /** Real mouse click — synthetic events do not reproduce what a person does. */
 async function clickAt(page, pos, settleMs = 1200) {
     await page.mouse.click(pos.x, pos.y);
     await page.waitForTimeout(settleMs);
+}
+
+/**
+ * Type into a control the way a person does: real mouse to focus, real keys.
+ * A dispatched keydown does not make the browser insert a character, and an
+ * assignment to .value does not fire the change LWC listens for.
+ */
+async function typeInto(page, pos, text) {
+    await clickAt(page, pos, 250);
+    await page.keyboard.type(text);
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(600);
+}
+
+/**
+ * Re-runs login()'s cache bust WITHOUT re-authenticating.
+ *
+ * The template picker is `@AuraEnabled(cacheable=true)`, so Lightning persists
+ * its payload to IndexedDB and will serve it to the next page load. The
+ * empty-state check would otherwise assert against the template list captured
+ * moments earlier and pass — or fail — for the wrong reason.
+ */
+async function clearLightningCache(page) {
+    await page.evaluate(async () => {
+        try {
+            localStorage.clear();
+            sessionStorage.clear();
+        } catch (e) {
+            /* storage may be blocked */
+        }
+        if (indexedDB.databases) {
+            const dbs = await indexedDB.databases();
+            await Promise.all(
+                dbs.map(
+                    (d) =>
+                        new Promise((res) => {
+                            const r = indexedDB.deleteDatabase(d.name);
+                            r.onsuccess = r.onerror = r.onblocked = () => res();
+                        })
+                )
+            );
+        }
+    });
+}
+
+/**
+ * Every interactive control the runner is showing, as data.
+ *
+ * Used to prove a NEGATIVE — that no control exists which could change the
+ * output FILE FORMAT. Asserting on the presence of a named widget would not do
+ * it; the claim is about the whole surface, so the whole surface is enumerated.
+ * Select options are reported by VALUE as well as label because the template
+ * names themselves contain the word "PDF".
+ */
+const runnerControls = (page) =>
+    ev(
+        page,
+        `
+    ${TEXT_OF}
+    const h = __dgFind(${JSON.stringify(host('doc-gen-runner'))});
+    if (!h) return { present: false };
+    const sel = __dgFind('select.custom-select', true).map(s => ({
+      values: [...s.options].map(o => o.value),
+      labels: [...s.options].map(o => (o.textContent || '').trim())
+    }));
+    return {
+      present: true,
+      selects: sel,
+      segs: __dgFind('.seg-btn', true).map(b => ({ v: b.dataset.value, label: __dgText(b), active: /active/.test(b.className) })),
+      pills: __dgFind('.pill-btn', true).map(b => ({ v: b.dataset.value, label: __dgText(b), active: /active/.test(b.className) })),
+      primary: __dgFind('.cool-brand-btn', true).map(b => ({ label: __dgText(b), disabled: !!b.disabled })),
+      dualListboxes: __dgFind('lightning-dual-listbox', true).map(d => (d.options || []).map(o => o.label))
+    };
+  `
+    );
+
+/** Which of the runner's two native selects is which, by the values they carry. */
+function classifySelects(controls) {
+    const selects = (controls && controls.selects) || [];
+    return {
+        category: selects.findIndex((s) => s.values.indexOf('__ALL__') !== -1),
+        template: selects.findIndex((s) => s.values.some((v) => /^[a-zA-Z0-9]{15,18}$/.test(v)))
+    };
+}
+
+/** found + disabled for a button carrying `text`, read through shadow roots. */
+const buttonState = (page, text) =>
+    ev(
+        page,
+        `
+    ${TEXT_OF}
+    const b = __dgFind('button', true).find(e => __dgText(e).indexOf(${JSON.stringify(text)}) !== -1);
+    return b ? { found: true, disabled: !!b.disabled } : { found: false, disabled: null };
+  `
+    );
+
+/**
+ * Waits for a file whose title contains `needle` to be LINKED TO THE RECORD.
+ *
+ * Save-to-Record for PDF goes through DocGenPdfSaveQueueable, so the Aura call
+ * returns before anything is written — polling the server is the only honest
+ * evidence. A spinner finishing is not evidence.
+ */
+async function waitForRecordFile(org, recordId, needle, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    let seen = [];
+    while (Date.now() < deadline) {
+        const rows = await soql(
+            org,
+            `SELECT ContentDocument.Title, ContentDocument.FileExtension FROM ContentDocumentLink ` +
+                `WHERE LinkedEntityId = '${recordId}'`
+        );
+        seen = rows.map((r) => (r.ContentDocument || {}).Title).filter(Boolean);
+        const hit = rows.filter((r) => r.ContentDocument && String(r.ContentDocument.Title).indexOf(needle) !== -1);
+        if (hit.length) return { file: hit[0].ContentDocument, all: seen, needle };
+        await new Promise((r) => setTimeout(r, 5000));
+    }
+    // `needle` is echoed back so a failure message can name what was searched
+    // for rather than what the caller thinks it searched for.
+    return { file: null, all: seen, needle };
+}
+
+/** How many files are linked to a record right now. */
+async function recordFileCount(org, recordId) {
+    const rows = await soql(org, `SELECT Id FROM ContentDocumentLink WHERE LinkedEntityId = '${recordId}'`);
+    return rows.length;
 }
 
 /**
@@ -397,9 +684,14 @@ export async function run({ org, headed }) {
     let ns = '';
     const F = (rec, field) => (rec ? rec[ns + field] : undefined);
 
+    // Stamped into the seeded template's Document_Title_Format__c, the bulk job
+    // labels and the signer name, so every row and file this run creates can be
+    // told apart from a previous run's leftovers in a shared org.
+    const runTag = `${PREFIX}-${Date.now().toString(36)}`;
+
     let seedLog;
     try {
-        seedLog = debugMap(await runAnonymous(org, SEED_APEX));
+        seedLog = debugMap(await runAnonymous(org, seedApex(runTag)));
     } catch (e) {
         return suiteSkipped('ui-runner', 'End-user UI', `could not seed test data: ${String(e.message).slice(0, 160)}`);
     }
@@ -416,20 +708,32 @@ export async function run({ org, headed }) {
     }
 
     const tabApi = (name) => (ns ? ns + name : name);
-    const runTag = `${PREFIX}-${Date.now().toString(36)}`;
+    // The title the seeded template renders under: "<runTag> <record name>".
+    const expectedTitle = `${runTag} ${PREFIX} Alpha`;
     let browser;
     // Set when the Output Mode was successfully switched to Individual Files —
     // the per-record attachment assertion is only meaningful in that mode.
     let individualMode = false;
+    // Is_Active__c snapshot taken while the empty state is being observed. Held
+    // here so the suite's finally block can restore it even if a check throws.
+    let hiddenTemplateSnapshot = null;
+    // Only clears the snapshot AFTER the restore lands, so a failed restore is
+    // retried by the suite's finally block instead of being forgotten.
+    const restoreHiddenTemplates = async () => {
+        if (!hiddenTemplateSnapshot) return;
+        await runAnonymous(org, restoreAccountTemplatesApex(hiddenTemplateSnapshot));
+        hiddenTemplateSnapshot = null;
+    };
 
     try {
         /* ============================================================ *
-         * 1. The runner's server contract.
-         *    The component cannot be reached (see header); what it calls can.
+         * 1. The runner's server contract — the parts of it that have no
+         *    UI surface, plus the audience rules the picker must apply.
+         *    The component itself is driven in section 2.
          * ============================================================ */
         const area = 'Runner (server contract)';
         try {
-            const p = debugMap(await runAnonymous(org, PROBE_APEX));
+            const p = debugMap(await runAnonymous(org, probeApex(runTag)));
             const picker = (p.PICKER || '').split('~').filter(Boolean);
             const bulkPicker = (p.BULKPICKER || '').split('~').filter(Boolean);
 
@@ -501,9 +805,10 @@ export async function run({ org, headed }) {
             });
             add({
                 ...check(
-                    'the generated document is titled from the record',
-                    (p.GEN_TITLE || '') === `${PREFIX} Alpha`,
-                    `title was "${p.GEN_TITLE}", expected "${PREFIX} Alpha"`,
+                    "the generated document's title resolves merge tokens against the record",
+                    (p.GEN_TITLE || '') === expectedTitle,
+                    `Document_Title_Format__c = "${runTag} {Name}" → title was "${p.GEN_TITLE}", ` +
+                        `expected "${expectedTitle}"`,
                     SEVERITY.MINOR
                 ),
                 area
@@ -533,14 +838,50 @@ export async function run({ org, headed }) {
                 area
             });
 
-            // Consistency between the two pickers: bulk uses a different query.
+            // The two pickers run different queries, so they are checked apart —
+            // one assertion covering both hid which half was actually broken.
+
+            // ACTIVE: a deactivated template must never be selectable, and on the
+            // bulk screen least of all — the blast radius is a job across
+            // thousands of records rather than one document.
             add({
                 ...check(
-                    'bulk template picker applies the same active/audience rules as the runner',
-                    bulkPicker.indexOf(`${PREFIX} Inactive`) === -1 &&
-                        bulkPicker.indexOf(`${PREFIX} Filtered Out`) === -1,
-                    `DocGenBulkController.getBulkTemplates has no Is_Active__c filter, so deactivated templates stay ` +
-                        `selectable for bulk runs. Bulk picker: ${bulkPicker.join(', ')}`,
+                    'bulk template picker excludes deactivated templates',
+                    bulkPicker.indexOf(`${PREFIX} Inactive`) === -1,
+                    bulkPicker.indexOf(`${PREFIX} Inactive`) === -1
+                        ? 'matches the single-record runner'
+                        : `"${PREFIX} Inactive" is selectable for a bulk run. ` +
+                              `DocGenBulkController.getBulkTemplates must filter Is_Active__c != FALSE, ` +
+                              `the same predicate getTemplatesForObjectInternal uses. Picker: ${bulkPicker.join(', ')}`,
+                    SEVERITY.MAJOR
+                ),
+                area
+            });
+
+            // RECORD FILTER: a genuinely different question, and the answer is not
+            // simply "the picker is wrong".
+            //
+            // Record_Filter__c is a per-RECORD rule, and the bulk screen has no
+            // single record — getBulkTemplates passes null to filterTemplatesForSender
+            // precisely because of that, so only sharing and audience apply. Offering
+            // the template is therefore defensible.
+            //
+            // What is NOT defensible is that nothing downstream applies it either:
+            // Record_Filter__c is evaluated only in DocGenController's per-record
+            // path (see canUseTemplateForRecord), and the batch does not call it. So
+            // a bulk run over a WHERE clause can generate documents for records the
+            // template's own filter excludes — silently, and at scale.
+            //
+            // Reported rather than fixed: making the batch honour the filter changes
+            // what existing bulk jobs produce, which is a product decision.
+            add({
+                ...check(
+                    'a record-filtered template is not silently applied to excluded records in bulk',
+                    bulkPicker.indexOf(`${PREFIX} Filtered Out`) === -1,
+                    `"${PREFIX} Filtered Out" carries a Record_Filter__c and is offered for bulk, where the filter ` +
+                        `is never evaluated — DocGenBulkController passes null to filterTemplatesForSender and the ` +
+                        `batch never calls the per-record check. Documents can be generated for records the ` +
+                        `template excludes. Either the batch must apply the filter, or the picker must exclude it.`,
                     SEVERITY.MAJOR
                 ),
                 area
@@ -556,16 +897,782 @@ export async function run({ org, headed }) {
         }
 
         /* ============================================================ *
-         * 2. Bulk runner — the one end-user generation UI that ships
-         *    with a tab and is therefore reachable.
+         * 2. docGenRunner ON A RECORD PAGE — the screen the customer
+         *    actually uses. Reached through the QA-only FlexiPage
+         *    described in the file header.
+         *
+         *    login() is what makes any of this trustworthy: Lightning
+         *    serves component bundles AND cacheable Apex payloads out of
+         *    IndexedDB, and has passed checks against code that was no
+         *    longer deployed. It is never skipped, and clearLightningCache
+         *    repeats the bust before any navigation whose result must not
+         *    come from the previous one.
          * ============================================================ */
-        const bulkArea = 'Bulk runner';
+        const runnerArea = 'Runner (record page)';
         const launched = await launch({ headed });
         browser = launched.browser;
         const page = launched.page;
         const consoleErrors = launched.consoleErrors;
-
         const base = await login(page, org);
+
+        const goodId = seedLog.GOOD || '';
+        const lockedId = seedLog.LOCKED || '';
+
+        /* --- 2a. The empty state ------------------------------------- *
+         * Done FIRST and restored immediately: it is the only check that
+         * has to modify rows this suite did not create.                  */
+        try {
+            const hide = debugMap(await runAnonymous(org, HIDE_ACCOUNT_TEMPLATES_APEX));
+            hiddenTemplateSnapshot = hide.SNAP || null;
+            if (!hiddenTemplateSnapshot) {
+                add(
+                    skip(
+                        'the runner shows an actionable empty state when no template matches the record',
+                        'the Is_Active__c snapshot came back empty, so the Account templates were never hidden and ' +
+                            'the empty state could not be produced without guessing',
+                        SEVERITY.MAJOR
+                    )
+                );
+            } else {
+                await clearLightningCache(page);
+                await openRecord(page, base, acctId, 15000);
+                const emptyText = await componentText(page, 'doc-gen-runner');
+                const emptyControls = await runnerControls(page);
+                const emptyPrimary = (emptyControls.primary || [])[0];
+                add({
+                    ...check(
+                        'the runner shows an actionable empty state when no template matches the record',
+                        emptyText.indexOf('No templates available for this record') !== -1 &&
+                            emptyText.indexOf('Ask an admin') !== -1 &&
+                            !!emptyPrimary &&
+                            emptyPrimary.disabled === true,
+                        emptyControls.present
+                            ? `with every Account template inactive the runner rendered ` +
+                                  `${emptyText.length} chars; Create Document disabled=${
+                                      emptyPrimary ? emptyPrimary.disabled : 'no button'
+                                  }. The user must be told WHY there is nothing to pick, and must not be able to ` +
+                                  `press a button that cannot work.`
+                            : 'the runner did not render at all',
+                        SEVERITY.MAJOR
+                    ),
+                    area: runnerArea
+                });
+            }
+        } catch (e) {
+            add(
+                skip(
+                    'the runner shows an actionable empty state when no template matches the record',
+                    `threw: ${String(e.message).slice(0, 160)}`,
+                    SEVERITY.MAJOR
+                )
+            );
+        } finally {
+            try {
+                await restoreHiddenTemplates();
+            } catch (e) {
+                /* the suite's finally block retries */
+            }
+        }
+
+        /* --- 2b. It renders, cleanly -------------------------------- */
+        await clearLightningCache(page);
+        const runnerErrMark = consoleErrors.length;
+        await openRecord(page, base, acctId, 15000);
+        const runnerText = await componentText(page, 'doc-gen-runner');
+        const controls = await runnerControls(page);
+        const idx = classifySelects(controls);
+        const runnerErrors = consoleErrors.slice(runnerErrMark);
+
+        add({
+            ...check(
+                'docGenRunner renders on a record page',
+                controls.present && runnerText.indexOf('Select Template') !== -1 && idx.template !== -1,
+                controls.present
+                    ? `rendered ${runnerText.length} chars, ${controls.selects.length} picker(s), ` +
+                          `${(controls.primary || []).length} primary button(s)`
+                    : `no ${host('doc-gen-runner')} in the DOM. If this org lost the QA host page, re-run ` +
+                          `scripts/qa/fixtures/deploy.sh — do not re-skip this check.`,
+                SEVERITY.BLOCKER
+            ),
+            area: runnerArea
+        });
+        add({
+            ...check(
+                'the runner shows neither an error nor an empty state on a record that has templates',
+                controls.present &&
+                    runnerText.indexOf('Error:') === -1 &&
+                    runnerText.indexOf('No templates available') === -1,
+                `component text starts: ${runnerText.slice(0, 200)}`,
+                SEVERITY.BLOCKER
+            ),
+            area: runnerArea
+        });
+        add({
+            ...check(
+                'docGenRunner boots without a console error',
+                runnerErrors.length === 0,
+                runnerErrors.slice(0, 3).join(' | '),
+                SEVERITY.MAJOR
+            ),
+            area: runnerArea
+        });
+
+        if (!controls.present || idx.template === -1) {
+            add(
+                skip(
+                    'record-page runner interaction checks',
+                    'the runner did not render its template picker, so nothing downstream could be driven',
+                    SEVERITY.BLOCKER
+                )
+            );
+        } else {
+            const tplLabels = controls.selects[idx.template].labels;
+            const offered = (name) => tplLabels.some((l) => l.indexOf(name) !== -1);
+
+            /* --- 2c. The picker ------------------------------------- */
+            add({
+                ...check(
+                    'the record-page template picker lists a template the user can actually run',
+                    offered(`${PREFIX} Good PDF`),
+                    `picker showed: ${tplLabels.join(' / ')}`,
+                    SEVERITY.BLOCKER
+                ),
+                area: runnerArea
+            });
+            const leaked = [`${PREFIX} Inactive`, `${PREFIX} Filtered Out`, `${PREFIX} Needs PermSet`].filter(offered);
+            add({
+                ...check(
+                    'the record-page picker applies the active and audience rules',
+                    leaked.length === 0,
+                    leaked.length
+                        ? `the picker offered ${leaked.join(', ')} — Is_Active__c / Record_Filter__c / ` +
+                              `Required_Permission_Sets__c should have excluded them for this record and user`
+                        : `Inactive, Record_Filter__c-excluded and permission-gated templates were all withheld`,
+                    SEVERITY.MAJOR
+                ),
+                area: runnerArea
+            });
+            const tplSelPos = await locate(page, 'select.custom-select', idx.template);
+            add({
+                ...check(
+                    'the template picker is reachable by a mouse',
+                    tplSelPos.found && tplSelPos.hit === 'ok',
+                    `found=${tplSelPos.found} hit=${tplSelPos.hit}`,
+                    SEVERITY.BLOCKER
+                ),
+                area: runnerArea
+            });
+
+            // Category filter. Driven with Playwright's own selectOption because
+            // a native <select> popup is an OS window page.mouse cannot open.
+            if (idx.category === -1) {
+                add(
+                    skip(
+                        'choosing a category narrows the template list',
+                        'the category filter is hidden — it only renders when the loaded templates span more than ' +
+                            'one Category__c value, which is a legitimate state for this org',
+                        SEVERITY.MINOR
+                    )
+                );
+            } else {
+                try {
+                    await page.locator('select.custom-select').nth(idx.category).selectOption(PREFIX);
+                    await page.waitForTimeout(1500);
+                    const filtered = await runnerControls(page);
+                    const fIdx = classifySelects(filtered);
+                    const fLabels = (filtered.selects[fIdx.template] || { labels: [] }).labels.filter(
+                        (l) => l.indexOf('Choose a template') === -1
+                    );
+                    add({
+                        ...check(
+                            'choosing a category narrows the template list to that category',
+                            fLabels.length > 0 && fLabels.every((l) => l.indexOf(`[${PREFIX}]`) !== -1),
+                            `after picking category "${PREFIX}" the picker showed: ${fLabels.join(' / ') || '(nothing)'}`,
+                            SEVERITY.MAJOR
+                        ),
+                        area: runnerArea
+                    });
+                    await page.locator('select.custom-select').nth(fIdx.category).selectOption('__ALL__');
+                    await page.waitForTimeout(1200);
+                } catch (e) {
+                    add(
+                        skip(
+                            'choosing a category narrows the template list to that category',
+                            `the category select could not be driven: ${String(e.message).slice(0, 140)}`,
+                            SEVERITY.MAJOR
+                        )
+                    );
+                }
+            }
+
+            /* --- 2d. Save to Record actually saves ------------------ */
+            if (!goodId) {
+                add(
+                    skip(
+                        'pressing Create Document in Save to Record mode puts the document on the record',
+                        'the seed did not report the template Id, so the picker could not be driven to a known template',
+                        SEVERITY.BLOCKER
+                    )
+                );
+            } else {
+                await page.locator('select.custom-select').nth(idx.template).selectOption(goodId);
+                await page.waitForTimeout(1500);
+
+                const savePill = await locate(page, '.pill-btn[data-value="save"]');
+                add({
+                    ...check(
+                        'the Save to Record output choice is reachable',
+                        savePill.found && savePill.hit === 'ok',
+                        `found=${savePill.found} hit=${savePill.hit}`,
+                        SEVERITY.BLOCKER
+                    ),
+                    area: runnerArea
+                });
+
+                if (savePill.found && savePill.hit === 'ok') {
+                    await clickAt(page, savePill, 1000);
+                    const afterSave = await runnerControls(page);
+                    const savePillNow = (afterSave.pills || []).find((p) => p.v === 'save');
+                    add({
+                        ...check(
+                            'choosing Save to Record is honoured by the UI',
+                            !!savePillNow && savePillNow.active === true,
+                            `output pills after the click: ${(afterSave.pills || [])
+                                .map((p) => `${p.v}${p.active ? '(active)' : ''}`)
+                                .join(', ')}`,
+                            SEVERITY.MAJOR
+                        ),
+                        area: runnerArea
+                    });
+
+                    const genPos = await locate(page, '.cool-brand-btn');
+                    add({
+                        ...check(
+                            'the Create Document button is reachable',
+                            genPos.found && genPos.hit === 'ok',
+                            `found=${genPos.found} hit=${genPos.hit}`,
+                            SEVERITY.BLOCKER
+                        ),
+                        area: runnerArea
+                    });
+
+                    if (genPos.found && genPos.hit === 'ok') {
+                        await clickAt(page, genPos, 2000);
+                        // SERVER STATE. Save-to-Record for PDF runs in
+                        // DocGenPdfSaveQueueable, so the Aura call returns long
+                        // before anything is written — a finished spinner proves
+                        // nothing at all here.
+                        const saved = await waitForRecordFile(org, acctId, expectedTitle, 210000);
+                        add({
+                            ...check(
+                                'pressing Create Document in Save to Record mode puts the document ON the record',
+                                !!saved.file,
+                                saved.file
+                                    ? `ContentDocument "${saved.file.Title}" linked to ${acctId}`
+                                    : `no file whose title contains "${saved.needle}" appeared on the record ` +
+                                          `within 210s. Files linked to it: ${saved.all.join(', ') || '(none)'}`,
+                                SEVERITY.BLOCKER
+                            ),
+                            area: runnerArea
+                        });
+                        if (!saved.file) {
+                            // Not a failure of its own — it could not be
+                            // evaluated, and a second red line for one cause
+                            // would just inflate the count.
+                            add(
+                                skip(
+                                    "the saved file is in the template's own output format",
+                                    'no file reached the record, so there was no format to inspect',
+                                    SEVERITY.MAJOR
+                                )
+                            );
+                        } else {
+                            add({
+                                ...check(
+                                    "the saved file is in the template's own output format",
+                                    saved.file.FileExtension === 'pdf',
+                                    `Output_Format__c = PDF, file extension = .${saved.file.FileExtension}`,
+                                    SEVERITY.MAJOR
+                                ),
+                                area: runnerArea
+                            });
+                        }
+                    }
+                }
+
+                /* --- 2e. Download must NOT also save ---------------- */
+                const dlPill = await locate(page, '.pill-btn[data-value="download"]');
+                if (!dlPill.found || dlPill.hit !== 'ok') {
+                    add(
+                        skip(
+                            'pressing Create Document in Download mode downloads the document',
+                            `the Download output choice was not reachable (${dlPill.hit})`,
+                            SEVERITY.BLOCKER
+                        )
+                    );
+                } else {
+                    await clickAt(page, dlPill, 1000);
+                    const afterDl = await runnerControls(page);
+                    const dlPillNow = (afterDl.pills || []).find((p) => p.v === 'download');
+                    add({
+                        ...check(
+                            'choosing Download is honoured by the UI',
+                            !!dlPillNow && dlPillNow.active === true,
+                            `output pills after the click: ${(afterDl.pills || [])
+                                .map((p) => `${p.v}${p.active ? '(active)' : ''}`)
+                                .join(', ')}`,
+                            SEVERITY.MAJOR
+                        ),
+                        area: runnerArea
+                    });
+
+                    const filesBefore = await recordFileCount(org, acctId);
+                    // Armed BEFORE the click: the anchor-click download fires as
+                    // soon as the bytes come back.
+                    const downloadName = page
+                        .waitForEvent('download', { timeout: 210000 })
+                        .then((d) => d.suggestedFilename())
+                        .catch(() => null);
+                    const genPos2 = await locate(page, '.cool-brand-btn');
+                    if (genPos2.found && genPos2.hit === 'ok') {
+                        await clickAt(page, genPos2, 1500);
+                    }
+                    const dlName = await downloadName;
+                    add({
+                        ...check(
+                            'pressing Create Document in Download mode downloads the document to the browser',
+                            !!dlName && dlName.indexOf(runTag) !== -1,
+                            dlName
+                                ? `the browser received "${dlName}"`
+                                : `no download event fired within 210s — the user pressed the button and got no file`,
+                            SEVERITY.BLOCKER
+                        ),
+                        area: runnerArea
+                    });
+                    await page.waitForTimeout(8000);
+                    const filesAfter = await recordFileCount(org, acctId);
+                    add({
+                        ...check(
+                            'Download does NOT also attach the document to the record',
+                            filesAfter === filesBefore,
+                            `files linked to the record: ${filesBefore} before the run, ${filesAfter} after. ` +
+                                `Download and Save to Record are the two halves of one choice; honouring it means ` +
+                                `Download leaves the record untouched.`,
+                            SEVERITY.MAJOR
+                        ),
+                        area: runnerArea
+                    });
+                }
+            }
+
+            /* --- 2f. A locked output format has no runtime control -- */
+            if (!lockedId) {
+                add(
+                    skip(
+                        'a template with Lock_Output_Format__c exposes no runtime file-format control',
+                        'the seed did not report the locked template Id',
+                        SEVERITY.MAJOR
+                    )
+                );
+            } else {
+                try {
+                    await page.locator('select.custom-select').nth(idx.template).selectOption(lockedId);
+                    await page.waitForTimeout(1500);
+                    const lockedControls = await runnerControls(page);
+                    const lIdx = classifySelects(lockedControls);
+                    const strayPickers = (lockedControls.selects || []).filter(
+                        (s, i) => i !== lIdx.category && i !== lIdx.template
+                    );
+                    const pillValues = (lockedControls.pills || []).map((p) => p.v).sort();
+                    const onlyDestination = pillValues.every((v) => v === 'download' || v === 'save');
+                    add({
+                        ...check(
+                            'a template with Lock_Output_Format__c exposes no runtime file-format control',
+                            strayPickers.length === 0 && onlyDestination,
+                            `with the locked template selected the runner offered ${lockedControls.selects.length} ` +
+                                `picker(s) (category + template) and the choice widgets [${pillValues.join(', ')}], ` +
+                                `which are output DESTINATIONS, not formats. The server half of this contract — an ` +
+                                `explicit override being refused — is asserted in the server-contract area.`,
+                            SEVERITY.MAJOR
+                        ),
+                        area: runnerArea
+                    });
+                } catch (e) {
+                    add(
+                        skip(
+                            'a template with Lock_Output_Format__c exposes no runtime file-format control',
+                            `the locked template could not be selected: ${String(e.message).slice(0, 140)}`,
+                            SEVERITY.MAJOR
+                        )
+                    );
+                }
+            }
+
+            /* --- 2g. Document Packet tab ---------------------------- */
+            const packetSeg = await locate(page, '.seg-btn[data-value="packet"]');
+            if (!packetSeg.found || packetSeg.hit !== 'ok') {
+                add(
+                    skip(
+                        'the Document Packet tab renders and its controls are reachable',
+                        `the Document Packet tab was not reachable (${packetSeg.hit})`,
+                        SEVERITY.MAJOR
+                    )
+                );
+            } else {
+                await clickAt(page, packetSeg, 4000);
+                const packet = await runnerControls(page);
+                // The dual-listbox HOST always reads as "covered by" its own
+                // inner list — HIT_TEST's containment test cannot cross a shadow
+                // boundary — so the inner list is what gets hit-tested.
+                const packetList = await locate(page, '.slds-dueling-list__options');
+                const packetBtn = await locate(page, '.cool-brand-btn');
+                const packetOpts = (packet.dualListboxes || [])[0] || [];
+                add({
+                    ...check(
+                        'the Document Packet tab renders its template chooser and it is reachable',
+                        (packet.segs || []).some((s) => s.v === 'packet' && s.active) &&
+                            (packet.dualListboxes || []).length === 1 &&
+                            packetList.hit === 'ok',
+                        `packet tab active=${(packet.segs || []).some((s) => s.v === 'packet' && s.active)}, ` +
+                            `dual listboxes=${(packet.dualListboxes || []).length}, source list hit=${packetList.hit}`,
+                        SEVERITY.MAJOR
+                    ),
+                    area: runnerArea
+                });
+                add({
+                    ...check(
+                        "the packet chooser offers the record's PDF templates",
+                        packetOpts.some((l) => l.indexOf(`${PREFIX} Good PDF`) !== -1),
+                        `chooser offered ${packetOpts.length} template(s): ${packetOpts.slice(0, 6).join(' / ')}`,
+                        SEVERITY.MAJOR
+                    ),
+                    area: runnerArea
+                });
+                add({
+                    ...check(
+                        'the Create Packet button is reachable and refuses to run with nothing chosen',
+                        packetBtn.hit === 'ok' && ((packet.primary || [])[0] || {}).disabled === true,
+                        `button hit=${packetBtn.hit}, disabled=${((packet.primary || [])[0] || {}).disabled}`,
+                        SEVERITY.MAJOR
+                    ),
+                    area: runnerArea
+                });
+            }
+
+            /* --- 2h. Combine PDFs tab ------------------------------- */
+            const mergeSeg = await locate(page, '.seg-btn[data-value="mergeOnly"]');
+            if (!mergeSeg.found || mergeSeg.hit !== 'ok') {
+                add(
+                    skip(
+                        'the Combine PDFs tab renders and its controls are reachable',
+                        `the Combine PDFs tab was not reachable (${mergeSeg.hit})`,
+                        SEVERITY.MAJOR
+                    )
+                );
+            } else {
+                await clickAt(page, mergeSeg, 4000);
+                const merge = await runnerControls(page);
+                const mergeList = await locate(page, '.slds-dueling-list__options');
+                const mergeBtn = await locate(page, '.cool-brand-btn');
+                const mergeOpts = (merge.dualListboxes || [])[0] || [];
+                const seededSources = mergeOpts.filter((l) => l.indexOf(`${PREFIX} merge source`) !== -1);
+                add({
+                    ...check(
+                        "the Combine PDFs tab lists the record's existing PDFs and they are reachable",
+                        (merge.segs || []).some((s) => s.v === 'mergeOnly' && s.active) &&
+                            seededSources.length === 2 &&
+                            mergeList.hit === 'ok',
+                        `tab active=${(merge.segs || []).some((s) => s.v === 'mergeOnly' && s.active)}, ` +
+                            `source list hit=${mergeList.hit}, it offered ${mergeOpts.length} file(s) ` +
+                            `of which ${seededSources.length} are the two PDFs this suite attached to the record`,
+                        SEVERITY.MAJOR
+                    ),
+                    area: runnerArea
+                });
+                add({
+                    ...check(
+                        'the Combine PDFs button is reachable and refuses to run with fewer than two files chosen',
+                        mergeBtn.hit === 'ok' && ((merge.primary || [])[0] || {}).disabled === true,
+                        `button hit=${mergeBtn.hit}, disabled=${((merge.primary || [])[0] || {}).disabled} ` +
+                            `with nothing moved into the Combine list`,
+                        SEVERITY.MAJOR
+                    ),
+                    area: runnerArea
+                });
+            }
+        }
+
+        /* ============================================================ *
+         * 3. docGenSignatureSender ON A RECORD PAGE.
+         *    Same host page. Ends in SOQL against the two objects a
+         *    signature request is supposed to write.
+         * ============================================================ */
+        const signArea = 'Signature sender (record page)';
+        try {
+            const senderErrMark = consoleErrors.length;
+            await clearLightningCache(page);
+            await openRecord(page, base, acctId, 15000);
+            const senderText = await componentText(page, 'doc-gen-signature-sender');
+            const senderErrors = consoleErrors.slice(senderErrMark);
+            const senderUp =
+                senderText.indexOf('Select Template') !== -1 &&
+                senderText.indexOf('Signers') !== -1 &&
+                senderText.indexOf('Generate Signature Links') !== -1;
+            add({
+                ...check(
+                    'docGenSignatureSender renders on a record page',
+                    senderUp,
+                    senderUp
+                        ? `rendered ${senderText.length} chars with its template picker, signer table and send button`
+                        : `component text: ${senderText.slice(0, 220) || '(nothing — is the QA host page still deployed?)'}`,
+                    SEVERITY.BLOCKER
+                ),
+                area: signArea
+            });
+            add({
+                ...check(
+                    'docGenSignatureSender boots without a console error',
+                    senderErrors.length === 0,
+                    senderErrors.slice(0, 3).join(' | '),
+                    SEVERITY.MAJOR
+                ),
+                area: signArea
+            });
+
+            if (!senderUp) {
+                add(
+                    skip(
+                        'docGenSignatureSender validates its fields and writes the signature rows',
+                        'the component did not render, so nothing could be driven',
+                        SEVERITY.BLOCKER
+                    )
+                );
+            } else {
+                const signerName = `${runTag} Signer`;
+                const signerEmail = `${runTag.toLowerCase()}@example.com`;
+
+                // --- validation gate, before anything is filled in -----
+                const emptyGate = await buttonState(page, 'Generate Signature Links');
+                add({
+                    ...check(
+                        'the send button refuses to send with no document and no signer details',
+                        emptyGate.found && emptyGate.disabled === true,
+                        `found=${emptyGate.found} disabled=${emptyGate.disabled}`,
+                        SEVERITY.MAJOR
+                    ),
+                    area: signArea
+                });
+
+                // --- pick a document -----------------------------------
+                const cbPos = await locateComboboxShowing(page, ['Choose a DocGen template...']);
+                add({
+                    ...check(
+                        'the signature document picker is reachable',
+                        cbPos.found && cbPos.hit === 'ok',
+                        `found=${cbPos.found} hit=${cbPos.hit}`,
+                        SEVERITY.BLOCKER
+                    ),
+                    area: signArea
+                });
+                let picked = false;
+                if (cbPos.found && cbPos.hit === 'ok') {
+                    await clickAt(page, cbPos, 1500);
+                    const opt = await locateByText(page, '.slds-media__body', `${PREFIX} Good PDF`);
+                    add({
+                        ...check(
+                            'the signature document picker offers the record’s templates and they can be clicked',
+                            opt.found && opt.hit === 'ok',
+                            `found=${opt.found} hit=${opt.hit}`,
+                            SEVERITY.BLOCKER
+                        ),
+                        area: signArea
+                    });
+                    if (opt.found && opt.hit === 'ok') {
+                        await clickAt(page, opt, 6000);
+                        picked = true;
+                    }
+                }
+
+                if (!picked) {
+                    add(
+                        skip(
+                            'docGenSignatureSender validates its fields and writes the signature rows',
+                            'no template could be selected, so no request could be sent',
+                            SEVERITY.BLOCKER
+                        )
+                    );
+                } else {
+                    const afterDoc = await buttonState(page, 'Generate Signature Links');
+                    add({
+                        ...check(
+                            'a document alone is not enough to send — the signer is still required',
+                            afterDoc.disabled === true,
+                            `with a template chosen and the signer row blank, the send button is ` +
+                                `disabled=${afterDoc.disabled}`,
+                            SEVERITY.MAJOR
+                        ),
+                        area: signArea
+                    });
+
+                    // Real mouse + real keys. A dispatched keydown inserts nothing.
+                    const rolePos = await locateLightningInput(page, 'Role', '0');
+                    const namePos = await locateLightningInput(page, 'Name', '0');
+                    const emailPos = await locateLightningInput(page, 'Email', '0');
+                    const reachable = rolePos.hit === 'ok' && namePos.hit === 'ok' && emailPos.hit === 'ok';
+                    add({
+                        ...check(
+                            'every signer field is reachable by a mouse',
+                            reachable,
+                            `role=${rolePos.hit} name=${namePos.hit} email=${emailPos.hit}`,
+                            SEVERITY.BLOCKER
+                        ),
+                        area: signArea
+                    });
+
+                    if (!reachable) {
+                        add(
+                            skip(
+                                'docGenSignatureSender writes correct signature request and signer rows',
+                                'the signer fields could not be reached, so no request could be sent',
+                                SEVERITY.BLOCKER
+                            )
+                        );
+                    } else {
+                        await typeInto(page, rolePos, 'Signer');
+                        await typeInto(page, await locateLightningInput(page, 'Name', '0'), signerName);
+                        const partial = await buttonState(page, 'Generate Signature Links');
+                        add({
+                            ...check(
+                                'a signer with no email address cannot be sent to',
+                                partial.disabled === true,
+                                `role and name filled, email blank → send button disabled=${partial.disabled}`,
+                                SEVERITY.MAJOR
+                            ),
+                            area: signArea
+                        });
+
+                        await typeInto(page, await locateLightningInput(page, 'Email', '0'), signerEmail);
+                        const ready = await buttonState(page, 'Generate Signature Links');
+                        add({
+                            ...check(
+                                'a complete document + signer enables the send button',
+                                ready.disabled === false,
+                                `role, name and email all filled → send button disabled=${ready.disabled}`,
+                                SEVERITY.BLOCKER
+                            ),
+                            area: signArea
+                        });
+
+                        if (ready.disabled !== false) {
+                            add(
+                                skip(
+                                    'docGenSignatureSender writes correct signature request and signer rows',
+                                    'the send button never enabled, so no request could be sent',
+                                    SEVERITY.BLOCKER
+                                )
+                            );
+                        } else {
+                            const sendPos = await locateByText(page, 'button', 'Generate Signature Links');
+                            add({
+                                ...check(
+                                    'the send button is reachable by a mouse',
+                                    sendPos.found && sendPos.hit === 'ok',
+                                    `found=${sendPos.found} hit=${sendPos.hit}`,
+                                    SEVERITY.BLOCKER
+                                ),
+                                area: signArea
+                            });
+                            if (sendPos.found && sendPos.hit === 'ok') {
+                                await clickAt(page, sendPos, 5000);
+
+                                // SERVER STATE — polled, because the request
+                                // renders a PDF before it inserts anything.
+                                const req = await waitForSignatureRequest(org, ns, goodId, 210000);
+                                const signers = req
+                                    ? await soql(
+                                          org,
+                                          `SELECT Id, ${ns}Signer_Name__c, ${ns}Signer_Email__c, ` +
+                                              `${ns}Role_Name__c, ${ns}Status__c, ${ns}Sort_Order__c, ` +
+                                              `${ns}Signature_Request__c FROM ${ns}DocGen_Signer__c ` +
+                                              `WHERE ${ns}Signature_Request__c = '${req.Id}'`
+                                      )
+                                    : [];
+                                const doneText = await componentText(page, 'doc-gen-signature-sender');
+
+                                add({
+                                    ...check(
+                                        'sending a signature request tells the user it worked',
+                                        doneText.indexOf('Signature Links Generated!') !== -1,
+                                        doneText.indexOf('Error generating links') !== -1
+                                            ? `the component showed: ${doneText.slice(0, 220)}`
+                                            : `component text: ${doneText.slice(0, 220)}`,
+                                        SEVERITY.MAJOR
+                                    ),
+                                    area: signArea
+                                });
+                                add({
+                                    ...check(
+                                        'sending writes a DocGen_Signature_Request__c tied to this record and template',
+                                        !!req &&
+                                            F(req, 'Related_Record_Id__c') === acctId &&
+                                            F(req, 'Status__c') === 'Sent' &&
+                                            F(req, 'Signing_Order__c') === 'Parallel' &&
+                                            !!F(req, 'Source_Document_Id__c'),
+                                        req
+                                            ? `request ${req.Id}: record=${F(req, 'Related_Record_Id__c')} ` +
+                                                  `(expected ${acctId}), status=${F(req, 'Status__c')}, ` +
+                                                  `order=${F(req, 'Signing_Order__c')}, ` +
+                                                  `sourceDoc=${
+                                                      F(req, 'Source_Document_Id__c') ||
+                                                      '(none — the signer ' + 'would have nothing to open)'
+                                                  }`
+                                            : `no DocGen_Signature_Request__c for template ${goodId} appeared within 210s`,
+                                        SEVERITY.BLOCKER
+                                    ),
+                                    area: signArea
+                                });
+                                const s = signers[0];
+                                add({
+                                    ...check(
+                                        'sending writes exactly one DocGen_Signer__c carrying what was typed',
+                                        signers.length === 1 &&
+                                            F(s, 'Signer_Name__c') === signerName &&
+                                            F(s, 'Signer_Email__c') === signerEmail &&
+                                            F(s, 'Role_Name__c') === 'Signer' &&
+                                            F(s, 'Status__c') === 'Pending' &&
+                                            Number(F(s, 'Sort_Order__c')) === 1,
+                                        signers.length
+                                            ? `${signers.length} signer row(s) (expected 1); first = ` +
+                                                  `name "${F(s, 'Signer_Name__c')}" (typed "${signerName}"), ` +
+                                                  `email "${F(s, 'Signer_Email__c')}" (typed "${signerEmail}"), ` +
+                                                  `role "${F(s, 'Role_Name__c')}" (typed "Signer"), ` +
+                                                  `status "${F(s, 'Status__c')}" (expected "Pending"), ` +
+                                                  `sort order ${F(s, 'Sort_Order__c')} (expected 1)`
+                                            : 'no DocGen_Signer__c rows were written for the request',
+                                        SEVERITY.BLOCKER
+                                    ),
+                                    area: signArea
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            add(
+                skip(
+                    'docGenSignatureSender record-page checks',
+                    `threw: ${String(e.message).slice(0, 180)}`,
+                    SEVERITY.BLOCKER
+                )
+            );
+        }
+
+        /* ============================================================ *
+         * 4. Bulk runner — the generation UI that ships with a tab.
+         * ============================================================ */
+        const bulkArea = 'Bulk runner';
+        const bulkErrMark = consoleErrors.length;
         await openTab(page, base, tabApi('DocGen_Bulk_Gen'), 12000);
 
         // Asserted on the words the user must see, not on a character count —
@@ -585,7 +1692,10 @@ export async function run({ org, headed }) {
             ),
             area: bulkArea
         });
-        const bootErrors = consoleErrors.slice();
+        // Sliced from a mark taken just before this tab opened — the record-page
+        // sections ran first in the same browser, and their console output must
+        // not be attributed to this component.
+        const bootErrors = consoleErrors.slice(bulkErrMark);
         add({
             ...check(
                 'bulk generation UI boots without a console error',
@@ -1055,7 +2165,7 @@ export async function run({ org, headed }) {
         }
 
         /* ============================================================ *
-         * 5. Command Hub — the front door for everything else the
+         * 6. Command Hub — the front door for everything else the
          *    end user can reach without an admin building a page.
          * ============================================================ */
         const hubArea = 'Command Hub';
@@ -1166,38 +2276,42 @@ export async function run({ org, headed }) {
         }
 
         /* ============================================================ *
-         * 6. What this run could NOT reach, said out loud.
+         * 7. What this run could NOT reach, said out loud.
          *    A skipped check is not a passing one.
+         *
+         *    The docGenRunner / docGenSignatureSender skips that used to
+         *    live here are GONE: those components are now driven for real
+         *    in sections 2 and 3 via the QA host FlexiPage. What is left
+         *    is genuinely out of reach.
          * ============================================================ */
-        const unreachable =
-            'no Lightning record page or quick action exists in this org that hosts the component ' +
-            '(SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no ' +
-            'LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but ' +
-            'nothing that places this component, and there is no supported URL that renders an LWC on a record ' +
-            'without a page assignment. Reaching it requires hand-building a Lightning record page, which this ' +
-            'suite is not permitted to deploy.';
-
-        add(skip('docGenRunner renders on a record page', unreachable, SEVERITY.BLOCKER));
-        add(skip('docGenRunner Generate button produces a document from a record page', unreachable, SEVERITY.BLOCKER));
-        add(skip('docGenRunner honours the Save to Record / Download output choice', unreachable, SEVERITY.MAJOR));
-        add(
-            skip('docGenRunner shows the empty state when no template matches the record', unreachable, SEVERITY.MAJOR)
-        );
-        add(skip('docGenSignatureSender validates its fields and creates a request', unreachable, SEVERITY.BLOCKER));
         add(
             skip(
-                'docGenSignatureSender writes correct DocGen_Signature_Request__c / DocGen_Signer__c rows',
-                unreachable,
-                SEVERITY.BLOCKER
+                'docGenButton one-click generation from a record action',
+                'docGenButton is exposed as lightning__RecordAction ONLY, and nothing in this org hosts it: there ' +
+                    'are no LightningComponent QuickActionDefinitions, and a lightning__RecordAction component ' +
+                    'cannot be placed on a FlexiPage region (the QA host page reaches docGenRunner and ' +
+                    'docGenSignatureSender precisely because those are lightning__RecordPage). Covering it needs a ' +
+                    'QuickActionDefinition fixture plus the page-layout assignment that puts the action on the ' +
+                    'Account highlights panel, which does not exist yet.',
+                SEVERITY.MAJOR
             )
         );
-        add(skip('docGenButton one-click generation from a record action', unreachable, SEVERITY.MAJOR));
         add(
             skip(
                 'a user without the DocGen permission set gets a clear message, not a broken UI',
                 'needs a second user and a Login-As session; creating a licensed user and switching identity is ' +
                     'outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. ' +
                     'The template-audience half of this (Required_Permission_Sets__c) IS covered above.',
+                SEVERITY.MAJOR
+            )
+        );
+        add(
+            skip(
+                'the Combine PDFs and Document Packet runs produce a real merged document',
+                'both tabs are proved to render, list their sources and gate their button (section 2g/2h), but ' +
+                    'actually running them means driving a dual-listbox move — select an option, then press the ' +
+                    "listbox's own arrow button — and then a multi-megabyte client-side PDF merge. Neither the " +
+                    'move nor the merge is exercised here, so "the packet is correct" is NOT claimed.',
                 SEVERITY.MAJOR
             )
         );
@@ -1214,6 +2328,15 @@ export async function run({ org, headed }) {
             } catch (e) {
                 /* nothing useful to do */
             }
+        }
+        // Belt and braces. The empty-state check restores this itself; if it
+        // threw between the hide and the restore, every Account template in the
+        // org would still be inactive and the next suite would report a
+        // catastrophe that this suite caused.
+        try {
+            await restoreHiddenTemplates();
+        } catch (e) {
+            /* nothing further can be done from here */
         }
         try {
             await runAnonymous(org, CLEANUP_APEX);
@@ -1283,6 +2406,30 @@ async function driveBulkRun(page, templateName, condition, jobLabel, { stopBefor
     if (!runBtn.found || runBtn.hit !== 'ok') return { ok: false, why: `run button ${runBtn.hit}` };
     await clickAt(page, runBtn, 4000);
     return { ok: true };
+}
+
+/**
+ * Waits for the signature request row the sender is supposed to write.
+ *
+ * Polled rather than slept on: the guided path renders a viewing PDF with
+ * Blob.toPdf before it inserts anything, so how long it takes depends on the
+ * template. Scoped to the seeded template so a request left behind by another
+ * suite can never be mistaken for this one's.
+ */
+async function waitForSignatureRequest(org, ns, templateId, timeoutMs) {
+    if (!templateId) return null;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const rows = await soql(
+            org,
+            `SELECT Id, ${ns}Status__c, ${ns}Signing_Order__c, ${ns}Related_Record_Id__c, ` +
+                `${ns}Template__c, ${ns}Source_Document_Id__c FROM ${ns}DocGen_Signature_Request__c ` +
+                `WHERE ${ns}Template__c = '${templateId}' ORDER BY CreatedDate DESC LIMIT 1`
+        );
+        if (rows.length) return rows[0];
+        await new Promise((r) => setTimeout(r, 5000));
+    }
+    return null;
 }
 
 /**
