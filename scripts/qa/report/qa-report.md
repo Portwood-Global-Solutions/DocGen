@@ -1,223 +1,257 @@
 # DocGen QA report
 
-**Org** `docgen-verify` · **Run** 2026-07-25T15:39:25.333Z · **Duration** 12s
+**Org** `docgen-verify` · **Run** 2026-07-25T15:53:35.061Z · **Duration** 176s
 
 ## Headline
 
-|                       |            |
-| --------------------- | ---------- |
-| Checks evaluated      | 180        |
-| Passed                | 180 (100%) |
-| Failed                | 0          |
-| Skipped (not counted) | 4          |
-| Blockers              | 0          |
-| Major                 | 0          |
-| Minor                 | 0          |
+|                       |             |
+| --------------------- | ----------- |
+| Checks evaluated      | 216         |
+| Passed                | 208 (96.3%) |
+| Failed                | 8           |
+| Skipped (not counted) | 0           |
+| Blockers              | 0           |
+| Major                 | 8           |
+| Minor                 | 0           |
 
 ## Coverage by area
 
-| Suite        | Area       | Passed | Failed | Skipped | Rate |
-| ------------ | ---------- | -----: | -----: | ------: | ---: |
-| `merge-tags` | Merge tags |    180 |      0 |       4 | 100% |
+| Suite          | Area         | Passed | Failed | Skipped |  Rate |
+| -------------- | ------------ | -----: | -----: | ------: | ----: |
+| `record-pages` | Record pages |    208 |      8 |       0 | 96.3% |
 
 ## What to fix
 
-Nothing — every evaluated check passed.
+Ordered by severity. The detail column is written to say WHERE to look.
 
-## Not covered by this run
-
-A skipped check is not a passing one. Each of these is a gap in the evidence.
-
-- `merge-tags` — HTML-template escaping ({Field} newline → <br/>) behaves correctly: processXmlForTest(xml, data, templateType) is @TestVisible private and unreachable from anonymous Apex, so every check here runs the Word branch; HTML/Excel/PowerPoint escaping needs a unit test or a real HTML template render
-- `merge-tags` — {PageNumber}/{TotalPages} render real page numbers in the PDF: processXml only preserves the tokens; the @page counter substitution happens in wrapHtmlForPdf and can only be verified on a rendered PDF (output-formats suite)
-- `merge-tags` — {%ImageField} with a real ContentVersion renders an embedded image: needs an uploaded ContentVersion fixture and a real DOCX/PDF render; covered by scripts/e2e-09-images.apex, not by this parser-level probe
-- `merge-tags` — The giant-query parent path resolves the same tag surface: DocGenGiantQueryAssembler.resolveParentMergeTags / resolveGiantChartBuckets do not go through processXmlForTest and need >2000 child rows to exercise
+| Severity  | Suite          | Check                                                                                        | Evidence                                                                                                                                                                                                                                                                                                       |
+| --------- | -------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **major** | `record-pages` | DocGen_Template_Version\_\_c exposes every one of its fields somewhere on the record page    | 7 field(s) exist on the object but render nowhere: Custom_Margins**c "Custom Margins (in)", Document_Title_Format**c "Document Title Format", Output_Format**c "Output Format", Page_Margins**c "Page Margins", Page_Orientation**c "Page Orientation", Page_Size**c "Page Size", Watermark_Image_CV_Id\_\_c " |
+| **major** | `record-pages` | DocGen_Job\_\_c exposes every one of its fields somewhere on the record page                 | 5 field(s) exist on the object but render nowhere: Data_Cache_CV**c "Data Cache CV", Error_Log**c "Error Log", Giant_Query_Config**c "Giant Query Config", Merged_PDF_CV**c "Merged PDF CV", Parent_Record_Id\_\_c "Parent Record Id"                                                                          |
+| **major** | `record-pages` | DocGen_Asset\_\_c has a layout file backing its record page                                  | no layouts/DocGen_Asset\_\_c-\*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render                                                                                                                                                 |
+| **major** | `record-pages` | DocGen_Asset\_\_c exposes every one of its fields somewhere on the record page               | 3 field(s) exist on the object but render nowhere: Asset_Type**c "Asset Type", Category**c "Category", Is_Active\_\_c "Is Active"                                                                                                                                                                              |
+| **major** | `record-pages` | DocGen_Email_Template\_\_c has a layout file backing its record page                         | no layouts/DocGen_Email_Template\_\_c-\*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render                                                                                                                                        |
+| **major** | `record-pages` | DocGen_Email_Template\_\_c exposes every one of its fields somewhere on the record page      | 12 field(s) exist on the object but render nowhere: Body_Html**c "Body (HTML)", Body_Plain**c "Body (Plain Text)", Brand_Color**c "Brand Color Override", Description**c "Description", Footer_Text**c "Footer Text Override", Is_Active**c "Is Active", Layout_Mode**c "Layout Mode", Logo_Asset_Key**c "Lo   |
+| **major** | `record-pages` | DocGen_Signature_Request\_\_c exposes every one of its fields somewhere on the record page   | 3 field(s) exist on the object but render nowhere: Frozen_Document_CV_Id**c "Frozen Document CV Id", Snapshot_Hash**c "Snapshot Hash", Snapshot_Taken_At\_\_c "Snapshot Taken At"                                                                                                                              |
+| **major** | `record-pages` | DocGen_Signature_Placement\_\_c exposes every one of its fields somewhere on the record page | 1 field(s) exist on the object but render nowhere: Render_Inline\_\_c "Render Inline"                                                                                                                                                                                                                          |
 
 ## Every check
 
-### merge-tags — Merge tags
+### record-pages — Record pages
 
-- ✅ probe "fields+built-ins" stays under the 20,000-char anonymous Apex limit — 5494 chars
-- ✅ {Name} resolves a plain field — actual: Acme Corp
-- ✅ {Account.Name} resolves a parent relationship field — actual: Parent Co
-- ✅ {Account.Owner.Name} resolves two hops up — actual: Deep Owner
-- ✅ {name} resolves case-insensitively — actual: Acme Corp
-- ✅ {!Name} (Salesforce-style prefix) resolves like {Name} — actual: Acme Corp
-- ✅ { Name } tolerates whitespace inside the braces — actual: Acme Corp
-- ✅ {Missing} (no such key) renders empty, not the raw tag — actual: <empty>
-- ✅ {NullF} (key present, value null) renders empty — actual: <empty>
-- ✅ {Blank} (empty-string value) renders empty — actual: <empty>
-- ✅ {Account.Missing} (missing subfield) renders empty — actual: <empty>
-- ✅ {Nope.Sub} (missing relationship) renders empty, no throw — actual: <empty>
-- ✅ {Nope.A.B.C} (deep missing path) renders empty, no throw — actual: <empty>
-- ✅ Text around an unresolved tag survives intact — actual: before after
-- ✅ Two tags in one text node both resolve — actual: Acme Corp/Won
-- ✅ {Today:yyyy-MM-dd} equals the org calendar date — actual: 2026-07-25
-- ✅ {Today:MMMM d, yyyy} formats the date — actual: July 25, 2026
-- ✅ {Today} renders a date containing the current year — actual: 2026-07-25 07:00:00
-- ✅ {Now:yyyy-MM-dd HH:mm} formats a timestamp — actual: 2026-07-25 08:39
-- ✅ {RunningUser.Name} resolves the executing user — actual: User User
-- ✅ {RunningUser.Email} resolves the executing user email — actual: dave@portwood.dev
-- ✅ {runninguser.name} resolves case-insensitively — actual: User User
-- ✅ {RunningUser.ProfileId} (outside the allowlist) renders empty — actual: <empty>
-- ✅ {PageNumber} survives processXml verbatim for the PDF counter layer — actual: {PageNumber}
-- ✅ {TotalPages} survives processXml verbatim — actual: {TotalPages}
-- ✅ {pagenumber} is preserved case-insensitively — actual: {pagenumber}
-- ✅ "Page {PageNumber} of {TotalPages}" passes through untouched — actual: Page {PageNumber} of {TotalPages}
-- ✅ probe "formats" stays under the 20,000-char anonymous Apex limit — 5167 chars
-- ✅ {Amt:currency} formats US dollars with separators — actual: $75,000.50
-- ✅ {Amt:currency:EUR} uses the euro symbol — actual: €75,000.50
-- ✅ {Amt:currency:EUR:de_DE} uses German separators — actual: 75.000,50 €
-- ✅ {Amt:currency:JPY} rounds to zero decimals — actual: ¥75,001
-- ✅ {Amt:currency:auto} falls back to $ when no ISO is on the record — actual: $75,000.50
-- ✅ {Rate:percent} renders a percent sign — actual: 15.5%
-- ✅ {Qty:number} groups thousands — actual: 1,234,567
-- ✅ {Qty:#,##0} honours a custom numeric pattern — actual: 1,234,567
-- ✅ {Amt:0.00} honours a two-decimal pattern — actual: 75,000.50
-- ✅ {Text:currency} on non-numeric text degrades to the raw value — actual: not-a-number
-- ✅ {Active:checkbox} renders [X] when true — actual: [X]
-- ✅ {Inactive:checkbox} renders [ ] when false — actual: [ ]
-- ✅ {D:MM/dd/yyyy} formats a DateTime — actual: 04/08/2026
-- ✅ {D:MMMM d, yyyy} formats a DateTime long-form — actual: April 8, 2026
-- ✅ {D:HH:mm} formats the time component — actual: 13:45
-- ✅ {D:date:de_DE} uses the German date pattern — actual: 08.04.2026
-- ✅ {D:date} renders a locale date, not an ISO timestamp — actual: 04/08/2026
-- ✅ {DateStr:MM/dd/yyyy} re-types a "yyyy-MM-dd" string and formats it — actual: 04/08/2026
-- ✅ {DateStr} on a date-string shows no 00:00:00 time tail — actual: 04/08/2026
-- ✅ {DateStr} keeps the calendar day (no timezone shift) — actual: 04/08/2026
-- ✅ {IsoStr:yyyy} re-types an ISO datetime string — actual: 2026
-- ✅ {Stage:label} falls back to the raw value with no label map — actual: Won
-- ✅ {Name:upper} (unsupported suffix) is ignored, not printed — actual: Acme Corp
-- ✅ probe "sections+loops" stays under the 20,000-char anonymous Apex limit — 8152 chars
-- ✅ {#Items}...{/Items} repeats the body once per row — actual: [Item A][Item B][Item C]
-- ✅ {#Items} over an empty list renders nothing and leaks no tag — actual: <empty>
-- ✅ {#Empty}...{:else}... renders the else branch for 0 rows — actual: none
-- ✅ {#Rel} iterates a {totalSize, records} relationship wrapper — actual: [W1][W2]
-- ✅ {#Rel} over non-record entries renders nothing rather than throwing — actual: <empty>
-- ✅ {#Rows} over 60 rows emits every row (crosses the heap-check boundary) — actual: 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
-- ✅ {#Rows} over 60 rows includes the last row — actual: 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
-- ✅ Nested {#Orders}{#Lines} loops expand inner rows per outer row — actual: [O1(L1a)(L1b)][O2(L2a)]
-- ✅ A parent field inside {#Items} is out of scope (renders empty) — actual: [][][]
-- ✅ {index} inside a plain {#Items} loop leaks no literal tag — actual: [][][]
-- ✅ {count} inside a plain {#Items} loop leaks no literal tag — actual: [][][]
-- ✅ {#Flag} shows the body when the field is true — actual: Yes
-- ✅ {#Flag} hides the body when the field is false — actual: <empty>
-- ✅ {#Field} treats a non-blank string as truthy — actual: Y
-- ✅ {#Field} treats an empty string as falsy — actual: <empty>
-- ✅ {#Field} treats visually-blank rich text (<p><br></p>) as falsy — actual: <empty>
-- ✅ {^Field} shows for visually-blank rich text (symmetric with {#}) — actual: N
-- ✅ {^Flag} shows the body when the field is false — actual: No
-- ✅ {^Flag} hides the body when the field is true — actual: <empty>
-- ✅ {#Flag}Y{:else}N{/Flag} takes the true branch — actual: Y
-- ✅ {#Flag}Y{:else}N{/Flag} takes the else branch — actual: N
-- ✅ {^Flag}Y{:else}N{/Flag} takes the else branch when truthy — actual: N
-- ✅ {#Parent}{Field}{/Parent} scopes into a related map — actual: Parent Co
-- ✅ {#IF Amount > 10000} evaluates a numeric comparison — actual: Big
-- ✅ {#IF Amount &gt; 10000} works with the OOXML-escaped operator — actual: Big
-- ✅ {#IF Amount < 100} is false for a large value — actual: <empty>
-- ✅ {#IF Stage = 'Won'} matches a single-quoted literal — actual: C
-- ✅ {#IF Stage = "Won"} matches a double-quoted literal — actual: C
-- ✅ {#IF Stage != 'Lost'} evaluates inequality — actual: A
-- ✅ {#IF a AND b} evaluates a conjunction — actual: B
-- ✅ {#IF a OR b} evaluates a disjunction — actual: B
-- ✅ {#IF NOT(...)} negates a comparison — actual: B
-- ✅ {#IF ...}{:else}... falls to the else branch on a missing field — actual: Y
-- ✅ Nested {#IF} blocks pair with the right {/IF} — actual: D
-- ✅ A conditional inside a loop evaluates per row — actual: [Item A][Item B]
-- ✅ A loop inside <w:tr> clones the whole table row per record — actual: <w:tbl><w:tr><w:tc><w:t>Item A</w:t></w:tc></w:tr><w:tr><w:tc><w:t>Item B</w:t></w:tc></w:tr><w:tr><w:tc><w:t>Item C</w:t></w:tc></w:tr></w:tbl>
-- ✅ A loop inside <w:tr> keeps every row value — actual: <w:tbl><w:tr><w:tc><w:t>Item A</w:t></w:tc></w:tr><w:tr><w:tc><w:t>Item B</w:t></w:tc></w:tr><w:tr><w:tc><w:t>Item C</w:t></w:tc></w:tr></w:tbl>
-- ✅ probe "aggregates+media" stays under the 20,000-char anonymous Apex limit — 6193 chars
-- ✅ {SUM:Items.Amount} totals a child collection — actual: 350
-- ✅ {COUNT:Items} counts a child collection — actual: 3
-- ✅ {AVG:Items.Amount} averages a child collection — actual: 116.67
-- ✅ {MIN:Items.Amount} returns the smallest value — actual: 50
-- ✅ {MAX:Items.Amount} returns the largest value — actual: 200
-- ✅ {sum:Items.Amount} accepts a lower-case function name — actual: 350
-- ✅ {SUM:Items.Amount:currency} applies a format suffix to the total — actual: $350.00
-- ✅ {COUNT:Empty} over an empty collection renders 0 — actual: 0
-- ✅ {SUM:Empty.Amount} over an empty collection renders 0 — actual: 0
-- ✅ {COUNT:Nope} on a missing relationship renders 0, no throw — actual: 0
-- ✅ {SUM:Items.Nope} on a missing field renders 0, no throw — actual: 0
-- ✅ {Nope:bar} (colon tag, unknown function) renders empty, not an error — actual: <empty>
-- ✅ {\*Field} defaults to a code128 barcode marker — actual: ##BARCODE:code128::ABC-123&amp;X##
-- ✅ {\*Field:qr} emits a QR marker — actual: ##BARCODE:qr::ABC-123&amp;X##
-- ✅ {\*Field:qr:200} carries the size through — actual: ##BARCODE:qr:200:ABC-123&amp;X##
-- ✅ {\*Field:code128:300x80} carries a WxH size through — actual: ##BARCODE:code128:300x80:ABC-123&amp;X##
-- ✅ {\*Field:code39} emits a code39 marker — actual: ##BARCODE:code39::ABC-123&amp;X##
-- ✅ {\*Field} XML-escapes the barcode value — actual: ##BARCODE:qr::ABC-123&amp;X##
-- ✅ {\*NullF:qr} on a null value emits nothing — actual: <empty>
-- ✅ {%Field} on a null image field emits nothing (no broken markup) — actual: <empty>
-- ✅ {%Field:200x100} on a null image field emits nothing — actual: <empty>
-- ✅ {%Image:1} with no attached image emits nothing — actual: <empty>
-- ✅ {%asset:key} for an unknown asset renders a visible placeholder — actual: [missing asset: dgqa_no_such_asset]
-- ✅ {%asset:key} inside src="" emits a URL, not a nested <img> — actual: <img src="">
-- ✅ probe "edge cases" stays under the 20,000-char anonymous Apex limit — 7195 chars
-- ✅ A value containing "<" is XML-escaped — actual: R&amp;D &lt;Widgets&gt; &quot;Q1&quot; it&apos;s
-- ✅ A value containing "<" leaves no raw markup in the output — actual: R&amp;D &lt;Widgets&gt; &quot;Q1&quot; it&apos;s
-- ✅ A value containing "&" is XML-escaped — actual: R&amp;D &lt;Widgets&gt; &quot;Q1&quot; it&apos;s
-- ✅ A value containing quotes is XML-escaped — actual: R&amp;D &lt;Widgets&gt; &quot;Q1&quot; it&apos;s
-- ✅ A tag inside href="" escapes the query-string ampersand — actual: <a href="https://ex.test/a?b=1&amp;c=2">x</a>
-- ✅ A tag inside href="" keeps the attribute well-formed — actual: <a href="https://ex.test/a?b=1&amp;c=2">x</a>
-- ✅ A unicode + emoji value round-trips unchanged — actual: Zürich 東京 😀
-- ✅ A 4,000-character value is not truncated — actual: 0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789<T
-- ✅ A multi-line value becomes Word line breaks, not literal newlines — actual: <w:r><w:t>Line1</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">Line2</w:t></w:r>
-- ✅ A multi-line value keeps both lines — actual: <w:r><w:t>Line1</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">Line2</w:t></w:r>
-- ✅ A field value that looks like a merge tag is not re-parsed — actual: {Secret}
-- ✅ A field value that looks like a merge tag renders literally — actual: {Secret}
-- ✅ {unclosed (no closing brace) throws a named error — actual: THREW portwoodglobal.DocGenException: Malformed merge tag: missing closing "}" near "{unclosed b". Check for an unclosed tag in the template.
-- ✅ {#Items} with no {/Items} throws a named error — actual: THREW portwoodglobal.DocGenException: Malformed loop tag: missing closing "{/Items}" for "{#Items}" opened near "{#Items}{Name}".
-- ✅ {^Flag} with no {/Flag} throws a named error — actual: THREW portwoodglobal.DocGenException: Malformed inverse tag: missing closing "{/Active}" for "{^Active}" opened near "{^Active}x".
-- ✅ A malformed-loop error names the offending tag — actual: THREW portwoodglobal.DocGenException: Malformed loop tag: missing closing "{/Items}" for "{#Items}" opened near "{#Items}{Name}".
-- ✅ {} (empty tag) renders nothing and does not throw — actual: ab
-- ✅ {/Orphan} with no opener is emitted literally so the author sees the typo — actual: a{/Orphan}b
-- ✅ {{nested}} resolves the inner tag to empty and passes the trailing brace through — actual: }
-- ✅ {{nested}} does not print the inner tag name — actual: }
-- ✅ A tag split across <w:r> runs resolves after run de-fragmentation — actual: <w:r><w:t>Acme Corp</w:t></w:r><w:r><w:t></w:t></w:r>
-- ✅ A tag with a format suffix split across runs resolves — actual: <w:r><w:t>$75,000.50</w:t></w:r><w:r><w:t></w:t></w:r>
-- ✅ A split tag does NOT resolve without de-fragmentation (documents the dependency) — actual: <w:r><w:t></w:t></w:r>
-- ✅ {RepeatHeader} injects <w:tblHeader/> into its table row — actual: <w:tbl><w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:p><w:r><w:t>Head</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
-- ✅ {RepeatHeader} text is stripped from the rendered row — actual: <w:tbl><w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:p><w:r><w:t>Head</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
-- ✅ {RepeatHeader} never renders as literal text even without a table row — actual: xy
-- ✅ {@Signature_X} is stripped during normal generation — actual: ab
-- ✅ {@Signature_X} is preserved when preserveSignatureTags is on — actual: {@Signature_Buyer}
-- ✅ {?key} is preserved until the finalize re-render — actual: {?title}
-- ✅ {?key} resolves from \_\_formFields at finalize — actual: CTO
-- ✅ {?key\|fallback} uses the fallback when unanswered — actual: N/A
-- ✅ {?key} XML-escapes the collected value — actual: &lt;b&gt;&amp;
-- ✅ probe "chart buckets (in-memory)" stays under the 20,000-char anonymous Apex limit — 6157 chars
-- ✅ {#ChartBucket:rel:field} buckets by value, sorted desc by count — actual: [Bus:3][Car:2][Ash:1][Bike:1][:1]
-- ✅ {#ChartBucket} breaks count ties alphabetically by key — actual: Bus,Car,Ash,Bike,,
-- ✅ {percent} is the share of all rows — actual: [37.5][25.0][12.5][12.5][12.5]
-- ✅ {max_percent} is 100 for the largest bucket — actual: [100.0][66.7][33.3][33.3][33.3]
-- ✅ {max_percent} scales the runner-up against the largest bucket — actual: [100.0][66.7][33.3][33.3][33.3]
-- ✅ {index} is a 1-based bucket counter — actual: 1,2,3,4,5,
-- ✅ {color} cycles the default palette starting at #3b82f6 — actual: [#3b82f6][#10b981][#f59e0b][#ef4444][#8b5cf6]
-- ✅ {color_hex} emits raw hex with no leading # (for Word w:shd) — actual: [3b82f6][10b981][f59e0b][ef4444][8b5cf6]
-- ✅ {key_label} labels a null/blank bucket "Not Specified" — actual: [Bus][Car][Ash][Bike][Not Specified]
-- ✅ {key} for a null value is empty, not the "**null**" sentinel — actual: [Bus][Car][Ash][Bike][]
-- ✅ colors= overrides the palette, cycling by row index — actual: [#111111][#222222][#111111][#222222][#111111]
-- ✅ split=; splits multi-select values per respondent — actual: [Bus:2][Car:2][Bike:1]
-- ✅ split=; counts every selection, not just the first — actual: [Bus:2][Car:2][Bike:1]
-- ✅ split=; produces no combined "Bus;Car" bucket — actual: [Bus][Car][Bike]
-- ✅ colors= and split= compose in one tag — actual: [Bus#111111][Car#111111][Bike#111111]
-- ✅ {#ChartBucket} over an empty collection renders nothing, leaks no tag — actual: xy
-- ✅ {#ChartBucket} nested inside a loop resolves against the iteration item — actual: [Inner]
-- ✅ {#ChartBucket} on an unknown relationship renders nothing, no throw — actual: xy
-- ✅ {#ChartBucket} on an unknown field buckets everything as blank, no throw — actual: [:8]
-- ✅ {#ChartBucket:onlyOneArg} fails loudly instead of rendering garbage — actual: THREW portwoodglobal.DocGenException: Malformed loop tag: missing closing "{/ChartBucket:Answers}" for "{#ChartBucket:Answers}" opened near "{#ChartBucket:Answers}[{key}]{/ChartBuck".
-- ✅ Two {#ChartBucket} tags on one page each get their own bucket list — actual: [Bus][Car][Ash][Bike][]&#124;[Bus][Bus;Car][Car;Bike]
-- ✅ probe "chart buckets (SOQL modifiers)" stays under the 20,000-char anonymous Apex limit — 5068 chars
-- ✅ {#ChartBucket} falls back to a SOQL aggregate when the relationship is not pre-loaded — actual: [Bus:3][Car:1][Bike:1]
-- ✅ The SOQL fallback returns every bucket, not just the largest — actual: [Bus:3][Car:1][Bike:1]
-- ✅ where= filters the aggregate server-side — actual: [Bus:2][Bike:1]
-- ✅ where= excludes non-matching rows entirely — actual: [Bus][Bike]
-- ✅ where= with an injection attempt renders nothing rather than running — actual: <empty>
-- ✅ groupBy= builds a cross-tab with a {#cols} sub-list — actual: [Bus(Eng:2)(Sales:1)(Total:3)][Bike(Eng:1)(Sales:0)(Total:1)][Car(Eng:0)(Sales:1)(Total:1)]
-- ✅ groupBy= counts the right cell (Bus x Eng = 2) — actual: [Bus(Eng:2)(Sales:1)(Total:3)][Bike(Eng:1)(Sales:0)(Total:1)][Car(Eng:0)(Sales:1)(Total:1)]
-- ✅ groupBy= appends a synthetic Total column last — actual: [Bus(Eng:2)(Sales:1)(Total:3)][Bike(Eng:1)(Sales:0)(Total:1)][Car(Eng:0)(Sales:1)(Total:1)]
-- ✅ colSort= orders the pivot columns as the author named them — actual: [(Sales)(Eng)(Total)][(Sales)(Eng)(Total)][(Sales)(Eng)(Total)]
-- ✅ {#ChartBucket} on a field the child object lacks renders nothing, no throw — actual: xy
-- ⊘ HTML-template escaping ({Field} newline → <br/>) behaves correctly — processXmlForTest(xml, data, templateType) is @TestVisible private and unreachable from anonymous Apex, so every check here runs the Word branch; HTML/Excel/PowerPoint escaping needs a unit test or a
-- ⊘ {PageNumber}/{TotalPages} render real page numbers in the PDF — processXml only preserves the tokens; the @page counter substitution happens in wrapHtmlForPdf and can only be verified on a rendered PDF (output-formats suite)
-- ⊘ {%ImageField} with a real ContentVersion renders an embedded image — needs an uploaded ContentVersion fixture and a real DOCX/PDF render; covered by scripts/e2e-09-images.apex, not by this parser-level probe
-- ⊘ The giant-query parent path resolves the same tag surface — DocGenGiantQueryAssembler.resolveParentMergeTags / resolveGiantChartBuckets do not go through processXmlForTest and need >2000 child rows to exercise
+- ✅ DocGen_Template\_\_c record page renders — 54 field slots rendered
+- ✅ DocGen_Template\_\_c detail fields are genuinely visible (hit test) — first field "Template Name" is hittable
+- ✅ DocGen_Template\_\_c.Name renders on the record page
+- ✅ DocGen_Template**c.API_Name**c renders on the record page
+- ✅ DocGen_Template**c.Type**c renders on the record page
+- ✅ DocGen_Template**c.Output_Format**c renders on the record page
+- ✅ DocGen_Template**c.Is_Active**c renders on the record page
+- ✅ DocGen_Template**c.Is_Default**c renders on the record page
+- ✅ DocGen_Template**c.Category**c renders on the record page
+- ✅ DocGen_Template**c.Base_Object_API**c renders on the record page
+- ✅ DocGen_Template**c.Document_Title_Format**c renders on the record page
+- ✅ DocGen_Template**c.Test_Record_Id**c renders on the record page
+- ✅ DocGen_Template**c.Sort_Order**c renders on the record page
+- ✅ DocGen_Template**c.Lock_Output_Format**c renders on the record page
+- ✅ DocGen_Template**c.Specific_Record_Ids**c renders on the record page
+- ✅ DocGen_Template**c.Required_Permission_Sets**c renders on the record page
+- ✅ DocGen_Template**c.Signer_Verification**c renders on the record page
+- ✅ DocGen_Template**c.Prefill_Signer_Email**c renders on the record page
+- ✅ DocGen_Template**c.Page_Size**c renders on the record page
+- ✅ DocGen_Template**c.Page_Orientation**c renders on the record page
+- ✅ DocGen_Template**c.Page_Margins**c renders on the record page
+- ✅ DocGen_Template**c.Custom_Margins**c renders on the record page
+- ✅ DocGen_Template**c.Default_Email_Message**c renders on the record page
+- ✅ DocGen_Template**c.Record_Filter**c renders on the record page
+- ✅ DocGen_Template**c.Description**c renders on the record page
+- ✅ DocGen_Template**c.Query_Config**c renders on the record page
+- ✅ DocGen_Template\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Template\_\_c.LastModifiedById renders on the record page
+- ✅ DocGen_Template\_\_c exposes every one of its fields somewhere on the record page — all reachable; 3 field(s) intentionally edited elsewhere
+- ✅ DocGen_Template**c fields edited outside the record page are accounted for — Footer_Html**c (edited in the Designer footer band), Form_Fields_Config**c (edited on the Signer Inputs tab), Header_Html**c (edited in the Designer header band)
+- ✅ DocGen_Template\_\_c related lists load without error — 7 related list container(s) rendered
+- ✅ DocGen_Template\_\_c shows its "Versions" related list
+- ✅ DocGen_Template\_\_c shows its "Files" related list
+- ✅ DocGen_Template\_\_c related lists are genuinely visible (hit test)
+- ✅ DocGen_Template\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Template\_\_c record page logs no console errors
+- ✅ DocGen_Template_Version\_\_c record page renders — 24 field slots rendered
+- ✅ DocGen_Template_Version\_\_c detail fields are genuinely visible (hit test) — first field "Version Name" is hittable
+- ✅ DocGen_Template_Version\_\_c.Name renders on the record page
+- ✅ DocGen_Template_Version**c.Template**c renders on the record page
+- ✅ DocGen_Template_Version**c.Is_Active**c renders on the record page
+- ✅ DocGen_Template_Version**c.Type**c renders on the record page
+- ✅ DocGen_Template_Version**c.Category**c renders on the record page
+- ✅ DocGen_Template_Version**c.Base_Object_API**c renders on the record page
+- ✅ DocGen_Template_Version**c.Content_Version_Id**c renders on the record page
+- ✅ DocGen_Template_Version**c.Pre_Decomposition_Status**c renders on the record page
+- ✅ DocGen_Template_Version**c.Description**c renders on the record page
+- ✅ DocGen_Template_Version**c.Query_Config**c renders on the record page
+- ✅ DocGen_Template_Version\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Template_Version\_\_c.LastModifiedById renders on the record page
+- ❌ DocGen_Template_Version**c exposes every one of its fields somewhere on the record page — 7 field(s) exist on the object but render nowhere: Custom_Margins**c "Custom Margins (in)", Document_Title_Format**c "Document Title Format", Output_Format**c "Output Format", Page_Margins\_\_c "Page Ma
+- ✅ DocGen_Template_Version**c fields edited outside the record page are accounted for — Footer_Html**c (edited in the Designer footer band), Header_Html\_\_c (edited in the Designer header band)
+- ✅ DocGen_Template_Version\_\_c related lists load without error — 6 related list container(s) rendered
+- ✅ DocGen_Template_Version\_\_c shows its "Files" related list
+- ✅ DocGen_Template_Version\_\_c related lists are genuinely visible (hit test)
+- ✅ DocGen_Template_Version\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Template_Version\_\_c record page logs no console errors
+- ✅ DocGen_Job\_\_c record page renders — 22 field slots rendered
+- ✅ DocGen_Job\_\_c detail fields are genuinely visible (hit test) — first field "Job Number" is hittable
+- ✅ DocGen_Job\_\_c.Name renders on the record page
+- ✅ DocGen_Job**c.Template**c renders on the record page
+- ✅ DocGen_Job**c.Status**c renders on the record page
+- ✅ DocGen_Job**c.Label**c renders on the record page
+- ✅ DocGen_Job**c.Total_Records**c renders on the record page
+- ✅ DocGen_Job**c.Success_Count**c renders on the record page
+- ✅ DocGen_Job**c.Error_Count**c renders on the record page
+- ✅ DocGen_Job**c.Merge_Only**c renders on the record page
+- ✅ DocGen_Job**c.Query_Condition**c renders on the record page
+- ✅ DocGen_Job\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Job\_\_c.LastModifiedById renders on the record page
+- ❌ DocGen_Job**c exposes every one of its fields somewhere on the record page — 5 field(s) exist on the object but render nowhere: Data_Cache_CV**c "Data Cache CV", Error_Log**c "Error Log", Giant_Query_Config**c "Giant Query Config", Merged_PDF_CV\_\_c "Merged PDF CV", Parent_Reco
+- ✅ DocGen_Job\_\_c related lists load without error — 6 related list container(s) rendered
+- ✅ DocGen_Job\_\_c shows its "Files" related list
+- ✅ DocGen_Job\_\_c related lists are genuinely visible (hit test)
+- ✅ DocGen_Job\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Job\_\_c record page logs no console errors
+- ✅ DocGen_Saved_Query\_\_c record page renders — 15 field slots rendered
+- ✅ DocGen_Saved_Query\_\_c detail fields are genuinely visible (hit test) — first field "Query Label" is hittable
+- ✅ DocGen_Saved_Query\_\_c.Name renders on the record page
+- ✅ DocGen_Saved_Query**c.DocGen_Template**c renders on the record page
+- ✅ DocGen_Saved_Query**c.Description**c renders on the record page
+- ✅ DocGen_Saved_Query**c.Query_Condition**c renders on the record page
+- ✅ DocGen_Saved_Query\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Saved_Query\_\_c.LastModifiedById renders on the record page
+- ✅ DocGen_Saved_Query\_\_c exposes every one of its fields somewhere on the record page
+- ✅ DocGen_Saved_Query\_\_c related lists load without error — 6 related list container(s) rendered
+- ✅ DocGen_Saved_Query\_\_c shows its "Files" related list
+- ✅ DocGen_Saved_Query\_\_c related lists are genuinely visible (hit test)
+- ✅ DocGen_Saved_Query\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Saved_Query\_\_c record page logs no console errors
+- ✅ DocGen_Error_Log\_\_c record page renders — 32 field slots rendered
+- ✅ DocGen_Error_Log\_\_c detail fields are genuinely visible (hit test) — first field "Error Number" is hittable
+- ✅ DocGen_Error_Log\_\_c.Name renders on the record page
+- ✅ DocGen_Error_Log**c.Severity**c renders on the record page
+- ✅ DocGen_Error_Log**c.Context**c renders on the record page
+- ✅ DocGen_Error_Log**c.Operation**c renders on the record page
+- ✅ DocGen_Error_Log**c.Exception_Type**c renders on the record page
+- ✅ DocGen_Error_Log**c.Message**c renders on the record page
+- ✅ DocGen_Error_Log**c.Stack_Trace**c renders on the record page
+- ✅ DocGen_Error_Log**c.Additional_Info**c renders on the record page
+- ✅ DocGen_Error_Log**c.Record_Id**c renders on the record page
+- ✅ DocGen_Error_Log**c.Template_Id**c renders on the record page
+- ✅ DocGen_Error_Log**c.Job_Id**c renders on the record page
+- ✅ DocGen_Error_Log**c.User_Id**c renders on the record page
+- ✅ DocGen_Error_Log**c.Flow_Interview_Guid**c renders on the record page
+- ✅ DocGen_Error_Log\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Error_Log\_\_c.LastModifiedById renders on the record page
+- ✅ DocGen_Error_Log\_\_c exposes every one of its fields somewhere on the record page
+- ✅ DocGen_Error_Log\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Error_Log\_\_c record page logs no console errors
+- ✅ DocGen_Asset\_\_c record page renders — 11 field slots rendered
+- ✅ DocGen_Asset\_\_c detail fields are genuinely visible (hit test) — first field "Asset Name" is hittable
+- ❌ DocGen_Asset**c has a layout file backing its record page — no layouts/DocGen_Asset**c-\*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render
+- ❌ DocGen_Asset**c exposes every one of its fields somewhere on the record page — 3 field(s) exist on the object but render nowhere: Asset_Type**c "Asset Type", Category**c "Category", Is_Active**c "Is Active"
+- ✅ DocGen_Asset\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Asset\_\_c record page logs no console errors
+- ✅ DocGen_Email_Template\_\_c record page renders — 11 field slots rendered
+- ✅ DocGen_Email_Template\_\_c detail fields are genuinely visible (hit test) — first field "Email Template Name" is hittable
+- ❌ DocGen_Email_Template**c has a layout file backing its record page — no layouts/DocGen_Email_Template**c-\*.layout-meta.xml in the repo — the org is showing Salesforce's auto-generated default layout, which is why only 5 fields render
+- ❌ DocGen_Email_Template**c exposes every one of its fields somewhere on the record page — 12 field(s) exist on the object but render nowhere: Body_Html**c "Body (HTML)", Body_Plain**c "Body (Plain Text)", Brand_Color**c "Brand Color Override", Description**c "Description", Footer_Text**c "
+- ✅ DocGen_Email_Template\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Email_Template\_\_c record page logs no console errors
+- ✅ DocGen_Signature_Request\_\_c record page renders — 34 field slots rendered
+- ✅ DocGen_Signature_Request\_\_c detail fields are genuinely visible (hit test) — first field "Request Number" is hittable
+- ✅ DocGen_Signature_Request\_\_c.Name renders on the record page
+- ✅ DocGen_Signature_Request**c.Status**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Template**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Template_Ids**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Document_Title_Format**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Related_Record_Id**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Source_Document_Id**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Signing_Order**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Expires_At**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Email_Status**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Prefill_Signer_Email**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Require_Email_Verification**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Signer_Name**c renders on the record page
+- ✅ DocGen_Signature_Request**c.Signer_Email**c renders on the record page
+- ✅ DocGen_Signature_Request\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Signature_Request\_\_c.LastModifiedById renders on the record page
+- ❌ DocGen_Signature_Request**c exposes every one of its fields somewhere on the record page — 3 field(s) exist on the object but render nowhere: Frozen_Document_CV_Id**c "Frozen Document CV Id", Snapshot_Hash**c "Snapshot Hash", Snapshot_Taken_At**c "Snapshot Taken At"
+- ✅ DocGen_Signature_Request**c fields edited outside the record page are accounted for — Frozen_Document**c (internal snapshot blob written by the signing engine), Render_Data_Snapshot**c (internal snapshot blob written by the signing engine), Secure_Token**c (signing capability token — d
+- ✅ DocGen_Signature_Request\_\_c related lists load without error — 8 related list container(s) rendered
+- ✅ DocGen_Signature_Request\_\_c shows its "Signers" related list
+- ✅ DocGen_Signature_Request\_\_c shows its "Audits" related list
+- ✅ DocGen_Signature_Request\_\_c shows its "Files" related list
+- ✅ DocGen_Signature_Request\_\_c related lists are genuinely visible (hit test)
+- ✅ DocGen_Signature_Request\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Signature_Request\_\_c record page logs no console errors
+- ✅ DocGen_Signer\_\_c record page renders — 38 field slots rendered
+- ✅ DocGen_Signer\_\_c detail fields are genuinely visible (hit test) — first field "Signer Number" is hittable
+- ✅ DocGen_Signer\_\_c.Name renders on the record page
+- ✅ DocGen_Signer**c.Signature_Request**c renders on the record page
+- ✅ DocGen_Signer**c.Signer_Name**c renders on the record page
+- ✅ DocGen_Signer**c.Signer_Email**c renders on the record page
+- ✅ DocGen_Signer**c.Status**c renders on the record page
+- ✅ DocGen_Signer**c.Role_Name**c renders on the record page
+- ✅ DocGen_Signer**c.Sort_Order**c renders on the record page
+- ✅ DocGen_Signer**c.Contact**c renders on the record page
+- ✅ DocGen_Signer**c.Signature_Data**c renders on the record page
+- ✅ DocGen_Signer**c.Consent_Captured**c renders on the record page
+- ✅ DocGen_Signer**c.Decline_Reason**c renders on the record page
+- ✅ DocGen_Signer**c.PIN_Verified_At**c renders on the record page
+- ✅ DocGen_Signer**c.PIN_Attempts**c renders on the record page
+- ✅ DocGen_Signer**c.PIN_Expires_At**c renders on the record page
+- ✅ DocGen_Signer**c.Reminders_Sent**c renders on the record page
+- ✅ DocGen_Signer**c.Reminder_Sent_At**c renders on the record page
+- ✅ DocGen_Signer\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Signer\_\_c.LastModifiedById renders on the record page
+- ✅ DocGen_Signer\_\_c exposes every one of its fields somewhere on the record page — all reachable; 3 field(s) intentionally edited elsewhere
+- ✅ DocGen_Signer**c fields edited outside the record page are accounted for — Field_Data_Json**c (internal, written by the signing engine), PIN_Hash**c (credential hash — deliberately not on a layout), Secure_Token**c (signing capability token — deliberately not on a layout)
+- ✅ DocGen_Signer\_\_c related lists load without error — 6 related list container(s) rendered
+- ✅ DocGen_Signer\_\_c shows its "Files" related list
+- ✅ DocGen_Signer\_\_c related lists are genuinely visible (hit test)
+- ✅ DocGen_Signer\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Signer\_\_c record page logs no console errors
+- ✅ DocGen_Signature_Placement\_\_c record page renders — 29 field slots rendered
+- ✅ DocGen_Signature_Placement\_\_c detail fields are genuinely visible (hit test) — first field "Placement Number" is hittable
+- ✅ DocGen_Signature_Placement\_\_c.Name renders on the record page
+- ✅ DocGen_Signature_Placement**c.Signer**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Signature_Request**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Placement_Type**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Sequence_Order**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Status**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Signed_Value**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Signed_At**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Document_Index**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Section_Context**c renders on the record page
+- ✅ DocGen_Signature_Placement**c.Tag_Text**c renders on the record page
+- ✅ DocGen_Signature_Placement\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Signature_Placement\_\_c.LastModifiedById renders on the record page
+- ❌ DocGen_Signature_Placement**c exposes every one of its fields somewhere on the record page — 1 field(s) exist on the object but render nowhere: Render_Inline**c "Render Inline"
+- ✅ DocGen_Signature_Placement\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Signature_Placement\_\_c record page logs no console errors
+- ✅ DocGen_Signature_Audit\_\_c record page renders — 34 field slots rendered
+- ✅ DocGen_Signature_Audit\_\_c detail fields are genuinely visible (hit test) — first field "Audit Number" is hittable
+- ✅ DocGen_Signature_Audit\_\_c.Name renders on the record page
+- ✅ DocGen_Signature_Audit**c.Signature_Request**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Signer**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Contact**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Signer_Name**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Signer_Email**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Signed_Date**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Consent_Captured**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Verification_Method**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.PIN_Verified_At**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Document_Hash_SHA256**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.IP_Address**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.User_Agent**c renders on the record page
+- ✅ DocGen_Signature_Audit**c.Error_Message**c renders on the record page
+- ✅ DocGen_Signature_Audit\_\_c.CreatedById renders on the record page
+- ✅ DocGen_Signature_Audit\_\_c.LastModifiedById renders on the record page
+- ✅ DocGen_Signature_Audit\_\_c exposes every one of its fields somewhere on the record page
+- ✅ DocGen_Signature_Audit\_\_c page components report no error state — no custom component is placed on this record page
+- ✅ DocGen_Signature_Audit\_\_c record page logs no console errors
+- ✅ every seeded QA record is deleted again — 11 record(s) removed

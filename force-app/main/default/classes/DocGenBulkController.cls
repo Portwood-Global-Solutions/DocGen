@@ -554,11 +554,46 @@ public with sharing class DocGenBulkController {
         Integer batchSize,
         Boolean mergeOnly
     ) {
+        // The LWC boundary, and the ONLY place AuraHandledException may be raised.
+        try {
+            return submitJobInternal(templateId, condition, jobLabel, mergePdf, batchSize, mergeOnly);
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error starting bulk generation job.');
+        }
+    }
+
+    /**
+     * The same work, throwing a CATCHABLE exception.
+     *
+     * AuraHandledException can only be THROWN from an Aura/VF request. Raising it
+     * anywhere else — a Flow interview, a queueable, anonymous Apex — does not
+     * produce that exception at all; it produces
+     *
+     *     System.LimitException: Can only throw this exception type from
+     *     VisualForce or Aura context
+     *
+     * and a LimitException is UNCATCHABLE. So a Flow action calling the
+     * @AuraEnabled entry point could not report a failure however carefully it
+     * was written: its own catch(Exception) never ran and the whole interview
+     * faulted. Passing a null or deleted Template Id — the commonest Flow-author
+     * mistake — took the entire Flow down instead of setting Success = false.
+     *
+     * Non-Aura callers (Flow actions above all) MUST call this. Only submitJob
+     * converts to AuraHandledException, because only it is answering an LWC.
+     */
+    public static Id submitJobInternal(
+        Id templateId,
+        String condition,
+        String jobLabel,
+        Boolean mergePdf,
+        Integer batchSize,
+        Boolean mergeOnly
+    ) {
         try {
             Boolean isMergeOnly = (mergeOnly == true);
             Boolean isMergeMode = (mergePdf == true) || isMergeOnly;
             if (isMergeMode && isFillablePdfTemplate(templateId)) {
-                throw DocGenService.ahe(
+                throw new DocGenException(
                     'Fillable PDF templates can be generated in bulk as Individual Files. ' +
                     'Turn off Merged PDF and Merge Only for this template.'
                 );
@@ -595,7 +630,8 @@ public with sharing class DocGenBulkController {
 
             return job.Id;
         } catch (Exception e) {
-            throw DocGenService.ahe(e, 'Error starting bulk generation job.');
+            // Catchable by design — see the note above.
+            throw new DocGenException('Error starting bulk generation job. (' + e.getMessage() + ')');
         }
     }
 

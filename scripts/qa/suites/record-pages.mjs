@@ -455,6 +455,22 @@ function clickTab(text) {
     `);
 }
 
+/**
+ * The heading Salesforce puts on a related-list card is the child lookup's
+ * `<relationshipLabel>` ("Versions"), NOT the child object's plural label
+ * ("DocGen Template Versions"). Matching on the plural label looked right and was
+ * wrong. Falls back to the plural label when the field declares no label.
+ */
+function relatedListHeading(rl) {
+    const [childObj, fkField] = rl.split('.');
+    const fkPath = join(ROOT, 'objects', childObj, 'fields', `${fkField}.field-meta.xml`);
+    if (existsSync(fkPath)) {
+        const lbl = xmlValues(readFileSync(fkPath, 'utf8'), 'relationshipLabel')[0];
+        if (lbl) return lbl.trim();
+    }
+    return readObjectMeta(childObj).pluralLabel || childObj;
+}
+
 /** Strip the namespace from an API name so repo names and org names compare. */
 const bare = (api) => String(api).replace(/^[A-Za-z0-9]+__(?=[A-Za-z])/, '');
 
@@ -475,7 +491,11 @@ export async function run({ org, headed }) {
         seeded = debugMap(seedLog);
     } catch (e) {
         return suiteResult('record-pages', 'Record pages', [
-            skip('seed a record for every DocGen object', `anonymous Apex failed: ${String(e.message).slice(0, 200)}`, SEVERITY.BLOCKER)
+            skip(
+                'seed a record for every DocGen object',
+                `anonymous Apex failed: ${String(e.message).slice(0, 200)}`,
+                SEVERITY.BLOCKER
+            )
         ]);
     }
 
@@ -496,7 +516,11 @@ export async function run({ org, headed }) {
         } catch (e) {
             for (const m of metas) {
                 checks.push(
-                    skip(`${m.obj} record page renders`, `could not log in to ${org}: ${String(e.message).slice(0, 120)}`, SEVERITY.BLOCKER)
+                    skip(
+                        `${m.obj} record page renders`,
+                        `could not log in to ${org}: ${String(e.message).slice(0, 120)}`,
+                        SEVERITY.BLOCKER
+                    )
                 );
             }
             return suiteResult('record-pages', 'Record pages', checks);
@@ -518,9 +542,7 @@ export async function run({ org, headed }) {
                         SEVERITY.BLOCKER
                     )
                 );
-                checks.push(
-                    skip(`${obj} record page renders`, 'no seeded record to open', SEVERITY.BLOCKER)
-                );
+                checks.push(skip(`${obj} record page renders`, 'no seeded record to open', SEVERITY.BLOCKER));
                 continue;
             }
 
@@ -702,28 +724,21 @@ export async function run({ org, headed }) {
                     // Each declared child list should be nameable on the page, so a
                     // silently-dropped list is not hidden by a sibling that did load.
                     for (const rl of m.relatedLists) {
-                        if (rl === 'RelatedFileList') {
-                            const filesShown = /\bfiles\b/i.test(related.bodyText);
-                            checks.push(
-                                check(
-                                    `${obj} Files related list is on the page`,
-                                    filesShown,
-                                    filesShown ? '' : 'layout declares RelatedFileList but no Files card is on the Related tab',
-                                    SEVERITY.MINOR
-                                )
-                            );
-                            continue;
-                        }
-                        const childObj = rl.split('.')[0];
-                        const childMeta = metas.find((x) => x.obj === childObj) || readObjectMeta(childObj);
-                        const plural = childMeta.pluralLabel || childObj;
-                        const shown = related.bodyText.includes(norm(plural));
+                        const heading = rl === 'RelatedFileList' ? 'Files' : relatedListHeading(rl);
+                        // Search only inside the related-list cards, never the whole
+                        // page: the nav bar names every DocGen object.
+                        const shown = related.relatedTexts.some((t) => t.includes(norm(heading)));
                         checks.push(
                             check(
-                                `${obj} shows its ${plural} related list`,
+                                `${obj} shows its "${heading}" related list`,
                                 shown,
-                                shown ? '' : `layout declares ${rl} but "${plural}" appears nowhere on the Related tab`,
-                                SEVERITY.MAJOR
+                                shown
+                                    ? ''
+                                    : `layout declares ${rl} but no related-list card headed "${heading}" is on the Related tab` +
+                                          (related.relatedTexts.length
+                                              ? ` (cards present: ${related.relatedTexts.map((t) => t.slice(0, 40)).join(' / ')})`
+                                              : ' (no cards at all)'),
+                                rl === 'RelatedFileList' ? SEVERITY.MINOR : SEVERITY.MAJOR
                             )
                         );
                     }
@@ -733,7 +748,9 @@ export async function run({ org, headed }) {
                             check(
                                 `${obj} related lists are genuinely visible (hit test)`,
                                 bad.length === 0,
-                                bad.length === 0 ? '' : `${bad.length} related list container(s) not reachable: ${bad.join(', ')}`,
+                                bad.length === 0
+                                    ? ''
+                                    : `${bad.length} related list container(s) not reachable: ${bad.join(', ')}`,
                                 SEVERITY.MINOR
                             )
                         );

@@ -45,8 +45,11 @@
  * template only removes the link, not the file). Repeat runs must stay green and
  * must not fill the org.
  */
-import { runAnonymous, debugMap, soql } from '../lib/sf.mjs';
+import { runAnonymous, debugMap } from '../lib/sf.mjs';
 import { check, skip, suiteResult, suiteSkipped, SEVERITY } from '../lib/report.mjs';
+import { writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const B = SEVERITY.BLOCKER;
 const MA = SEVERITY.MAJOR;
@@ -93,22 +96,45 @@ function extractError(log) {
  * Run one phase. Never throws: a CLI failure, a compile error and a governor
  * limit all come back as `{ ok:false, error }` so the caller turns them into
  * checks rather than killing the suite.
+ *
+ * A compile error goes to the CLI's STDERR with an empty stdout, so the failure
+ * text alone is "Command failed" — useless. When a phase does not finish, the
+ * generated Apex is written to a temp file and the path goes into the check
+ * detail, because a report line you cannot act on is barely better than none.
  */
 async function phase(org, id, src) {
     let log = '';
+    let cliErr = '';
     try {
         log = await runAnonymous(org, src, { timeout: 900000 });
     } catch (e) {
-        return { ok: false, map: {}, log: '', error: `sf CLI failed: ${String(e.message).slice(0, 200)}` };
+        cliErr = String(e.stderr || e.message || '').slice(0, 400);
     }
     const map = debugMap(log);
-    if (map.PHASE_DONE !== id) {
-        return { ok: false, map, log, error: extractError(log) };
+    if (map.PHASE_DONE === id) return { ok: true, map, log, error: '' };
+
+    let dumped = '';
+    try {
+        dumped = join(mkdtempSync(join(tmpdir(), 'dgqa-fail-')), `${id}.apex`);
+        writeFileSync(dumped, src, 'utf8');
+    } catch (e) {
+        /* the dump is a convenience; never let it become the failure */
     }
-    return { ok: true, map, log, error: '' };
+    const why = log ? extractError(log) : cliErr || 'the CLI produced no output at all';
+    return { ok: false, map, log, error: `${why}${dumped ? ` [apex: ${dumped}]` : ''}` };
 }
 
 const yes = (v) => String(v) === 'true';
+
+/**
+ * Evidence that reads correctly in BOTH states.
+ *
+ * The report prints the detail next to a ✅ as well as a ❌, so a string written
+ * only as an accusation ("a literal {Tag} survived") is actively misleading when
+ * the check passed. Pass the two readings explicitly.
+ */
+const evidence = (ok, whenOk, whenBad) => (ok ? whenOk : whenBad);
+
 const num = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : -1;
@@ -160,14 +186,7 @@ function artefactChecks(label, map, prefix, magic, minSize, severity = B) {
     );
     // Above a floor, because an empty PDF shell and an empty ZIP both pass the
     // magic-byte test.
-    out.push(
-        check(
-            `${label}: size above ${minSize} bytes`,
-            size >= minSize,
-            `${size} bytes`,
-            severity
-        )
-    );
+    out.push(check(`${label}: size above ${minSize} bytes`, size >= minSize, `${size} bytes`, severity));
     return out;
 }
 
@@ -198,6 +217,24 @@ String buildDocx(String bodyXml) {
         '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'));
     zw.addEntry('word/document.xml', Blob.valueOf(bodyXml));
     return EncodingUtil.base64Encode(zw.getArchive());
+}
+`;
+
+/**
+ * Binary-safe byte search.
+ *
+ * Blob.toString() throws `BLOB is not a valid UTF-8 string` on a real
+ * Flying-Saucer PDF (compressed streams are not text), so looking for content
+ * that way turns a HEALTHY generation into a caught exception and reads as a
+ * clean product failure. Hex is the only way in, and hex doubles the heap — so
+ * anything over the ceiling reports "not checked" instead of guessing.
+ */
+const APEX_BYTES = `
+Boolean bytesCheckable(Blob b) { return b != null && b.size() <= 1000000; }
+Boolean bytesContain(Blob b, String needle) {
+    if (!bytesCheckable(b)) { return false; }
+    String hx = EncodingUtil.convertToHex(b).toUpperCase();
+    return hx.contains(EncodingUtil.convertToHex(Blob.valueOf(needle)).toUpperCase());
 }
 `;
 
@@ -280,7 +317,9 @@ String wordBody =
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
     '<w:p><w:r><w:t>MARKER_TITLE {Name}</w:t></w:r></w:p>' +
     '<w:p><w:r><w:t>IND:{Industry}</w:t></w:r></w:p>' +
-    '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>ROW-{LastName}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>' +
+    // The section tags live INSIDE the row that repeats — that is the Word
+    // convention the row-expansion logic keys off.
+    '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>{#Contacts}ROW-{LastName}{/Contacts}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>' +
     '</w:body></w:document>';
 DocGen_Template__c docxT = new DocGen_Template__c(
     Name = PFX + ' WORDDOCX', Base_Object_API__c = 'Account', Type__c = 'Word',
@@ -391,7 +430,11 @@ System.debug('PHASE_DONE=P1');
                 check(
                     'HTML→PDF: merged parent field appears in the rendered document',
                     yes(p1.map.H_HAS_NAME) && yes(p1.map.H_HAS_IND),
-                    `{Name}=${p1.map.H_HAS_NAME} {Industry}=${p1.map.H_HAS_IND} — a PDF that renders but drops merge data is worse than one that fails`,
+                    evidence(
+                        yes(p1.map.H_HAS_NAME) && yes(p1.map.H_HAS_IND),
+                        'both {Name} and {Industry} resolved in the rendered HTML',
+                        `{Name}=${p1.map.H_HAS_NAME} {Industry}=${p1.map.H_HAS_IND} — a PDF that renders but drops merge data is worse than one that fails`
+                    ),
                     B
                 )
             );
@@ -399,7 +442,11 @@ System.debug('PHASE_DONE=P1');
                 check(
                     'HTML→PDF: every child-loop row rendered',
                     yes(p1.map.H_ROWS),
-                    'expected ROW-Alpha, ROW-Bravo and ROW-Charlie in lastRenderedHtml',
+                    evidence(
+                        yes(p1.map.H_ROWS),
+                        'ROW-Alpha, ROW-Bravo and ROW-Charlie all present',
+                        'expected ROW-Alpha, ROW-Bravo and ROW-Charlie in lastRenderedHtml — a loop that renders fewer rows than the collection holds is silent data loss'
+                    ),
                     B
                 )
             );
@@ -416,7 +463,11 @@ System.debug('PHASE_DONE=P1');
                 check(
                     'HTML→PDF: no unresolved merge tags leak into the output',
                     !yes(p1.map.H_LEAK),
-                    'a literal {Tag} or {#Loop} was found in the rendered HTML',
+                    evidence(
+                        !yes(p1.map.H_LEAK),
+                        'no {Tag} or {#Loop} survived into the rendered HTML',
+                        'a literal {Tag} or {#Loop} was found in the rendered HTML'
+                    ),
                     B
                 )
             );
@@ -528,7 +579,11 @@ System.debug('PHASE_DONE=P2');
                 check(
                     'Word→DOCX: every child-loop row rendered',
                     yes(p2.map.D_ROWS),
-                    'expected ROW-Alpha, ROW-Bravo and ROW-Charlie inside word/document.xml',
+                    evidence(
+                        yes(p2.map.D_ROWS),
+                        'all three rows present in the produced word/document.xml',
+                        'expected ROW-Alpha, ROW-Bravo and ROW-Charlie inside word/document.xml'
+                    ),
                     B
                 )
             );
@@ -536,7 +591,11 @@ System.debug('PHASE_DONE=P2');
                 check(
                     'Word→DOCX: no unresolved merge tags leak into the output',
                     !yes(p2.map.D_LEAK),
-                    'a literal {Tag} survived into word/document.xml',
+                    evidence(
+                        !yes(p2.map.D_LEAK),
+                        'no {Tag} survived into word/document.xml',
+                        'a literal {Tag} survived into word/document.xml'
+                    ),
                     B
                 )
             );
@@ -608,7 +667,11 @@ System.debug('PHASE_DONE=P3');
                 check(
                     'Word→PDF: no raw OOXML reaches the PDF renderer',
                     !yes(p3.map.W_RAW_OOXML),
-                    'a <w:t>/<w:p> tag was still present in the HTML handed to Blob.toPdf',
+                    evidence(
+                        !yes(p3.map.W_RAW_OOXML),
+                        'the converter emitted clean HTML — no <w:t>/<w:p> left',
+                        'a <w:t>/<w:p> tag was still present in the HTML handed to Blob.toPdf'
+                    ),
                     B
                 )
             );
@@ -616,7 +679,11 @@ System.debug('PHASE_DONE=P3');
                 check(
                     'Word→PDF: no unresolved merge tags leak into the output',
                     !yes(p3.map.W_LEAK),
-                    'a literal {Tag} survived the converter path',
+                    evidence(
+                        !yes(p3.map.W_LEAK),
+                        'no {Tag} survived the converter path',
+                        'a literal {Tag} survived the converter path'
+                    ),
                     B
                 )
             );
@@ -793,6 +860,7 @@ System.debug('PHASE_DONE=P4');
             'P5',
             `
 ${APEX_ATTACH}
+${APEX_BYTES}
 String PFX = '${PFX}';
 
 // A minimal reference-based AcroForm with one text field named "Name".
@@ -826,8 +894,7 @@ try {
         System.debug('A_HEX=' + (ahx.length() > 16 ? ahx.substring(0, 16) : ahx));
         // The AcroForm filler writes an incremental update, so the merged value
         // is readable as literal bytes in the tail of the file.
-        String txt = abl.toString();
-        System.debug('A_MERGED=' + txt.contains(PFX + ' Corp'));
+        System.debug('A_MERGED=' + bytesContain(abl, PFX + ' Corp'));
         System.debug('A_GROWN=' + (abl.size() > src.size()));
     } else {
         System.debug('A_SIZE=0');
@@ -883,6 +950,16 @@ System.debug('PHASE_DONE=P5');
 ${APEX_ATTACH}
 String PFX = '${PFX}';
 
+// NOTE ON ENTRY POINT
+// Every negative path in this phase goes through DocGenService.generatePdfBlob,
+// NOT DocGenController.processAndReturnDocument. The controller wraps failures in
+// AuraHandledException, and anonymous Apex CANNOT catch one — it is an
+// uncatchable LimitException subclass. Using the controller here would kill the
+// whole transaction on the very first expected failure and print nothing, so an
+// intentional negative test would masquerade as a dead script. generatePdfBlob
+// raises the underlying DocGenException, which is catchable and carries the real
+// message. (Same lesson as CLAUDE.md's note on e2e negative-path assertions.)
+
 // ---- A template with NO body at all: no active version, no attached file ----
 // Must fail with something an admin can act on, and must NOT return bytes.
 DocGen_Template__c bare = new DocGen_Template__c(
@@ -890,8 +967,9 @@ DocGen_Template__c bare = new DocGen_Template__c(
     Output_Format__c = 'PDF', Query_Config__c = 'Name');
 insert bare;
 try {
-    Map<String, Object> br = DocGenController.processAndReturnDocument(bare.Id, '${MAIN}', null);
-    System.debug('NV_RETURNED=' + (br != null && String.isNotBlank((String) br.get('base64'))));
+    Map<String, Object> br = DocGenService.generatePdfBlob(bare.Id, '${MAIN}');
+    Blob bb = br == null ? null : (Blob) br.get('blob');
+    System.debug('NV_RETURNED=' + (bb != null && bb.size() > 0));
     System.debug('NV_THREW=false');
 } catch (Exception e) {
     System.debug('NV_THREW=true');
@@ -911,10 +989,9 @@ for (DocGen_Template_Version__c v : [SELECT Id FROM DocGen_Template_Version__c W
     update new DocGen_Template_Version__c(Id = v.Id, Is_Active__c = false);
 }
 try {
-    Map<String, Object> ir = DocGenController.processAndReturnDocument(inact.Id, '${MAIN}', null);
-    String ib = (String) ir.get('base64');
-    if (String.isNotBlank(ib)) {
-        Blob ibl = EncodingUtil.base64Decode(ib);
+    Map<String, Object> ir = DocGenService.generatePdfBlob(inact.Id, '${MAIN}');
+    Blob ibl = ir == null ? null : (Blob) ir.get('blob');
+    if (ibl != null) {
         String ihx = EncodingUtil.convertToHex(ibl).toUpperCase();
         System.debug('IA_HEX=' + (ihx.length() > 16 ? ihx.substring(0, 16) : ihx));
         System.debug('IA_SIZE=' + ibl.size());
@@ -939,10 +1016,9 @@ attach(zt.Id, PFX + ' ZEROCHILD', 'b.html', Blob.valueOf(
     '<p>AFTER_LOOP</p></body></html>'));
 DocGenService.lastRenderedHtml = null;
 try {
-    Map<String, Object> zr = DocGenController.processAndReturnDocument(zt.Id, '${EMPTY}', null);
-    String zb = (String) zr.get('base64');
-    if (String.isNotBlank(zb)) {
-        Blob zbl = EncodingUtil.base64Decode(zb);
+    Map<String, Object> zr = DocGenService.generatePdfBlob(zt.Id, '${EMPTY}');
+    Blob zbl = zr == null ? null : (Blob) zr.get('blob');
+    if (zbl != null) {
         System.debug('Z_SIZE=' + zbl.size());
         String zhx = EncodingUtil.convertToHex(zbl).toUpperCase();
         System.debug('Z_HEX=' + (zhx.length() > 16 ? zhx.substring(0, 16) : zhx));
@@ -954,7 +1030,7 @@ try {
         // Loop markers gone, content on BOTH sides of the loop still present.
         System.debug('Z_LEAK=' + (zh.contains('{#Contacts}') || zh.contains('{/Contacts}') || zh.contains('{LastName}')));
         System.debug('Z_KEEPS_CHROME=' + (zh.contains('ZERO ') && zh.contains('AFTER_LOOP')));
-        System.debug('Z_NO_GHOST_ROW=' + !zh.contains('ROW-'));
+        System.debug('Z_NO_GHOST_ROW=' + (!zh.contains('ROW-')));
     }
 } catch (Exception e) {
     System.debug('Z_ERR=' + e.getMessage());
@@ -1001,7 +1077,11 @@ System.debug('PHASE_DONE=P6');
                 check(
                     'Zero-row child collection: loop tags do not leak into the output',
                     !yes(p6.map.Z_LEAK),
-                    'a {#Contacts}/{/Contacts}/{LastName} tag survived when the collection was empty',
+                    evidence(
+                        !yes(p6.map.Z_LEAK),
+                        'the loop collapsed cleanly with nothing to iterate',
+                        'a {#Contacts}/{/Contacts}/{LastName} tag survived when the collection was empty'
+                    ),
                     B
                 )
             );
@@ -1009,7 +1089,11 @@ System.debug('PHASE_DONE=P6');
                 check(
                     'Zero-row child collection: content around the loop is preserved',
                     yes(p6.map.Z_KEEPS_CHROME),
-                    'the heading before the loop and the paragraph after it must both survive an empty collection',
+                    evidence(
+                        yes(p6.map.Z_KEEPS_CHROME),
+                        'the heading before the loop and the paragraph after it both survived',
+                        'an empty collection swallowed the content surrounding the loop'
+                    ),
                     B
                 )
             );
@@ -1017,7 +1101,11 @@ System.debug('PHASE_DONE=P6');
                 check(
                     'Zero-row child collection: no phantom row rendered',
                     yes(p6.map.Z_NO_GHOST_ROW),
-                    'a row body rendered once with blank values is the classic empty-collection bug',
+                    evidence(
+                        yes(p6.map.Z_NO_GHOST_ROW),
+                        'zero rows in, zero rows out',
+                        'the loop body rendered once with blank values — the classic empty-collection bug'
+                    ),
                     MA
                 )
             );
@@ -1155,7 +1243,11 @@ System.debug('PHASE_DONE=P7');
                 check(
                     'Tall header image grows the top margin instead of overflowing onto the body',
                     yes(p7.map.HI_GROWN),
-                    `a 1.5in header image needs margin-top: 1.65in; emitted @page was: ${(p7.map.HI_MARGIN_SNIPPET || '(none)').slice(0, 200)}`,
+                    evidence(
+                        yes(p7.map.HI_GROWN),
+                        'margin-top raised to 1.65in for the 1.5in header image',
+                        `a 1.5in header image needs margin-top: 1.65in or it paints over the body; emitted @page was: ${(p7.map.HI_MARGIN_SNIPPET || '(none)').slice(0, 200)}`
+                    ),
                     B
                 )
             );
@@ -1174,7 +1266,11 @@ System.debug('PHASE_DONE=P7');
                 check(
                     'Missing image degrades without dropping the rest of the document',
                     yes(p7.map.MI_KEEPS_BODY),
-                    `content before and after the image tag must survive; MI_KEEPS_BODY=${p7.map.MI_KEEPS_BODY}`,
+                    evidence(
+                        yes(p7.map.MI_KEEPS_BODY),
+                        'content before and after the image tag both survived',
+                        'the unresolvable image took surrounding content down with it'
+                    ),
                     B
                 )
             );
@@ -1182,7 +1278,11 @@ System.debug('PHASE_DONE=P7');
                 check(
                     'Missing image does not leak the raw ContentVersion Id onto the page',
                     !yes(p7.map.MI_LEAKS_ID) && !yes(p7.map.MI_DANGLING_SRC),
-                    `rawIdAsText=${p7.map.MI_LEAKS_ID} danglingSrc=${p7.map.MI_DANGLING_SRC} — either one shows the customer an internal Id or a broken-image box`,
+                    evidence(
+                        !yes(p7.map.MI_LEAKS_ID) && !yes(p7.map.MI_DANGLING_SRC),
+                        'no internal Id and no dangling <img src> in the output',
+                        `rawIdAsText=${p7.map.MI_LEAKS_ID} danglingSrc=${p7.map.MI_DANGLING_SRC} — either one shows the customer an internal Id or a broken-image box`
+                    ),
                     MA
                 )
             );
@@ -1198,6 +1298,7 @@ System.debug('PHASE_DONE=P7');
             'P8',
             `
 ${APEX_ATTACH}
+${APEX_BYTES}
 String PFX = '${PFX}';
 
 // ~1.2 MB of real markup before merging. Big enough to press on heap in a
@@ -1213,6 +1314,9 @@ DocGen_Template__c bt = new DocGen_Template__c(
 insert bt;
 attach(bt.Id, PFX + ' HEAP', 'b.html', Blob.valueOf(
     '<html><body><h1>HEAPTOP {Name}</h1>' + big + '<p>HEAPEND {Name}</p></body></html>'));
+// Release the 1.2 MB source string before generating. It is no longer needed,
+// and holding it would leave too little heap for the hex scan of the output.
+big = null;
 
 try {
     Map<String, Object> res = DocGenService.generatePdfBlob(bt.Id, '${MAIN}');
@@ -1223,8 +1327,8 @@ try {
         System.debug('HP_HEX=' + (hx.length() > 16 ? hx.substring(0, 16) : hx));
         // %%EOF is the PDF end-of-file marker. Its absence means the writer was
         // cut off mid-stream — the exact corruption a size check alone misses.
-        String tail = b.toString();
-        System.debug('HP_EOF=' + tail.contains('%%EOF'));
+        System.debug('HP_EOF_CHECKED=' + bytesCheckable(b));
+        System.debug('HP_EOF=' + bytesContain(b, '%%EOF'));
     }
     System.debug('HP_THREW=false');
 } catch (Exception e) {
@@ -1253,8 +1357,7 @@ System.debug('PHASE_DONE=P8');
             checks.push(
                 check(
                     'Very large document body: valid PDF or a clean, catchable error',
-                    (threw && hpSize === 0) ||
-                        (hpSize >= MIN_PDF && String(p8.map.HP_HEX || '').startsWith(MAGIC_PDF)),
+                    (threw && hpSize === 0) || (hpSize >= MIN_PDF && String(p8.map.HP_HEX || '').startsWith(MAGIC_PDF)),
                     threw
                         ? `raised ${p8.map.HP_ERR} at body length ${p8.map.HP_BODY_LEN} — acceptable, provided the UI surfaces it`
                         : `size=${hpSize} hex=${p8.map.HP_HEX} at body length ${p8.map.HP_BODY_LEN}`,
@@ -1263,18 +1366,32 @@ System.debug('PHASE_DONE=P8');
             );
             if (!threw) {
                 checks.push(
-                    check(
-                        'Very large document body: PDF is complete, not truncated',
-                        yes(p8.map.HP_EOF),
-                        'the %%EOF trailer is missing — the blob starts like a PDF but was cut short',
-                        B
-                    )
+                    yes(p8.map.HP_EOF_CHECKED)
+                        ? check(
+                              'Very large document body: PDF is complete, not truncated',
+                              yes(p8.map.HP_EOF),
+                              evidence(
+                                  yes(p8.map.HP_EOF),
+                                  `%%EOF trailer present in ${hpSize} bytes`,
+                                  'the %%EOF trailer is missing — the blob starts like a PDF but was cut short'
+                              ),
+                              B
+                          )
+                        : skip(
+                              'Very large document body: PDF is complete, not truncated',
+                              `output was ${hpSize} bytes; scanning it for the %%EOF trailer needs a hex copy that would itself blow the 6 MB Apex heap`,
+                              B
+                          )
                 );
                 checks.push(
                     check(
                         'Very large document body: output size reflects the content',
                         hpSize > 20000,
-                        `a ${p8.map.HP_BODY_LEN}-char body produced only ${hpSize} bytes — content was probably dropped`,
+                        evidence(
+                            hpSize > 20000,
+                            `${p8.map.HP_BODY_LEN}-char body → ${hpSize} bytes of PDF`,
+                            `a ${p8.map.HP_BODY_LEN}-char body produced only ${hpSize} bytes — content was probably dropped`
+                        ),
                         MA
                     )
                 );
@@ -1305,11 +1422,14 @@ DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c WHERE Name = :pat LIMI
 // FLS/sharing-invisible record without a second authenticated user.
 delete [SELECT Id FROM Account WHERE Id = '${DOOMED}'];
 
+// generatePdfBlob, not the controller — see the note in phase P6: an
+// AuraHandledException from the controller cannot be caught here and would end
+// the transaction instead of being asserted on.
 try {
-    Map<String, Object> r = DocGenController.processAndReturnDocument(t.Id, '${DOOMED}', null);
-    String b = r == null ? null : (String) r.get('base64');
-    System.debug('UR_RETURNED=' + String.isNotBlank(b));
-    if (String.isNotBlank(b)) { System.debug('UR_SIZE=' + EncodingUtil.base64Decode(b).size()); }
+    Map<String, Object> r = DocGenService.generatePdfBlob(t.Id, '${DOOMED}');
+    Blob b = r == null ? null : (Blob) r.get('blob');
+    System.debug('UR_RETURNED=' + (b != null && b.size() > 0));
+    if (b != null) { System.debug('UR_SIZE=' + b.size()); }
     System.debug('UR_THREW=false');
 } catch (Exception e) {
     System.debug('UR_THREW=true');
@@ -1400,12 +1520,7 @@ System.debug('PHASE_DONE=P10');
         let giantJobId = null;
         if (!p10.ok) {
             checks.push(
-                check(
-                    'Giant-query path (>2000 child rows) is reachable',
-                    false,
-                    `phase died: ${p10.error}`,
-                    B
-                )
+                check('Giant-query path (>2000 child rows) is reachable', false, `phase died: ${p10.error}`, B)
             );
         } else {
             const childCount = num(p10.map.G_CHILD_COUNT);
@@ -1413,7 +1528,11 @@ System.debug('PHASE_DONE=P10');
                 check(
                     'Giant-query fixture actually crosses the 2000-row threshold',
                     childCount > 2000,
-                    `${childCount} child rows inserted — below 2000 would silently test the ordinary path instead`,
+                    evidence(
+                        childCount > 2000,
+                        `${childCount} child rows — over the hard-coded 2000 threshold`,
+                        `only ${childCount} child rows: below 2000 this silently tests the ordinary path instead`
+                    ),
                     MA
                 )
             );
@@ -1438,44 +1557,60 @@ System.debug('PHASE_DONE=P10');
             }
         }
 
-        /* --- poll the async chain: batch -> finish -> assembler queueable --- */
+        /* --- poll the async chain: batch -> finish -> assembler queueable ---
+         * Polled through anonymous Apex rather than `sf data query`, because a
+         * NAMESPACED org (this package builds under `portwoodglobal`) rejects the
+         * bare `DocGen_Job__c` name over the API while Apex inside the namespace
+         * resolves it. Polling in Apex keeps the suite working against both a
+         * namespaced scratch org and a plain one.
+         */
+        let poll = { ok: false, map: {}, error: 'not polled' };
         if (giantJobId) {
-            const deadline = Date.now() + 420000; // 7 min; 2100 rows at batchSize 50 is ~42 executes
-            let job = null;
+            const deadline = Date.now() + 480000; // 2100 rows at batchSize 50 is ~42 executes
             while (Date.now() < deadline) {
-                const rows = await soql(
+                poll = await phase(
                     org,
-                    `SELECT Id, Status__c, Label__c, Total_Records__c, Merged_PDF_CV__c FROM DocGen_Job__c WHERE Id = '${giantJobId}'`
+                    'PJ',
+                    `
+Id jid = '${giantJobId}';
+DocGen_Job__c j = [SELECT Id, Status__c, Label__c, Total_Records__c, Merged_PDF_CV__c FROM DocGen_Job__c WHERE Id = :jid LIMIT 1];
+System.debug('J_STATUS=' + j.Status__c);
+System.debug('J_LABEL=' + j.Label__c);
+System.debug('J_TOTAL=' + j.Total_Records__c);
+System.debug('J_CV=' + j.Merged_PDF_CV__c);
+System.debug('PHASE_DONE=PJ');
+`
                 );
-                job = rows[0] || null;
-                const st = job && (job.Status__c || job.portwoodglobal__Status__c);
-                if (st === 'Completed' || st === 'Failed') break;
+                if (!poll.ok) break;
+                if (poll.map.J_STATUS === 'Completed' || poll.map.J_STATUS === 'Failed') break;
                 await new Promise((r) => setTimeout(r, 10000));
             }
-            // Field keys are namespace-prefixed in a packaged org; read both.
-            const f = (name) => (job ? (job[name] !== undefined ? job[name] : job[`portwoodglobal__${name}`]) : undefined);
-            const status = f('Status__c');
+            const status = poll.ok ? poll.map.J_STATUS : null;
 
             checks.push(
                 check(
                     'Giant-query job reaches Completed',
                     status === 'Completed',
-                    job
-                        ? `status=${status} label=${f('Label__c')} totalRecords=${f('Total_Records__c')}`
-                        : 'job record could not be read',
+                    poll.ok
+                        ? `status=${status} label=${poll.map.J_LABEL} totalRecords=${poll.map.J_TOTAL}`
+                        : `job record could not be read: ${poll.error}`,
                     B
                 )
             );
             checks.push(
                 check(
                     'Giant-query job harvested every child row',
-                    num(f('Total_Records__c')) > 2000,
-                    `Total_Records__c=${f('Total_Records__c')} — fewer than the 2100 inserted means rows were dropped from the document`,
+                    num(poll.map.J_TOTAL) > 2000,
+                    evidence(
+                        num(poll.map.J_TOTAL) > 2000,
+                        `Total_Records__c=${poll.map.J_TOTAL} of 2100 inserted`,
+                        `Total_Records__c=${poll.map.J_TOTAL} — fewer than the 2100 inserted means rows were dropped from the document`
+                    ),
                     B
                 )
             );
 
-            const pdfCvId = f('Merged_PDF_CV__c');
+            const pdfCvId = poll.map.J_CV && poll.map.J_CV !== 'null' ? poll.map.J_CV : null;
             if (status === 'Completed' && pdfCvId) {
                 // Inspect the assembled PDF with the same artefact bar as every
                 // other format — the giant path builds its own HTML and never
@@ -1484,6 +1619,7 @@ System.debug('PHASE_DONE=P10');
                     org,
                     'P10B',
                     `
+${APEX_BYTES}
 Id cvId = '${pdfCvId}';
 List<ContentVersion> cvs = [SELECT Id, Title, VersionData FROM ContentVersion WHERE Id = :cvId LIMIT 1];
 if (cvs.isEmpty()) {
@@ -1491,29 +1627,39 @@ if (cvs.isEmpty()) {
 } else {
     Blob b = cvs[0].VersionData;
     System.debug('GP_SIZE=' + b.size());
+    System.debug('GP_TITLE=' + cvs[0].Title);
     String hx = EncodingUtil.convertToHex(b).toUpperCase();
     System.debug('GP_HEX=' + (hx.length() > 16 ? hx.substring(0, 16) : hx));
-    System.debug('GP_EOF=' + b.toString().contains('%%EOF'));
-    System.debug('GP_TITLE=' + cvs[0].Title);
+    hx = null;
+    System.debug('GP_EOF_CHECKED=' + bytesCheckable(b));
+    System.debug('GP_EOF=' + bytesContain(b, '%%EOF'));
 }
 System.debug('PHASE_DONE=P10B');
 `
                 );
                 if (!p10b.ok) {
-                    checks.push(
-                        check('Giant-query output PDF is readable', false, `phase died: ${p10b.error}`, B)
-                    );
+                    checks.push(check('Giant-query output PDF is readable', false, `phase died: ${p10b.error}`, B));
                 } else {
                     // 2100 rows cannot fit in a small file; the floor is set high
                     // deliberately so a chrome-only or bare-table regression fails.
                     checks.push(...artefactChecks('Giant-query PDF', p10b.map, 'GP_', MAGIC_PDF, 30000));
                     checks.push(
-                        check(
-                            'Giant-query PDF is complete, not truncated',
-                            yes(p10b.map.GP_EOF),
-                            'the %%EOF trailer is missing from the assembled PDF',
-                            B
-                        )
+                        yes(p10b.map.GP_EOF_CHECKED)
+                            ? check(
+                                  'Giant-query PDF is complete, not truncated',
+                                  yes(p10b.map.GP_EOF),
+                                  evidence(
+                                      yes(p10b.map.GP_EOF),
+                                      `%%EOF trailer present in ${p10b.map.GP_SIZE} bytes`,
+                                      'the %%EOF trailer is missing from the assembled PDF'
+                                  ),
+                                  B
+                              )
+                            : skip(
+                                  'Giant-query PDF is complete, not truncated',
+                                  `assembled PDF was ${p10b.map.GP_SIZE} bytes; a hex copy large enough to scan for %%EOF would exceed the Apex heap`,
+                                  B
+                              )
                     );
                     checks.push(
                         check(
@@ -1547,7 +1693,12 @@ System.debug('PHASE_DONE=P10B');
     } catch (e) {
         // A suite must never throw. Whatever went wrong becomes a visible check.
         checks.push(
-            check('output-formats suite ran to completion', false, `unexpected harness error: ${String(e.message).slice(0, 240)}`, B)
+            check(
+                'output-formats suite ran to completion',
+                false,
+                `unexpected harness error: ${String(e.message).slice(0, 240)}`,
+                B
+            )
         );
     } finally {
         /* ============================================================ *
@@ -1562,12 +1713,12 @@ System.debug('PHASE_DONE=P10B');
                 'P11',
                 `
 String PFX = '${PFX}';
-String like = PFX + '%';
+String lk = PFX + '%'; // NOT 'like' — that is a reserved word in Apex
 Integer docs = 0, tmpls = 0, accts = 0, jobs = 0;
 
 try {
     List<Id> tmplIds = new List<Id>();
-    for (DocGen_Template__c t : [SELECT Id FROM DocGen_Template__c WHERE Name LIKE :like]) { tmplIds.add(t.Id); }
+    for (DocGen_Template__c t : [SELECT Id FROM DocGen_Template__c WHERE Name LIKE :lk]) { tmplIds.add(t.Id); }
     tmpls = tmplIds.size();
 
     // Jobs first — they reference the templates.
@@ -1585,7 +1736,7 @@ try {
             cdIds.add(l.ContentDocumentId);
         }
     }
-    for (ContentVersion cv : [SELECT ContentDocumentId FROM ContentVersion WHERE Title LIKE :like]) {
+    for (ContentVersion cv : [SELECT ContentDocumentId FROM ContentVersion WHERE Title LIKE :lk]) {
         cdIds.add(cv.ContentDocumentId);
     }
     if (!cdIds.isEmpty()) {
@@ -1597,9 +1748,9 @@ try {
     if (!tmplIds.isEmpty()) { delete [SELECT Id FROM DocGen_Template__c WHERE Id IN :tmplIds]; }
 
     // Contacts cascade with the Accounts.
-    List<Account> as = [SELECT Id FROM Account WHERE Name LIKE :like];
-    accts = as.size();
-    if (!as.isEmpty()) { delete as; }
+    List<Account> doomedAccts = [SELECT Id FROM Account WHERE Name LIKE :lk];
+    accts = doomedAccts.size();
+    if (!doomedAccts.isEmpty()) { delete doomedAccts; }
 
     System.debug('CL_ERR=');
 } catch (Exception e) {

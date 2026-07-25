@@ -76,7 +76,13 @@ global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier â€
                 // (AND) with any user-supplied queryCondition.
                 effectiveCondition = buildEffectiveCondition(req.queryCondition, req.recordIds);
 
-                Id jobId = DocGenBulkController.submitJob(
+                // submitJobInternal, NOT submitJob: the @AuraEnabled entry point
+                // raises AuraHandledException, which cannot be thrown outside an
+                // Aura/VF request and instead produces an UNCATCHABLE
+                // LimitException. Calling it from a Flow faulted the whole
+                // interview and made these Success/Error Message outputs
+                // unreachable for the commonest failure of all â€” a bad template Id.
+                Id jobId = DocGenBulkController.submitJobInternal(
                     req.templateId,
                     effectiveCondition,
                     req.jobLabel,

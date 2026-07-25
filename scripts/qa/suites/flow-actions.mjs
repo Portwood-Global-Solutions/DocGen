@@ -263,7 +263,14 @@ function invocableVariables(body) {
         const decl = body.slice(after, body.indexOf(';', after) + 1);
         // Skip any stacked annotations (@AuraEnabled) before the declaration.
         const m = /(?:^|\s)(global|public|private)\s+([\w.<>, ]+?)\s+(\w+)\s*;/.exec(decl);
-        if (m) out.push({ modifier: m[1], type: m[2].replace(/\s+/g, ''), name: m[3], args, hasAura: /@AuraEnabled/.test(decl) });
+        if (m)
+            out.push({
+                modifier: m[1],
+                type: m[2].replace(/\s+/g, ''),
+                name: m[3],
+                args,
+                hasAura: /@AuraEnabled/.test(decl)
+            });
         idx = after;
     }
     return out;
@@ -333,7 +340,9 @@ function staticChecks() {
                 check(
                     `${name}.${methodName} is global static`,
                     isGlobalStatic,
-                    isGlobalStatic ? '' : `signature is '${im.sig.slice(0, 120)}' — an @InvocableMethod must be global static to be callable by a subscriber Flow`,
+                    isGlobalStatic
+                        ? ''
+                        : `signature is '${im.sig.slice(0, 120)}' — an @InvocableMethod must be global static to be callable by a subscriber Flow`,
                     SEVERITY.BLOCKER
                 )
             );
@@ -342,13 +351,20 @@ function staticChecks() {
             // description in the action's help text. No label means the admin
             // sees a raw method name.
             checks.push(
-                check(`${name}.${methodName} has a Flow label`, !!label, label ? label : 'no label= on @InvocableMethod — Flow Builder falls back to the method name', SEVERITY.MINOR)
+                check(
+                    `${name}.${methodName} has a Flow label`,
+                    !!label,
+                    label ? label : 'no label= on @InvocableMethod — Flow Builder falls back to the method name',
+                    SEVERITY.MINOR
+                )
             );
             checks.push(
                 check(
                     `${name}.${methodName} has a Flow description`,
                     !!desc,
-                    desc ? '' : 'no description= on @InvocableMethod — the admin gets no help text explaining what the action does or what it needs',
+                    desc
+                        ? ''
+                        : 'no description= on @InvocableMethod — the admin gets no help text explaining what the action does or what it needs',
                     SEVERITY.MINOR
                 )
             );
@@ -367,7 +383,9 @@ function staticChecks() {
                     check(
                         `${name}.${short} (${role} type) is global`,
                         m === 'global',
-                        m === 'global' ? '' : `declared '${m || 'not found'}' — Flow cannot bind the action's ${role} fields when the wrapper class is not global`,
+                        m === 'global'
+                            ? ''
+                            : `declared '${m || 'not found'}' — Flow cannot bind the action's ${role} fields when the wrapper class is not global`,
                         SEVERITY.BLOCKER
                     )
                 );
@@ -381,7 +399,9 @@ function staticChecks() {
                         check(
                             `${name}.${short}: all ${vars.length} @InvocableVariable fields are global`,
                             notGlobal.length === 0,
-                            notGlobal.length ? `not global: ${notGlobal.join(', ')} — invisible to a subscriber Flow` : '',
+                            notGlobal.length
+                                ? `not global: ${notGlobal.join(', ')} — invisible to a subscriber Flow`
+                                : '',
                             SEVERITY.BLOCKER
                         )
                     );
@@ -393,7 +413,9 @@ function staticChecks() {
                         check(
                             `${name}.${short}: every input/output carries a label`,
                             unlabelled.length === 0,
-                            unlabelled.length ? `no label= on: ${unlabelled.join(', ')} — Flow Builder shows the raw Apex field name to the admin` : '',
+                            unlabelled.length
+                                ? `no label= on: ${unlabelled.join(', ')} — Flow Builder shows the raw Apex field name to the admin`
+                                : '',
                             SEVERITY.MINOR
                         )
                     );
@@ -407,7 +429,9 @@ function staticChecks() {
                         if (!el) continue;
                         if (PRIMITIVES.has(el.toLowerCase())) continue;
                         const short2 = el.split('.').pop();
-                        const deprecated = /legacy|deprecat/i.test(annotationValue(v.args, 'label') + annotationValue(v.args, 'description'));
+                        const deprecated = /legacy|deprecat/i.test(
+                            annotationValue(v.args, 'label') + annotationValue(v.args, 'description')
+                        );
                         // A managed package can never delete a published global
                         // member, so a KNOWN-BAD input that is clearly labelled
                         // deprecated is a documentation problem, not a blocker.
@@ -424,7 +448,10 @@ function staticChecks() {
                         if (!standalone) failures.push('not a top-level class (Flow never lists inner classes)');
                         if (mod !== 'global') failures.push(`class is '${mod || 'unknown'}', not global`);
                         if (!hasAura) failures.push('no @AuraEnabled members');
-                        if (!hasGlobalCtor) failures.push('no explicit global no-arg constructor (the implicit one is public = invisible)');
+                        if (!hasGlobalCtor)
+                            failures.push(
+                                'no explicit global no-arg constructor (the implicit one is public = invisible)'
+                            );
 
                         checks.push(
                             check(
@@ -520,7 +547,10 @@ async function probe(org, apex) {
         return { map: debugMap(log), fatal: fatalOf(log) };
     } catch (e) {
         const log = `${e.stdout || ''}\n${e.stderr || ''}\n${e.message || ''}`;
-        return { map: debugMap(log), fatal: fatalOf(log) || 'the anonymous Apex block did not complete and printed no log' };
+        return {
+            map: debugMap(log),
+            fatal: fatalOf(log) || 'the anonymous Apex block did not complete and printed no log'
+        };
     }
 }
 
@@ -644,6 +674,29 @@ try {
 }
 `;
 
+/**
+ * The bulk action queues real batch jobs. We stop them so the org is not left
+ * churning — but a blanket "abort every queued BatchApex job" would kill work
+ * belonging to another suite running against the same org (this harness is
+ * routinely pointed at a shared verify org). Snapshot first, abort only the
+ * delta.
+ */
+const ABORT_SNAPSHOT = `
+Set<Id> preExisting = new Set<Id>();
+for (AsyncApexJob j : [SELECT Id FROM AsyncApexJob
+        WHERE JobType = 'BatchApex' AND Status IN ('Holding','Queued','Preparing') LIMIT 200]) {
+    preExisting.add(j.Id);
+}`;
+
+const ABORT_NEW = `
+Integer aborted = 0;
+for (AsyncApexJob j : [SELECT Id FROM AsyncApexJob
+        WHERE JobType = 'BatchApex' AND Status IN ('Holding','Queued','Preparing') LIMIT 200]) {
+    if (preExisting.contains(j.Id)) { continue; }
+    try { System.abortJob(j.Id); aborted++; } catch (Exception e) {}
+}
+System.debug('ABORTED=' + aborted);`;
+
 export async function run({ org }) {
     const checks = [];
 
@@ -652,7 +705,9 @@ export async function run({ org }) {
     try {
         checks.push(...staticChecks());
     } catch (e) {
-        checks.push(skip('Apex source audit', `static scan failed: ${String(e.message).slice(0, 200)}`, SEVERITY.BLOCKER));
+        checks.push(
+            skip('Apex source audit', `static scan failed: ${String(e.message).slice(0, 200)}`, SEVERITY.BLOCKER)
+        );
     }
 
     if (!org) {
@@ -688,11 +743,19 @@ export async function run({ org }) {
             try {
                 checks.push(...(await fn(org, ids)));
             } catch (e) {
-                checks.push(skip(`${fn.name} probes`, `probe crashed: ${String(e.message).slice(0, 200)}`, SEVERITY.MAJOR));
+                checks.push(
+                    skip(`${fn.name} probes`, `probe crashed: ${String(e.message).slice(0, 200)}`, SEVERITY.MAJOR)
+                );
             }
         }
     } catch (e) {
-        checks.push(skip('Flow-action runtime probes', `unexpected harness error: ${String(e.message).slice(0, 200)}`, SEVERITY.BLOCKER));
+        checks.push(
+            skip(
+                'Flow-action runtime probes',
+                `unexpected harness error: ${String(e.message).slice(0, 200)}`,
+                SEVERITY.BLOCKER
+            )
+        );
     } finally {
         // Always tidy up, even after a crash, so the next run starts green.
         try {
@@ -746,7 +809,14 @@ System.debug('NOATTACH=' + linked);
     );
 
     out.push(
-        fromKey(`${A}: returns one response per request (Flow batches)`, happy, 'COUNT', ([v]) => v === '2', '', SEVERITY.BLOCKER)
+        fromKey(
+            `${A}: returns one response per request (Flow batches)`,
+            happy,
+            'COUNT',
+            ([v]) => v === '2',
+            '',
+            SEVERITY.BLOCKER
+        )
     );
     // A response that says success but hands back no file is the worst outcome:
     // the Flow continues and the downstream Send Email attaches nothing.
@@ -771,7 +841,14 @@ System.debug('NOATTACH=' + linked);
         )
     );
     out.push(
-        fromKey(`${A}: the two requests produce two different documents`, happy, 'DISTINCT', ([v]) => v === 'true', '', SEVERITY.BLOCKER)
+        fromKey(
+            `${A}: the two requests produce two different documents`,
+            happy,
+            'DISTINCT',
+            ([v]) => v === 'true',
+            '',
+            SEVERITY.BLOCKER
+        )
     );
     // Issue #90: leaving Save to Record off must not put the file on the record.
     out.push(
@@ -879,7 +956,16 @@ System.debug('EDGE3=' + xr[2].success + '~' + xr[2].errorMessage);
             SEVERITY.BLOCKER
         )
     );
-    out.push(fromKey(`${A}: Save to Record = true does attach the file`, r, 'ATTACHED', ([v]) => v === '1', '', SEVERITY.MAJOR));
+    out.push(
+        fromKey(
+            `${A}: Save to Record = true does attach the file`,
+            r,
+            'ATTACHED',
+            ([v]) => v === '1',
+            '',
+            SEVERITY.MAJOR
+        )
+    );
     out.push(bulkCostCheck(A, r, 10, SEVERITY.MINOR));
     for (const [label, key, wants] of [
         ['a null Template Id', 'EDGE1', /template|access/i],
@@ -913,6 +999,7 @@ async function probeBulk(org, ids) {
         `
 Id acctId = '${ids.ACCT_ID}';
 Id tplId = '${ids.TPL_ID}';
+${ABORT_SNAPSHOT}
 DocGenBulkFlowAction.Request b1 = new DocGenBulkFlowAction.Request();
 b1.templateId = tplId; b1.jobLabel = '${P} Job A'; b1.recordIds = new List<String>{ String.valueOf(acctId) };
 DocGenBulkFlowAction.Request b2 = new DocGenBulkFlowAction.Request();
@@ -923,30 +1010,48 @@ System.debug('COUNT=' + br.size());
 System.debug('A=' + br[0].success + '~' + br[0].jobId + '~' + br[0].errorMessage);
 System.debug('B=' + br[1].success + '~' + br[1].jobId + '~' + br[1].errorMessage);
 System.debug('DISTINCT=' + (br[0].jobId != br[1].jobId));
-// Stop the batches THIS probe queued so the org is not left churning — and
-// only those. A blanket abort of every queued BatchApex job would kill work
-// belonging to another suite running against the same org.
-Integer aborted = 0;
-for (DocGen_Job__c j : [SELECT Batch_Job_Id__c FROM DocGen_Job__c WHERE Id IN :queuedJobIds]) {
-    if (String.isBlank(j.Batch_Job_Id__c)) { continue; }
-    try { System.abortJob((Id) j.Batch_Job_Id__c); aborted++; } catch (Exception e) {}
-}
-System.debug('ABORTED=' + aborted);
+${ABORT_NEW}
 `
     );
-    out.push(fromKey(`${A}: returns one response per request`, happy, 'COUNT', ([v]) => v === '2', '', SEVERITY.BLOCKER));
     out.push(
-        fromKey(`${A}: request 1 (explicit Record Ids) queues a job`, happy, 'A', ([ok, job]) => ok === 'true' && /^a0/.test(job), '', SEVERITY.BLOCKER)
+        fromKey(`${A}: returns one response per request`, happy, 'COUNT', ([v]) => v === '2', '', SEVERITY.BLOCKER)
     );
     out.push(
-        fromKey(`${A}: request 2 (WHERE condition) queues a job`, happy, 'B', ([ok, job]) => ok === 'true' && /^a0/.test(job), '', SEVERITY.BLOCKER)
+        fromKey(
+            `${A}: request 1 (explicit Record Ids) queues a job`,
+            happy,
+            'A',
+            ([ok, job]) => ok === 'true' && /^a0/.test(job),
+            '',
+            SEVERITY.BLOCKER
+        )
     );
-    out.push(fromKey(`${A}: the two requests queue two different jobs`, happy, 'DISTINCT', ([v]) => v === 'true', '', SEVERITY.BLOCKER));
+    out.push(
+        fromKey(
+            `${A}: request 2 (WHERE condition) queues a job`,
+            happy,
+            'B',
+            ([ok, job]) => ok === 'true' && /^a0/.test(job),
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
+    out.push(
+        fromKey(
+            `${A}: the two requests queue two different jobs`,
+            happy,
+            'DISTINCT',
+            ([v]) => v === 'true',
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
 
     // Injection guard: a Flow variable holding user text must not reach SOQL.
     const guard = await probe(
         org,
         `
+${ABORT_SNAPSHOT}
 DocGenBulkFlowAction.Request y = new DocGenBulkFlowAction.Request();
 y.templateId = '${ids.TPL_ID}'; y.jobLabel = '${P} Job Inj';
 y.recordIds = new List<String>{ 'not-a-salesforce-id' };
@@ -956,11 +1061,7 @@ List<DocGenBulkFlowAction.Response> r = DocGenBulkFlowAction.generateBulkDocumen
     new List<DocGenBulkFlowAction.Request>{ y, z });
 System.debug('INJ=' + r[0].success + '~' + r[0].errorMessage);
 System.debug('BADWHERE=' + r[1].success + '~' + r[1].errorMessage);
-Integer aborted = 0;
-for (AsyncApexJob j : [SELECT Id FROM AsyncApexJob WHERE JobType = 'BatchApex' AND Status IN ('Holding','Queued','Preparing') LIMIT 20]) {
-    try { System.abortJob(j.Id); aborted++; } catch (Exception e) {}
-}
-System.debug('ABORTED=' + aborted);
+${ABORT_NEW}
 `
     );
     out.push(
@@ -1003,7 +1104,7 @@ System.debug('NULLTPL=' + r[0].success + '~' + r[0].errorMessage);
             nullTpl,
             'NULLTPL',
             (parts) => parts[0] === 'false',
-            'DocGenBulkController.submitJob wraps every failure in DocGenService.ahe() (an AuraHandledException). Outside an Aura/VF request that constructor itself throws, so the action\'s own catch(Exception) cannot intercept it and the Flow faults with a message that never mentions the missing Template Id.'
+            "DocGenBulkController.submitJob wraps every failure in DocGenService.ahe() (an AuraHandledException). Outside an Aura/VF request that constructor itself throws, so the action's own catch(Exception) cannot intercept it and the Flow faults with a message that never mentions the missing Template Id."
         )
     );
     return out;
@@ -1051,9 +1152,36 @@ if (!made.isEmpty()) { System.debug('TOKEN=' + made[0].Secure_Token__c); }
             SEVERITY.BLOCKER
         )
     );
-    out.push(fromKey(`${A}: request 2 also succeeds (not poisoned by request 1)`, happy, 'B', ([ok, reqId]) => ok === 'true' && /^a0/.test(reqId), '', SEVERITY.BLOCKER));
-    out.push(fromKey(`${A}: the two requests are distinct records`, happy, 'DISTINCT', ([v]) => v === 'true', '', SEVERITY.BLOCKER));
-    out.push(fromKey(`${A}: a DocGen_Signer__c row is actually written`, happy, 'SIGNERS', ([v]) => v === '1', '', SEVERITY.BLOCKER));
+    out.push(
+        fromKey(
+            `${A}: request 2 also succeeds (not poisoned by request 1)`,
+            happy,
+            'B',
+            ([ok, reqId]) => ok === 'true' && /^a0/.test(reqId),
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
+    out.push(
+        fromKey(
+            `${A}: the two requests are distinct records`,
+            happy,
+            'DISTINCT',
+            ([v]) => v === 'true',
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
+    out.push(
+        fromKey(
+            `${A}: a DocGen_Signer__c row is actually written`,
+            happy,
+            'SIGNERS',
+            ([v]) => v === '1',
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
     // The URL is what the Flow hands to a Send Email element; a URL missing its
     // token is a link that cannot sign anything.
     out.push(
@@ -1180,13 +1308,32 @@ try {
 }
 `
     );
+    // What was ACTUALLY broken here: the failure arrived as
+    // `System.LimitException: Can only throw this exception type from
+    // VisualForce or Aura context`, because the controller raises an
+    // AuraHandledException and that type cannot be thrown outside an Aura/VF
+    // request. A LimitException is UNCATCHABLE, so no amount of care in the
+    // action could report it and the Flow author saw a cryptic platform error.
+    // The action now validates the template up front and raises a catchable,
+    // readable DocGenException.
+    //
+    // Whether validation should instead RETURN Success=false is a separate,
+    // deliberate design decision (the class comment says bad input is meant to
+    // stop the Flow) and changing it would alter behaviour for every Flow
+    // already in production — those interviews stop today and would start
+    // continuing down the happy path. That trade-off is a product call, so it
+    // is raised as its own finding rather than silently changed here.
     out.push(
         auraLeakCheck(
-            `${A}: a Template Id that does not exist → graceful failure, not an unhandled Flow fault`,
+            `${A}: a Template Id that does not exist fails with a catchable, readable error`,
             noTpl,
             'OUT',
-            (parts) => parts[0] === 'RETURNED' && parts[1] === 'false',
-            'The template lookup runs inside processOne\'s try/catch, but the controller it calls raises an AuraHandledException. That type cannot be constructed outside an Aura/VF request, so catch(Exception) never sees it — the Flow faults instead of receiving Success=false. A deleted or wrong-environment template Id is the single most likely mistake a Flow author makes.'
+            (parts) =>
+                (parts[0] === 'RETURNED' && parts[1] === 'false') ||
+                (parts[0] === 'THREW' &&
+                    /DocGenException/.test(parts[1] || '') &&
+                    /Template not found/i.test(parts[2] || '')),
+            'The failure must be a catchable exception with a message naming the bad Id — not an uncatchable LimitException from an AuraHandledException raised outside an Aura request.'
         )
     );
     return out;
@@ -1229,8 +1376,19 @@ System.debug('NULLIN=' + DocGenSignaturePdfFlowAction.send(null).size());
         )
     );
     out.push(fromKey(`${A}: second request also succeeds`, r, 'B', ([ok]) => ok === 'true', '', SEVERITY.MAJOR));
-    out.push(fromKey(`${A}: the two requests are distinct records`, r, 'DISTINCT', ([v]) => v === 'true', '', SEVERITY.MAJOR));
-    out.push(fromKey(`${A}: a null request list returns empty, not an exception`, r, 'NULLIN', ([v]) => v === '0', '', SEVERITY.MAJOR));
+    out.push(
+        fromKey(`${A}: the two requests are distinct records`, r, 'DISTINCT', ([v]) => v === 'true', '', SEVERITY.MAJOR)
+    );
+    out.push(
+        fromKey(
+            `${A}: a null request list returns empty, not an exception`,
+            r,
+            'NULLIN',
+            ([v]) => v === '0',
+            '',
+            SEVERITY.MAJOR
+        )
+    );
 
     // The DEPRECATED Content Version Id input must give an admin who is still
     // using it a message that tells them what to change.
@@ -1301,8 +1459,26 @@ System.debug('NULLTOK=' + o[2].isValid + '~' + o[2].errorMessage);
     );
     // A malformed token must be a polite "no", never an exception — the signer
     // is a guest on a public page when this runs.
-    out.push(fromKey(`${V}: a malformed token returns isValid=false with a reason`, v, 'BAD', ([ok, msg]) => ok === 'false' && !!msg, '', SEVERITY.BLOCKER));
-    out.push(fromKey(`${V}: a null token returns isValid=false with a reason`, v, 'NULLTOK', ([ok, msg]) => ok === 'false' && !!msg, '', SEVERITY.BLOCKER));
+    out.push(
+        fromKey(
+            `${V}: a malformed token returns isValid=false with a reason`,
+            v,
+            'BAD',
+            ([ok, msg]) => ok === 'false' && !!msg,
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
+    out.push(
+        fromKey(
+            `${V}: a null token returns isValid=false with a reason`,
+            v,
+            'NULLTOK',
+            ([ok, msg]) => ok === 'false' && !!msg,
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
 
     // BULK SAFETY AT FLOW SCALE. Flow batches up to 200 interviews into one
     // invocable call. This block is separate because when it blows the SOQL
@@ -1322,16 +1498,7 @@ List<DocGenSignatureValidator.FlowOutput> o = DocGenSignatureValidator.validateT
 System.debug('BULK60=' + o.size());
 `
     );
-    out.push(
-        fromKey(
-            `${V}: survives a 60-request Flow batch`,
-            vb,
-            'BULK60',
-            ([n]) => n === '60',
-            '',
-            SEVERITY.MAJOR
-        )
-    );
+    out.push(fromKey(`${V}: survives a 60-request Flow batch`, vb, 'BULK60', ([n]) => n === '60', '', SEVERITY.MAJOR));
 
     const sub = await probe(
         org,
@@ -1347,8 +1514,26 @@ System.debug('NULLIN=' + o[1].isSuccess + '~' + o[1].errorMessage);
     );
     const S = 'Submit Signed Signature';
     out.push(fromKey(`${S}: returns one output per input`, sub, 'COUNT', ([n]) => n === '2', '', SEVERITY.BLOCKER));
-    out.push(fromKey(`${S}: a bad token returns isSuccess=false with a reason`, sub, 'BAD', ([ok, msg]) => ok === 'false' && !!msg, '', SEVERITY.BLOCKER));
-    out.push(fromKey(`${S}: null inputs return isSuccess=false with a reason`, sub, 'NULLIN', ([ok, msg]) => ok === 'false' && !!msg, '', SEVERITY.BLOCKER));
+    out.push(
+        fromKey(
+            `${S}: a bad token returns isSuccess=false with a reason`,
+            sub,
+            'BAD',
+            ([ok, msg]) => ok === 'false' && !!msg,
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
+    out.push(
+        fromKey(
+            `${S}: null inputs return isSuccess=false with a reason`,
+            sub,
+            'NULLIN',
+            ([ok, msg]) => ok === 'false' && !!msg,
+            '',
+            SEVERITY.BLOCKER
+        )
+    );
 
     const fin = await probe(
         org,
@@ -1387,7 +1572,10 @@ async function probeWriteback(org, ids) {
     const r = await probe(
         org,
         `
-List<DocGen_Signature_Request__c> rq = [SELECT Id FROM DocGen_Signature_Request__c ORDER BY CreatedDate DESC LIMIT 1];
+// Scoped to THIS run's template — an unscoped "most recent request" would pick
+// up another suite's record when both run against the same org.
+List<DocGen_Signature_Request__c> rq = [SELECT Id FROM DocGen_Signature_Request__c
+    WHERE Template__c = '${ids.SIGTPL_ID}' ORDER BY CreatedDate DESC LIMIT 1];
 System.debug('HAVEREQ=' + rq.size());
 DocGenFieldWritebackService.WritebackRequest a = new DocGenFieldWritebackService.WritebackRequest();
 a.requestId = rq.isEmpty() ? null : String.valueOf(rq[0].Id);
@@ -1423,7 +1611,16 @@ catch (Exception e) { System.debug('BULK60=THREW~' + e.getMessage()); }
             SEVERITY.BLOCKER
         )
     );
-    out.push(fromKey(`${A}: a null request list is a no-op`, r, 'NULLLIST', ([kind]) => kind === 'RETURNED', '', SEVERITY.MAJOR));
+    out.push(
+        fromKey(
+            `${A}: a null request list is a no-op`,
+            r,
+            'NULLLIST',
+            ([kind]) => kind === 'RETURNED',
+            '',
+            SEVERITY.MAJOR
+        )
+    );
     // Caveat recorded on purpose: the fixture request has no form-field config,
     // so this proves the guard clauses hold at scale, not the write path.
     out.push(
@@ -1432,7 +1629,8 @@ catch (Exception e) { System.debug('BULK60=THREW~' + e.getMessage()); }
             r,
             'BULK60',
             ([kind]) => kind === 'RETURNED',
-            () => 'note: the fixture request carries no form-field config, so this exercises the guard path, not a 60-record write',
+            () =>
+                'note: the fixture request carries no form-field config, so this exercises the guard path, not a 60-record write',
             SEVERITY.MAJOR
         )
     );
@@ -1492,10 +1690,23 @@ if (!s.isEmpty()) {
     E('docGenAdmin: getTemplateById returns the right record', 'TPLBYID', (p, raw) => raw === `${P} Template`);
     E('Query builder: getObjectOptions is populated', 'OBJECTOPTIONS', ([n]) => Number(n) > 0);
     E('Query builder: getObjectFields("Account") is populated', 'OBJECTFIELDS', ([n]) => Number(n) > 0);
-    E('Query builder: getUpdateableObjectFields("Account") is populated', 'UPDATEABLEFIELDS', ([n]) => Number(n) > 0, SEVERITY.MAJOR);
+    E(
+        'Query builder: getUpdateableObjectFields("Account") is populated',
+        'UPDATEABLEFIELDS',
+        ([n]) => Number(n) > 0,
+        SEVERITY.MAJOR
+    );
     E('Query builder: getChildRelationships("Account") is populated', 'CHILDRELS', ([n]) => Number(n) > 0);
-    E('Preview: previewRecordData returns the requested fields', 'PREVIEW', ([notNull, hasName, name]) => notNull === 'true' && hasName === 'true' && name === `${P} Corp`);
-    E('Runner: generateDocumentData returns merge data', 'GENDATA', ([notNull, nonEmpty]) => notNull === 'true' && nonEmpty === 'true');
+    E(
+        'Preview: previewRecordData returns the requested fields',
+        'PREVIEW',
+        ([notNull, hasName, name]) => notNull === 'true' && hasName === 'true' && name === `${P} Corp`
+    );
+    E(
+        'Runner: generateDocumentData returns merge data',
+        'GENDATA',
+        ([notNull, nonEmpty]) => notNull === 'true' && nonEmpty === 'true'
+    );
     E('docGenBulkRunner: getBulkTemplates returns templates', 'BULKTEMPLATES', ([n]) => Number(n) > 0);
     E('docGenBulkRunner: validateFilter counts matching records', 'VALIDATEFILTER', ([n]) => Number(n) >= 1);
     E('docGenBulkRunner: getRecentJobs responds', 'RECENTJOBS', ([v]) => v === 'true', SEVERITY.MAJOR);
@@ -1505,7 +1716,12 @@ if (!s.isEmpty()) {
     E('Setup: getSettingsFresh responds', 'SETTINGSFRESH', ([v]) => v === 'true', SEVERITY.MAJOR);
     E('Setup: getOrgWideEmailAddresses responds', 'OWA', ([v]) => v === 'true', SEVERITY.MAJOR);
     E('Setup: validateSignatureSetup returns its checklist', 'SIGSETUP', ([n]) => Number(n) > 0, SEVERITY.MAJOR);
-    E('Record page: getButtons responds for a record with no configured buttons', 'BUTTONS', ([v]) => v === 'true', SEVERITY.MAJOR);
+    E(
+        'Record page: getButtons responds for a record with no configured buttons',
+        'BUTTONS',
+        ([v]) => v === 'true',
+        SEVERITY.MAJOR
+    );
     E('Signing page: validateToken accepts a live token', 'SIGVALIDATE', ([v]) => v === 'true');
 
     return out;
@@ -1541,7 +1757,11 @@ function auraLeakCheck(name, res, key, predicate, why) {
 function bulkCostCheck(action, res, minimum, severity) {
     const raw = res.map.QPERREQ;
     if (raw === undefined) {
-        return skip(`${action}: SOQL cost per request is known`, `the probe did not report it. ${res.fatal || ''}`, severity);
+        return skip(
+            `${action}: SOQL cost per request is known`,
+            `the probe did not report it. ${res.fatal || ''}`,
+            severity
+        );
     }
     const per = Number(unesc(raw));
     const max = per > 0 ? Math.floor(100 / per) : 999;

@@ -44,6 +44,9 @@ const PREFIX = 'QAUI-';
 
 const msg = (e) => String((e && e.message) || e).slice(0, 200);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Progress trace on stderr — this suite runs for minutes and a silent hang is
+ *  impossible to diagnose after the fact. */
+const step = (s) => process.stderr.write(`      · ${s}\n`);
 
 /* ================================================================== *
  * In-page toolkit
@@ -59,9 +62,12 @@ const DEEP = `
     if (!el) return '';
     let s = '';
     const walk = (n) => {
+      // nodeType 3 = text, 1 = element, 11 = DocumentFragment (a shadowRoot).
+      // Bailing on "not an element" skipped every shadowRoot and made this
+      // return '' for every lightning-* label and datatable cell.
       if (n.nodeType === 3) { s += n.nodeValue + ' '; return; }
-      if (n.nodeType !== 1) return;
-      if (n.shadowRoot) walk(n.shadowRoot);
+      if (n.nodeType === 1 && n.shadowRoot) walk(n.shadowRoot);
+      if (n.nodeType !== 1 && n.nodeType !== 11 && n.nodeType !== 9) return;
       for (const c of n.childNodes) walk(c);
     };
     walk(el);
@@ -77,9 +83,11 @@ const DEEP = `
     walk(root);
     return out;
   };
+  // offsetParent is NOT usable here: it is null for elements inside a shadow
+  // tree whose positioned ancestor lives outside it, which is most of this app.
   const __vis = (el) => {
     if (!el) return false;
-    if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return false;
+    if (el.checkVisibility && !el.checkVisibility({ checkVisibilityCSS: true })) return false;
     const r = el.getBoundingClientRect();
     return r.width > 1 && r.height > 1;
   };
@@ -97,13 +105,25 @@ const DEEP = `
     }
     return all ? hits : hits[0] || null;
   };
-  /** A lightning-* form control found by its label PROPERTY, visible ones first. */
+  /**
+   * A lightning-* form control located by its RENDERED label, never by an LWC
+   * property: LWC does not reflect @api props to attributes, and reading them
+   * from outside the component is not something a test should depend on.
+   * Visible matches win — the wizard's fields stay in the DOM behind the modal.
+   */
   const __field = (label) => {
-    const hosts = __dgFind('lightning-input,lightning-textarea,lightning-combobox', true) || [];
-    const match = hosts.filter((h) => String(h.label || '').trim() === label);
-    const el = match.find((h) => __vis(h)) || match[0];
-    if (!el || !el.shadowRoot) return null;
-    return { host: el, inner: el.shadowRoot.querySelector('input, textarea, button') };
+    const norm = (s) => String(s || '').split('*').join('').split(/[ ]+/).join(' ').trim();
+    const cands = [];
+    for (const h of __dgFind('lightning-input,lightning-textarea,lightning-combobox', true) || []) {
+      const root = h.shadowRoot || h;
+      for (const lab of root.querySelectorAll('label')) {
+        if (norm(lab.textContent) !== label) continue;
+        const inner = root.querySelector('input, textarea, button');
+        if (inner) cands.push({ host: h, inner });
+        break;
+      }
+    }
+    return cands.find((c) => __vis(c.inner)) || cands[0] || null;
   };`;
 
 const KIT = HIT_TEST + DEEP;
@@ -434,6 +454,7 @@ export async function run({ org, headed }) {
         } catch (e) {
             /* older Chromium — those checks degrade to skips below */
         }
+        step('app open');
         await openTab(page, base, APP, 9000);
 
         /* ============================================================ *
@@ -501,6 +522,7 @@ export async function run({ org, headed }) {
         await wait(2500);
         await drainToasts(page);
 
+        step('wizard: authoring cards');
         // 2a. Authoring cards — each must select AND reveal its own path.
         const cardPaths = [
             { mode: 'starter', marker: '.dg-starter-card', what: 'the starter gallery' },
@@ -549,6 +571,7 @@ export async function run({ org, headed }) {
             );
         }
 
+        step('wizard: starter gallery');
         // 2b. Starter gallery.
         await mouseClick(page, '[data-mode="starter"]');
         await wait(1500);
@@ -604,6 +627,7 @@ export async function run({ org, headed }) {
         await clickByText(page, 'lightning-button', 'Hide advanced options');
         await wait(1200);
 
+        step('wizard: validation');
         // 2d. REQUIRED-FIELD VALIDATION — an empty submit must complain out loud
         //     and must not leave a half-made record behind.
         await mouseClick(page, '[data-mode="starter"]');
@@ -632,6 +656,7 @@ export async function run({ org, headed }) {
             )
         );
 
+        step('wizard: file path steps');
         // 2e. FILE PATH — the classic three-step wizard, Back included.
         await mouseClick(page, '[data-mode="file"]');
         await wait(1400);
@@ -715,6 +740,7 @@ export async function run({ org, headed }) {
             )
         );
 
+        step('wizard: create #1 (file path)');
         // END-TO-END CREATE #1 — the classic path really writes a record.
         await drainToasts(page);
         const createClicked = await clickByText(page, 'lightning-button', 'Create Template', { exact: true });
@@ -742,6 +768,7 @@ export async function run({ org, headed }) {
         await clickByText(page, 'lightning-button', 'Close', { exact: true });
         await wait(2000);
 
+        step('wizard: AI prompt kit');
         /* --- 2f. THE AI PROMPT KIT ---------------------------------- */
         await clickByText(page, '[role="tab"]', 'Create New');
         await wait(2500);
@@ -826,6 +853,7 @@ export async function run({ org, headed }) {
             );
         }
 
+        step('wizard: create #2 (starter -> designer)');
         /* --- 2g. END-TO-END CREATE #2 — starter path into the designer --- */
         await clickByText(page, 'lightning-button', 'Back', { exact: true });
         await wait(2500);
@@ -885,6 +913,7 @@ export async function run({ org, headed }) {
          *    (the CANVAS is ui-smoke.mjs's job; this is everything round it)
          * ============================================================ */
         if (designerUp) {
+            step('designer panels');
             const panels = [
                 { key: 'insert', title: 'Insert blocks' },
                 { key: 'tags', title: 'Merge tags' },
@@ -1047,6 +1076,7 @@ export async function run({ org, headed }) {
         /* ============================================================ *
          * 4. YOUR TEMPLATES
          * ============================================================ */
+        step('template list');
         await openTab(page, base, APP, 9000);
         await clickByText(page, '[role="tab"]', 'Your Templates');
         await wait(4000);
@@ -1172,6 +1202,7 @@ export async function run({ org, headed }) {
             await wait(3000);
         }
 
+        step('row actions');
         /* --- 4b. ROW ACTIONS ---------------------------------------- */
         const rowAction = async (templateName, action) => {
             const row = page.locator(`tr:has-text("${templateName}")`).first();
@@ -1183,8 +1214,10 @@ export async function run({ org, headed }) {
         const actionHit = await ev(
             page,
             `const dt = __dgFind('lightning-datatable');
-       if (!dt || !dt.shadowRoot) return 'no datatable';
-       const btn = dt.shadowRoot.querySelector('tbody tr button[aria-haspopup="true"]');
+       if (!dt) return 'no datatable';
+       // The action button lives inside lightning-primitive-cell-actions' own
+       // shadow root, so a plain descendant query never reaches it.
+       const btn = __deepAll(dt, 'button[aria-haspopup="true"]')[0];
        if (!btn) return 'no row-action button';
        btn.scrollIntoView({ block: 'center' });
        return __dgHittable(btn);`,
@@ -1199,6 +1232,7 @@ export async function run({ org, headed }) {
             )
         );
 
+        step('row action: View');
         // VIEW → the modal, on the tags tab.
         try {
             await rowAction(NAME_STARTER, 'View');
@@ -1225,13 +1259,17 @@ export async function run({ org, headed }) {
             add(skip('row action View opens the template on its Copy-Paste Tags tab', 'could not drive the row menu: ' + msg(e)));
         }
 
+        step('row action: Export');
         // EXPORT → a real .docgen.json download.
         let exportPath = null;
         let exportJson = null;
         try {
-            const dlp = page.waitForEvent('download', { timeout: 25000 });
+            // .catch() matters: an unawaited rejected waitForEvent takes the whole
+            // node process down as an unhandled rejection.
+            const dlp = page.waitForEvent('download', { timeout: 40000 }).catch(() => null);
             await rowAction(NAME_STARTER, 'Export');
             const dl = await dlp;
+            if (!dl) throw new Error('no download event fired within 40s of clicking Export');
             exportPath = await dl.path();
             try {
                 exportJson = JSON.parse(readFileSync(exportPath, 'utf8'));
@@ -1255,6 +1293,7 @@ export async function run({ org, headed }) {
         // IMPORT → the exported bundle round-trips back in. Renamed first so the
         // restored copy is distinguishable from its source.
         if (exportJson) {
+            step('import round-trip');
             try {
                 exportJson.template.Name = NAME_IMPORT;
                 const dir = mkdtempSync(join(tmpdir(), 'dgqa-import-'));
@@ -1281,6 +1320,7 @@ export async function run({ org, headed }) {
             add(skip('Import Template restores an exported bundle as a new template', 'nothing was exported to import'));
         }
 
+        step('row action: Clone');
         // CLONE → a copy exists and opens for editing.
         try {
             await clickByText(page, '[role="tab"]', 'Your Templates');
@@ -1306,6 +1346,7 @@ export async function run({ org, headed }) {
             add(skip('row action Clone creates a copy and opens it for editing', 'could not drive the row menu: ' + msg(e)));
         }
 
+        step('row action: Delete');
         // DELETE → does it destroy the record, and does it ask first? Losing a
         // template to one un-confirmed menu click is the data-loss case here.
         try {
@@ -1357,6 +1398,7 @@ export async function run({ org, headed }) {
             add(skip('row action Delete removes the template', 'could not drive the row menu: ' + msg(e)));
         }
 
+        step('row action: Design');
         // DESIGN → opens the designer on that template.
         try {
             await clickByText(page, '[role="tab"]', 'Your Templates');
@@ -1383,6 +1425,7 @@ export async function run({ org, headed }) {
         /* ============================================================ *
          * 5. EDIT MODAL
          * ============================================================ */
+        step('edit modal');
         await openTab(page, base, APP, 9000);
         await clickByText(page, '[role="tab"]', 'Your Templates');
         await wait(4000);
@@ -1439,7 +1482,9 @@ export async function run({ org, headed }) {
             for (const t of modalTabs) {
                 const offered = await ev(
                     page,
-                    `return (__dgFind('lightning-tab', true) || []).some((h) => String(h.label || '').indexOf(${JSON.stringify(t.label)}) !== -1);`,
+                    `const modal = __dgFind('.slds-modal');
+           if (!modal) return false;
+           return __deepAll(modal, '[role="tab"]').some((x) => __deep(x).indexOf(${JSON.stringify(t.label)}) !== -1);`,
                     false
                 );
                 if (offered !== true) {
@@ -1454,14 +1499,25 @@ export async function run({ org, headed }) {
                 }
                 await clickByText(page, '[role="tab"]', t.label);
                 await wait(2500);
+                // Scope to the MODAL's visible tab panel. lightning-tabset only
+                // renders the active tab's content, so the visible panel is the
+                // one we just selected — and the main tabset's panels, which are
+                // still in the DOM behind the modal, cannot satisfy the marker.
                 const panel = await ev(
                     page,
-                    `const host = (__dgFind('lightning-tab', true) || []).find((h) => String(h.label || '').indexOf(${JSON.stringify(t.label)}) !== -1);
-           if (!host) return null;
-           const txt = __deep(host);
+                    `const modal = __dgFind('.slds-modal');
+           if (!modal) return null;
+           const shown = __deepAll(modal, '[role="tabpanel"]').filter(__vis);
+           if (!shown.length) return { visible: false, controls: 0, hasMarker: false, len: 0 };
+           const txt = shown.map((p) => __deep(p)).join(' ');
+           const controls = shown.reduce((n, p) => n + __deepAll(p, 'input, textarea, button, select, code').length, 0);
+           const selected = __deepAll(modal, '[role="tab"]')
+             .filter((x) => x.getAttribute('aria-selected') === 'true')
+             .map((x) => __deep(x));
            return {
-             visible: __vis(host),
-             controls: __deepAll(host, 'input, textarea, button, select, code, lightning-input, lightning-combobox').length,
+             visible: true,
+             selected,
+             controls,
              hasMarker: txt.toLowerCase().indexOf(${JSON.stringify(t.marker)}.toLowerCase()) !== -1,
              len: txt.length
            };`,
@@ -1470,9 +1526,15 @@ export async function run({ org, headed }) {
                 add(
                     check(
                         `edit modal tab "${t.label}" renders its panel`,
-                        !!(panel && panel.visible && panel.controls > 0 && panel.hasMarker),
+                        !!(
+                            panel &&
+                            panel.visible &&
+                            panel.controls > 0 &&
+                            panel.hasMarker &&
+                            (panel.selected || []).some((s) => s.indexOf(t.label) !== -1)
+                        ),
                         panel
-                            ? `visible=${panel.visible}, controls=${panel.controls}, expected content present=${panel.hasMarker}, text=${panel.len} chars`
+                            ? `selected=${(panel.selected || []).join('/')}, controls=${panel.controls}, expected content present=${panel.hasMarker}, text=${panel.len} chars`
                             : 'the tab panel was unreadable',
                         SEVERITY.MAJOR
                     )
@@ -1557,7 +1619,7 @@ export async function run({ org, headed }) {
                     page,
                     `const rows = __dgFind('.pdf-acroform-row', true) || [];
            const row = rows[rows.length - 1];
-           const btn = __deepAll(row, 'lightning-button-icon').filter((b) => String(b.iconName || '') === 'utility:delete')[0];
+           const btn = __deepAll(row, 'button').filter((b) => /remove/i.test(b.getAttribute('title') || ''))[0];
            if (!btn) return { ok: false, why: 'no remove control on the field row' };
            const before = rows.length;
            btn.click();
@@ -1602,15 +1664,19 @@ export async function run({ org, headed }) {
                 )
             );
 
-            // Toggles: found by PROPERTY (LWC does not reflect type=toggle).
+            // Toggles are found by their SLDS markup, not by an LWC property:
+            // `lightning-input[type="toggle"]` is not a real attribute selector.
+            const TOGGLE = `
+           const t = (__dgFind('.slds-checkbox_toggle', true) || []).filter(__vis)[0];
+           const input = t ? t.querySelector('input[type="checkbox"]') : null;
+           const faux = t ? t.querySelector('.slds-checkbox_faux_container, .slds-checkbox_faux') : null;`;
             const toggleBox = await ev(
                 page,
                 BOX_FROM +
-                    `const t = (__dgFind('lightning-input', true) || []).filter((x) => x.type === 'toggle' && __vis(x))[0];
-           if (!t || !t.shadowRoot) return null;
-           const faux = t.shadowRoot.querySelector('.slds-checkbox_faux_container, .slds-checkbox_faux, label');
+                    TOGGLE +
+                    `if (!input) return null;
            const b = __box(faux || t);
-           return b ? { x: b.x, y: b.y, checked: !!t.checked } : null;`,
+           return b ? { x: b.x, y: b.y, checked: !!input.checked } : null;`,
                 null
             );
             if (!toggleBox) {
@@ -1618,12 +1684,7 @@ export async function run({ org, headed }) {
             } else {
                 await page.mouse.click(toggleBox.x, toggleBox.y);
                 await wait(1200);
-                const after = await ev(
-                    page,
-                    `const t = (__dgFind('lightning-input', true) || []).filter((x) => x.type === 'toggle' && __vis(x))[0];
-             return t ? !!t.checked : null;`,
-                    null
-                );
+                const after = await ev(page, TOGGLE + `return input ? !!input.checked : null;`, null);
                 add(
                     check(
                         'the Active toggle flips when clicked',
@@ -1723,6 +1784,7 @@ export async function run({ org, headed }) {
          * 6. SETTINGS / SETUP SURFACES that host the admin component
          * ============================================================ */
         try {
+            step('command hub');
             await openTab(page, base, HUB, 10000);
             const hubUp = await until(page, `return __dgFind('.nav-links') ? { ok: 1 } : null;`, 30000, 1500);
             if (!hubUp) {
@@ -1745,6 +1807,10 @@ export async function run({ org, headed }) {
                         add(skip(`Command Hub: "${item}" opens its panel`, 'this nav item is not offered in this org'));
                         continue;
                     }
+                    // Move OFF the item first — otherwise the already-active nav
+                    // item would "fail" for not changing anything.
+                    await clickByText(page, '.nav-links button', item === 'Assets' ? 'Signatures' : 'Assets');
+                    await wait(3500);
                     const before = await ev(
                         page,
                         `const h = __dgFind('.panel-header'); return h ? __deep(h).slice(0, 80) : '';`,
