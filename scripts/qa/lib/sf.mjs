@@ -82,10 +82,20 @@ export async function soql(org, query) {
     }
 }
 
-/** Run Apex tests for named classes; returns parsed per-method outcomes. */
-export async function runApexTests(org, classNames, { timeout = 2400000 } = {}) {
-    const args = ['apex', 'run', 'test', '--target-org', org, '--wait', '45', '--result-format', 'json'];
-    for (const c of classNames) args.push('--class-names', c);
+/**
+ * Run Apex tests. Pass classNames to scope the run, or nothing for RunLocalTests.
+ *
+ * RunLocalTests is the default because enumerating every test class as a
+ * --class-names flag builds a command line the CLI rejects outright — 43 flags
+ * was enough — and it is what the release checklist runs anyway.
+ */
+export async function runApexTests(org, classNames, { timeout = 3600000 } = {}) {
+    const args = ['apex', 'run', 'test', '--target-org', org, '--wait', '60', '--result-format', 'json'];
+    if (classNames && classNames.length && classNames.length <= 20) {
+        for (const c of classNames) args.push('--class-names', c);
+    } else {
+        args.push('--test-level', 'RunLocalTests');
+    }
     const raw = await sf(args, { timeout });
     const jsonStart = raw.indexOf('{');
     if (jsonStart === -1) return { summary: null, tests: [] };

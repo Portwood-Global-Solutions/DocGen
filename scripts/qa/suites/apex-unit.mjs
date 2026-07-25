@@ -46,8 +46,11 @@ export async function run({ org, classes }) {
     }
 
     // --- run the tests --------------------------------------------------------
-    const toRun = classes && classes.length ? classes : tests;
-    if (!toRun.length) {
+    // No explicit list -> RunLocalTests. Naming all 43 classes builds a command
+    // line the CLI refuses, which surfaced as a blocker that was really a harness
+    // bug rather than a failing test.
+    const toRun = classes && classes.length ? classes : [];
+    if (!tests.length) {
         checks.push(skip('Apex tests ran', 'no test classes found', SEVERITY.BLOCKER));
         return suiteResult('apex-unit', 'Apex unit', checks);
     }
