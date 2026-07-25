@@ -867,6 +867,239 @@ async function main() {
         );
         record('canvas click points reach the page', canvasClickable.bad.length === 0, canvasClickable.bad.join(' | '));
 
+        // --- 4e. Undo stack (DESIGNER_PLAN_V2 step 1) ----------------------------
+        //
+        // Every table and block edit is direct DOM surgery the browser's native undo
+        // history never saw, so Ctrl+Z used to step straight past them. Each case
+        // asserts on SERIALIZED HTML EQUALITY, not element counts: a restore that
+        // gets the row count right and the content wrong is still a broken undo.
+        const undoReport = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const bar = __dgFind('.dg-format-bar');
+      const out = {};
+      const reset = () => {
+        const style = pv.querySelector('style');
+        while (pv.firstChild) pv.removeChild(pv.firstChild);
+        if (style) pv.appendChild(style);
+        const p = document.createElement('p'); p.textContent = 'AAA'; pv.appendChild(p);
+        const q = document.createElement('p'); q.textContent = 'BBB'; pv.appendChild(q);
+        const t = document.createElement('table');
+        t.innerHTML = '<tr><td>c1</td><td>c2</td></tr><tr><td>c3</td><td>c4</td></tr>';
+        pv.appendChild(t);
+        pv.focus();
+        return t;
+      };
+      const caretIn = (el) => {
+        const r = document.createRange(); r.selectNodeContents(el); r.collapse(true);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        document.dispatchEvent(new Event('selectionchange'));
+      };
+      const press = (extra) => {
+        pv.dispatchEvent(new KeyboardEvent('keydown', Object.assign(
+          { key: 'z', ctrlKey: true, bubbles: true, composed: true, cancelable: true }, extra || {})));
+      };
+      const tbtn = (action) => bar.querySelector('[data-taction="' + action + '"]');
+      // Compare the DOCUMENT, not the byte-for-byte serialization.
+      //
+      // Raw innerHTML equality reports differences that are not differences.
+      // Re-parsing a fragment reorders attributes (LWC re-stamps its lwc-xxxxx
+      // style-scoping attribute, so 'style lwc-x' comes back as 'lwc-x style'),
+      // and the caret highlight is editor chrome — data-dg-paint plus a purple
+      // inline style on whichever block the cursor is in — that the undo stack
+      // deliberately excludes, so the comparison must exclude it too.
+      //
+      // canon() walks the parsed tree and emits tag + SORTED attributes + text.
+      // Still serialized-HTML equality (every element, attribute and character of
+      // text has to match), just insensitive to ordering the browser owns and to
+      // chrome the editor owns. Element counts alone would not catch a restore
+      // that got the shape right and the content wrong; this does.
+      const canon = (html) => {
+        const tpl = document.createElement('template');
+        tpl.innerHTML = html;
+        const out = [];
+        const walk = (node) => {
+          for (const n of node.childNodes) {
+            if (n.nodeType === 3) {
+              const t = n.nodeValue.replace(/\\s+/g, ' ');
+              if (t.trim()) out.push('#' + t.trim());
+              continue;
+            }
+            if (n.nodeType !== 1) continue;
+            // The four properties _paintActiveBlock writes. outline-offset carries
+            // no colour, so filtering by the purple alone left it behind and made a
+            // correctly-restored cell compare unequal.
+            const PAINT_PROPS = /^(background-color|box-shadow|outline|outline-offset)$/;
+            const painted = n.hasAttribute('data-dg-paint');
+            const attrs = [];
+            for (const a of n.attributes) {
+              if (/^lwc-/.test(a.name) || a.name === 'data-dg-paint') continue;
+              if (a.name === 'style') {
+                const decls = a.value.split(';').map(s => s.trim()).filter(Boolean)
+                  .filter(s => {
+                    if (/124, 58, 237|#7c3aed/.test(s)) return false;
+                    return !(painted && PAINT_PROPS.test(s.split(':')[0].trim()));
+                  }).sort();
+                if (!decls.length) continue;
+                attrs.push('style=' + decls.join(';'));
+              } else {
+                attrs.push(a.name + '=' + a.value);
+              }
+            }
+            attrs.sort();
+            out.push('<' + n.tagName + (attrs.length ? ' ' + attrs.join(' ') : '') + '>');
+            walk(n);
+            out.push('</' + n.tagName + '>');
+          }
+        };
+        walk(tpl.content);
+        return out.join('');
+      };
+      const same = (a, b) => canon(a) === canon(b);
+      const diffAt = (a, b) => {
+        const x = canon(a), y = canon(b);
+        let i = 0;
+        while (i < x.length && i < y.length && x[i] === y[i]) i++;
+        return 'at ' + i + ': ' + JSON.stringify(x.slice(i, i + 90)) + ' vs ' + JSON.stringify(y.slice(i, i + 90));
+      };
+      const click = (b) => {
+        b.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        b.click();
+      };
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      return (async () => {
+        // --- table row insert -------------------------------------------------
+        let t = reset();
+        caretIn(t.querySelector('td'));
+        await step(400);
+        let before = pv.innerHTML;
+        let btn = tbtn('rowAfter');
+        if (!btn) { out.rowInsert = 'no rowAfter button'; }
+        else {
+          click(btn);
+          await step(250);
+          const mutated = !same(pv.innerHTML, before);
+          press();
+          await step(300);
+          out.rowInsert = !mutated ? 'the edit itself did nothing'
+                        : (same(pv.innerHTML, before) ? 'ok' : 'undo did not restore the document ' + diffAt(pv.innerHTML, before));
+        }
+
+        // --- table row delete -------------------------------------------------
+        t = reset();
+        caretIn(t.rows[1].cells[0]);
+        await step(400);
+        before = pv.innerHTML;
+        btn = tbtn('rowDel');
+        if (!btn) { out.rowDelete = 'no rowDel button'; }
+        else {
+          click(btn);
+          await step(250);
+          const mutated = !same(pv.innerHTML, before);
+          press();
+          await step(300);
+          out.rowDelete = !mutated ? 'the edit itself did nothing'
+                        : (same(pv.innerHTML, before) ? 'ok' : 'undo did not restore the document ' + diffAt(pv.innerHTML, before));
+        }
+
+        // --- block move -------------------------------------------------------
+        reset();
+        const first = pv.querySelector('p');
+        const fr = first.getBoundingClientRect();
+        first.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+          clientX: Math.round(fr.left + 10), clientY: Math.round(fr.top + 5)}));
+        await step(500);
+        const handle = __dgFind('.dg-blk-handle');
+        const down = handle && [...handle.querySelectorAll('button')].find(x => x.dataset.dir === 'down');
+        if (!down) { out.blockMove = 'no block move control'; }
+        else {
+          before = pv.innerHTML;
+          click(down);
+          await step(300);
+          const mutated = !same(pv.innerHTML, before);
+          press();
+          await step(300);
+          out.blockMove = !mutated ? 'the move itself did nothing'
+                        : (same(pv.innerHTML, before) ? 'ok' : 'undo did not restore block order');
+        }
+
+        // --- redo re-applies what undo took back ------------------------------
+        t = reset();
+        caretIn(t.querySelector('td'));
+        await step(400);
+        before = pv.innerHTML;
+        btn = tbtn('rowAfter');
+        if (!btn) { out.redo = 'no rowAfter button'; }
+        else {
+          click(btn);
+          await step(250);
+          const afterEdit = pv.innerHTML;
+          press();
+          await step(300);
+          const undone = same(pv.innerHTML, before);
+          const redoBtn = bar.querySelector('[data-cmd="redo"]');
+          const redoArmed = redoBtn ? !redoBtn.disabled : 'no redo button';
+          press({ shiftKey: true });
+          await step(300);
+          out.redo = !undone ? 'undo did not restore first'
+                   : (same(pv.innerHTML, afterEdit) ? 'ok'
+                      : ('redo diff ' + diffAt(pv.innerHTML, afterEdit)));
+        }
+
+        // --- undo covers the header band too ----------------------------------
+        const band = __dgFind('.dg-chrome-band_header');
+        if (!band) { out.band = 'no header band'; }
+        else {
+          const t2 = reset();
+          caretIn(t2.querySelector('td'));
+          await step(300);
+          const bandBefore = band.innerHTML;
+          const b2 = tbtn('rowAfter');
+          if (!b2) { out.band = 'no rowAfter button'; }
+          else {
+            // Change the header, then make a body edit, then undo: the band must
+            // come back with the body, since one snapshot covers all surfaces.
+            band.focus();
+            band.dispatchEvent(new InputEvent('beforeinput', {bubbles:true, composed:true, inputType:'insertText', data:'X'}));
+            band.textContent = 'HEADER PROBE';
+            band.dispatchEvent(new Event('input', {bubbles:true, composed:true}));
+            await step(300);
+            const bandEdited = band.innerHTML;
+            press();
+            await step(400);
+            out.band = (!same(bandEdited, bandBefore) && same(band.innerHTML, bandBefore))
+                     ? 'ok'
+                     : ('band diff ' + diffAt(band.innerHTML, bandBefore));
+          }
+        }
+
+        // --- the buttons reflect whether there is anything to undo -------------
+        const undoBtn = bar.querySelector('[data-cmd="undo"]');
+        out.buttonState = undoBtn ? (undoBtn.disabled === false ? 'ok' : 'undo button still disabled after edits')
+                                  : 'no undo button';
+        return out;
+      })();`)
+        );
+        record(
+            'undo: table row insert restores the document exactly',
+            undoReport.rowInsert === 'ok',
+            undoReport.rowInsert
+        );
+        record(
+            'undo: table row delete restores the document exactly',
+            undoReport.rowDelete === 'ok',
+            undoReport.rowDelete
+        );
+        record('undo: block move restores block order', undoReport.blockMove === 'ok', undoReport.blockMove);
+        record('undo: redo re-applies the undone edit', undoReport.redo === 'ok', undoReport.redo);
+        record('undo: one step covers the header band too', undoReport.band === 'ok', undoReport.band);
+        record(
+            'undo: toolbar button enables once there is history',
+            undoReport.buttonState === 'ok',
+            undoReport.buttonState
+        );
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

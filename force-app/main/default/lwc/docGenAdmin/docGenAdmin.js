@@ -1686,6 +1686,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             }
                         });
                         pv.addEventListener('drop', (e) => this._handleVisualDrop(e, pv));
+                        // Undo capture for plain typing. beforeinput fires BEFORE the
+                        // browser mutates the DOM, which is the only moment the
+                        // pre-edit state still exists to snapshot. Coalescing inside
+                        // _pushUndo turns a burst into one step.
+                        pv.addEventListener('beforeinput', (e) => {
+                            this._pushUndo('type:' + ((e && e.inputType) || 'text'));
+                        });
                         // Live dirty signal while typing in the page — and
                         // type-to-pill: a completed {tag} snaps into a pill.
                         pv.addEventListener('input', () => {
@@ -1813,6 +1820,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             this._activeSurface = 'body';
                         });
                         pv.addEventListener('keydown', (e) => {
+                            // Ctrl/Cmd+Z first: it must beat the floor guard and the
+                            // slash menu, and it must preventDefault before the
+                            // browser's own undo can run against the wrong history.
+                            if (this._undoKeydown(e)) {
+                                return;
+                            }
                             // A top-left-corner click parks the caret at the
                             // canvas ROOT, before the scoped <style> — there,
                             // Space types nowhere visible and Backspace eats
@@ -6990,6 +7003,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._activeSurface = which;
                 this._canvasFocused = true;
             });
+            // Same undo capture as the body canvas — the bands are edit surfaces
+            // for two template fields, and Ctrl+Z has to mean the same thing in all
+            // three or the author learns it is unreliable.
+            band.addEventListener('beforeinput', (e) => {
+                this._pushUndo('type:' + ((e && e.inputType) || 'text'));
+            });
             band.addEventListener('input', () => {
                 this._activeSurface = which;
                 this._syncBandToRecord(which, band);
@@ -7004,7 +7023,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             });
             // Same reason the body canvas traps keydown: Lightning's "/" global-search
             // hotkey would otherwise swallow the keystroke.
-            band.addEventListener('keydown', (e) => e.stopPropagation());
+            band.addEventListener('keydown', (e) => {
+                if (this._undoKeydown(e)) {
+                    return;
+                }
+                e.stopPropagation();
+            });
             band.addEventListener('dragover', (e) => e.preventDefault());
             band.addEventListener('mouseup', () => this._performPendingDropInsert());
         }
@@ -7331,6 +7355,248 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return false;
     }
 
+    // ===== Designer undo stack (DESIGNER_PLAN_V2 step 1) ======================
+    //
+    // Every structural edit in this editor is direct DOM surgery —
+    // insertAdjacentElement, remove(), _safeReplace. The browser's native undo
+    // stack has no record of any of it, so Ctrl+Z stepped straight PAST an
+    // inserted row or a moved block to whatever execCommand last did. There was
+    // nothing to undo to, because no state was ever captured.
+    //
+    // This captures it. _pushUndo(label) snapshots all three editable surfaces
+    // (body + running header + running footer) as HTML STRINGS before a mutation
+    // runs, so undo restores the whole document, not one surface.
+    //
+    // Snapshots, deliberately, rather than an operation log: the ~15 mutation
+    // sites are already written as DOM surgery, so an operation log would mean
+    // rewriting every one of them with an inverse and keeping the pair in sync
+    // forever. A snapshot is one call at the top of the handler and cannot drift
+    // out of sync with the operation it describes.
+    //
+    // The stack owns TYPING TOO (via beforeinput, coalesced into bursts) rather
+    // than leaving plain text edits to native undo. Two undo stacks racing over
+    // one document is the exact failure being fixed here: whichever one the
+    // browser picks, the other's history is silently wrong. One stack, one
+    // model, and Ctrl+Z is preventDefault-ed so native undo never also fires.
+    _undoStack = [];
+    _redoStack = [];
+    /** Label + timestamp of the last capture, for burst coalescing. */
+    _undoMark = { label: null, ts: 0 };
+    /** Snapshots are strings and a large template is ~100KB — memory needs a bound. */
+    UNDO_CAP = 50;
+    /** Same-label edits inside this window are one logical step. */
+    UNDO_COALESCE_MS = 700;
+    @track canUndo = false;
+    @track canRedo = false;
+
+    get undoDisabled() {
+        return !this.canUndo;
+    }
+    get redoDisabled() {
+        return !this.canRedo;
+    }
+
+    /**
+     * All three surfaces as HTML strings, or null when the canvas is not mounted.
+     *
+     * The caret highlight is stripped first. It is applied as `data-dg-paint` plus
+     * inline style on a LIVE block (component CSS cannot reach manual-DOM nodes), so
+     * a snapshot that kept it would restore a purple tint onto a block the caret had
+     * since left, and would make two otherwise-identical documents compare unequal —
+     * defeating the dedupe that stops the stack filling with no-ops. Same discipline
+     * _extractVisualBody already uses before serializing to save.
+     *
+     * It is put straight back afterwards, so the author never sees it blink.
+     */
+    _snapshotSurfaces() {
+        const body = this._bodyCanvas();
+        if (!body) {
+            return null;
+        }
+        const painted = this._paintedEl;
+        this._clearActiveBlockPaint();
+        const snap = { body: body.innerHTML, header: null, footer: null };
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band) {
+                snap[which] = band.innerHTML;
+            }
+        }
+        if (painted && painted.isConnected) {
+            this._paintActiveBlock(body, painted, null);
+        }
+        return snap;
+    }
+
+    _sameSnapshot(a, b) {
+        return !!a && !!b && a.body === b.body && a.header === b.header && a.footer === b.footer;
+    }
+
+    /**
+     * Capture the document as it stands RIGHT NOW, before the caller mutates it.
+     * Call this at the TOP of a mutating handler, never after.
+     */
+    _pushUndo(label) {
+        if (!this.showHtmlBodyVisual || this._restoringUndo) {
+            return;
+        }
+        const snap = this._snapshotSurfaces();
+        if (!snap) {
+            return;
+        }
+        const now = Date.now();
+        const top = this._undoStack[this._undoStack.length - 1];
+        // A typing burst is one logical edit — one Ctrl+Z should take the word
+        // back, not one keystroke. Coalescing is limited to `type:` labels on
+        // purpose: two Bold clicks or two + presses are two deliberate acts and
+        // each deserves its own step, however fast they land.
+        const coalescing =
+            label &&
+            label.indexOf('type:') === 0 &&
+            this._undoMark.label === label &&
+            now - this._undoMark.ts < this.UNDO_COALESCE_MS &&
+            top;
+        if (coalescing || this._sameSnapshot(top, snap)) {
+            this._undoMark = { label, ts: now };
+            return;
+        }
+        snap.label = label || 'edit';
+        this._undoStack.push(snap);
+        if (this._undoStack.length > this.UNDO_CAP) {
+            this._undoStack.shift();
+        }
+        // A fresh edit forks the timeline — anything redone from here is gone.
+        this._redoStack = [];
+        this._undoMark = { label, ts: now };
+        this.canUndo = true;
+        this.canRedo = false;
+    }
+
+    /**
+     * Write a snapshot back into the live surfaces.
+     *
+     * innerHTML, not node grafting: under the LWS namespace sandbox the nodes an
+     * innerHTML write creates are sandbox-owned and therefore behave, which is the
+     * same reason _extractVisualBody reads the string rather than cloning.
+     *
+     * Everything the canvas hangs off a specific NODE has to be re-established:
+     * _pvStyleEl (the floor guard's handle on the scoped <style>), the zoom
+     * transform and pill spread (inline styles on nodes that no longer exist), and
+     * the overlays, which point at rows and blocks that were just detached.
+     */
+    _restoreUndoSnapshot(snap) {
+        const body = this._bodyCanvas();
+        if (!body || !snap) {
+            return false;
+        }
+        this._restoringUndo = true;
+        try {
+            this.pillMenu = null;
+            this._activePill = null;
+            this._clearCellSel();
+            this.tableOverlay = null;
+            this._overlayTable = null;
+            this.blockHandle = null;
+            // eslint-disable-next-line @lwc/lwc/no-inner-html -- restoring a snapshot this component took of its own canvas
+            body.innerHTML = snap.body;
+            this._pvStyleEl = body.querySelector('style');
+            for (const which of ['header', 'footer']) {
+                const band = this.template.querySelector('.dg-chrome-band_' + which);
+                if (band && snap[which] != null) {
+                    // eslint-disable-next-line @lwc/lwc/no-inner-html -- restoring a snapshot this component took of its own band
+                    band.innerHTML = snap[which];
+                    // The bands are the live edit surface for two template FIELDS;
+                    // restoring the DOM without re-syncing would leave the record
+                    // holding the undone version.
+                    this._syncBandToRecord(which, band);
+                }
+            }
+            // Pills survive as elements in the string, but a pill written by an older
+            // bundle (or raw {tag} text typed before the snapshot) needs wrapping.
+            // _pillifyTags is idempotent — it refuses to wrap inside an existing pill.
+            this._pillifyTags(body);
+            this._applyZoom();
+            this._applyPillSpread();
+            this.htmlEditorDirty = true;
+        } finally {
+            this._restoringUndo = false;
+        }
+        try {
+            body.focus();
+        } catch (e) {
+            /* focus is best-effort */
+        }
+        return true;
+    }
+    _restoringUndo = false;
+
+    handleUndo() {
+        if (!this._undoStack.length) {
+            return;
+        }
+        const current = this._snapshotSurfaces();
+        const snap = this._undoStack.pop();
+        if (current) {
+            this._redoStack.push(current);
+        }
+        this._restoreUndoSnapshot(snap);
+        // The next edit after an undo must start a new step, never coalesce into
+        // the one that was just taken off the stack.
+        this._undoMark = { label: null, ts: 0 };
+        this.canUndo = this._undoStack.length > 0;
+        this.canRedo = this._redoStack.length > 0;
+    }
+
+    handleRedo() {
+        if (!this._redoStack.length) {
+            return;
+        }
+        const current = this._snapshotSurfaces();
+        const snap = this._redoStack.pop();
+        if (current) {
+            this._undoStack.push(current);
+        }
+        this._restoreUndoSnapshot(snap);
+        this._undoMark = { label: null, ts: 0 };
+        this.canUndo = this._undoStack.length > 0;
+        this.canRedo = this._redoStack.length > 0;
+    }
+
+    /** A different document is now on the canvas — its history does not apply. */
+    _resetUndoHistory() {
+        this._undoStack = [];
+        this._redoStack = [];
+        this._undoMark = { label: null, ts: 0 };
+        this.canUndo = false;
+        this.canRedo = false;
+    }
+
+    /**
+     * Ctrl/Cmd+Z and Ctrl+Shift+Z / Ctrl+Y on any editable surface.
+     * Returns true when it handled the event, so the caller can stop there.
+     */
+    _undoKeydown(e) {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey) {
+            return false;
+        }
+        const k = (e.key || '').toLowerCase();
+        const isUndo = k === 'z' && !e.shiftKey;
+        const isRedo = (k === 'z' && e.shiftKey) || k === 'y';
+        if (!isUndo && !isRedo) {
+            return false;
+        }
+        // Without preventDefault the browser ALSO runs its own undo, on a history
+        // that knows nothing about the DOM surgery — two stacks, one document.
+        e.preventDefault();
+        e.stopPropagation();
+        if (isUndo) {
+            this.handleUndo();
+        } else {
+            this.handleRedo();
+        }
+        return true;
+    }
+
     // ===== #241: Confluence-style table row/column handles ====================
     //
     // The add/remove actions already existed, but only as four similar-looking text
@@ -7435,6 +7701,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!blk || !blk.isConnected) {
             return;
         }
+        this._pushUndo('block-insert');
         const p = document.createElement('p');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
         p.innerHTML = '<br/>';
@@ -7467,6 +7734,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!sibling || sibling.tagName === 'STYLE') {
             return;
         }
+        this._pushUndo('block-move');
         if (dir === 'up') {
             sibling.insertAdjacentElement('beforebegin', blk);
         } else {
@@ -7713,6 +7981,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!table) {
             return;
         }
+        this._pushUndo('seam-insert');
         const idx = parseInt(event.currentTarget.dataset.index, 10);
         const axis = event.currentTarget.dataset.axis;
         if (axis === 'col') {
@@ -8083,6 +8352,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const action = event.currentTarget.dataset.taction;
         const value = event.currentTarget.dataset.value || null;
+        // Every branch below is DOM surgery the browser's undo history cannot see.
+        // One capture at the top covers all ~20 of them.
+        this._pushUndo('table:' + action);
         // #239 — the <select> controls (border width, cell padding, table alignment)
         // take focus when opened, which destroys the live selection before this runs.
         // Restore before resolving the target cell.
@@ -8723,6 +8995,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         event.preventDefault();
+        // Capture once at grab, not per mousemove: a drag is one edit, and the
+        // move handler fires dozens of times.
+        this._pushUndo('table-resize');
         this._colResizing = true;
         const doc = pv.ownerDocument || document;
         let onMove;
@@ -8792,6 +9067,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             );
             return;
         }
+        // List toggling is DOM surgery here, not execCommand (LWS breaks the list
+        // commands) — so it needs its own capture like every other surgical edit.
+        this._pushUndo('list');
         const doc = blk.ownerDocument || document;
         const placeCaret = (el) => {
             try {
@@ -9068,6 +9346,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!cmd) {
             return;
         }
+        // Undo/redo are the designer's own stack, not execCommand's. execCommand
+        // only ever knew about typing, so the toolbar buttons appeared to skip
+        // straight past every table and block edit.
+        if (cmd === 'undo') {
+            this.handleUndo();
+            return;
+        }
+        if (cmd === 'redo') {
+            this.handleRedo();
+            return;
+        }
+        // Formatting is a mutation like any other — capture before execCommand
+        // runs, or Ctrl+Z after "Bold" would jump back past it.
+        this._pushUndo('fmt:' + cmd);
         // #239 — the swatch buttons preventDefault on mousedown so the selection is
         // normally still live here, but the border-width <select> and any control that
         // does take focus land in this handler too. Restoring is idempotent when the
@@ -9241,6 +9533,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _enterVisualMode(html) {
         this._visualOriginalCode = html;
         this._visualEnteredDom = null; // captured in renderedCallback after mount
+        // A different document is about to occupy the canvas — undoing into the
+        // previous one's history would splice two unrelated documents together.
+        this._resetUndoHistory();
         this._parsePageSetup(html);
         this.showHtmlBodyVisual = true;
         // Reuse the preview pipeline, but flag the write as editable so
@@ -9610,6 +9905,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handlePillTransform(event) {
         const tag = event.currentTarget.dataset.tag;
         if (this._activePill && tag) {
+            this._pushUndo('pill-transform');
             this._activePill.textContent = tag;
             this._activePill.style.cssText = this._pillStyleFor(tag);
             this.htmlEditorDirty = true;
@@ -9619,6 +9915,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     handlePillRemove() {
         if (this._activePill) {
+            this._pushUndo('pill-remove');
             this._activePill.remove();
             this.htmlEditorDirty = true;
         }
@@ -11682,6 +11979,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!pv) {
             return;
         }
+        // Covers every insert route that funnels through here — slash menu, block
+        // palette, tag chips, image assets, the table grid picker.
+        this._pushUndo('insert');
         const doc = pv.ownerDocument || document;
         const tpl = doc.createElement('template');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
@@ -12099,6 +12399,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!text) {
             return;
         }
+        this._pushUndo('drop');
         const doc = pv.ownerDocument || document;
         const tpl = doc.createElement('template');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview

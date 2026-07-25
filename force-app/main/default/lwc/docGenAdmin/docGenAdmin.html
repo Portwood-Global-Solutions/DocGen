@@ -2303,18 +2303,20 @@
                                         <button
                                             class="dg-fmt-btn dg-fmt-btn_word"
                                             data-cmd="undo"
+                                            disabled={undoDisabled}
                                             onmousedown={handleFmtMouseDown}
                                             onclick={handleFormatAction}
-                                            title="Undo"
+                                            title="Undo (Ctrl/Cmd + Z)"
                                         >
                                             &#8630; Undo
                                         </button>
                                         <button
                                             class="dg-fmt-btn dg-fmt-btn_word"
                                             data-cmd="redo"
+                                            disabled={redoDisabled}
                                             onmousedown={handleFmtMouseDown}
                                             onclick={handleFormatAction}
-                                            title="Redo"
+                                            title="Redo (Ctrl/Cmd + Shift + Z)"
                                         >
                                             &#8631; Redo
                                         </button>
