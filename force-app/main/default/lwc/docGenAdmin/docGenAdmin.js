@@ -1441,10 +1441,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._wheelBoundPv.removeEventListener('mousemove', this.handleCanvasMouseMove);
             this._wheelBoundPv = null;
         }
-        if (this._overlayRaf) {
-            cancelAnimationFrame(this._overlayRaf);
-            this._overlayRaf = null;
-        }
+
         this._disableFloatPanelChrome();
     }
 
@@ -7236,19 +7233,26 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * already drawn for, and rAF-coalesce the rest.
      */
     handleCanvasMouseMove = (event) => {
-        if (this._overlayRaf) {
+        // Time-based throttle, NOT requestAnimationFrame. The rAF version latched: it
+        // set a pending-flag, and if the frame never ran — background tab, throttled
+        // renderer, headless — the flag was never cleared and every later mousemove
+        // returned early, permanently disabling the table handles. A timestamp cannot
+        // get stuck.
+        const now = Date.now();
+        if (now - this._overlayLastRun < 40) {
             return;
         }
-        this._overlayRaf = requestAnimationFrame(() => {
-            this._overlayRaf = null;
-            try {
-                this._updateTableOverlay(event);
-            } catch (e) {
-                /* handles are cosmetic — never break editing */
-            }
-        });
+        this._overlayLastRun = now;
+        try {
+            this._updateTableOverlay(event);
+        } catch (e) {
+            // Was silently swallowed, which hid the handles never rendering at all.
+            // Still non-fatal, but no longer invisible.
+            // eslint-disable-next-line no-console
+            console.warn('DocGen: table overlay failed', e);
+        }
     };
-    _overlayRaf = null;
+    _overlayLastRun = 0;
 
     handleCanvasMouseLeave() {
         this.tableOverlay = null;
@@ -7295,8 +7299,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
         }
         const cols = [];
+        const seams = [];
         if (widest) {
             let i = 0;
+            const tRect = table.getBoundingClientRect();
             for (const cell of widest.children) {
                 const r = cell.getBoundingClientRect();
                 // Skip anything scrolled out of view — the handles are absolutely
@@ -7306,18 +7312,35 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     i += cell.colSpan || 1;
                     continue;
                 }
+                // Confluence's model: the BAR is the select target and carries no
+                // buttons at rest — that is what removes the clutter. Insert lives on
+                // the seam between bars, delete lives in the bar's own menu.
                 cols.push({
                     key: 'c' + i,
                     index: i,
-                    style: `left:${r.left - wrapRect.left}px; top:${
-                        table.getBoundingClientRect().top - wrapRect.top - 22
-                    }px; width:${r.width}px;`
+                    style: `left:${r.left - wrapRect.left}px; top:${tRect.top - wrapRect.top - 20}px; width:${r.width}px;`
+                });
+                // Leading seam for the first column, then one after every column.
+                if (i === 0) {
+                    seams.push({
+                        key: 's-lead',
+                        index: 0,
+                        axis: 'col',
+                        style: `left:${r.left - wrapRect.left - 8}px; top:${tRect.top - wrapRect.top - 24}px;`
+                    });
+                }
+                seams.push({
+                    key: 'sc' + i,
+                    index: i + (cell.colSpan || 1),
+                    axis: 'col',
+                    style: `left:${r.right - wrapRect.left - 8}px; top:${tRect.top - wrapRect.top - 24}px;`
                 });
                 i += cell.colSpan || 1;
             }
         }
         const rows = [];
         let ri = 0;
+        const tRect2 = table.getBoundingClientRect();
         for (const tr of table.rows) {
             const r = tr.getBoundingClientRect();
             if (r.bottom < wrapRect.top || r.top > wrapRect.bottom) {
@@ -7327,13 +7350,75 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             rows.push({
                 key: 'r' + ri,
                 index: ri,
-                style: `left:${table.getBoundingClientRect().left - wrapRect.left - 46}px; top:${
-                    r.top - wrapRect.top
-                }px; height:${r.height}px;`
+                style: `left:${tRect2.left - wrapRect.left - 20}px; top:${r.top - wrapRect.top}px; height:${r.height}px;`
+            });
+            if (ri === 0) {
+                seams.push({
+                    key: 's-rlead',
+                    index: 0,
+                    axis: 'row',
+                    style: `left:${tRect2.left - wrapRect.left - 24}px; top:${r.top - wrapRect.top - 8}px;`
+                });
+            }
+            seams.push({
+                key: 'sr' + ri,
+                index: ri + 1,
+                axis: 'row',
+                style: `left:${tRect2.left - wrapRect.left - 24}px; top:${r.bottom - wrapRect.top - 8}px;`
             });
             ri++;
         }
-        this.tableOverlay = { cols, rows };
+        this.tableOverlay = { cols, rows, seams };
+    }
+
+    /**
+     * Insert at a SEAM — the boundary between two bars, not "before/after the current
+     * cell". Confluence's affordance: you point at the gap where the new column or row
+     * will go, so the insertion point is never a guess. index is the grid position the
+     * new column/row takes.
+     */
+    handleSeamInsert(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const axis = event.currentTarget.dataset.axis;
+        if (axis === 'col') {
+            for (const tr of table.rows) {
+                const ref = tr.children[Math.min(idx, tr.children.length - 1)];
+                if (!ref) {
+                    continue;
+                }
+                const c = ref.cloneNode(false);
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('colspan');
+                if (idx >= tr.children.length) {
+                    ref.insertAdjacentElement('afterend', c);
+                } else {
+                    ref.insertAdjacentElement('beforebegin', c);
+                }
+            }
+        } else {
+            const ref = table.rows[Math.min(idx, table.rows.length - 1)];
+            if (!ref) {
+                return;
+            }
+            const clone = ref.cloneNode(true);
+            for (const c of clone.children) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('rowspan');
+            }
+            if (idx >= table.rows.length) {
+                ref.insertAdjacentElement('afterend', clone);
+            } else {
+                ref.insertAdjacentElement('beforebegin', clone);
+            }
+        }
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
     }
 
     /** Tint the column/row a handle refers to, so "which one" is never a guess. */

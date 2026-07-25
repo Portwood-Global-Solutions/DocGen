@@ -312,6 +312,45 @@ async function main() {
         record('table tools appear inside a table', tableCtx.shownInside, '');
         record('table tools work when shown (+ Row)', tableCtx.rowAdded, '');
 
+        // Confluence-style seam inserts: a + on the boundary where the new column/row
+        // lands. Assert they exist, are not ghost click targets, and actually insert.
+        const seams = await page.evaluate(
+            inPage(`
+      const pv = __dgFind('.dg-pv');
+      const wrap = __dgFind('.dg-canvas-wrap');
+      const tbl = pv.querySelector('table');
+      if (!tbl) return { ok:false, why:'no table in canvas' };
+      // Dispatch on a CELL, not the canvas: _updateTableOverlay resolves the table
+      // from event.target, and a synthetic event on pv has target === pv, which is
+      // not inside any table.
+      const cell0 = tbl.querySelector('td, th') || tbl;
+      const r = cell0.getBoundingClientRect();
+      cell0.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, composed:true,
+        clientX: Math.round(r.left + 5), clientY: Math.round(r.top + 5)}));
+      return new Promise((resolve) => setTimeout(() => {
+        const all = __dgFind('.dg-tbl-seam', true) || [];
+        if (!all.length) return resolve({ ok:false, why:'no seams rendered' });
+        // Ghost-target contract.
+        let ghost = null;
+        for (const el of all) {
+          const cs = getComputedStyle(el);
+          if (parseFloat(cs.opacity) < 0.02 && cs.pointerEvents !== 'none') { ghost = 'seam at opacity 0 still clickable'; break; }
+        }
+        if (ghost) return resolve({ ok:false, why:ghost });
+        // Functional: a column seam must add a column.
+        const colSeam = all.find(e => e.dataset.axis === 'col');
+        if (!colSeam) return resolve({ ok:false, why:'no column seam' });
+        const before = tbl.rows[0].children.length;
+        colSeam.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        colSeam.click();
+        setTimeout(() => {
+          const after = tbl.rows[0].children.length;
+          resolve({ ok: after === before + 1, why: after === before + 1 ? '' : ('columns ' + before + ' -> ' + after), count: all.length });
+        }, 250);
+      }, 500));`)
+        );
+        record('table seams: render, no ghost targets, insert a column', seams.ok, seams.why);
+
         // --- 4c. Selection bubble: appears, is unclipped, and actually formats ----
         // The bubble is position: fixed precisely so no ancestor can clip it. Assert
         // that property directly rather than trusting the CSS — this is the same

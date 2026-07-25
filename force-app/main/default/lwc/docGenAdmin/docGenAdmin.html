@@ -2789,6 +2789,24 @@
                                                     </button>
                                                 </div>
                                             </template>
+                                            <!-- Insert seams — a circular + centred on
+                                                 the boundary where the new column/row
+                                                 will land, so the insertion point is
+                                                 never a guess (Confluence's model). -->
+                                            <template for:each={tableOverlay.seams} for:item="seam">
+                                                <button
+                                                    key={seam.key}
+                                                    class="dg-tbl-seam"
+                                                    style={seam.style}
+                                                    data-index={seam.index}
+                                                    data-axis={seam.axis}
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleSeamInsert}
+                                                    title="Insert here"
+                                                >
+                                                    +
+                                                </button>
+                                            </template>
                                         </template>
                                     </div>
                                     <!-- #247 — running footer, mirror of the header band -->
