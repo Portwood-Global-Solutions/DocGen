@@ -1267,6 +1267,96 @@ async function main() {
             modelReport.why
         );
 
+        // --- 4h. Inserts land in the surface that owns the caret ----------------
+        //
+        // _insertIntoVisualPage hardcoded the body canvas, so with the caret in a
+        // running header the containment test failed for every candidate range —
+        // the caret was in the band, the test asked about the body — and the insert
+        // fell through to appending at the END OF THE BODY. Tags and images could
+        // not be put into a header at all, which rules out every header that is
+        // more than a line of static text.
+        const insertReport = await page.evaluate(
+            inPage(`
+      const step = (ms) => new Promise((r) => setTimeout(r, ms));
+      const modeBtn = (label) => {
+        const seg = __dgFind('.dg-mode-seg');
+        return seg ? [...seg.querySelectorAll('button')].find(b => (b.textContent||'').trim() === label) : null;
+      };
+      const out = {};
+      return (async () => {
+        // The preceding probe leaves the designer in Source mode, where there are
+        // no bands at all — come back to Visual before asserting on them.
+        if (!__dgFind('.dg-pv') && modeBtn('Visual')) {
+          modeBtn('Visual').click();
+          await step(1800);
+        }
+        const bar = __dgFind('.dg-format-bar');
+        const pv = __dgFind('.dg-pv');
+        const band = __dgFind('.dg-chrome-band_header');
+        if (!band || !pv) return { setup: 'no band or canvas' };
+        out.setup = 'ok';
+
+        // Clean body so an append is unmistakable.
+        const style = pv.querySelector('style');
+        while (pv.firstChild) pv.removeChild(pv.firstChild);
+        if (style) pv.appendChild(style);
+        const p = document.createElement('p'); p.textContent = 'BODY ONLY';
+        pv.appendChild(p);
+        band.textContent = 'HDR';
+
+        // Caret into the header band.
+        band.focus();
+        const r = document.createRange();
+        r.selectNodeContents(band); r.collapse(false);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        document.dispatchEvent(new Event('selectionchange'));
+        await step(500);
+
+        // The contextual header row must appear — that is the consolidation.
+        out.chromeRow = !!bar.querySelector('[data-tok="pagexy"]');
+
+        // Insert a page counter; it must land in the BAND, not the body.
+        const bodyBefore = pv.innerHTML;
+        const tok = bar.querySelector('[data-tok="pagexy"]');
+        if (!tok) return Object.assign(out, { landed: 'no page-counter control in the toolbar' });
+        tok.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, composed:true, cancelable:true}));
+        tok.click();
+        await step(500);
+        const inBand = band.textContent.indexOf('PageNumber') !== -1 || band.querySelector('[data-dg-tag]');
+        const bodyGrew = pv.innerHTML !== bodyBefore;
+        out.landed = inBand && !bodyGrew ? 'ok'
+                   : ('inBand=' + !!inBand + ' bodyChanged=' + bodyGrew);
+
+        // And with the caret back in the BODY, an insert must still go to the body.
+        const p2 = pv.querySelector('p');
+        const r2 = document.createRange(); r2.selectNodeContents(p2); r2.collapse(false);
+        const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r2);
+        document.dispatchEvent(new Event('selectionchange'));
+        await step(500);
+        out.chromeRowHidden = !bar.querySelector('[data-tok="pagexy"]');
+        return out;
+      })();`)
+        );
+        if (insertReport.setup !== 'ok') {
+            record('insert: designer exposes band + canvas', false, insertReport.setup);
+        } else {
+            record(
+                'header tools appear in the toolbar when the caret is in a band',
+                !!insertReport.chromeRow,
+                'page counters must be contextual, not in a separate panel'
+            );
+            record(
+                'insert lands in the header band, not the bottom of the body',
+                insertReport.landed === 'ok',
+                insertReport.landed
+            );
+            record(
+                'header tools hide again when the caret returns to the body',
+                !!insertReport.chromeRowHidden,
+                'page counters are meaningless in the body'
+            );
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

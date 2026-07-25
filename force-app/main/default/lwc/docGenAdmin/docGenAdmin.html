@@ -2399,6 +2399,59 @@
                                                 </div>
                                             </template>
                                         </div>
+                                        <!-- Header/footer tools are CONTEXTUAL, same idiom as the
+                                         table row below: page counters are meaningless in the
+                                         body and only work in a running header or footer, so
+                                         they appear exactly when the caret is in one.
+                                         These used to be the only reason to open a separate
+                                         "Header/Footer" panel, which also carried raw-HTML
+                                         textareas for the same two fields — a second editor,
+                                         in a different medium, for something already editable
+                                         in place on the page. -->
+                                        <template if:true={caretInChrome}>
+                                            <span class="dg-fmt-break"></span>
+                                            <span
+                                                class="dg-fmt-label"
+                                                title="You are editing the running header/footer — it repeats on every PDF page"
+                                                >{activeChromeLabel}</span
+                                            >
+                                            <button
+                                                class="dg-fmt-btn dg-fmt-btn_word"
+                                                data-tok="pagexy"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleHfTokenInsert}
+                                                title="Insert a page counter — only works in the header/footer"
+                                            >
+                                                Page X of Y
+                                            </button>
+                                            <button
+                                                class="dg-fmt-btn dg-fmt-btn_word"
+                                                data-tok="pagenum"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleHfTokenInsert}
+                                                title="Insert the current page number"
+                                            >
+                                                Page #
+                                            </button>
+                                            <button
+                                                class="dg-fmt-btn dg-fmt-btn_word"
+                                                data-tok="pagetotal"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleHfTokenInsert}
+                                                title="Insert the total page count"
+                                            >
+                                                Total pages
+                                            </button>
+                                            <button
+                                                class="dg-fmt-btn dg-fmt-btn_word"
+                                                data-tok="today"
+                                                onmousedown={handleFmtMouseDown}
+                                                onclick={handleHfTokenInsert}
+                                                title="Insert today's date"
+                                            >
+                                                Today
+                                            </button>
+                                        </template>
                                         <!-- Table tools are CONTEXTUAL: ~45 controls that are only
                                          meaningful inside a table, and which otherwise sat on
                                          screen permanently whether or not the document had one. -->
@@ -2672,14 +2725,24 @@
                                          in, the format bar applies, tables work. Writes to
                                          Header_Html__c rather than the body. -->
                                     <div class="dg-sheet">
-                                        <div
-                                            class="dg-chrome-band dg-chrome-band_header"
-                                            lwc:dom="manual"
-                                            data-surface="header"
-                                            data-band-label="Header"
-                                            title="Running header — the top margin of the page. Click in and type; it repeats on every PDF page."
-                                        ></div>
-                                        <!-- #241 — the table row/column handles are rendered
+                                        <!-- The paper itself — header band, page and footer
+                                         band as one object. It exists so the editing
+                                         outline can enclose ALL THREE: drawn on the page
+                                         alone it boxed the body and left the running
+                                         header outside it, which said "the document is
+                                         this rectangle and the header is not part of
+                                         it" — the opposite of what the sheet is for.
+                                         Sized by its widest child, so it is exactly the
+                                         page width with no measurement to keep in sync. -->
+                                        <div class="dg-sheet-paper">
+                                            <div
+                                                class="dg-chrome-band dg-chrome-band_header"
+                                                lwc:dom="manual"
+                                                data-surface="header"
+                                                data-band-label="Header"
+                                                title="Running header — the top margin of the page. Click in and type; it repeats on every PDF page."
+                                            ></div>
+                                            <!-- #241 — the table row/column handles are rendered
                                          HERE, as LWC-owned siblings of the canvas, never
                                          inside it. The canvas is serialized back to the
                                          template body, so any chrome placed within it
@@ -2687,225 +2750,230 @@
                                          keeping it outside makes that impossible by
                                          construction. Positioned over the canvas by
                                          getBoundingClientRect math. -->
-                                        <!-- Selection bubble — the third chrome layer,
+                                            <!-- Selection bubble — the third chrome layer,
                                          alongside the persistent bar and slash menu.
                                          position: fixed in viewport coordinates so no
                                          ancestor's overflow can clip it (the failure
                                          mode that killed the previous rewrite), and
                                          placed ABOVE the selection so it never covers
                                          the text being formatted. -->
-                                        <template if:true={selectionBubble}>
-                                            <div class="dg-sel-bubble" role="toolbar" aria-label="Selection formatting">
-                                                <button
-                                                    class={boldBtnClass}
-                                                    data-cmd="bold"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleFormatAction}
-                                                    title="Bold"
+                                            <template if:true={selectionBubble}>
+                                                <div
+                                                    class="dg-sel-bubble"
+                                                    role="toolbar"
+                                                    aria-label="Selection formatting"
                                                 >
-                                                    <b>B</b>
-                                                </button>
-                                                <button
-                                                    class={italicBtnClass}
-                                                    data-cmd="italic"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleFormatAction}
-                                                    title="Italic"
-                                                >
-                                                    <i>I</i>
-                                                </button>
-                                                <button
-                                                    class={underlineBtnClass}
-                                                    data-cmd="underline"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleFormatAction}
-                                                    title="Underline"
-                                                >
-                                                    <u>U</u>
-                                                </button>
-                                                <button
-                                                    class={strikeBtnClass}
-                                                    data-cmd="strikeThrough"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleFormatAction}
-                                                    title="Strikethrough"
-                                                >
-                                                    <s>S</s>
-                                                </button>
-                                                <span class="dg-sel-bubble-sep"></span>
-                                                <template for:each={bubbleColorSwatches} for:item="sw">
                                                     <button
-                                                        key={sw.key}
-                                                        class="dg-fmt-swatch"
-                                                        style={sw.style}
-                                                        data-cmd="foreColor"
-                                                        data-value={sw.value}
+                                                        class={boldBtnClass}
+                                                        data-cmd="bold"
                                                         onmousedown={handleFmtMouseDown}
                                                         onclick={handleFormatAction}
-                                                        title={sw.title}
-                                                    ></button>
-                                                </template>
-                                                <span class="dg-sel-bubble-sep"></span>
-                                                <button
-                                                    class="dg-fmt-btn dg-fmt-btn_word"
-                                                    data-cmd="removeFormat"
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleFormatAction}
-                                                    title="Clear formatting"
-                                                >
-                                                    Clear
-                                                </button>
-                                            </div>
-                                        </template>
-                                        <div class="dg-canvas-wrap" onmouseleave={handleCanvasMouseLeave}>
-                                            <div
-                                                class="dg-html-preview-frame dg-visual-host dg-designer-size"
-                                                lwc:dom="manual"
-                                                title="Visual editing — click into the page and type"
-                                            ></div>
-                                            <template if:true={tableGhost}>
-                                                <div class={tableGhost.cls} style={tableGhost.style}></div>
-                                            </template>
-                                            <template if:true={tableOverlay}>
-                                                <!-- Column gutter, above the table -->
-                                                <template for:each={tableOverlay.cols} for:item="col">
-                                                    <div
-                                                        key={col.key}
-                                                        class="dg-tbl-handle dg-tbl-handle_col"
-                                                        style={col.style}
-                                                        data-index={col.index}
-                                                        onmouseenter={handleTableHandleEnter}
-                                                        onmouseleave={handleTableHandleLeave}
+                                                        title="Bold"
                                                     >
-                                                        <button
-                                                            class="dg-tbl-handle-btn"
-                                                            data-index={col.index}
-                                                            data-axis="col"
-                                                            onmouseenter={handleSeamPreview}
-                                                            onmouseleave={handleGhostClear}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleInsertColAt}
-                                                            title="Insert a column here"
-                                                        >
-                                                            +
-                                                        </button>
-                                                        <button
-                                                            class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
-                                                            data-index={col.index}
-                                                            data-axis="col"
-                                                            onmouseenter={handleRemovePreview}
-                                                            onmouseleave={handleGhostClear}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleDeleteColAt}
-                                                            title="Delete this column"
-                                                        >
-                                                            &minus;
-                                                        </button>
-                                                    </div>
-                                                </template>
-                                                <!-- Row gutter, left of the table -->
-                                                <template for:each={tableOverlay.rows} for:item="row">
-                                                    <div
-                                                        key={row.key}
-                                                        class="dg-tbl-handle dg-tbl-handle_row"
-                                                        style={row.style}
-                                                        data-index={row.index}
-                                                        onmouseenter={handleTableHandleEnter}
-                                                        onmouseleave={handleTableHandleLeave}
-                                                    >
-                                                        <button
-                                                            class="dg-tbl-handle-btn"
-                                                            data-index={row.index}
-                                                            data-axis="row"
-                                                            onmouseenter={handleSeamPreview}
-                                                            onmouseleave={handleGhostClear}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleInsertRowAt}
-                                                            title="Insert a row here"
-                                                        >
-                                                            +
-                                                        </button>
-                                                        <button
-                                                            class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
-                                                            data-index={row.index}
-                                                            data-axis="row"
-                                                            onmouseenter={handleRemovePreview}
-                                                            onmouseleave={handleGhostClear}
-                                                            onmousedown={handleFmtMouseDown}
-                                                            onclick={handleDeleteRowAt}
-                                                            title="Delete this row"
-                                                        >
-                                                            &minus;
-                                                        </button>
-                                                    </div>
-                                                </template>
-                                            </template>
-                                            <!-- Block gutter handle (Notion): appears in
-                                             the left margin of the block under the
-                                             pointer. LWC-owned sibling of the canvas,
-                                             so it can never reach the saved body. -->
-                                            <template if:true={blockHandle}>
-                                                <div class="dg-blk-handle" style={blockHandle.style}>
-                                                    <button
-                                                        class="dg-blk-handle-btn"
-                                                        onmousedown={handleFmtMouseDown}
-                                                        onclick={handleBlockInsertAfter}
-                                                        title="Insert a paragraph below this block"
-                                                    >
-                                                        +
+                                                        <b>B</b>
                                                     </button>
                                                     <button
-                                                        class="dg-blk-handle-btn"
-                                                        data-dir="up"
+                                                        class={italicBtnClass}
+                                                        data-cmd="italic"
                                                         onmousedown={handleFmtMouseDown}
-                                                        onclick={handleBlockMove}
-                                                        title="Move this block up"
+                                                        onclick={handleFormatAction}
+                                                        title="Italic"
                                                     >
-                                                        &#9650;
+                                                        <i>I</i>
                                                     </button>
                                                     <button
-                                                        class="dg-blk-handle-btn"
-                                                        data-dir="down"
+                                                        class={underlineBtnClass}
+                                                        data-cmd="underline"
                                                         onmousedown={handleFmtMouseDown}
-                                                        onclick={handleBlockMove}
-                                                        title="Move this block down"
+                                                        onclick={handleFormatAction}
+                                                        title="Underline"
                                                     >
-                                                        &#9660;
+                                                        <u>U</u>
+                                                    </button>
+                                                    <button
+                                                        class={strikeBtnClass}
+                                                        data-cmd="strikeThrough"
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleFormatAction}
+                                                        title="Strikethrough"
+                                                    >
+                                                        <s>S</s>
+                                                    </button>
+                                                    <span class="dg-sel-bubble-sep"></span>
+                                                    <template for:each={bubbleColorSwatches} for:item="sw">
+                                                        <button
+                                                            key={sw.key}
+                                                            class="dg-fmt-swatch"
+                                                            style={sw.style}
+                                                            data-cmd="foreColor"
+                                                            data-value={sw.value}
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleFormatAction}
+                                                            title={sw.title}
+                                                        ></button>
+                                                    </template>
+                                                    <span class="dg-sel-bubble-sep"></span>
+                                                    <button
+                                                        class="dg-fmt-btn dg-fmt-btn_word"
+                                                        data-cmd="removeFormat"
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleFormatAction}
+                                                        title="Clear formatting"
+                                                    >
+                                                        Clear
                                                     </button>
                                                 </div>
                                             </template>
-                                            <template if:true={tableOverlay}>
-                                                <!-- Insert seams — a circular + centred on
+                                            <div class="dg-canvas-wrap" onmouseleave={handleCanvasMouseLeave}>
+                                                <div
+                                                    class="dg-html-preview-frame dg-visual-host dg-designer-size"
+                                                    lwc:dom="manual"
+                                                    title="Visual editing — click into the page and type"
+                                                ></div>
+                                                <template if:true={tableGhost}>
+                                                    <div class={tableGhost.cls} style={tableGhost.style}></div>
+                                                </template>
+                                                <template if:true={tableOverlay}>
+                                                    <!-- Column gutter, above the table -->
+                                                    <template for:each={tableOverlay.cols} for:item="col">
+                                                        <div
+                                                            key={col.key}
+                                                            class="dg-tbl-handle dg-tbl-handle_col"
+                                                            style={col.style}
+                                                            data-index={col.index}
+                                                            onmouseenter={handleTableHandleEnter}
+                                                            onmouseleave={handleTableHandleLeave}
+                                                        >
+                                                            <button
+                                                                class="dg-tbl-handle-btn"
+                                                                data-index={col.index}
+                                                                data-axis="col"
+                                                                onmouseenter={handleSeamPreview}
+                                                                onmouseleave={handleGhostClear}
+                                                                onmousedown={handleFmtMouseDown}
+                                                                onclick={handleInsertColAt}
+                                                                title="Insert a column here"
+                                                            >
+                                                                +
+                                                            </button>
+                                                            <button
+                                                                class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
+                                                                data-index={col.index}
+                                                                data-axis="col"
+                                                                onmouseenter={handleRemovePreview}
+                                                                onmouseleave={handleGhostClear}
+                                                                onmousedown={handleFmtMouseDown}
+                                                                onclick={handleDeleteColAt}
+                                                                title="Delete this column"
+                                                            >
+                                                                &minus;
+                                                            </button>
+                                                        </div>
+                                                    </template>
+                                                    <!-- Row gutter, left of the table -->
+                                                    <template for:each={tableOverlay.rows} for:item="row">
+                                                        <div
+                                                            key={row.key}
+                                                            class="dg-tbl-handle dg-tbl-handle_row"
+                                                            style={row.style}
+                                                            data-index={row.index}
+                                                            onmouseenter={handleTableHandleEnter}
+                                                            onmouseleave={handleTableHandleLeave}
+                                                        >
+                                                            <button
+                                                                class="dg-tbl-handle-btn"
+                                                                data-index={row.index}
+                                                                data-axis="row"
+                                                                onmouseenter={handleSeamPreview}
+                                                                onmouseleave={handleGhostClear}
+                                                                onmousedown={handleFmtMouseDown}
+                                                                onclick={handleInsertRowAt}
+                                                                title="Insert a row here"
+                                                            >
+                                                                +
+                                                            </button>
+                                                            <button
+                                                                class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
+                                                                data-index={row.index}
+                                                                data-axis="row"
+                                                                onmouseenter={handleRemovePreview}
+                                                                onmouseleave={handleGhostClear}
+                                                                onmousedown={handleFmtMouseDown}
+                                                                onclick={handleDeleteRowAt}
+                                                                title="Delete this row"
+                                                            >
+                                                                &minus;
+                                                            </button>
+                                                        </div>
+                                                    </template>
+                                                </template>
+                                                <!-- Block gutter handle (Notion): appears in
+                                             the left margin of the block under the
+                                             pointer. LWC-owned sibling of the canvas,
+                                             so it can never reach the saved body. -->
+                                                <template if:true={blockHandle}>
+                                                    <div class="dg-blk-handle" style={blockHandle.style}>
+                                                        <button
+                                                            class="dg-blk-handle-btn"
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleBlockInsertAfter}
+                                                            title="Insert a paragraph below this block"
+                                                        >
+                                                            +
+                                                        </button>
+                                                        <button
+                                                            class="dg-blk-handle-btn"
+                                                            data-dir="up"
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleBlockMove}
+                                                            title="Move this block up"
+                                                        >
+                                                            &#9650;
+                                                        </button>
+                                                        <button
+                                                            class="dg-blk-handle-btn"
+                                                            data-dir="down"
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleBlockMove}
+                                                            title="Move this block down"
+                                                        >
+                                                            &#9660;
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                                <template if:true={tableOverlay}>
+                                                    <!-- Insert seams — a circular + centred on
                                                  the boundary where the new column/row
                                                  will land, so the insertion point is
                                                  never a guess (Confluence's model). -->
-                                                <template for:each={tableOverlay.seams} for:item="seam">
-                                                    <button
-                                                        key={seam.key}
-                                                        class="dg-tbl-seam"
-                                                        style={seam.style}
-                                                        data-index={seam.index}
-                                                        data-axis={seam.axis}
-                                                        onmouseenter={handleSeamPreview}
-                                                        onmouseleave={handleGhostClear}
-                                                        onmousedown={handleFmtMouseDown}
-                                                        onclick={handleSeamInsert}
-                                                        title="Insert here"
-                                                    >
-                                                        +
-                                                    </button>
+                                                    <template for:each={tableOverlay.seams} for:item="seam">
+                                                        <button
+                                                            key={seam.key}
+                                                            class="dg-tbl-seam"
+                                                            style={seam.style}
+                                                            data-index={seam.index}
+                                                            data-axis={seam.axis}
+                                                            onmouseenter={handleSeamPreview}
+                                                            onmouseleave={handleGhostClear}
+                                                            onmousedown={handleFmtMouseDown}
+                                                            onclick={handleSeamInsert}
+                                                            title="Insert here"
+                                                        >
+                                                            +
+                                                        </button>
+                                                    </template>
                                                 </template>
-                                            </template>
-                                        </div>
-                                        <!-- Running footer: the bottom margin of the same
+                                            </div>
+                                            <!-- Running footer: the bottom margin of the same
                                              sheet, mirroring the header. -->
-                                        <div
-                                            class="dg-chrome-band dg-chrome-band_footer"
-                                            lwc:dom="manual"
-                                            data-surface="footer"
-                                            data-band-label="Footer"
-                                            title="Running footer — the bottom margin of the page. Click in and type; it repeats on every PDF page."
-                                        ></div>
+                                            <div
+                                                class="dg-chrome-band dg-chrome-band_footer"
+                                                lwc:dom="manual"
+                                                data-surface="footer"
+                                                data-band-label="Footer"
+                                                title="Running footer — the bottom margin of the page. Click in and type; it repeats on every PDF page."
+                                            ></div>
+                                        </div>
                                     </div>
                                     <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_xx-small">
                                         This is your document — click anywhere and type. The colored pills are your data
@@ -3077,72 +3145,44 @@
                                     </template>
                                     <template if:true={isPanelHf}>
                                         <div class="dg-image-panel">
+                                            <!-- Not an editor any more. The running header and
+                                             footer are edited in place on the sheet, with the
+                                             same toolbar, chips, drag-and-drop and undo as the
+                                             body; page counters appear in the format bar when
+                                             the caret is in one. This panel used to carry raw
+                                             HTML textareas for the same two fields, which meant
+                                             two editors in two different media for one thing —
+                                             and the textareas silently lost anything richer
+                                             than text. It is now just a way to get there. -->
                                             <p class="slds-text-body_small slds-var-m-bottom_x-small">
-                                                Repeats on every PDF page. Merge tags work here too. Click a chip to
-                                                insert at your cursor; changes save with
-                                                <strong>Save as New Version</strong>.
+                                                Your running header and footer are the top and bottom bands of the page
+                                                itself &mdash; click into one and type. Everything works there that
+                                                works in the body: formatting, tables, images, merge tags, and
+                                                drag-and-drop from this rail.
                                             </p>
                                             <div class="dg-tag-chips slds-var-m-bottom_x-small">
                                                 <button
                                                     class="dg-tag-chip"
-                                                    data-tok="pagexy"
-                                                    onclick={handleHfTokenInsert}
-                                                    title="Page counters — only work in the header/footer"
+                                                    data-surface="header"
+                                                    onclick={handleJumpToBand}
+                                                    title="Put the cursor in the running header"
                                                 >
-                                                    Page X of Y
+                                                    Edit header &#8593;
                                                 </button>
                                                 <button
                                                     class="dg-tag-chip"
-                                                    data-tok="pagenum"
-                                                    onclick={handleHfTokenInsert}
+                                                    data-surface="footer"
+                                                    onclick={handleJumpToBand}
+                                                    title="Put the cursor in the running footer"
                                                 >
-                                                    &#123;PageNumber&#125;
-                                                </button>
-                                                <button
-                                                    class="dg-tag-chip"
-                                                    data-tok="pagetotal"
-                                                    onclick={handleHfTokenInsert}
-                                                >
-                                                    &#123;TotalPages&#125;
-                                                </button>
-                                                <button
-                                                    class="dg-tag-chip"
-                                                    data-tok="today"
-                                                    onclick={handleHfTokenInsert}
-                                                >
-                                                    Today
-                                                </button>
-                                                <button
-                                                    class="dg-tag-chip"
-                                                    data-tok="name"
-                                                    onclick={handleHfTokenInsert}
-                                                >
-                                                    &#123;Name&#125;
+                                                    Edit footer &#8595;
                                                 </button>
                                             </div>
-                                            <label class="slds-form-element__label">Header (top of every page)</label>
-                                            <textarea
-                                                class="dg-hf-ta dg-hf-header"
-                                                data-hf="header"
-                                                spellcheck="false"
-                                                placeholder="e.g. <div style='text-align:center'>&#123;Name&#125; — Confidential</div>"
-                                                onfocus={handleHfFocus}
-                                                oninput={handleDesignerHeaderChange}
-                                            ></textarea>
-                                            <label class="slds-form-element__label slds-var-m-top_small"
-                                                >Footer (bottom of every page)</label
-                                            >
-                                            <textarea
-                                                class="dg-hf-ta dg-hf-footer"
-                                                data-hf="footer"
-                                                spellcheck="false"
-                                                placeholder="e.g. <div style='text-align:center'>Page &#123;PageNumber&#125; of &#123;TotalPages&#125;</div>"
-                                                onfocus={handleHfFocus}
-                                                oninput={handleDesignerFooterChange}
-                                            ></textarea>
                                             <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
-                                                With page counters the engine uses plain-text margin boxes; without
-                                                them, full HTML (including images) renders as a running band.
+                                                Page counters (<strong>Page X of Y</strong>) appear in the toolbar while
+                                                your cursor is in the header or footer. With page counters the engine
+                                                uses plain-text margin boxes; without them, full HTML &mdash; including
+                                                images &mdash; renders as a running band.
                                             </p>
                                         </div>
                                     </template>

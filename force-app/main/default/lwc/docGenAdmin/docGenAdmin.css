@@ -509,10 +509,12 @@
     white-space: nowrap;
 }
 
-/* Visual mode: the editable rendered page needs a visible caret + focus cue */
+/* Visual mode: the editable rendered page needs a visible caret.
+   The dashed focus ring is NOT here — it belongs on .dg-sheet-paper, which
+   encloses the header band, the page and the footer band. Drawn on the page
+   alone it boxed the body and left the running header outside it, and put a
+   second dashed line 6px from the band's own margin rule at every seam. */
 .dg-html-preview-frame .dg-pv[contenteditable='true'] {
-    outline: 2px dashed #b49aef;
-    outline-offset: 6px;
     cursor: text;
     caret-color: #7c3aed;
 }
@@ -655,6 +657,32 @@
     align-items: center;
 }
 
+/* The paper — header band, page and footer band as one object.
+   .dg-sheet is a centred flex column, so this sizes to its widest child and is
+   therefore exactly the page width without any measurement to keep in sync.
+
+   The editing outline lives HERE. It used to be an inline outline on .dg-pv,
+   which drew a dashed rectangle around the body and left the running header
+   sitting outside it — the sheet said "one piece of paper" and the outline said
+   "the document is this box, and the header is not in it". It also put a second
+   dashed line 6px from the band's own dashed margin rule, so each seam showed
+   two parallel dashes that meant different things. */
+.dg-sheet-paper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-radius: 8px;
+    outline: 2px dashed #d9cdf7;
+    outline-offset: 7px;
+    transition: outline-color 0.12s ease-in-out;
+}
+
+/* Editing is happening — the ring firms up. Applied to the whole paper, so it
+   reads the same whether the caret is in the header, the body or the footer. */
+.dg-sheet-paper:focus-within {
+    outline-color: #b49aef;
+}
+
 /* Word's in-margin label, on hover/focus only so it never competes with content. */
 .dg-chrome-band::before {
     content: attr(data-band-label);
@@ -681,14 +709,27 @@
     opacity: 1;
 }
 
+/* Typography is set INLINE from the page's computed style at mount time (see
+   _mountChromeBands) — a running header prints in the DOCUMENT's typeface, so
+   showing it in the Salesforce UI font at a UI size meant the screen did not
+   match the print. These values are only the pre-mount fallback.
+
+   The dim is opacity rather than a grey colour for the same reason: Word greys
+   inactive header text, but greying it here would also override a colour the
+   author deliberately set, and opacity costs no layout so the on-screen metrics
+   still match the PDF. */
 .dg-chrome-band {
     box-sizing: border-box;
     background: #fff;
     border: none;
     min-height: 42px;
     font-size: 0.8rem;
-    /* Dimmed until focused — Word greys inactive header/footer text. */
-    color: #9a9aa8;
+    /* Dimmed until focused — Word greys inactive header/footer text. Done with
+       COLOUR, not opacity: element opacity made the band's white background
+       translucent, so the grey desk showed through and the header read as a
+       different piece of paper from the page it sits on. --dg-band-ink is set
+       inline from the page's computed colour (see _matchBandTypographyToPage). */
+    color: var(--dg-band-ink-dim, #6b6b7b);
     cursor: text;
     margin: 0 auto;
     position: relative;
@@ -696,10 +737,10 @@
     transition: color 0.12s ease-in-out;
 }
 
+.dg-chrome-band:hover,
 .dg-chrome-band:focus,
 .dg-chrome-band:focus-within {
-    border-color: #7c3aed;
-    border-style: solid;
+    color: var(--dg-band-ink, #2c2c38);
     background: #fff;
     outline: none;
 }

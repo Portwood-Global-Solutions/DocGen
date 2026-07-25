@@ -1663,9 +1663,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     if (pv) {
                         pv.setAttribute('contenteditable', 'true');
                         pv.setAttribute('spellcheck', 'false');
-                        // Component CSS can't reach manual DOM — style inline.
-                        pv.style.outline = '2px dashed #b49aef';
-                        pv.style.outlineOffset = '6px';
+                        // The editing outline moved to .dg-sheet-paper, which encloses
+                        // the header band, the page AND the footer band. Here it boxed
+                        // the body alone, so the running header sat visibly outside
+                        // "the document" and each seam carried two competing dashed
+                        // lines. Component CSS can't reach manual DOM, so the rest is
+                        // still styled inline.
                         pv.style.caretColor = '#7c3aed';
                         pv.style.cursor = 'text';
                         // Merge tags render as friendly atomic pills.
@@ -1820,7 +1823,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             this._canvasFocused = true;
                             // #247 — three editable surfaces now; the toolbar has to
                             // know which one it is acting on.
-                            this._activeSurface = 'body';
+                            this._setActiveSurface('body');
                         });
                         pv.addEventListener('keydown', (e) => {
                             // Ctrl/Cmd+Z first: it must beat the floor guard and the
@@ -6569,18 +6572,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const body = this._bodyCanvas();
         if (body && this._isInCanvas(node, body)) {
-            this._activeSurface = 'body';
+            this._setActiveSurface('body');
             return body;
         }
         for (const which of ['header', 'footer']) {
             const band = this.template.querySelector('.dg-chrome-band_' + which);
             if (band && this._isInCanvas(node, band)) {
-                this._activeSurface = which;
+                this._setActiveSurface(which);
                 return band;
             }
         }
         return null;
     }
+
+    /**
+     * Single writer for _activeSurface, mirroring it into a tracked flag.
+     *
+     * The flag drives the contextual header/footer tools in the format bar — the
+     * same idiom as caretInTable, which shows the 24 table controls only when the
+     * caret is in a table. Header and footer tools used to live in a separate
+     * floating panel with its own raw-HTML textareas, so editing a header meant
+     * leaving the page, working in a different medium, and keeping two editors of
+     * the same two fields in your head. Flipped only on change, so the toolbar does
+     * not re-render on every caret move.
+     */
+    _setActiveSurface(which) {
+        this._activeSurface = which;
+        const inChrome = which === 'header' || which === 'footer';
+        if (this.caretInChrome !== inChrome) {
+            this.caretInChrome = inChrome;
+        }
+        const label = which === 'header' ? 'Header' : which === 'footer' ? 'Footer' : '';
+        if (this.activeChromeLabel !== label) {
+            this.activeChromeLabel = label;
+        }
+    }
+    /** True while the caret is in a running header/footer — drives the contextual row. */
+    @track caretInChrome = false;
+    @track activeChromeLabel = '';
 
     // ===== Durable caret tracker (#238 / #239 / #240) =========================
     //
@@ -7006,12 +7035,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 band.setAttribute('spellcheck', 'false');
                 this._pillifyTags(band);
             }
+            this._matchBandTypographyToPage(band);
             if (band.dataset.dgWired === '1') {
                 continue;
             }
             band.dataset.dgWired = '1';
             band.addEventListener('focusin', () => {
-                this._activeSurface = which;
+                this._setActiveSurface(which);
                 this._canvasFocused = true;
             });
             // Same undo capture as the body canvas — the bands are edit surfaces
@@ -7021,7 +7051,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._pushUndo('type:' + ((e && e.inputType) || 'text'));
             });
             band.addEventListener('input', () => {
-                this._activeSurface = which;
+                this._setActiveSurface(which);
                 this._syncBandToRecord(which, band);
                 this._maybePillifyTyped();
             });
@@ -7040,13 +7070,68 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
                 e.stopPropagation();
             });
-            band.addEventListener('dragover', (e) => e.preventDefault());
+            band.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                this._showDropMarker(e, band);
+            });
+            band.addEventListener('dragleave', (e) => {
+                if (e.target === band) {
+                    this._hideDropMarker(band);
+                }
+            });
+            // The bands accepted dragover but had no drop handler, so a tag chip or
+            // image asset dragged onto the running header was silently discarded —
+            // the drop had nowhere to go. Complex headers are exactly the case where
+            // dragging beats typing, so they get the same handler as the body.
+            band.addEventListener('drop', (e) => this._handleVisualDrop(e, band));
             band.addEventListener('mouseup', () => this._performPendingDropInsert());
         }
         this._bandMounted = this.template.querySelector('.dg-chrome-band_header');
     }
     _bandMounted = null;
     _bandSource = { header: null, footer: null };
+
+    /**
+     * Give a band the PAGE's typography.
+     *
+     * The template's own CSS is scoped to `.dg-pv` by scopeHtmlForInlinePreview, and
+     * the bands live outside it, so they fell back to the Salesforce UI font at a UI
+     * size in a UI grey. A running header prints in the DOCUMENT's typeface at the
+     * document's size — so the band was showing the author something that would never
+     * appear in the PDF, in the one place where "what you see is what prints" is the
+     * entire point of putting it on the sheet.
+     *
+     * Copies the computed values rather than the declared ones, so a template whose
+     * font comes from a stylesheet, a `body` rule or a default all resolve the same
+     * way. Inline, because component CSS cannot reach an lwc:dom="manual" node.
+     */
+    _matchBandTypographyToPage(band) {
+        const pv = this._bodyCanvas();
+        if (!pv || !band) {
+            return;
+        }
+        try {
+            const cs = getComputedStyle(pv);
+            band.style.fontFamily = cs.fontFamily;
+            band.style.fontSize = cs.fontSize;
+            band.style.lineHeight = cs.lineHeight;
+            // Colour goes through custom properties rather than `color` directly, so
+            // the CSS above can swap between the dim and full-strength inks on focus
+            // — an inline `color` would win over both. The dim is alpha on the
+            // document's OWN ink, so it stays the author's colour, just quieter.
+            const ink = cs.color || 'rgb(44, 44, 56)';
+            band.style.setProperty('--dg-band-ink', ink);
+            band.style.setProperty('--dg-band-ink-dim', this._dimInk(ink));
+        } catch (e) {
+            /* cosmetic — never let it break mounting the band */
+        }
+    }
+
+    /** rgb()/rgba() → the same colour at 62% alpha. Falls back to the input. */
+    _dimInk(color) {
+        const m = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i.exec(color || '');
+        return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, 0.62)` : color;
+    }
 
     /**
      * Serialize a band back to its template field, pills unwrapped to plain tags.
@@ -11419,9 +11504,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             name: '{Name}'
         };
         const tok = TOKS[event.currentTarget.dataset.tok];
+        if (!tok) {
+            return;
+        }
+        // On the sheet, a page counter goes in at the caret like anything else —
+        // same path as a merge-tag chip, so it pillifies, undoes and formats
+        // identically. _insertIntoVisualPage resolves the target from the caret, so
+        // it lands in whichever band the author is actually in.
+        if (this.showHtmlBodyVisual) {
+            this._restoreCaret();
+            this._insertIntoVisualPage(tok);
+            return;
+        }
+        // Source mode has no bands — fall back to the raw field.
         const which = this._lastHfFocus === 'header' ? 'header' : 'footer';
         const ta = this.template.querySelector(which === 'header' ? '.dg-hf-header' : '.dg-hf-footer');
-        if (!ta || !tok) {
+        if (!ta) {
             return;
         }
         const st = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
@@ -11433,6 +11531,40 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.editTemplateFooterHtml = ta.value;
         }
         this.htmlEditorDirty = true;
+    }
+
+    /**
+     * Put the caret in a running band and scroll it into view.
+     *
+     * The Header/Footer panel is a way to GET to the bands, not a second place to
+     * edit them — so this is the whole of it. Closes the panel on the way, because
+     * leaving a floating panel open over the sheet you were just sent to edit is
+     * the kind of small friction that made the header feel like a separate mode.
+     */
+    handleJumpToBand(event) {
+        const which = event.currentTarget.dataset.surface === 'footer' ? 'footer' : 'header';
+        this.activePanel = null;
+        // eslint-disable-next-line @lwc/lwc/no-async-operation -- wait for the panel to unmount so the scroll lands correctly
+        setTimeout(() => {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (!band) {
+                return;
+            }
+            try {
+                band.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                band.focus();
+                const first = band.querySelector('p, div, span') || band;
+                const r = document.createRange();
+                r.selectNodeContents(first);
+                r.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(r);
+                this._setActiveSurface(which);
+            } catch (e) {
+                /* focus is best-effort */
+            }
+        }, 80);
     }
 
     async handleDesignerTemplateSwitch(event) {
@@ -12097,13 +12229,71 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /**
+     * Which surface an insert belongs to: the one that owns the caret.
+     *
+     * This used to be hardcoded to the body canvas. With the caret in a running
+     * header, the containment test below therefore failed for EVERY candidate
+     * range — the caret was in the band, the test asked whether it was in the
+     * body — and the insert fell through to appending at the end of the body.
+     * That is the whole of "tags and images never land in the header, they go to
+     * the bottom of the page": headers with images or merge tags in them were
+     * simply not buildable from the rail.
+     *
+     * The remembered caret is the primary signal, because clicking a chip in the
+     * rail moves focus out of whichever surface the author was editing (the same
+     * reason #240 had to stop asking for the live selection). _activeSurface is
+     * the fallback for a band that was focused but never had a selection recorded.
+     */
+    /**
+     * Whichever editable surface the pointer is over — body, running header or
+     * running footer. Drag paths asked only about the body canvas, so a chip or
+     * image dragged onto a band showed no drop marker and, on release, inserted
+     * into the body instead.
+     */
+    _surfaceAtPoint(x, y) {
+        for (const surface of this._allSurfaces()) {
+            try {
+                const r = surface.getBoundingClientRect();
+                if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+                    return surface;
+                }
+            } catch (e) {
+                /* a detached surface is simply not under the pointer */
+            }
+        }
+        return null;
+    }
+
+    _insertTargetSurface() {
+        const remembered = this._caret && this._caret.range;
+        if (remembered) {
+            try {
+                const node = remembered.startContainer;
+                const el = node && node.nodeType === 3 ? node.parentElement : node;
+                const surface = el && this._surfaceContaining(el);
+                if (surface) {
+                    return surface;
+                }
+            } catch (e) {
+                /* fall through to the active surface */
+            }
+        }
+        if (this._activeSurface === 'header' || this._activeSurface === 'footer') {
+            const band = this.template.querySelector('.dg-chrome-band_' + this._activeSurface);
+            if (band) {
+                return band;
+            }
+        }
+        return this._bodyCanvas();
+    }
+
+    /**
      * Insert markup into the editable visual page — at the caret when there
      * is one (chips keep it alive via mousedown-preventDefault), otherwise
-     * appended at the end.
+     * appended at the end of whichever surface owns it.
      */
     _insertIntoVisualPage(markup) {
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
+        const pv = this._insertTargetSurface();
         if (!pv) {
             return;
         }
@@ -12609,14 +12799,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         d.ghost.style.left = e.clientX + 14 + 'px';
         d.ghost.style.top = e.clientY + 10 + 'px';
-        const pv = this._getVisualPv();
-        if (pv) {
-            const r = pv.getBoundingClientRect();
-            const over = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-            if (over) {
-                this._showDropMarker(e, pv);
+        // Any surface, not just the body — dragging into the running header has to
+        // show where it will land, exactly as it does on the page.
+        const over = this._surfaceAtPoint(e.clientX, e.clientY);
+        for (const surface of this._allSurfaces()) {
+            if (surface === over) {
+                this._showDropMarker(e, surface);
             } else {
-                this._hideDropMarker(pv);
+                this._hideDropMarker(surface);
             }
         }
         e.preventDefault();
@@ -12667,7 +12857,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         this._pendingDropInsert = null;
-        const pv = this._getVisualPv();
+        // Drop into whatever was under the pointer — body, header or footer.
+        const pv = this._surfaceAtPoint(drop.x, drop.y) || this._getVisualPv();
         if (!pv) {
             return;
         }
@@ -12682,7 +12873,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     range.setStart(pos.offsetNode, pos.offset);
                 }
             }
-            if (range && pv.contains(range.startContainer)) {
+            // _isInCanvas, not pv.contains — contains() is unreliable under the LWS
+            // namespace sandbox and has broken four separate features.
+            if (range && this._isInCanvas(range.startContainer, pv)) {
                 range.collapse(true);
                 const s = window.getSelection();
                 s.removeAllRanges();
