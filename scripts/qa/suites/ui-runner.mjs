@@ -59,7 +59,7 @@
  */
 import { check, skip, suiteResult, suiteSkipped, SEVERITY } from '../lib/report.mjs';
 import { launch, login, openTab, openRecord, inPage, HIT_TEST } from '../lib/browser.mjs';
-import { runAnonymous, debugMap, soql } from '../lib/sf.mjs';
+import { runAnonymous, debugMap, soql, sf, orgFrontDoorUrl } from '../lib/sf.mjs';
 
 /** Everything this suite creates is prefixed so a repeat run can clean up first. */
 const PREFIX = 'UIQA';
@@ -2477,44 +2477,67 @@ export async function run({ org, headed }) {
          */
         let restrictedCtx = null;
         try {
-            const pw = 'DocGenQA!' + Date.now().toString().slice(-6);
-            const seed = await runAnonymous(
-                org,
-                `
-        // Reused across runs when it already exists — a scratch org has very few
-        // Salesforce licences and burning one per run would exhaust them.
-        String uname = 'uiqa.restricted@docgenqa.test.' + UserInfo.getOrganizationId().toLowerCase();
-        List<User> found = [SELECT Id, Username FROM User WHERE Username = :uname LIMIT 1];
-        User u;
-        if (found.isEmpty()) {
-            Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
-            u = new User(
-                FirstName = 'UIQA', LastName = 'Restricted', Username = uname,
-                Email = 'uiqa-restricted@example.com', Alias = 'uiqares',
-                ProfileId = p.Id, TimeZoneSidKey = 'America/New_York',
-                LocaleSidKey = 'en_US', EmailEncodingKey = 'UTF-8', LanguageLocaleKey = 'en_US'
-            );
-            insert u;
-        } else {
-            u = found[0];
-        }
-        // Assert the premise of the test rather than assuming it: if some earlier
-        // run left a DocGen permission set on this user, the check below would be
-        // measuring the wrong thing entirely.
-        Integer psa = [
-            SELECT COUNT() FROM PermissionSetAssignment
-            WHERE AssigneeId = :u.Id AND PermissionSet.Name LIKE 'DocGen%'
-        ];
-        System.setPassword(u.Id, '${pw}');
-        System.debug('RUSER=' + u.Username);
-        System.debug('RDOCGENPS=' + psa);`
-            );
-            const rs = debugMap(seed);
+            // `sf org create user` rather than Apex + the login form. Creating the
+            // User in Apex and calling System.setPassword works, but the login
+            // form then refuses the brand-new identity and the run lands back on
+            // the login page with no session — the route simply cannot get in.
+            // The CLI registers the identity as an auth alias, so a front-door
+            // URL carries the session and no password is typed at all.
+            //
+            // The alias is per-org: two verify orgs would otherwise fight over
+            // one alias and the second would silently drive the first org's user.
+            const alias = `uiqa-restricted-${org}`;
+            let restrictedUser = null;
+            try {
+                // Reuse before create — every run creating a user would exhaust a
+                // scratch org's handful of Salesforce licences.
+                const shown = await sf(['org', 'display', '--target-org', alias, '--json'], { retries: 0 });
+                restrictedUser = JSON.parse(shown).result.username;
+            } catch (e) {
+                const made = await sf(
+                    [
+                        'org',
+                        'create',
+                        'user',
+                        '--target-org',
+                        org,
+                        '--definition-file',
+                        'scripts/qa/fixtures/restricted-user.json',
+                        '--set-alias',
+                        alias,
+                        '--json'
+                    ],
+                    { retries: 0 }
+                ).catch((err) => String(err.stdout || err.message || ''));
+                try {
+                    restrictedUser = JSON.parse(made).result.username;
+                } catch (e2) {
+                    restrictedUser = null;
+                }
+            }
+
+            // Assert the premise rather than assuming it: if anything ever
+            // assigns this user a DocGen permission set, the check below stops
+            // measuring an unentitled user and starts passing for the wrong
+            // reason.
+            const rs = restrictedUser
+                ? debugMap(
+                      await runAnonymous(
+                          org,
+                          `Integer psa = [SELECT COUNT() FROM PermissionSetAssignment
+                 WHERE Assignee.Username = '${restrictedUser}' AND PermissionSet.Name LIKE 'DocGen%'];
+               System.debug('RDOCGENPS=' + psa);`
+                      )
+                  )
+                : {};
+            rs.RUSER = restrictedUser;
+
             if (!rs.RUSER) {
                 add(
                     skip(
                         'a user without the DocGen permission set gets a clear message, not a broken UI',
-                        `could not create the restricted user: ${String(seed).slice(-200)}`,
+                        'could not create or resolve the restricted user via `sf org create user` — the org may be ' +
+                            'out of Salesforce licences.',
                         SEVERITY.MAJOR
                     )
                 );
@@ -2530,38 +2553,34 @@ export async function run({ org, headed }) {
             } else {
                 const r = await launch({ headed });
                 restrictedCtx = r;
-                const loginUrl = base.replace('.lightning.force.com', '.my.salesforce.com');
-                await r.page.goto(loginUrl + '/', { waitUntil: 'domcontentloaded' });
-                await r.page.fill('#username', rs.RUSER).catch(() => {});
-                await r.page.fill('#password', pw).catch(() => {});
-                await r.page.click('#Login').catch(() => {});
-                await r.page.waitForTimeout(8000);
+                // Front-door URL for the RESTRICTED alias — this is the whole
+                // point of going through the CLI. It carries a session, so the
+                // login form is never involved.
+                const frontDoor = await orgFrontDoorUrl(alias);
+                await r.page.goto(frontDoor, { waitUntil: 'domcontentloaded' });
+                await r.page.waitForTimeout(6000);
 
-                // DID THE LOGIN ACTUALLY SUCCEED? This gate is not optional.
-                // Without it the run lands back on the Salesforce login page,
-                // whose own text contains the words "access" and "log in", the
-                // leniency below matches them, and the check reports a cheerful
-                // PASS for a session that was never established. It did exactly
-                // that on the first run.
+                // DID THE SESSION ACTUALLY TAKE? This gate is not optional.
+                // Without it a run that lands back on the Salesforce login page —
+                // whose own text contains "access" and "log in" — matches the
+                // leniency below and reports a cheerful PASS for a session that
+                // never existed. It did exactly that on the first attempt.
                 const authed = await r.page
                     .evaluate(() => !!(document.cookie && document.cookie.indexOf('sid=') !== -1))
                     .catch(() => false);
                 const url = r.page.url();
-                const onLoginPage = /\/login|\/_ui\/identity|secur\/login/i.test(url) || !authed;
-                // A fresh identity on a new machine can also be challenged for an
-                // emailed verification code. Platform behaviour, not a product
-                // defect, and it must not be reported as one either.
+                const onLoginPage = /\/login|secur\/login/i.test(url) || !authed;
                 const challenged = /verify|challenge|_ui\/identity/i.test(url) || (await r.page.title()).match(/Verify/i);
                 if (onLoginPage || challenged) {
                     add(
                         skip(
                             'a user without the DocGen permission set gets a clear message, not a broken UI',
                             challenged
-                                ? 'the org challenged the new identity for email verification at login, so the ' +
-                                      `record page was never reached (landed on ${url.slice(0, 120)}).`
-                                : 'the restricted user could not be signed in — no session cookie was set and the ' +
-                                      `browser is still on ${url.slice(0, 120)}. A scratch org often refuses a ` +
-                                      'password login for a freshly created user until the identity is verified.',
+                                ? 'the org challenged the restricted identity for verification, so the record ' +
+                                      `page was never reached (landed on ${url.slice(0, 120)}).`
+                                : `the restricted user's front-door URL did not establish a session — still on ` +
+                                      `${url.slice(0, 120)}. Re-authorise the alias: sf org create user --target-org ` +
+                                      `${org} --definition-file scripts/qa/fixtures/restricted-user.json`,
                             SEVERITY.MAJOR
                         )
                     );
