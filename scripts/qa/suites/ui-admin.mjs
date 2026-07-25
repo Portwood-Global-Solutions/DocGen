@@ -366,22 +366,31 @@ async function apex(org, body) {
         const log = await runAnonymous(org, APEX_HEAD + body + '\n}', { timeout: 180000 });
         return { lines: debugLines(log), log };
     } catch (e) {
-        return { lines: [], log: '', error: msg(e) };
+        // A failing probe must be LOUD. Silently returning no rows made an Apex
+        // NullPointerException look like "the UI never created the record".
+        const detail = String((e && e.stderr) || msg(e)).split('\n').join(' ').slice(0, 200);
+        step('APEX PROBE FAILED: ' + detail);
+        return { lines: [], log: '', error: detail };
     }
 }
 
 /** Every QAUI- template in the org, with any extra (un-prefixed) fields asked for. */
 async function probeTemplates(org, extraFields = []) {
     const sel = ['Id', 'Name', ...extraFields.map((f) => `' + ns + '${f}`)].join(', ');
+    // String.valueOf(null) returns null in Apex, so calling .replaceAll on it
+    // throws a NullPointerException and the whole probe returns nothing.
     const getters = extraFields
-        .map((f) => `+ '|' + String.valueOf(r.get(ns + '${f}')).replaceAll('[\\r\\n]+', ' ')`)
+        .map(
+            (f) =>
+                `+ '~' + (r.get(ns + '${f}') == null ? '' : String.valueOf(r.get(ns + '${f}')).replaceAll('[\\r\\n]+', ' '))`
+        )
         .join('\n        ');
     const r = await apex(
         org,
         `List<SObject> rows = Database.query('SELECT ${sel} FROM ' + tgt + ' WHERE Name LIKE :pfx ORDER BY CreatedDate');
      System.debug('COUNT=' + rows.size());
      for (SObject r : rows) {
-        System.debug('ROW=' + r.Id + '|' + String.valueOf(r.get('Name'))
+        System.debug('ROW=' + r.Id + '~' + String.valueOf(r.get('Name'))
         ${getters});
      }`
     );
@@ -389,7 +398,10 @@ async function probeTemplates(org, extraFields = []) {
     for (const line of r.lines) {
         const m = /^ROW=(.+)$/.exec(line.trim());
         if (!m) continue;
-        const parts = m[1].split('|');
+        // '~', not '|': the Salesforce CLI escapes a literal pipe in debug
+        // output to &#124; (it is the log's own field separator), which silently
+        // broke every field this probe reads back.
+        const parts = m[1].split('~');
         const row = { id: parts[0], name: parts[1] };
         extraFields.forEach((f, i) => {
             row[f] = parts[2 + i];

@@ -28,6 +28,12 @@ public with sharing class DocGenBulkController {
                 'Record_Filter__c'
             }
         );
+        // Is_Active__c mirrors the single-record runner
+        // (getTemplatesForObjectInternal). Without it a DEACTIVATED template
+        // stayed selectable here — and this is the bulk screen, so the blast
+        // radius is a job across thousands of records rather than one document.
+        // OR-NULL because records created before the field shipped have no value
+        // and are treated as active everywhere else.
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template__c> all = [
             SELECT
@@ -44,6 +50,7 @@ public with sharing class DocGenBulkController {
                 Required_Permission_Sets__c,
                 Record_Filter__c
             FROM DocGen_Template__c
+            WHERE Is_Active__c = TRUE OR Is_Active__c = NULL
             WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Name ASC
             LIMIT 2000

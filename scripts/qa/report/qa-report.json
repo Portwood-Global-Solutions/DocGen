@@ -1,1763 +1,379 @@
 {
     "meta": {
         "org": "docgen-verify",
-        "startedAt": "2026-07-25T16:08:28.729Z",
-        "durationMs": 175766,
-        "args": "--org docgen-verify --suite record-pages"
+        "startedAt": "2026-07-25T16:19:34.230Z",
+        "durationMs": 174060,
+        "args": "--org docgen-verify --suite ui-runner"
     },
     "tally": {
-        "passed": 248,
-        "failed": 0,
-        "skipped": 0,
-        "evaluated": 248,
-        "total": 248,
-        "rate": 100,
+        "passed": 34,
+        "failed": 3,
+        "skipped": 8,
+        "evaluated": 37,
+        "total": 45,
+        "rate": 91.9,
         "bySeverity": {
             "blocker": 0,
-            "major": 0,
-            "minor": 0
+            "major": 2,
+            "minor": 1
         }
     },
     "suites": [
         {
-            "suite": "record-pages",
-            "area": "Record pages",
+            "suite": "ui-runner",
+            "area": "End-user UI",
             "checks": [
                 {
-                    "name": "DocGen_Template__c record page renders",
+                    "name": "runner template picker offers an active, usable template for the record",
                     "ok": true,
-                    "detail": "54 field slots rendered",
+                    "detail": "picker returned: UIQA Good PDF, UIQA Locked Format, UIQA No Version — DocGenController.getTemplatesForObjectAndRecord",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Template__c detail fields are genuinely visible (hit test)",
+                    "name": "picker hides a template whose Record_Filter__c excludes this record",
                     "ok": true,
-                    "detail": "first field \"Template Name\" is hittable",
+                    "detail": "Record_Filter__c = Industry = 'Agriculture'; the record is Technology. Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Template__c.Name renders on the record page",
+                    "name": "picker hides a template requiring a permission set the user lacks",
                     "ok": true,
-                    "detail": "",
+                    "detail": "Required_Permission_Sets__c = UIQA_No_Such_PermSet. Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Template__c.API_Name__c renders on the record page",
+                    "name": "picker hides an inactive template",
                     "ok": true,
-                    "detail": "",
+                    "detail": "Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Template__c.Type__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
+                    "name": "picker hides a template that has no active version",
+                    "ok": false,
+                    "detail": "\"UIQA No Version\" is offered in the runner picker but cannot generate — the user gets \"No template file found (active or attached)\" only after pressing Generate. DocGenController.getTemplatesForObjectInternal filters on Is_Active__c/audience but never checks for an active DocGen_Template_Version__c.",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Template__c.Output_Format__c renders on the record page",
+                    "name": "generating from the picked template produces a real document",
                     "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Is_Active__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Is_Default__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Category__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Base_Object_API__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Document_Title_Format__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Test_Record_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Sort_Order__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Lock_Output_Format__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Specific_Record_Ids__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Required_Permission_Sets__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Signer_Verification__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Prefill_Signer_Email__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Page_Size__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Page_Orientation__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Page_Margins__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Custom_Margins__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Default_Email_Message__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Record_Filter__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Description__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.Query_Config__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "all reachable; 3 field(s) intentionally edited elsewhere",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c fields edited outside the record page are accounted for",
-                    "ok": true,
-                    "detail": "Footer_Html__c (edited in the Designer footer band), Form_Fields_Config__c (edited on the Signer Inputs tab), Header_Html__c (edited in the Designer header band)",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c related lists load without error",
-                    "ok": true,
-                    "detail": "7 related list container(s) rendered",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c shows its \"Versions\" related list",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c shows its \"Files\" related list",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c related lists are genuinely visible (hit test)",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c record page renders",
-                    "ok": true,
-                    "detail": "36 field slots rendered",
+                    "detail": "DocGenService.processDocument returned 66207 bytes",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Template_Version__c detail fields are genuinely visible (hit test)",
+                    "name": "the generated document is titled from the record",
                     "ok": true,
-                    "detail": "first field \"Version Name\" is hittable",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Name renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Template__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Is_Active__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Type__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Category__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Base_Object_API__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Content_Version_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Pre_Decomposition_Status__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Description__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Query_Config__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Output_Format__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Document_Title_Format__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Page_Size__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Page_Orientation__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Page_Margins__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c.Custom_Margins__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "all reachable; 3 field(s) intentionally edited elsewhere",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c fields edited outside the record page are accounted for",
-                    "ok": true,
-                    "detail": "Footer_Html__c (edited in the Designer footer band), Header_Html__c (edited in the Designer header band), Watermark_Image_CV_Id__c (set when a watermark is uploaded)",
+                    "detail": "title was \"UIQA Alpha\", expected \"UIQA Alpha\"",
                     "severity": "minor",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Template_Version__c related lists load without error",
+                    "name": "a locked output format cannot be overridden at run time",
                     "ok": true,
-                    "detail": "6 related list container(s) rendered",
+                    "detail": "Lock_Output_Format__c = true, override 'Word' → \"This template locks its output format. Override not permitted.\"",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Template_Version__c shows its \"Files\" related list",
+                    "name": "a template with no active version fails with a message, not a blank document",
                     "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c related lists are genuinely visible (hit test)",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Template_Version__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c record page renders",
-                    "ok": true,
-                    "detail": "29 field slots rendered",
+                    "detail": "got: Error retrieving template data: No template file found (active or attached).",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Job__c detail fields are genuinely visible (hit test)",
-                    "ok": true,
-                    "detail": "first field \"Job Number\" is hittable",
+                    "name": "bulk template picker applies the same active/audience rules as the runner",
+                    "ok": false,
+                    "detail": "DocGenBulkController.getBulkTemplates has no Is_Active__c filter, so deactivated templates stay selectable for bulk runs. Bulk picker: UIQA Filtered Out, UIQA Good PDF, UIQA Inactive, UIQA Locked Format, UIQA No Version",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Runner (server contract)"
                 },
                 {
-                    "name": "DocGen_Job__c.Name renders on the record page",
+                    "name": "bulk generation UI renders on its tab",
                     "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Template__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Status__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Label__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Total_Records__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Success_Count__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Error_Count__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Merge_Only__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Query_Condition__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Error_Log__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Merged_PDF_CV__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c.Parent_Record_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "all reachable; 2 field(s) intentionally edited elsewhere",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c fields edited outside the record page are accounted for",
-                    "ok": true,
-                    "detail": "Data_Cache_CV__c (internal cache pointer written by the batch), Giant_Query_Config__c (internal config written by the giant-query path)",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c related lists load without error",
-                    "ok": true,
-                    "detail": "6 related list container(s) rendered",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c shows its \"Files\" related list",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c related lists are genuinely visible (hit test)",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Job__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c record page renders",
-                    "ok": true,
-                    "detail": "15 field slots rendered",
+                    "detail": "{\"chars\":251,\"hasHeading\":true,\"hasStep1\":true}",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Saved_Query__c detail fields are genuinely visible (hit test)",
-                    "ok": true,
-                    "detail": "first field \"Query Label\" is hittable",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c.Name renders on the record page",
+                    "name": "bulk generation UI boots without a console error",
                     "ok": true,
                     "detail": "",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Saved_Query__c.DocGen_Template__c renders on the record page",
+                    "name": "the screen stays usable while a job is still running",
                     "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c.Description__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c.Query_Condition__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c related lists load without error",
-                    "ok": true,
-                    "detail": "6 related list container(s) rendered",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c shows its \"Files\" related list",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c related lists are genuinely visible (hit test)",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Saved_Query__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c record page renders",
-                    "ok": true,
-                    "detail": "32 field slots rendered",
+                    "detail": "template search box is hittable with 1 non-terminal job(s) present",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Error_Log__c detail fields are genuinely visible (hit test)",
+                    "name": "focusing the template box lists the available templates",
                     "ok": true,
-                    "detail": "first field \"Error Number\" is hittable",
+                    "detail": "16 options offered",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Error_Log__c.Name renders on the record page",
+                    "name": "typing narrows the template list to the match",
                     "ok": true,
-                    "detail": "",
+                    "detail": "after typing \"UIQA Good\": UIQA Good PDF (Account • PDF)",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Error_Log__c.Severity__c renders on the record page",
+                    "name": "a search with no matches says so instead of showing an empty box",
                     "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
+                    "detail": "expected the \"No templates found\" empty state in the dropdown",
+                    "severity": "minor",
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Error_Log__c.Context__c renders on the record page",
+                    "name": "a template option can be clicked",
                     "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Operation__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Exception_Type__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Message__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Stack_Trace__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Additional_Info__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Record_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Template_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Job_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.User_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.Flow_Interview_Guid__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Error_Log__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c record page renders",
-                    "ok": true,
-                    "detail": "15 field slots rendered",
+                    "detail": "found=true hit=ok",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Asset__c detail fields are genuinely visible (hit test)",
+                    "name": "selecting a template opens the filter and run steps",
                     "ok": true,
-                    "detail": "first field \"Asset Name\" is hittable",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c.Name renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c.Asset_Key__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c.Asset_Type__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c.Category__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c.Is_Active__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Asset__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c record page renders",
-                    "ok": true,
-                    "detail": "32 field slots rendered",
+                    "detail": "Step 2 (Record Filter) and Step 3 (Run Generation) must appear once a template is chosen",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Email_Template__c detail fields are genuinely visible (hit test)",
+                    "name": "the bulk screen offers no file-format override — format stays the template’s",
                     "ok": true,
-                    "detail": "first field \"Email Template Name\" is hittable",
+                    "detail": "Output Mode options: Individual Files / Print-Ready Packet / Combined + Individual",
+                    "severity": "minor",
+                    "skipped": false,
+                    "area": "Bulk runner"
+                },
+                {
+                    "name": "choosing an output mode is honoured by the UI",
+                    "ok": true,
+                    "detail": "after picking \"Individual Files\" the control reads \"Individual Files\"",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Email_Template__c.Name renders on the record page",
+                    "name": "the Validate Filter button is clickable",
                     "ok": true,
-                    "detail": "",
+                    "detail": "found=true hit=ok",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Email_Template__c.Type__c renders on the record page",
+                    "name": "Validate reports the true number of matching records",
                     "ok": true,
-                    "detail": "",
+                    "detail": "expected \"2 Records Found\" for Name LIKE 'UIQA%' (2 accounts seeded); component text did not contain it",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Email_Template__c.Subject__c renders on the record page",
+                    "name": "the Run button is clickable once the filter is validated",
                     "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Is_Active__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Description__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Layout_Mode__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Body_Html__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Body_Plain__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Logo_Url__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Logo_Url_Extended__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Logo_Asset_Key__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Logo_Height__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Brand_Color__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.Footer_Text__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Email_Template__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c record page renders",
-                    "ok": true,
-                    "detail": "34 field slots rendered",
+                    "detail": "found=true hit=ok",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Signature_Request__c detail fields are genuinely visible (hit test)",
+                    "name": "pressing Run creates a bulk job on the server",
                     "ok": true,
-                    "detail": "first field \"Request Number\" is hittable",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Name renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Status__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Template__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Template_Ids__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Document_Title_Format__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Related_Record_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Source_Document_Id__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Signing_Order__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Expires_At__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Email_Status__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Prefill_Signer_Email__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Require_Email_Verification__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Signer_Name__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.Signer_Email__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "all reachable; 4 field(s) intentionally edited elsewhere",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c fields edited outside the record page are accounted for",
-                    "ok": true,
-                    "detail": "Frozen_Document__c (snapshot blob written by the signing engine), Render_Data_Snapshot__c (snapshot blob written by the signing engine), Signature_Data__c (written by the signing engine), Snapshot_Taken_At__c (stamped by the signing engine)",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c related lists load without error",
-                    "ok": true,
-                    "detail": "8 related list container(s) rendered",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c shows its \"Signers\" related list",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c shows its \"Audits\" related list",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c shows its \"Files\" related list",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c related lists are genuinely visible (hit test)",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Request__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c record page renders",
-                    "ok": true,
-                    "detail": "38 field slots rendered",
+                    "detail": "DocGen_Job__c a03O500003gzxaXIAQ status Completed",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Signer__c detail fields are genuinely visible (hit test)",
+                    "name": "the job generates one document per matching record",
                     "ok": true,
-                    "detail": "first field \"Signer Number\" is hittable",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Name renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Signature_Request__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Signer_Name__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Signer_Email__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Status__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Role_Name__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Sort_Order__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Contact__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Signature_Data__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Consent_Captured__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Decline_Reason__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.PIN_Verified_At__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.PIN_Attempts__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.PIN_Expires_At__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Reminders_Sent__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.Reminder_Sent_At__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "all reachable; 1 field(s) intentionally edited elsewhere",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c fields edited outside the record page are accounted for",
-                    "ok": true,
-                    "detail": "Field_Data_Json__c (written by the signing engine)",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c related lists load without error",
-                    "ok": true,
-                    "detail": "6 related list container(s) rendered",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c shows its \"Files\" related list",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c related lists are genuinely visible (hit test)",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "minor",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signer__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c record page renders",
-                    "ok": true,
-                    "detail": "31 field slots rendered",
+                    "detail": "status=Completed total=2 success=2 errors=0; error log: ",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Signature_Placement__c detail fields are genuinely visible (hit test)",
+                    "name": "each generated document is attached to its own record",
                     "ok": true,
-                    "detail": "first field \"Placement Number\" is hittable",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Name renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Signer__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Signature_Request__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Placement_Type__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Sequence_Order__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Status__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Signed_Value__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Signed_At__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Document_Index__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Section_Context__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Tag_Text__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c.Render_Inline__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Placement__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c record page renders",
-                    "ok": true,
-                    "detail": "34 field slots rendered",
+                    "detail": "2 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files",
                     "severity": "blocker",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Signature_Audit__c detail fields are genuinely visible (hit test)",
+                    "name": "the output honours the template's Output Format (PDF)",
                     "ok": true,
-                    "detail": "first field \"Audit Number\" is hittable",
+                    "detail": "extensions produced: pdf",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Signature_Audit__c.Name renders on the record page",
+                    "name": "a run where every record fails is reported as failed, not as success",
                     "ok": true,
-                    "detail": "",
+                    "detail": "status=Failed success=0 errors=2",
+                    "severity": "blocker",
+                    "skipped": false,
+                    "area": "Bulk runner"
+                },
+                {
+                    "name": "the failing job records WHY each record failed",
+                    "ok": true,
+                    "detail": "Error_Log__c = 001O5000040js8PIAQ — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached).\n001O5000040js8QIAQ — portwoodglobal.DocGenException: Error retrieving ",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Signature_Audit__c.Signature_Request__c renders on the record page",
+                    "name": "the Recent Jobs list shows the error count to the user",
                     "ok": true,
-                    "detail": "",
+                    "detail": "Recent Jobs did not show \"UIQA-ms0kr7gr-err\" with \"2 errors\" — a user would see the run as finished with no indication anything went wrong",
                     "severity": "major",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
                 },
                 {
-                    "name": "DocGen_Signature_Audit__c.Signer__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.Contact__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.Signer_Name__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.Signer_Email__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.Signed_Date__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.Consent_Captured__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.Verification_Method__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.PIN_Verified_At__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.Document_Hash_SHA256__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.IP_Address__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.User_Agent__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.Error_Message__c renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.CreatedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c.LastModifiedById renders on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c exposes every one of its fields somewhere on the record page",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c page components report no error state",
-                    "ok": true,
-                    "detail": "no custom component is placed on this record page",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "DocGen_Signature_Audit__c record page logs no console errors",
-                    "ok": true,
-                    "detail": "",
-                    "severity": "major",
-                    "skipped": false
-                },
-                {
-                    "name": "every seeded QA record is deleted again",
-                    "ok": true,
-                    "detail": "11 record(s) removed",
+                    "name": "a filter that matches no records leaves Run disabled",
+                    "ok": false,
+                    "detail": "Validate returned 0 records but Run Bulk Generation is still enabled — the user can submit a job that will produce nothing. isRunDisabled only requires filterValidated, and runAnalysis() early-returns on a 0 count so no analysis blocks it (docGenBulkRunner.js isRunDisabled / runAnalysis).",
                     "severity": "minor",
-                    "skipped": false
+                    "skipped": false,
+                    "area": "Bulk runner"
+                },
+                {
+                    "name": "the DocGen Command Hub renders with its navigation",
+                    "ok": true,
+                    "detail": "{\"present\":true,\"navs\":[\"My Templates\",\"Bulk Generation\",\"Signatures\",\"Assets\",\"Buttons\",\"Email Templates\",\"Learning Center\",\"MoreTabs\",\"API Name Help Info\",\"Type Help Info\",\"Word\",\"PDF\"]}",
+                    "severity": "blocker",
+                    "skipped": false,
+                    "area": "Command Hub"
+                },
+                {
+                    "name": "Command Hub \"Bulk Generation\" mounts its component",
+                    "ok": true,
+                    "detail": "rendered 372 chars of text; consoleErrors=none",
+                    "severity": "major",
+                    "skipped": false,
+                    "area": "Command Hub"
+                },
+                {
+                    "name": "Command Hub \"Signatures\" mounts its component",
+                    "ok": true,
+                    "detail": "rendered 1400 chars of text; consoleErrors=none",
+                    "severity": "major",
+                    "skipped": false,
+                    "area": "Command Hub"
+                },
+                {
+                    "name": "Command Hub \"Assets\" mounts its component",
+                    "ok": true,
+                    "detail": "rendered 489 chars of text; consoleErrors=none",
+                    "severity": "major",
+                    "skipped": false,
+                    "area": "Command Hub"
+                },
+                {
+                    "name": "Command Hub \"Email Templates\" mounts its component",
+                    "ok": true,
+                    "detail": "rendered 1564 chars of text; consoleErrors=none",
+                    "severity": "major",
+                    "skipped": false,
+                    "area": "Command Hub"
+                },
+                {
+                    "name": "the document Button builder mounts from the Command Hub",
+                    "ok": true,
+                    "detail": "rendered 761 chars of text",
+                    "severity": "major",
+                    "skipped": false,
+                    "area": "Command Hub"
+                },
+                {
+                    "name": "docGenRunner renders on a record page",
+                    "ok": false,
+                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "severity": "blocker",
+                    "skipped": true
+                },
+                {
+                    "name": "docGenRunner Generate button produces a document from a record page",
+                    "ok": false,
+                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "severity": "blocker",
+                    "skipped": true
+                },
+                {
+                    "name": "docGenRunner honours the Save to Record / Download output choice",
+                    "ok": false,
+                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "severity": "major",
+                    "skipped": true
+                },
+                {
+                    "name": "docGenRunner shows the empty state when no template matches the record",
+                    "ok": false,
+                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "severity": "major",
+                    "skipped": true
+                },
+                {
+                    "name": "docGenSignatureSender validates its fields and creates a request",
+                    "ok": false,
+                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "severity": "blocker",
+                    "skipped": true
+                },
+                {
+                    "name": "docGenSignatureSender writes correct DocGen_Signature_Request__c / DocGen_Signer__c rows",
+                    "ok": false,
+                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "severity": "blocker",
+                    "skipped": true
+                },
+                {
+                    "name": "docGenButton one-click generation from a record action",
+                    "ok": false,
+                    "detail": "no Lightning record page or quick action exists in this org that hosts the component (SELECT DeveloperName, Type FROM FlexiPage returns only UtilityBar rows, and there are no LightningComponent QuickActionDefinitions). The package ships tabs for the admin surfaces but nothing that places this component, and there is no supported URL that renders an LWC on a record without a page assignment. Reaching it requires hand-building a Lightning record page, which this suite is not permitted to deploy.",
+                    "severity": "major",
+                    "skipped": true
+                },
+                {
+                    "name": "a user without the DocGen permission set gets a clear message, not a broken UI",
+                    "ok": false,
+                    "detail": "needs a second user and a Login-As session; creating a licensed user and switching identity is outside what this suite may do to the org, and System.runAs is not available in anonymous Apex. The template-audience half of this (Required_Permission_Sets__c) IS covered above.",
+                    "severity": "major",
+                    "skipped": true
                 }
             ],
             "skipped": false,

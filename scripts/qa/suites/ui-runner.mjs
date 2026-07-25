@@ -187,14 +187,21 @@ try {
 }
 `;
 
+/**
+ * Cleanup. Note DocGen_Error_Log__c.Template_Id__c is a TEXT field, not a
+ * lookup — binding a Set<Id> to it does not compile, and a compile failure here
+ * would silently leave every seeded row (including the parked Queued job, which
+ * would then break the Bulk Generation screen for anyone else using the org).
+ */
 const CLEANUP_APEX = `
 List<DocGen_Template__c> mine = [SELECT Id FROM DocGen_Template__c WHERE Name LIKE '${PREFIX}%'];
 Set<Id> ids = new Set<Id>();
-for (DocGen_Template__c t : mine) ids.add(t.Id);
+Set<String> idStrings = new Set<String>();
+for (DocGen_Template__c t : mine) { ids.add(t.Id); idStrings.add(String.valueOf(t.Id)); }
 if (!ids.isEmpty()) {
-    delete [SELECT Id FROM DocGen_Error_Log__c WHERE Template_Id__c IN :ids];
+    delete [SELECT Id FROM DocGen_Error_Log__c WHERE Template_Id__c IN :idStrings];
     delete [SELECT Id FROM DocGen_Job__c WHERE Template__c IN :ids];
-    delete [SELECT Id FROM DocGen_Saved_Query__c WHERE Template__c IN :ids];
+    delete [SELECT Id FROM DocGen_Saved_Query__c WHERE DocGen_Template__c IN :ids];
     delete [SELECT Id FROM DocGen_Template_Version__c WHERE Template__c IN :ids];
     delete mine;
 }
