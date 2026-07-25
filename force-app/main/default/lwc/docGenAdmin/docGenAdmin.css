@@ -2182,3 +2182,82 @@
 .dg-designer-toolbar__actions lightning-button button {
     white-space: nowrap;
 }
+
+/* --- Designer tab: pick a template to open ------------------------------- */
+/* Landing here with nothing open used to be a dead end that named two other
+   tabs. The templates you can design belong on the tab you design on. */
+.dg-designer-empty {
+    text-align: center;
+    padding: 40px 20px 48px;
+    color: #5b6b83;
+}
+
+.dg-designer-empty__title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #2c2c38;
+    margin: 10px 0 4px;
+}
+
+.dg-designer-empty__hint {
+    font-size: 0.85rem;
+    margin-bottom: 18px;
+}
+
+.dg-designer-open-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 520px;
+    margin: 0 auto;
+    text-align: left;
+}
+
+.dg-designer-open-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    background: #fff;
+    border: 1px solid #e2e0ef;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #2c2c38;
+    text-align: left;
+    transition:
+        border-color 0.12s ease,
+        box-shadow 0.12s ease,
+        background-color 0.12s ease;
+}
+
+.dg-designer-open-item:hover,
+.dg-designer-open-item:focus-visible {
+    border-color: #b49aef;
+    background: #faf8ff;
+    box-shadow: 0 2px 10px rgba(28, 20, 68, 0.08);
+    outline: none;
+}
+
+.dg-designer-open-item__name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The affordance only needs to be loud on the row you are actually on. */
+.dg-designer-open-item__go {
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #7c3aed;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.dg-designer-open-item:hover .dg-designer-open-item__go,
+.dg-designer-open-item:focus-visible .dg-designer-open-item__go {
+    opacity: 1;
+}

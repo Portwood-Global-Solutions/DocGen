@@ -1990,6 +1990,48 @@ async function main() {
         );
         record('an author cell fill survives hover tint + typing', !!fillReport.ok, fillReport.why);
 
+        // --- 4q. The Designer tab can open a template on its own ----------------
+        //
+        // Landing on the Designer with nothing open used to be a dead end: it named
+        // two other tabs and left you to go there. Run LAST, because it closes the
+        // template every other assertion depends on.
+        // Reload the app so the Designer tab starts with nothing open — the state a
+        // person actually arrives in.
+        await page.goto(`${base}/lightning/n/portwoodglobal__DocGen_Template_Manager?empty=${Date.now()}`, {
+            waitUntil: 'domcontentloaded'
+        });
+        await page.waitForTimeout(7000);
+        await page.locator('[role="tab"]:has-text("Designer")').first().click();
+        await page.waitForTimeout(3000);
+        const emptyState = await page.evaluate(
+            inPage(`
+      const list = __dgFind('.dg-designer-open-list');
+      const items = __dgFind('.dg-designer-open-item', true) || [];
+      return { list: !!list, count: items.length, first: items[0] ? (items[0].textContent || '').trim() : '' };`)
+        );
+        record(
+            'Designer tab offers templates to open when none is loaded',
+            emptyState.list && emptyState.count > 0,
+            JSON.stringify(emptyState)
+        );
+        if (emptyState.count > 0) {
+            await page.evaluate(
+                inPage(`
+      const item = __dgFind('.dg-designer-open-item');
+      item.click();
+      return true;`)
+            );
+            await page.waitForTimeout(8000);
+            const opened = await page.evaluate(
+                inPage(`return { pv: !!__dgFind('.dg-pv'), bar: !!__dgFind('.dg-format-bar') };`)
+            );
+            record(
+                'clicking a template on the Designer tab opens it for editing',
+                opened.pv && opened.bar,
+                JSON.stringify(opened)
+            );
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

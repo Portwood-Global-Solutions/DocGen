@@ -12070,6 +12070,26 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Row action / modal button → full-screen designer for HTML templates. */
+    get hasDesignerTemplates() {
+        return (this.designerTemplateOptions || []).length > 0;
+    }
+
+    /**
+     * Open a template straight from the Designer tab's empty state.
+     *
+     * Same path as the "Design" row action, so there is one way a template gets
+     * opened and no second code path to keep in step.
+     */
+    async handleOpenTemplateInDesigner(event) {
+        const id = event.currentTarget.dataset.id;
+        const row = (this.templates || []).find((t) => t.Id === id);
+        if (!row) {
+            this.showToast('Template not found', 'It may have been deleted — refresh and try again.', 'warning');
+            return;
+        }
+        await this.openDesignerForRow(row);
+    }
+
     async openDesignerForRow(row) {
         this.openEditModal(row, 'document');
         this.isEditModalOpen = false;

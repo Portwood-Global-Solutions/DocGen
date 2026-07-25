@@ -1506,18 +1506,41 @@
             <!-- Full-screen template designer: the page is the canvas, palettes ride the rail -->
             <lightning-tab label="Designer (Beta)" value="design" onactive={handleTabActive}>
                 <div class="slds-var-p-around_medium">
+                    <!-- Landing on the Designer with nothing open used to be a dead
+                         end: it named two other tabs and left you to go there. The
+                         tab is where you come to design, so the templates you can
+                         design are here, one click each. -->
                     <template if:false={designerHasTemplate}>
-                        <div class="slds-text-align_center slds-var-p-around_xx-large slds-text-color_weak">
+                        <div class="dg-designer-empty">
                             <lightning-icon icon-name="utility:brush" size="medium"></lightning-icon>
-                            <p class="slds-text-heading_small slds-var-m-top_small slds-var-m-bottom_x-small">
-                                No template open
-                            </p>
-                            <p class="slds-text-body_small">
-                                Pick an HTML template under&nbsp;<strong>Your Templates</strong>&nbsp;and choose
-                                the&nbsp;<strong>Design</strong>&nbsp;row action — or build one from&nbsp;<strong
-                                    >Create New</strong
-                                >.
-                            </p>
+                            <p class="dg-designer-empty__title">Choose a template to design</p>
+                            <template if:true={hasDesignerTemplates}>
+                                <p class="dg-designer-empty__hint">
+                                    HTML templates can be edited visually. Pick one to open it.
+                                </p>
+                                <div class="dg-designer-open-list">
+                                    <template for:each={designerTemplateOptions} for:item="opt">
+                                        <button
+                                            key={opt.value}
+                                            class="dg-designer-open-item"
+                                            data-id={opt.value}
+                                            onclick={handleOpenTemplateInDesigner}
+                                            title="Open this template in the designer"
+                                        >
+                                            <lightning-icon icon-name="utility:page" size="x-small"></lightning-icon>
+                                            <span class="dg-designer-open-item__name">{opt.label}</span>
+                                            <span class="dg-designer-open-item__go">Design &#8594;</span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </template>
+                            <template if:false={hasDesignerTemplates}>
+                                <p class="dg-designer-empty__hint">
+                                    You have no HTML templates yet. Build one from&nbsp;<strong>Create New</strong
+                                    >&nbsp;— or open a Word template under&nbsp;<strong>Your Templates</strong>&nbsp;and
+                                    switch it to HTML.
+                                </p>
+                            </template>
                         </div>
                     </template>
                     <template if:true={designerHasTemplate}>
