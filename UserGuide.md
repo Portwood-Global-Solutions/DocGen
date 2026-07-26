@@ -3268,7 +3268,76 @@ Notes:
 - You do **not** need to add domains under **Setup → Trusted Domains for Inline Frames** for signing to work (tested; not required when standard clickjack protection settings are in place).
 - If the page loads but the document preview is blank, that's a different problem — see §15.9.
 
-### 15.11 Still stuck?
+### 15.11 Long text breaks out of a table cell
+
+**Symptom.** A value runs straight through the right-hand cell border, over the
+next column or off the page. It looks like a CSS problem. It is not.
+
+**Cause.** The PDF engine cannot break a run of characters that contains no
+spaces. It breaks at spaces and nowhere else. So ordinary text — names,
+addresses, descriptions, long-text areas — wraps perfectly, while an external
+id, URL, SKU, base64 fragment or concatenated key does not, however narrow the
+column.
+
+**No CSS fixes this.** Measured against the engine, not assumed:
+
+| Technique                   | Result                                                         |
+| --------------------------- | -------------------------------------------------------------- |
+| `word-wrap: break-word`     | ignored (DocGen already applies this to every cell)            |
+| `overflow-wrap: break-word` | ignored                                                        |
+| `word-break: break-all`     | ignored                                                        |
+| `table-layout: fixed`       | column stops growing, so the text overflows the border instead |
+| `&#8203;` zero-width space  | ignored                                                        |
+| `&shy;` soft hyphen         | breaks — but prints **visible hyphens into your data**         |
+| `<wbr/>`                    | **works** — breaks cleanly, value unchanged                    |
+
+Avoid `&shy;` in particular. It appears to work until someone reads the value
+and finds hyphens that were never in the record.
+
+**What to do, in order:**
+
+1. **Does the value contain spaces?** Then it already wraps. Nothing to do.
+2. **No spaces, but a known maximum length?** Give the column room. At 10pt
+   Helvetica a full-width cell fits roughly **90 characters**; about 115 at 8pt.
+3. **Still too long?** Put the value on its own full-width row beneath its label
+   instead of beside it:
+
+    ```html
+    <tr>
+        <td colspan="3" style="font-size:8pt; color:#555;">Reference</td>
+    </tr>
+    <tr>
+        <td colspan="3">{External_Reference__c}</td>
+    </tr>
+    ```
+
+    This buys the most width available — but note it does **not** make the value
+    wrap. If it exceeds one full-width line it will still overflow.
+
+4. **Unbounded values (URLs, base64, long keys)?** Make the value breakable at
+   the source with a formula field that inserts a space every N characters, and
+   merge that field instead:
+
+    ```
+    LEFT(Ref__c, 12) & " " & MID(Ref__c, 13, 12) & " " & MID(Ref__c, 25, 12)
+    ```
+
+    Spaces break, so it wraps at any width. The trade-off is visible spaces —
+    fine for a reference code, wrong for a URL someone must copy.
+
+5. **Static text you author yourself?** Put a `<wbr/>` at every point a break is
+   acceptable. One `<wbr/>` at the end of the string does nothing — the tag marks
+   a single allowed break point, so it has to appear throughout:
+
+    ```html
+    <td>REF-00001111<wbr />222233334444<wbr />555566667777<wbr />88889999AAAA</td>
+    ```
+
+    Close it as `<wbr/>`; a bare `<wbr>` is valid HTML5 but the engine parses
+    XHTML-style. This only works for text you type into the template — there is
+    no way to place `<wbr/>` inside a merged field's value.
+
+### 15.12 Still stuck?
 
 Check the **DocGen Error Logs** tab first (§13.2.1) — most generation, bulk, and signature failures leave a log record with the failing context, which beats guessing.
 
