@@ -57,7 +57,8 @@ private class DocGenAiTemplateControllerTest {
         Test.startTest();
         DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateTemplateBody(
             t.Id,
-            'Build me an invoice for the Account object.'
+            'Build me an invoice for the Account object.',
+            null
         );
         Test.stopTest();
 
@@ -90,7 +91,8 @@ private class DocGenAiTemplateControllerTest {
         Test.startTest();
         DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateTemplateBody(
             t.Id,
-            'anything'
+            'anything',
+            null
         );
         Test.stopTest();
 
@@ -115,7 +117,11 @@ private class DocGenAiTemplateControllerTest {
         DocGenAiProviderFactory.setProvider(new FakeProvider(canned));
 
         Test.startTest();
-        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateTemplateBody(t.Id, 'x');
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateTemplateBody(
+            t.Id,
+            'x',
+            null
+        );
         Test.stopTest();
 
         System.assertEquals('Fake', res.providerName, 'the seam must be honoured');
@@ -130,7 +136,7 @@ private class DocGenAiTemplateControllerTest {
         Test.startTest();
         Boolean threw = false;
         try {
-            DocGenAiTemplateController.generateTemplateBody(t.Id, 'x');
+            DocGenAiTemplateController.generateTemplateBody(t.Id, 'x', null);
         } catch (Exception e) {
             threw = true;
             System.assert(
@@ -148,17 +154,132 @@ private class DocGenAiTemplateControllerTest {
         Integer caught = 0;
         Test.startTest();
         try {
-            DocGenAiTemplateController.generateTemplateBody(null, 'x');
+            DocGenAiTemplateController.generateTemplateBody(null, 'x', null);
         } catch (Exception e) {
             caught++;
         }
         try {
-            DocGenAiTemplateController.generateTemplateBody(t.Id, '   ');
+            DocGenAiTemplateController.generateTemplateBody(t.Id, '   ', null);
         } catch (Exception e) {
             caught++;
         }
         Test.stopTest();
         System.assertEquals(2, caught, 'both guards must fire');
+    }
+
+    @isTest
+    static void editModeRunsTheEditGuardAndFlagsLostTags() {
+        DocGen_Template__c t = makeTemplate();
+        String previous =
+            '<!DOCTYPE html><html><head><style>@page{size:Letter portrait;}</style></head><body>' +
+            '<h1>{Account.Name}</h1><table><tr><td>{Name}</td><td>{Amount:currency}</td></tr></table>' +
+            '</body></html>';
+        // The model "edits" but silently loses a binding — the failure the guard exists for.
+        String mangled =
+            '<!DOCTYPE html><html><head><style>@page{size:Letter portrait;}</style></head><body>' +
+            '<h1 style="color:#184d47;">{Account.Name}</h1><table><tr><td>{Name}</td><td>&nbsp;</td></tr></table>' +
+            '</body></html>';
+        DocGenAiProviderFactory.setProvider(new FakeProvider(mangled));
+
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateTemplateBody(
+            t.Id,
+            'make the heading dark green',
+            previous
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, res.wasEdit, 'passing a previous body means this was an edit');
+        Boolean flagged = false;
+        for (DocGenAiHtmlValidator.Finding f : res.findings) {
+            if (f.rule == 'Merge tags lost in the edit') {
+                flagged = true;
+                System.assert(f.detail.contains('{Amount:currency}'), 'the lost tag is named: ' + f.detail);
+            }
+        }
+        System.assert(flagged, 'the edit guard must run on an edit: ' + res.findings);
+        System.assert(res.warningCount > 0, 'guard findings must count toward the warnings');
+        System.assert(
+            res.summary.containsIgnoreCase('check it'),
+            'the summary must lead with the problem: ' + res.summary
+        );
+    }
+
+    @isTest
+    static void aFaithfulEditReportsCleanly() {
+        DocGen_Template__c t = makeTemplate();
+        String previous =
+            '<!DOCTYPE html><html><head><style>@page{size:Letter portrait;}</style></head><body>' +
+            '<h1>{Account.Name}</h1><table><tr><td>{Name}</td></tr></table></body></html>';
+        String edited = previous.replace('<h1>', '<h1 style="color:#184d47;">');
+        DocGenAiProviderFactory.setProvider(new FakeProvider(edited));
+
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateTemplateBody(
+            t.Id,
+            'make the heading dark green',
+            previous
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, res.wasEdit);
+        System.assert(res.html.contains('#184d47'), 'the requested change must be present');
+        System.assert(res.html.contains('{Account.Name}'), 'and everything else preserved');
+        for (DocGenAiHtmlValidator.Finding f : res.findings) {
+            System.assertNotEquals('Merge tags lost in the edit', f.rule, 'nothing was lost, so do not cry wolf');
+        }
+        System.assert(res.summary.containsIgnoreCase('survived'), 'a clean edit should say so: ' + res.summary);
+    }
+
+    @isTest
+    static void generatingFreshDoesNotRunTheEditGuard() {
+        DocGen_Template__c t = makeTemplate();
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateTemplateBody(
+            t.Id,
+            'a fresh invoice',
+            null
+        );
+        Test.stopTest();
+        System.assertEquals(false, res.wasEdit, 'no previous body means this was not an edit');
+        for (DocGenAiHtmlValidator.Finding f : res.findings) {
+            System.assertNotEquals('Merge tags lost in the edit', f.rule, 'there was nothing to lose');
+        }
+    }
+
+    @isTest
+    static void previewGeneratesWithoutTouchingAnyRecord() {
+        // The wizard calls this before the template record exists, so it must
+        // not write a ContentVersion, a Draft_Body__c, or anything else.
+        Integer cvBefore = [SELECT COUNT() FROM ContentVersion];
+
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateBodyPreview(
+            'an invoice for the Account object'
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, res.html, 'HTML must come back');
+        System.assert(res.html.length() > 0, 'and it must be non-empty');
+        System.assertEquals(null, res.contentVersionId, 'preview must NOT save a ContentVersion');
+        System.assertEquals(false, res.wasEdit, 'a preview is never an edit');
+        System.assertEquals('Stub', res.providerName);
+        System.assert(res.findings.size() > 0, 'the validator still runs and still reports');
+        System.assert(!res.html.containsIgnoreCase('display:flex'), 'and still sanitizes');
+        System.assertEquals(cvBefore, [SELECT COUNT() FROM ContentVersion], 'nothing may be persisted');
+    }
+
+    @isTest
+    static void previewRejectsABlankPrompt() {
+        Test.startTest();
+        Boolean threw = false;
+        try {
+            DocGenAiTemplateController.generateBodyPreview('  ');
+        } catch (Exception e) {
+            threw = true;
+        }
+        Test.stopTest();
+        System.assert(threw, 'a blank prompt must not reach the model');
     }
 
     @isTest

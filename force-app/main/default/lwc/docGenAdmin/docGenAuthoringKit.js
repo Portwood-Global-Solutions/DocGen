@@ -633,6 +633,51 @@ export function buildAiPrompt(shape, options) {
         );
     }
     lines.push('');
+    // EDIT MODE — revising a template that already exists. Same constraints and
+    // same data shape as above; only the task and the output contract differ.
+    // Kept in this one builder so the create and edit paths cannot drift apart,
+    // which is also why "Copy AI Prompt" and the in-org button share it.
+    if (opts.mode === 'edit' && opts.currentBody && opts.currentBody.trim()) {
+        lines.push('YOUR TASK — EDIT AN EXISTING TEMPLATE, DO NOT WRITE A NEW ONE:');
+        lines.push(
+            'Below is the template as it stands today. Apply the requested change to it and return the result. This is a revision, not a fresh start.'
+        );
+        lines.push('');
+        lines.push('CURRENT TEMPLATE (between the >>> markers, which are NOT part of the document):');
+        lines.push('>>>BEGIN CURRENT TEMPLATE');
+        lines.push(opts.currentBody.trim());
+        lines.push('>>>END CURRENT TEMPLATE');
+        lines.push('');
+        lines.push('WHAT TO CHANGE:');
+        lines.push(
+            opts.docDescription && opts.docDescription.trim()
+                ? opts.docDescription.trim()
+                : '<<DESCRIBE THE CHANGE YOU WANT, e.g. "make the header band dark green", "add a totals row under the line items", "move the date to the top right".>>'
+        );
+        lines.push('');
+        lines.push('EDIT RULES — these matter more than anything else here:');
+        lines.push(
+            '1. Return the COMPLETE modified HTML document (<!DOCTYPE html> ... </html>). Not a fragment, not a diff, not only the part you changed, no commentary, no markdown fences.'
+        );
+        lines.push(
+            '2. Change ONLY what was asked. Every other element, style rule, table, and piece of text must come back byte-for-byte as it went in.'
+        );
+        lines.push(
+            '3. NEVER drop, rename or reword a merge tag — anything in {curly braces} is a live data binding, and losing one silently blanks that value in every generated document. Keep them all unless the change explicitly asks you to remove one.'
+        );
+        lines.push(
+            '4. Keep the existing @page rule, page size and margins unless the change is specifically about page setup.'
+        );
+        lines.push(
+            '5. Obey every rendering constraint listed above — the edited file still has to survive Flying Saucer.'
+        );
+        lines.push('');
+        lines.push(
+            'QUESTIONS? The full Portwood DocGen UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/DocGen/blob/main/UserGuide.md'
+        );
+        return lines.join('\n');
+    }
+
     lines.push('WHAT I WANT THIS DOCUMENT TO BE:');
     if (opts.docDescription && opts.docDescription.trim()) {
         lines.push(opts.docDescription.trim());

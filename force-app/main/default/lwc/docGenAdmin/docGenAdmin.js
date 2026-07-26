@@ -126,6 +126,7 @@ import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemp
 // Agentforce authoring: same prompt as Copy AI Prompt, but it never leaves the org.
 import isAiAvailable from '@salesforce/apex/DocGenAiTemplateController.isAiAvailable';
 import generateTemplateBody from '@salesforce/apex/DocGenAiTemplateController.generateTemplateBody';
+import generateBodyPreview from '@salesforce/apex/DocGenAiTemplateController.generateBodyPreview';
 import savePdfAcroFormPreparedBodyChunk from '@salesforce/apex/DocGenController.savePdfAcroFormPreparedBodyChunk';
 import finalizePdfAcroFormPreparedBody from '@salesforce/apex/DocGenController.finalizePdfAcroFormPreparedBody';
 import getPdfAcroFormPreparedBodyStatus from '@salesforce/apex/DocGenController.getPdfAcroFormPreparedBodyStatus';
@@ -548,6 +549,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isAgentforceGenerating = false;
     @track agentforceSummary = '';
     @track agentforceFindings = [];
+    // 'edit' revises the body on the canvas; 'create' writes a new one from
+    // scratch. Defaults to edit whenever there is something to edit.
+    @track agentforceMode = 'create';
+    @track agentforceConfirmDiscard = false;
+    // Wizard AI step: generate in-org instead of copy-pasting to an assistant.
+    @track isWizardAgentforceGenerating = false;
+    @track wizardAgentforceSummary = '';
+    @track wizardAgentforceFindings = [];
     // Live PDF preview: draft HTML → real Blob.toPdf render → blob: iframe.
     @track pdfPreviewUrl = null;
     @track isPdfPreviewLoading = false;
@@ -1443,6 +1452,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     // --- Wizard Logic ---
+
+    connectedCallback() {
+        // Both the wizard's AI step and the designer toolbar key off this, so
+        // resolve it once on mount rather than per-surface. Never awaited and
+        // never throws — an org without Einstein simply keeps the copy-paste
+        // path as the only visible option.
+        this._refreshAgentforceAvailability();
+    }
 
     disconnectedCallback() {
         this._cancelOverlayClear();
@@ -2742,6 +2759,60 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.agentforceFindings && this.agentforceFindings.length > 0;
     }
 
+    /** Whatever is on the canvas right now, unsaved edits included. */
+    get _currentDesignerBody() {
+        try {
+            if (this.showHtmlBodyVisual) {
+                const live = this._extractVisualBody();
+                if (live && live.trim()) {
+                    return live;
+                }
+            }
+        } catch (e) {
+            // Fall through to the staged/saved text below.
+        }
+        const ta = this.template.querySelector('.dg-html-body-editor');
+        if (ta && ta.value && ta.value.trim()) {
+            return ta.value;
+        }
+        return this._lastUploadedHtmlText || '';
+    }
+
+    get canEditWithAgentforce() {
+        const body = this._currentDesignerBody;
+        return !!(body && body.trim().length > 40);
+    }
+
+    get isAgentforceEditMode() {
+        return this.agentforceMode === 'edit';
+    }
+
+    get agentforceDescriptionLabel() {
+        return this.isAgentforceEditMode ? 'What should I change?' : 'What should this document be?';
+    }
+
+    get agentforceDescriptionPlaceholder() {
+        return this.isAgentforceEditMode
+            ? 'e.g. Make the header band dark green, add a totals row under the line items, and move the date to the top right.'
+            : 'e.g. A one-page invoice: header band with the account name, a details panel, a line-item table with a grand total row, and a payment-terms footer.';
+    }
+
+    get agentforceGenerateLabel() {
+        return this.isAgentforceEditMode ? 'Apply Edit' : 'Generate';
+    }
+
+    get agentforceModeOptions() {
+        return [
+            { label: 'Edit what is on the canvas', value: 'edit' },
+            { label: 'Start over from scratch', value: 'create' }
+        ];
+    }
+
+    handleAgentforceModeChange(event) {
+        this.agentforceMode = event.detail.value;
+        this.agentforceConfirmDiscard = false;
+    }
+
     async _refreshAgentforceAvailability() {
         try {
             this.isAgentforceAvailable = await isAiAvailable();
@@ -2753,11 +2824,98 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleOpenAgentforcePanel() {
         this.agentforceFindings = [];
         this.agentforceSummary = '';
+        this.agentforceConfirmDiscard = false;
+        // Editing is the safe default whenever there is something to edit —
+        // "create" throws away whatever is on the canvas.
+        this.agentforceMode = this.canEditWithAgentforce ? 'edit' : 'create';
         this.isAgentforcePanelOpen = true;
     }
 
     handleCloseAgentforcePanel() {
         this.isAgentforcePanelOpen = false;
+    }
+
+    // -----------------------------------------------------------------------
+    // Wizard AI step — generate here instead of copy-pasting out.
+    //
+    // The template record does not exist yet at this point, so this cannot
+    // write a ContentVersion. It generates, validates, and drops the HTML into
+    // exactly the field the paste box fills, so the wizard's existing create
+    // path stages it the same way it stages HTML from ChatGPT. One create path.
+    // -----------------------------------------------------------------------
+
+    get showWizardAgentforce() {
+        return this.isAgentforceAvailable;
+    }
+
+    get wizardAgentforceBtnLabel() {
+        return this.isWizardAgentforceGenerating ? 'Generating…' : 'Generate it here with Agentforce';
+    }
+
+    get hasWizardAgentforceReport() {
+        return this.wizardAgentforceFindings && this.wizardAgentforceFindings.length > 0;
+    }
+
+    async handleWizardAgentforceGenerate() {
+        if (!this.aiDocDescription || !this.aiDocDescription.trim()) {
+            this.showToast(
+                'Describe the document first',
+                'Tell Agentforce what you want in the description box above, then generate.',
+                'warning'
+            );
+            return;
+        }
+        this.isWizardAgentforceGenerating = true;
+        this.wizardAgentforceFindings = [];
+        this.wizardAgentforceSummary = '';
+        try {
+            // aiAuthoringPrompt is the SAME prompt the Copy Prompt button hands
+            // out — fields, assets, description, tag syntax, engine constraints.
+            const res = await generateBodyPreview({ prompt: this.aiAuthoringPrompt });
+            const html = res.html || '';
+
+            this._aiPastedHtml = html;
+            const ta = this.template.querySelector('.dg-ai-paste');
+            if (ta) {
+                ta.value = html;
+            }
+
+            this.wizardAgentforceSummary = res.summary || '';
+            this.wizardAgentforceFindings = (res.findings || []).map((f, i) => ({
+                key: `wz-af-${i}`,
+                rule: f.rule,
+                detail: f.detail,
+                occurrences: f.occurrences,
+                badge: f.action === 'repaired' ? 'Repaired' : f.action === 'removed' ? 'Removed' : 'Check this',
+                badgeClass:
+                    f.action === 'warning' ? 'slds-theme_warning' : f.action === 'repaired' ? 'slds-theme_success' : ''
+            }));
+
+            this.showToast(
+                'Template generated',
+                `${res.summary || 'Ready.'} Continue to Review & Create — it becomes your v1, and the designer opens on it.`,
+                res.warningCount > 0 ? 'warning' : 'success'
+            );
+        } catch (e) {
+            const msg = e?.body?.message || e?.message || 'Generation failed.';
+            this.showToast('Agentforce could not generate this', msg, 'error');
+        } finally {
+            this.isWizardAgentforceGenerating = false;
+        }
+    }
+
+    /**
+     * Creating from scratch replaces the canvas outright, so it needs an
+     * explicit confirmation when there is work there to lose. Editing does not:
+     * the current body — unsaved edits and all — is what gets sent, so nothing
+     * is discarded.
+     */
+    get agentforceNeedsDiscardConfirm() {
+        return !this.isAgentforceEditMode && this.canEditWithAgentforce && !this.agentforceConfirmDiscard;
+    }
+
+    handleAgentforceConfirmDiscardChange(event) {
+        this.agentforceConfirmDiscard = !!event.target.checked;
     }
 
     async handleGenerateWithAgentforce() {
@@ -2771,19 +2929,41 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             );
             return;
         }
+        if (this.agentforceNeedsDiscardConfirm) {
+            this.dispatchEvent(
+                new ShowToastEvent({
+                    title: 'This will replace what is on the canvas',
+                    message:
+                        'Starting over discards the current template, including unsaved edits. Tick the box to confirm, or switch to "Edit what is on the canvas".',
+                    variant: 'warning'
+                })
+            );
+            return;
+        }
         this.isAgentforceGenerating = true;
         this.agentforceFindings = [];
         this.agentforceSummary = '';
         try {
-            // editAiPrompt already carries the schema, tag cheat sheet and
-            // Flying Saucer constraints. Append the author's description so the
-            // in-org path and the copy-paste path stay the same prompt.
+            // buildAiPrompt owns BOTH the create and the edit framing, so the
+            // in-org path, the copy-paste path and the edit path cannot drift.
             const description = (this.aiDocDescription || '').trim();
-            const prompt = description
-                ? `${this.editAiPrompt}\n\nWHAT I WANT THIS DOCUMENT TO BE:\n${description}`
-                : this.editAiPrompt;
+            const editing = this.isAgentforceEditMode;
+            const currentBody = editing ? this._currentDesignerBody : '';
+            const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
+            const prompt = buildAiPrompt(shape, {
+                dataSourceMode: this.editTemplateObject === 'FlowJsonData' ? 'flow' : 'record',
+                providerFields: (this.providerFields || []).map((f) => f.name || f),
+                fieldTypes: this._buildFieldTypeMap(this.designerQueryMeta),
+                docDescription: description,
+                mode: editing ? 'edit' : 'create',
+                currentBody
+            });
 
-            const res = await generateTemplateBody({ templateId: this.editTemplateId, prompt });
+            const res = await generateTemplateBody({
+                templateId: this.editTemplateId,
+                prompt,
+                previousBody: editing ? currentBody : null
+            });
 
             this.agentforceSummary = res.summary || '';
             this.agentforceFindings = (res.findings || []).map((f, i) => ({
@@ -2809,9 +2989,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
             this.dispatchEvent(
                 new ShowToastEvent({
-                    title: 'Template generated',
+                    title: res.wasEdit ? 'Edit applied' : 'Template generated',
                     message: res.summary || 'Loaded into the canvas.',
-                    variant: 'success'
+                    variant: res.warningCount > 0 ? 'warning' : 'success'
                 })
             );
         } catch (e) {
