@@ -115,7 +115,51 @@ them up, and a subscriber without Einstein installs normally with the feature
 dormant (button hidden). Verified by dry-run against `Portwood Dev`: 409
 components, 0 failures, no Einstein classes in the set.
 
-### Distribution — MEASURED 2026-07-26, and it settles the question
+### Distribution — SETTLED 2026-07-26 by building it and installing it
+
+Two separate questions, and conflating them cost most of a session:
+
+**1. Can a package containing `ConnectApi.EinsteinLLM` be BUILT? — YES.**
+The earlier "no" was a wrong scratch-org feature name, not an entitlement.
+`EinsteinGPTForDevelopers` is accepted by the platform but provisions nothing —
+`GenAiPromptTemplate` stays `INVALID_TYPE` in the resulting org. The correct
+recipe (per developer.salesforce.com/docs/ai/agentforce/guide/scratch-org.html):
+
+```json
+"features": ["Einstein1AIPlatform"],
+"settings": {
+  "agentPlatformSettings": { "enableAgentPlatform": true },
+  "einsteinGptSettings":   { "enableEinsteinGptPlatform": true }
+}
+```
+
+With that, a scratch org from our own Dev Hub compiles `ConnectApi.EinsteinLLM`,
+accepts `GenAiPromptTemplate`, and takes the full `force-app` INCLUDING
+`DocGenEinsteinProvider` at **414/414 with all 10 translations**. Version
+**3.46.0.3 (`04tVx000000s7vlIAA`)** built successfully at 78% coverage with the
+Einstein provider inside.
+
+**2. Can that package be INSTALLED where Einstein is absent? — NO.**
+
+```
+ApexClass Type is not visible: ConnectApi.EinsteinLLM
+Details: DocGenEinsteinProvider: Type is not visible: ConnectApi.EinsteinLLM
+```
+
+Install re-validates Apex in the SUBSCRIBER org. So shipping the class in the
+base package would lock out every customer without Einstein — a far worse
+outcome than an extra setup step.
+
+**Buildable is not installable.** That is the finding, and it is why the
+`.forceignore` fence stays permanently. The subscriber-supplied-class design
+below is not a workaround for a missing entitlement; it is the only shape that
+works.
+
+(Test note: the first install attempt failed with `Cannot upgrade beta package`
+because the target already had 3.46.0.1. Betas cannot be upgraded in place —
+use a fresh org, or the result is meaningless.)
+
+### Earlier reasoning, superseded but kept for the method
 
 The install-vs-deploy question turned out to be the wrong question. The binding
 constraint is **the package BUILD**, and it was measured directly by creating a
