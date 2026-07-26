@@ -5,6 +5,13 @@
             "enableTranslationWorkbench": true,
             "enableEndUserLanguages": true,
             "enablePlatformLanguages": true
+        },
+        "agentPlatformSettings": {
+            "enableAgentPlatform": true
+        },
+        "einsteinGptSettings": {
+            "enableEinsteinGptPlatform": true
         }
-    }
+    },
+    "features": ["Einstein1AIPlatform"]
 }
