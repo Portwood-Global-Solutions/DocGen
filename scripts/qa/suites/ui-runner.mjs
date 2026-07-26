@@ -2494,6 +2494,29 @@ export async function run({ org, headed }) {
                 const shown = await sf(['org', 'display', '--target-org', alias, '--json'], { retries: 0 });
                 restrictedUser = JSON.parse(shown).result.username;
             } catch (e) {
+                // NEVER mint a second one. The alias lookup above is the only way
+                // to REUSE a user (a created user has no password we can drive),
+                // so a missing alias would otherwise create a fresh licensed user
+                // on every run. A Developer-edition scratch org ships 2 Salesforce
+                // and 3 Platform licences; three strays had already accumulated
+                // here and one was holding a full Salesforce licence.
+                const existing = await soql(
+                    org,
+                    "SELECT Id FROM User WHERE LastName = 'Restricted' AND IsActive = TRUE"
+                ).catch(() => []);
+                if (existing.length) {
+                    add(
+                        skip(
+                            'a user without the DocGen permission set gets a clear message, not a broken UI',
+                            `the org already has ${existing.length} active QA "Restricted" user(s) but no CLI alias ` +
+                                `for them, so they cannot be driven and creating another would spend a licence. ` +
+                                `Re-authorise with: sf org create user --target-org ${org} ` +
+                                `--definition-file scripts/qa/fixtures/restricted-user.json --set-alias ${alias}`,
+                            SEVERITY.MAJOR
+                        )
+                    );
+                    return suiteResult('ui-runner', 'End-user UI', checks);
+                }
                 const made = await sf(
                     [
                         'org',
@@ -2571,16 +2594,33 @@ export async function run({ org, headed }) {
                 const url = r.page.url();
                 const onLoginPage = /\/login|secur\/login/i.test(url) || !authed;
                 const challenged = /verify|challenge|_ui\/identity/i.test(url) || (await r.page.title()).match(/Verify/i);
-                if (onLoginPage || challenged) {
+                // FIRST-LOGIN PASSWORD RESET. A user created by `sf org create
+                // user` is sent to "Change Your Password" the first time its
+                // front-door URL is opened. A session cookie IS set, so the
+                // authed gate above passes — and the record page is never
+                // reached. The component then reports as empty because the page
+                // is a PASSWORD FORM, and this check duly reported "an
+                // unentitled user sees an empty panel with no explanation" as a
+                // product defect. It was an artifact of the test. Anything that
+                // isn't the record page must skip, never fail.
+                const bodyNow = await r.page.evaluate(() => document.body.innerText || '').catch(() => '');
+                const passwordWall = /change your password|new password|security question/i.test(bodyNow);
+                if (onLoginPage || challenged || passwordWall) {
                     add(
                         skip(
                             'a user without the DocGen permission set gets a clear message, not a broken UI',
-                            challenged
-                                ? 'the org challenged the restricted identity for verification, so the record ' +
-                                      `page was never reached (landed on ${url.slice(0, 120)}).`
-                                : `the restricted user's front-door URL did not establish a session — still on ` +
-                                      `${url.slice(0, 120)}. Re-authorise the alias: sf org create user --target-org ` +
-                                      `${org} --definition-file scripts/qa/fixtures/restricted-user.json`,
+                            passwordWall
+                                ? 'the restricted user was sent to the first-login "Change Your Password" screen, ' +
+                                      'so the record page was never reached. A session cookie IS set, which is why ' +
+                                      'this slipped past the auth gate and previously got reported as the component ' +
+                                      'rendering nothing — a product defect that did not exist. Set the password ' +
+                                      'once by hand and this check runs.'
+                                : challenged
+                                  ? 'the org challenged the restricted identity for verification, so the record ' +
+                                        `page was never reached (landed on ${url.slice(0, 120)}).`
+                                  : `the restricted user's front-door URL did not establish a session — still on ` +
+                                        `${url.slice(0, 120)}. Re-authorise the alias: sf org create user --target-org ` +
+                                        `${org} --definition-file scripts/qa/fixtures/restricted-user.json`,
                             SEVERITY.MAJOR
                         )
                     );

@@ -92,10 +92,54 @@ sf project deploy start --target-org "$ORG" --source-dir force-app --ignore-conf
 # Assigning first, or forgetting entirely, produces "No such column" on fields
 # that plainly exist. It reads as broken metadata and is not.
 say "Assigning permission sets"
+# The old form was `sf org assign permset ... 2>/dev/null || echo "(already
+# assigned)"`, which discarded the error and then ANNOUNCED SUCCESS for it. A
+# genuine failure — a permission set that did not deploy, a typo, a licence
+# problem — printed "(already assigned)" and the run carried on. That is how
+# docgen-verify ended up with ONE DocGen permission set instead of two, and it
+# passed every check anyway because a System Administrator has broad access
+# regardless: the org was not configured the way a customer's install is, which
+# is the one thing a QA org must get right.
+PERMSET_FAILED=0
 for ps in DocGen_Admin DocGen_User; do
-    sf org assign permset --target-org "$ORG" --name "$ps" 2>/dev/null ||
-        echo "   ($ps already assigned)"
+    out="$(sf org assign permset --target-org "$ORG" --name "$ps" 2>&1)" && {
+        echo "   $ps assigned"
+        continue
+    }
+    # "Duplicate" is the only benign failure: it means already assigned.
+    if printf '%s' "$out" | grep -qiE 'duplicate|already assigned'; then
+        echo "   $ps already assigned"
+    else
+        echo "   !! $ps FAILED: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-160)"
+        PERMSET_FAILED=1
+    fi
 done
+if [[ "$PERMSET_FAILED" == 1 ]]; then
+    echo ""
+    echo "   A permission set did not assign. The org will still deploy and mostly work"
+    echo "   as an admin, which is exactly why this used to pass unnoticed — but it is"
+    echo "   NOT configured the way a customer install is, so permission bugs stay hidden."
+    exit 1
+fi
+
+# Prove it, rather than trusting the CLI's exit code.
+#
+# By USERNAME. The first version of this matched Assignee.Id against
+# `sf org display --json .result.id`, which is the ORGANISATION id, not the
+# user's — so it returned 0 and cheerfully reported "0 permission set(s)" over a
+# correctly configured org. A verification step that lies is worse than none,
+# because it is the thing you check when something looks wrong.
+RUN_USER="$(sf org display --target-org "$ORG" --json 2>/dev/null |
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["username"])' 2>/dev/null || echo '')"
+ASSIGNED="$(sf data query --target-org "$ORG" \
+    -q "SELECT COUNT() FROM PermissionSetAssignment WHERE Assignee.Username = '$RUN_USER' AND PermissionSet.Name LIKE 'DocGen%'" \
+    --json 2>/dev/null |
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["totalSize"])' 2>/dev/null || echo '?')"
+echo "   verified: $ASSIGNED DocGen permission set(s) on $RUN_USER"
+if [[ "$ASSIGNED" == "0" ]]; then
+    echo "   !! none are actually assigned — the CLI reported success but the org disagrees"
+    exit 1
+fi
 
 # ── 4. component placement ───────────────────────────────────────────────────
 # docGenRunner and docGenSignatureSender are lightning__RecordPage components and
