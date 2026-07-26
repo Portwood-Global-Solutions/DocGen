@@ -2,6 +2,8 @@
 
 ## v3.45.0 — Visual Designer editing overhaul, running-header render fixes, silent-degradation logging
 
+Promoted as `04tVx000000s7pJIAQ` (build 3.45.0-1) — 78% coverage, validation not skipped.
+
 The Designer remains labelled **Beta**; this release is a full release. Nothing previously
 working was removed or changed in behaviour — the work is additive plus fixes.
 

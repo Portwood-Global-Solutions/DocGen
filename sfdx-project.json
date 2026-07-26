@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.45.0 \u2014 Visual Designer editing overhaul, running-header render fixes, silent-degradation logging, QA harness",
+      "versionName": "v3.45.0 — Visual Designer editing overhaul, running-header render fixes, silent-degradation logging, QA harness",
       "versionNumber": "3.45.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.45 is a large quality release for the template Designer: edit a merge tag straight from its menu, format a whole block of table cells at once, set table border thickness and colour, and see a preview of what you are dragging before you drop it. Table controls are easier to find and stay put long enough to click. Documents with a running header now keep it clear of the page content. Generation problems that used to pass silently \u2014 a logo that could not be loaded, a chart that came back empty \u2014 are now recorded in the DocGen Error Log so they can be found and fixed. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.45 is a large quality release for the template Designer: edit a merge tag straight from its menu, format a whole block of table cells at once, set table border thickness and colour, and see a preview of what you are dragging before you drop it. Table controls are easier to find and stay put long enough to click. Documents with a running header now keep it clear of the page content. Generation problems that used to pass silently — a logo that could not be loaded, a chart that came back empty — are now recorded in the DocGen Error Log so they can be found and fixed. 100% native Salesforce — no external services or callouts. Free for all users.",
       "ancestorVersion": "3.44.0"
     }
   ],
@@ -210,6 +210,7 @@
     "Portwood DocGen Managed@3.42.0-1": "04tVx000000rj5RIAQ",
     "Portwood DocGen Managed@3.43.0-1": "04tVx000000rkeDIAQ",
     "Portwood DocGen Managed@3.44.0-1": "04tVx000000rksjIAA",
-    "Portwood DocGen Managed@3.44.0-2": "04tVx000000rlATIAY"
+    "Portwood DocGen Managed@3.44.0-2": "04tVx000000rlATIAY",
+    "Portwood DocGen Managed@3.45.0-1": "04tVx000000s7pJIAQ"
   }
 }
