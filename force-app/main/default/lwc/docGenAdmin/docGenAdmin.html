@@ -1862,8 +1862,23 @@
                                 </template>
                                 <template if:true={pillMenu}>
                                     <div class="dg-pill-menu" style={pillMenu.posStyle} role="menu">
+                                        <!--
+                                          The tag itself is EDITABLE here, on the first line.
+                                          It used to be a read-only <code> with "Edit tag…" two
+                                          rows below, so changing a tag meant opening the menu,
+                                          reading the tag, then hunting for a separate command
+                                          to change the thing already in front of you.
+                                        -->
                                         <div class="dg-pill-menu-head">
-                                            <code>{pillMenu.tagText}</code>
+                                            <input
+                                                class="dg-pill-menu-edit"
+                                                type="text"
+                                                value={pillMenu.tagText}
+                                                spellcheck="false"
+                                                title="Edit this tag — Enter to apply, Escape to cancel"
+                                                onkeydown={handlePillHeadKeydown}
+                                                onchange={handlePillHeadCommit}
+                                            />
                                             <button class="dg-pill-menu-x" onclick={handlePillMenuClose} title="Close">
                                                 &#10005;
                                             </button>

@@ -1573,6 +1573,35 @@
     white-space: nowrap;
 }
 
+/*
+ * The tag on the menu's first line is an input, not a label — it is the thing
+ * you came here to change. Styled to still READ as the tag it replaced
+ * (monospace, same size and colour) so the menu does not suddenly look like a
+ * form; the border only appears on focus.
+ */
+.dg-pill-menu-edit {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.72rem;
+    color: #5a3fc4;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+
+.dg-pill-menu-edit:hover {
+    border-color: #e0d8f7;
+}
+
+.dg-pill-menu-edit:focus {
+    outline: none;
+    background: #fff;
+    border-color: #c9b8f5;
+    box-shadow: 0 0 0 2px rgba(201, 184, 245, 0.35);
+}
+
 .dg-pill-menu-x {
     border: none;
     background: none;

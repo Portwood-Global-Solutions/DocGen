@@ -10358,10 +10358,32 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Chrome only (tint + border) — font family/size/color/weight INHERIT
         // from the surrounding text, so a pill inside a 24pt serif heading
         // reads exactly like the value will print.
+        //
+        // CONTAINMENT is the load-bearing part, not the tint. This used to be
+        // `white-space: nowrap` with no width limit, so a long tag such as
+        // {Statement_Date__c:MMMM d, yyyy} in a narrow table cell could not
+        // wrap: it spilled straight out of the cell and sat on top of the
+        // neighbouring one. The overlapping pill then swallowed the clicks meant
+        // for whatever was underneath, so both became uneditable — a pill you
+        // can see, cannot click, and cannot get rid of.
+        //
+        //   max-width:100%   — never wider than the cell that holds it
+        //   white-space:normal + overflow-wrap:anywhere
+        //                    — wrap INSIDE the cell instead of escaping it. A
+        //                      tag may break across two lines, which is far
+        //                      better than one that cannot be edited.
+        //   display:inline-block + vertical-align:baseline
+        //                    — max-width only applies to a block-ish box, and
+        //                      baseline keeps it sitting on the text line.
         const isStructural = /^[#/:%@*]/.test((tagText || '').charAt(1));
+        const containment =
+            'display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere;' +
+            'vertical-align:baseline;box-sizing:border-box;';
         return isStructural
-            ? 'background:#e3f5e9;border:1px solid #9fd6b1;border-radius:9px;padding:0 6px;white-space:nowrap;cursor:pointer;'
-            : 'background:#ede7fd;border:1px solid #c9b8f5;border-radius:9px;padding:0 6px;white-space:nowrap;cursor:pointer;';
+            ? 'background:#e3f5e9;border:1px solid #9fd6b1;border-radius:9px;padding:0 6px;cursor:pointer;' +
+                  containment
+            : 'background:#ede7fd;border:1px solid #c9b8f5;border-radius:9px;padding:0 6px;cursor:pointer;' +
+                  containment;
     }
 
     /**
@@ -10613,6 +10635,55 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._activePill.style.cssText = this._pillStyleFor(tag);
             this.htmlEditorDirty = true;
         }
+        this.pillMenu = null;
+    }
+
+    /**
+     * The menu's first line edits the tag directly.
+     *
+     * Enter applies, Escape abandons. Both stopPropagation: the canvas has its
+     * own Enter/Escape handling (new paragraph, dismiss menus), and without this
+     * typing a tag would also split the block underneath.
+     */
+    handlePillHeadKeydown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            this._commitPillHead(event.currentTarget.value);
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.pillMenu = null;
+        } else {
+            // Every other key too — a '/' or backtick typed into this field must
+            // not reach the canvas and open the slash or tag menu on top of it.
+            event.stopPropagation();
+        }
+    }
+
+    handlePillHeadCommit(event) {
+        this._commitPillHead(event.currentTarget.value);
+    }
+
+    _commitPillHead(raw) {
+        const text = (raw || '').trim();
+        // A blank field is treated as "no change", never as delete. Committing ''
+        // is how an image pill previously got destroyed by an edit — removal is
+        // what the Remove command is for, and it should be deliberate.
+        if (!text || !this._activePill) {
+            this.pillMenu = null;
+            return;
+        }
+        // Typing "Name" rather than "{Name}" is the common case; brace it.
+        const tag = text.startsWith('{') ? text : '{' + text.replace(/^\{|\}$/g, '') + '}';
+        if (tag === (this._activePill.textContent || '').trim()) {
+            this.pillMenu = null;
+            return;
+        }
+        this._pushUndo('pill-edit');
+        this._activePill.textContent = tag;
+        this._activePill.style.cssText = this._pillStyleFor(tag);
+        this.htmlEditorDirty = true;
         this.pillMenu = null;
     }
 
