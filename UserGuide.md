@@ -460,6 +460,38 @@ Two failure modes that look similar and are not:
 
 `opacity`, `box-shadow`, `transform`, `calc()` and `outline` are all ignored too.
 
+##### Long values overflow a table cell — and no CSS fixes it
+
+A value with no spaces in it (an external id, a URL, a base64 fragment, a long
+product code) will **run straight through the cell border**. This is not a
+styling mistake; the engine cannot break an unbroken run of characters at all.
+Measured across every candidate:
+
+| Technique                   | Result                                                                   |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `word-wrap: break-word`     | **ignored** — the engine injects this on every cell and it does nothing  |
+| `overflow-wrap: break-word` | **ignored**                                                              |
+| `word-break: break-all`     | **ignored**                                                              |
+| `table-layout: fixed`       | the column stops growing, so the text overflows the border instead       |
+| `&#8203;` zero-width space  | **ignored**                                                              |
+| `&shy;` soft hyphen         | breaks, but prints VISIBLE hyphens into the value — it corrupts the data |
+| **`<wbr/>`**                | **works** — breaks cleanly, and the text is unchanged                    |
+
+So the only correct fix is a `<wbr/>` at each allowed break point:
+
+```html
+<!-- overflows the cell -->
+<td>{External_Reference__c}</td>
+
+<!-- wraps, value unchanged -->
+<td>ORD-2026<wbr />-000148<wbr />-REV3<wbr />-APPROVED</td>
+```
+
+For merged values you cannot pre-break by hand, keep the column wide enough for
+the longest value you expect, or split the value into its own row beneath the
+label rather than beside it. Do **not** reach for `&shy;` — a hyphen that was
+never in the data is worse than a column that is too narrow.
+
 ##### How to draw a circle (bullets, status dots, timeline markers)
 
 Since `border-radius` does nothing, a circle has to be a **character**, not a box.
