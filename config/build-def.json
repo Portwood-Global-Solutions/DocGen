@@ -1,10 +1,17 @@
 {
     "orgName": "DocGen Package Build",
+    "features": ["Einstein1AIPlatform"],
     "settings": {
         "languageSettings": {
             "enableTranslationWorkbench": true,
             "enableEndUserLanguages": true,
             "enablePlatformLanguages": true
+        },
+        "agentPlatformSettings": {
+            "enableAgentPlatform": true
+        },
+        "einsteinGptSettings": {
+            "enableEinsteinGptPlatform": true
         }
     }
 }

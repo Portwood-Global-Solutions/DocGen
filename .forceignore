@@ -19,24 +19,3 @@ scripts/
 # Public-API reference example — ships in docs, not in the package
 force-app/main/default/classes/DocGenDataProviderExample.cls
 force-app/main/default/classes/DocGenDataProviderExample.cls-meta.xml
-
-# Einstein-only. These reference ConnectApi.EinsteinLLM, which is NOT a visible
-# type in an org without the Einstein entitlement — deploying them there fails
-# with "Type is not visible: ConnectApi.EinsteinLLM", and because deploys are
-# atomic that takes the ENTIRE deploy down with it (measured 2026-07-26 against
-# Portwood Dev: 409/411, full rollback). Fenced off so no package build can pick
-# them up and break a subscriber who does not have Einstein.
-#
-# The rest of the feature is unaffected: DocGenAiProviderFactory resolves this
-# class by name via Type.forName and falls back to DocGenUnavailableProvider, so
-# the Designer simply hides the button. Deploy these two explicitly, by path, to
-# an Einstein-enabled org:
-#   sf project deploy start -o <einstein-org> \
-#     -d force-app/main/default/classes/DocGenEinsteinProvider.cls \
-#     -d force-app/main/default/classes/DocGenEinsteinProviderTest.cls
-# Before this can ship in the base package, confirm whether a managed-package
-# INSTALL behaves like a source deploy here — that is still unmeasured.
-force-app/main/default/classes/DocGenEinsteinProvider.cls
-force-app/main/default/classes/DocGenEinsteinProvider.cls-meta.xml
-force-app/main/default/classes/DocGenEinsteinProviderTest.cls
-force-app/main/default/classes/DocGenEinsteinProviderTest.cls-meta.xml

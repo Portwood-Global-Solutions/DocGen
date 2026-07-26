@@ -303,7 +303,12 @@
         <readable>true</readable>
     </fieldPermissions>
     <!-- DocGen Settings (hierarchy custom setting) fields -->
-    <!-- AI authoring: which provider class and prompt template to use -->
+    <!-- AI authoring: the opt-in switch, plus which provider class and template -->
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Settings__c.Enable_AI_Authoring__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Settings__c.AI_Prompt_Template__c</field>

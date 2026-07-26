@@ -29,6 +29,10 @@ public with sharing class DocGenAiProviderFactory {
     @TestVisible
     private static final String NOT_CONFIGURED = 'In-org AI generation is not set up in this org. Use Copy AI Prompt and paste the result back, or ask an administrator to deploy an AI provider class (see the DocGen Agentforce setup guide).';
 
+    /** Shown when the org has not opted in. Names the exact switch. */
+    @TestVisible
+    private static final String NOT_ENABLED = 'AI authoring is turned off in this org. An administrator can enable it in Setup > Custom Settings > DocGen Settings > Enable AI Authoring, once Einstein Prompt Builder and the DocGen_HTML_Body prompt template are set up. Until then, use Copy AI Prompt and paste the result back.';
+
     /** Set by tests, or to force a specific implementation. */
     @TestVisible
     private static DocGenAiProvider overrideProvider;
@@ -39,6 +43,15 @@ public with sharing class DocGenAiProviderFactory {
         }
         if (Test.isRunningTest()) {
             return new DocGenAiStubProvider();
+        }
+
+        // Explicit opt-in. The Einstein provider now ships INSIDE the package,
+        // so "is the class present?" no longer answers "is AI usable here?" —
+        // Type.forName finds it in every org, entitled or not. Without this gate
+        // every subscriber would see a button that throws when pressed. The
+        // admin turns it on once setup is actually complete.
+        if (!aiAuthoringEnabled()) {
+            return new DocGenUnavailableProvider(NOT_ENABLED);
         }
 
         String className = configuredProviderClass();
@@ -73,6 +86,15 @@ public with sharing class DocGenAiProviderFactory {
             );
         }
         return (DocGenAiProvider) instance;
+    }
+
+    /**
+     * Has an admin confirmed AI authoring is set up in this org?
+     * Defaults to FALSE, so an upgrade never surfaces a button that fails.
+     */
+    public static Boolean aiAuthoringEnabled() {
+        String v = readSetting('Enable_AI_Authoring__c');
+        return v == 'true';
     }
 
     /** Provider class name from settings, falling back to the default. */

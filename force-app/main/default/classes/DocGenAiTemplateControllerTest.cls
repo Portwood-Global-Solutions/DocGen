@@ -392,6 +392,44 @@ private class DocGenAiTemplateControllerTest {
     }
 
     @isTest
+    static void aiIsOffUntilAnAdminTurnsItOn() {
+        // The Einstein provider now ships inside the package, so "the class
+        // exists" no longer means "AI works here". Without an explicit opt-in
+        // every subscriber would get a button that throws when pressed.
+        System.assertEquals(
+            false,
+            DocGenAiProviderFactory.aiAuthoringEnabled(),
+            'must default OFF so an upgrade never surfaces a broken button'
+        );
+
+        DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+        s.Enable_AI_Authoring__c = true;
+        upsert s;
+        Test.startTest();
+        System.assertEquals(true, DocGenAiProviderFactory.aiAuthoringEnabled(), 'honours the switch');
+        Test.stopTest();
+    }
+
+    @isTest
+    static void theOffSwitchNamesWhereToTurnItOn() {
+        DocGenAiProvider p = new DocGenAiProviderFactory.DocGenUnavailableProvider(
+            'AI authoring is turned off in this org. An administrator can enable it in Setup > Custom Settings > DocGen Settings > Enable AI Authoring.'
+        );
+        System.assertEquals(false, p.isAvailable());
+        Test.startTest();
+        try {
+            p.generateHtml('x');
+            System.assert(false, 'should have thrown');
+        } catch (DocGenAiProviderFactory.DocGenAiUnavailableException e) {
+            System.assert(
+                e.getMessage().containsIgnoreCase('Enable AI Authoring'),
+                'name the exact switch: ' + e.getMessage()
+            );
+        }
+        Test.stopTest();
+    }
+
+    @isTest
     static void providerClassNameComesFromSettings() {
         // An admin can point DocGen at their own class without editing Apex.
         System.assertEquals(
