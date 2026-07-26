@@ -10077,6 +10077,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._toggleListAtCaret(cmd === 'insertOrderedList');
             return;
         }
+        // MULTI-CELL SELECTION TAKES PRECEDENCE.
+        //
+        // Selecting a block of cells and pressing Center used to centre exactly
+        // one of them — whichever happened to hold the caret — because
+        // execCommand only ever sees the caret, and the cell selection is a
+        // model of ours it knows nothing about. Fill colour already applied to
+        // the whole selection, so the toolbar behaved inconsistently with itself.
+        //
+        // Captured before any mutation: the array must not be read back after
+        // the DOM has moved underneath it.
+        const selCells = this._cellSel && this._cellSel.length ? this._cellSel.filter((c) => c && c.isConnected) : [];
+        if (selCells.length > 1 && this._applyFmtAcrossCells(selCells, cmd, value)) {
+            this.htmlEditorDirty = true;
+            return;
+        }
         // Alignment on a clicked image: align the block that holds it —
         // pure text-align, CSS 2.1-safe, exactly what the PDF engine honors.
         if (/^justify(Left|Center|Right)$/.test(cmd)) {
@@ -10352,6 +10367,116 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         pill.style.fontSize = '10px';
         pill.style.background = 'repeating-linear-gradient(90deg, #e6e2f5 0 3px, #f6f4fc 3px 6px)';
         pill.style.borderStyle = 'dashed';
+    }
+
+    /**
+     * Apply a toolbar command to EVERY cell in the multi-cell selection.
+     *
+     * Returns true when it handled the command, false to let the normal
+     * caret-based path run — a command this does not understand must fall
+     * through rather than be silently swallowed.
+     *
+     * Two different mechanisms, because two different things are being set:
+     *
+     *  - Alignment is a property of the CELL. Written as cell.style.textAlign,
+     *    which is CSS 2.1 and exactly what the PDF engine honours. Running
+     *    execCommand('justifyCenter') per cell would instead wrap the contents
+     *    in alignment divs that survive into the generated document.
+     *  - Character formatting belongs to the cell's CONTENTS, so each cell's
+     *    contents are selected in turn and the command run over them.
+     */
+    _applyFmtAcrossCells(cells, cmd, value) {
+        const align = /^justify(Left|Center|Right)$/.exec(cmd);
+        if (align) {
+            const dir = align[1].toLowerCase();
+            for (const cell of cells) {
+                cell.style.textAlign = dir;
+            }
+            this._repaintCellSel(cells);
+            return true;
+        }
+
+        // DOM SURGERY, NOT execCommand.
+        //
+        // The obvious implementation — select each cell's contents and run
+        // document.execCommand('bold') — was written first and does NOTHING.
+        // It reported success and left all three cells unbolded. This is the
+        // same LWS behaviour that already forced the list commands off
+        // execCommand: inside a manual-DOM host it quietly declines to act on a
+        // programmatically-built range. Wrapping the contents by hand always
+        // works, and produces the plain <b>/<i>/<u>/<s> the PDF engine wants.
+        const WRAP = { bold: 'b', italic: 'i', underline: 'u', strikeThrough: 's' };
+        // Cell-level properties. Setting these on the CELL rather than around
+        // its contents keeps the markup clean and inherits to everything inside,
+        // which is what selecting a whole cell implies anyway.
+        const CELL_STYLE = { foreColor: 'color', fontName: 'fontFamily' };
+
+        if (WRAP[cmd]) {
+            const tag = WRAP[cmd];
+            // Toggle on the whole selection, decided ONCE: if every cell is
+            // already wrapped, this is an un-bold. Deciding per cell would make
+            // a mixed selection alternate instead of converging.
+            const allWrapped = cells.every((c) => {
+                const kids = Array.from(c.childNodes).filter((n) => n.nodeType !== 3 || n.nodeValue.trim());
+                return kids.length === 1 && kids[0].nodeName && kids[0].nodeName.toLowerCase() === tag;
+            });
+            for (const cell of cells) {
+                if (allWrapped) {
+                    const only = Array.from(cell.childNodes).find(
+                        (n) => n.nodeName && n.nodeName.toLowerCase() === tag
+                    );
+                    if (only) {
+                        while (only.firstChild) {
+                            cell.insertBefore(only.firstChild, only);
+                        }
+                        only.remove();
+                    }
+                } else if (cell.innerHTML.trim()) {
+                    const el = (cell.ownerDocument || document).createElement(tag);
+                    while (cell.firstChild) {
+                        el.appendChild(cell.firstChild);
+                    }
+                    cell.appendChild(el);
+                }
+            }
+            this._repaintCellSel(cells);
+            return true;
+        }
+
+        if (CELL_STYLE[cmd] && value) {
+            for (const cell of cells) {
+                cell.style[CELL_STYLE[cmd]] = value;
+            }
+            this._repaintCellSel(cells);
+            return true;
+        }
+
+        // Anything else falls through to the normal caret path rather than
+        // being half-applied. hiliteColor in particular is the table Fill
+        // control's job, and removeFormat/super/subscript across whole cells
+        // would mean something different from what the button promises.
+        return false;
+    }
+
+    /**
+     * Re-assert the cell-selection highlight after a formatting pass.
+     *
+     * execCommand rewrites a cell's inner markup, and _pushUndo's snapshot
+     * clears the caret paint, so the purple ring can be lost even though the
+     * selection is logically unchanged. Losing it makes the next command look
+     * like it applied to nothing — the user pressed Center, then Bold, and Bold
+     * only hit one cell because the selection had visually evaporated.
+     */
+    _repaintCellSel(cells) {
+        for (const cell of cells) {
+            if (!cell || !cell.isConnected) {
+                continue;
+            }
+            cell.setAttribute('data-dg-selcell', '1');
+            cell.style.boxShadow = 'inset 0 0 0 2px #7c3aed';
+            cell.style.backgroundClip = 'padding-box';
+        }
+        this._cellSel = cells.filter((c) => c && c.isConnected);
     }
 
     _pillStyleFor(tagText) {
