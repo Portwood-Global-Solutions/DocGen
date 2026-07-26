@@ -2632,16 +2632,131 @@ export async function run({ org, headed }) {
                 await restrictedCtx.browser.close().catch(() => {});
             }
         }
-        add(
-            skip(
-                'the Combine PDFs and Document Packet runs produce a real merged document',
-                'both tabs are proved to render, list their sources and gate their button (section 2g/2h), but ' +
-                    'actually running them means driving a dual-listbox move — select an option, then press the ' +
-                    "listbox's own arrow button — and then a multi-megabyte client-side PDF merge. Neither the " +
-                    'move nor the merge is exercised here, so "the packet is correct" is NOT claimed.',
-                SEVERITY.MAJOR
-            )
-        );
+        /* ---- Document Packet: actually run it, and read the result ---- *
+         * The packet merge happens IN THE BROWSER — there is no packet Apex for
+         * a server-side check to call (the runner's whole Apex surface is
+         * generate/fetch; the combining is client-side). So the only way to
+         * learn whether a packet is correct is to build one, download it, and
+         * read the text off the pages.
+         *
+         * "It downloaded" is not the claim being made here. The claim is that
+         * BOTH source documents are inside it — a merge that silently keeps only
+         * the first, or writes a valid PDF containing neither, downloads exactly
+         * as happily as a correct one.
+         */
+        try {
+            await openRecord(page, base, acctId, 15000);
+            const packetTab = await locateByText(page, 'a, button, span', 'Document Packet');
+            if (!packetTab.found) {
+                add(skip('a Document Packet contains every document it was built from', 'packet tab not found', SEVERITY.MAJOR));
+            } else {
+                await clickAt(page, packetTab, 2500);
+                // Move the first two available templates into the packet by
+                // driving the listbox the way a person does: click the option,
+                // then press the move button. Re-querying the source list each
+                // time matters — moving an option removes it, so the "first"
+                // option is a different template on the second pass.
+                const moved = await ev(
+                    page,
+                    `
+          const lb = __dgFind('lightning-dual-listbox');
+          if (!lb) return { ok: false, why: 'no dual listbox' };
+          const root = lb.shadowRoot || lb;
+          const names = [];
+          for (let pass = 0; pass < 2; pass++) {
+            const cols = root.querySelectorAll('ul[role="listbox"], ul.slds-dueling-list__options');
+            if (!cols.length) return { ok: false, why: 'no listbox columns' };
+            const opt = cols[0].querySelector('li[role="option"], li');
+            if (!opt) return { ok: false, why: 'source column empty on pass ' + pass };
+            names.push((opt.textContent || '').trim());
+            opt.click();
+            const btns = root.querySelectorAll('lightning-button-icon, button');
+            let movedThis = false;
+            for (const b of btns) {
+              const t = ((b.title || '') + ' ' + (b.getAttribute('alternative-text') || '') +
+                         ' ' + (b.getAttribute('icon-name') || '')).toLowerCase();
+              if (t.indexOf('right') !== -1 || t.indexOf('to selected') !== -1 || t.indexOf('in packet') !== -1) {
+                b.click(); movedThis = true; break;
+              }
+            }
+            if (!movedThis) return { ok: false, why: 'no move-right control' };
+          }
+          return { ok: true, names };
+        `
+                );
+
+                if (!moved || !moved.ok) {
+                    add(
+                        skip(
+                            'a Document Packet contains every document it was built from',
+                            `could not move templates into the packet: ${(moved && moved.why) || 'unknown'}`,
+                            SEVERITY.MAJOR
+                        )
+                    );
+                } else {
+                    const dl = page
+                        .waitForEvent('download', { timeout: 300000 })
+                        .then((d) => d.path().then((p) => ({ name: d.suggestedFilename(), path: p })))
+                        .catch(() => null);
+                    const genBtn = await locateByText(page, 'button', 'Packet');
+                    if (genBtn.found && genBtn.hit === 'ok') await clickAt(page, genBtn, 3000);
+                    const file = await dl;
+
+                    if (!file || !file.path) {
+                        add(
+                            check(
+                                'building a Document Packet produces a file',
+                                false,
+                                `two templates were moved into the packet (${moved.names.join(', ')}) and the ` +
+                                    'generate button pressed, but no download arrived within 300s',
+                                SEVERITY.MAJOR
+                            )
+                        );
+                    } else {
+                        add(check('building a Document Packet produces a file', true, `downloaded "${file.name}"`, SEVERITY.MAJOR));
+                        const { available: pdfOk, pdfText } = await import('../lib/pdf.mjs');
+                        if (!(await pdfOk())) {
+                            add(
+                                skip(
+                                    'a Document Packet contains every document it was built from',
+                                    'pdftotext is not installed, so the merged file cannot be read',
+                                    SEVERITY.MAJOR
+                                )
+                            );
+                        } else {
+                            const { readFileSync } = await import('node:fs');
+                            const { pages, text, pageCount } = await pdfText(readFileSync(file.path));
+                            // Each source template's title text should survive
+                            // into the packet. Matching on the template NAMES
+                            // taken off the listbox keeps this honest: it
+                            // compares against what was actually selected, not
+                            // against a hardcoded guess.
+                            const found = moved.names.filter((n) => n && text.toLowerCase().includes(n.toLowerCase().slice(0, 12)));
+                            add(
+                                check(
+                                    'a Document Packet contains every document it was built from',
+                                    pageCount > 1 && found.length === moved.names.length,
+                                    found.length === moved.names.length
+                                        ? `${pageCount} pages, and content from all ${moved.names.length} selected documents`
+                                        : `${pageCount} pages but only ${found.length} of ${moved.names.length} selected ` +
+                                              `documents are present (selected: ${moved.names.join(', ')}). A merge that ` +
+                                              'drops a document downloads exactly like one that does not.',
+                                    SEVERITY.MAJOR
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            add(
+                skip(
+                    'a Document Packet contains every document it was built from',
+                    `threw: ${String(e.message).slice(0, 200)}`,
+                    SEVERITY.MAJOR
+                )
+            );
+        }
 
         return suiteResult('ui-runner', 'End-user UI', checks);
     } catch (e) {

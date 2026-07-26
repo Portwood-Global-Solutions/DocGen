@@ -42,7 +42,21 @@ export const E2E_SEQUENCE = [
 ];
 
 export function parseE2E(log) {
-    const m = /PASS:\s*(\d+)\s+FAIL:\s*(\d+)/i.exec(log || '');
+    // ONLY the lines the script actually PRINTED.
+    //
+    // `sf apex run` echoes the Apex SOURCE back before the output, and these
+    // scripts contain their own summary strings as literals — including the
+    // abort line 'E2E-06B ... PASS: 0  FAIL: 1  ABORTED (run e2e-02 first)'.
+    // Scanning the whole log matched that echo instead of the real result, so
+    // three scripts that pass perfectly were reported as BLOCKERS claiming they
+    // had aborted for missing seed data. The evidence even quoted the abort
+    // message, which made it thoroughly convincing.
+    const printed = String(log || '')
+        .split('\n')
+        .filter((l) => /USER_DEBUG/.test(l))
+        .join('\n');
+    const scan = printed || String(log || '');
+    const m = /PASS:\s*(\d+)\s+FAIL:\s*(\d+)/i.exec(scan);
     if (!m) {
         // Pull whatever the org said went wrong — a governor limit or a compile
         // error, both of which print instead of the summary.

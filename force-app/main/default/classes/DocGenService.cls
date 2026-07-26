@@ -1202,6 +1202,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             resultBlob = assembleZip(mr);
         }
 
+        // Persist anything the render degraded past. Buffered until here so a
+        // 2,000-row document cannot spend the DML limit on diagnostics; a
+        // successful generation that quietly dropped an image or emptied a chart
+        // now leaves a Warning row behind instead of nothing.
+        DocGenErrorLogger.flush();
+
         return new Map<String, Object>{
             'blob' => resultBlob,
             'title' => mr.docTitle,
@@ -7288,7 +7294,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // payload survives ZIP roundtrip and grep cleanly.
             return '<!--DGPIC|' + spec.relationshipId + '|' + widthEmu + '|' + heightEmu + '|' + imageCounter + '-->';
         } catch (Exception e) {
-            // Image resolution failed (invalid CV, corrupt base64) — skip silently
+            // Image resolution failed (invalid CV, corrupt base64). The document
+            // still generates — it just has a hole where the logo or photo was
+            // meant to be, which is the single most common "it looks wrong"
+            // support report and previously left NOTHING to look at. Continuing
+            // is right; doing so invisibly was not.
+            DocGenErrorLogger.warn(
+                'DocGenService',
+                'Resolve image for output',
+                'Image omitted from the document — could not be resolved: ' + e.getMessage()
+            );
             return null;
         }
     }
@@ -8384,8 +8399,15 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 }
             }
         } catch (Exception e) {
-            // Intentionally swallowed — image fetch failed (invalid ID, access denied)
-            String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+            // Intentionally swallowed — image fetch failed (invalid ID, access
+            // denied). Continuing is right; the document should not fail over
+            // one image. But "access denied" in particular is invisible to the
+            // author, who sees a hole and no reason for it, so it is recorded.
+            DocGenErrorLogger.warn(
+                'DocGenService',
+                'Fetch image data',
+                'Image omitted — could not be fetched (invalid Id or no access): ' + e.getMessage()
+            );
         }
         return null;
     }

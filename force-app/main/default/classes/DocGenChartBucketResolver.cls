@@ -673,7 +673,14 @@ public with sharing class DocGenChartBucketResolver {
             rows = Database.query(soql, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — identifier-only interpolation; child/field/lookup validated against Schema; parentId bound via :variable
             chartSoqlBudget--;
         } catch (Exception qErr) {
-            String noop = qErr.getMessage(); // NOPMD — non-fatal; chart renders empty
+            // Same silent-empty-chart outcome as the advanced path below.
+            DocGenErrorLogger.warn(
+                'DocGenChartBucketResolver',
+                'Chart aggregate query',
+                'Chart rendered EMPTY — the aggregate query failed: ' + qErr.getMessage(),
+                null,
+                String.valueOf(parentId)
+            );
             return empty;
         }
 
@@ -914,7 +921,16 @@ public with sharing class DocGenChartBucketResolver {
             rows = Database.query(soql, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — identifier-only interpolation; lookup, group, and field validated against Schema; whereClause sanitized; parentId bound via :variable
             chartSoqlBudget--;
         } catch (Exception qErr) {
-            String noop = qErr.getMessage(); // NOPMD — non-fatal
+            // A failed aggregate renders an EMPTY chart, not an error — the
+            // document generates and looks finished, with a blank where the
+            // data should be. Recorded so that is diagnosable after the fact.
+            DocGenErrorLogger.warn(
+                'DocGenChartBucketResolver',
+                'Chart aggregate query',
+                'Chart rendered EMPTY — the aggregate query failed: ' + qErr.getMessage(),
+                null,
+                String.valueOf(parentId)
+            );
             return empty;
         }
 

@@ -7729,10 +7729,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const painted = this._paintedEl;
         this._clearEditorPaint();
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- READ, not a write: snapshots the canvas for undo. Reading innerHTML injects nothing, and under LWS the string is the ONLY faithful way to capture the canvas (cloneNode silently omits browser-inserted nodes — the v3.41 bug).
         const snap = { body: body.innerHTML, header: null, footer: null };
         for (const which of ['header', 'footer']) {
             const band = this.template.querySelector('.dg-chrome-band_' + which);
             if (band) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- READ, not a write; same undo snapshot as above.
                 snap[which] = band.innerHTML;
             }
         }
