@@ -123,6 +123,9 @@ import testRecordFilter from '@salesforce/apex/DocGenController.testRecordFilter
 // 1.61 — HTML zip sidesteps File Upload Security via client-side unzip + per-part upload
 import saveHtmlTemplateImage from '@salesforce/apex/DocGenController.saveHtmlTemplateImage';
 import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemplateBody';
+// Agentforce authoring: same prompt as Copy AI Prompt, but it never leaves the org.
+import isAiAvailable from '@salesforce/apex/DocGenAiTemplateController.isAiAvailable';
+import generateTemplateBody from '@salesforce/apex/DocGenAiTemplateController.generateTemplateBody';
 import savePdfAcroFormPreparedBodyChunk from '@salesforce/apex/DocGenController.savePdfAcroFormPreparedBodyChunk';
 import finalizePdfAcroFormPreparedBody from '@salesforce/apex/DocGenController.finalizePdfAcroFormPreparedBody';
 import getPdfAcroFormPreparedBodyStatus from '@salesforce/apex/DocGenController.getPdfAcroFormPreparedBodyStatus';
@@ -538,6 +541,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track aiSelectedAssetIds = null;
     // Step 3: the author's own description, injected into the prompt.
     @track aiDocDescription = '';
+    // Agentforce authoring (in-org generation). Degrades to Copy AI Prompt when
+    // the org has no Einstein entitlement — the button simply does not appear.
+    @track isAgentforceAvailable = false;
+    @track isAgentforcePanelOpen = false;
+    @track isAgentforceGenerating = false;
+    @track agentforceSummary = '';
+    @track agentforceFindings = [];
     // Live PDF preview: draft HTML → real Blob.toPdf render → blob: iframe.
     @track pdfPreviewUrl = null;
     @track isPdfPreviewLoading = false;
@@ -2708,6 +2718,110 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     handleCopyEditAiPrompt() {
         this._copyToClipboard(this.editAiPrompt, 'AI prompt copied — paste it into your AI assistant.');
+    }
+
+    // -----------------------------------------------------------------------
+    // Generate with Agentforce
+    //
+    // Closes the loop that Copy AI Prompt opens: the SAME prompt goes to
+    // Salesforce AI in this org, the result is stripped of everything the PDF
+    // engine ignores, and the cleaned body lands in the canvas. The button is
+    // hidden — not disabled — when the org has no entitlement, so the existing
+    // copy-paste path stays the visible answer rather than a dead end.
+    // -----------------------------------------------------------------------
+
+    get showAgentforceButton() {
+        return this.isAgentforceAvailable && !!this.editTemplateId;
+    }
+
+    get agentforceBtnLabel() {
+        return this.isAgentforceGenerating ? 'Generating…' : 'Generate with Agentforce';
+    }
+
+    get hasAgentforceReport() {
+        return this.agentforceFindings && this.agentforceFindings.length > 0;
+    }
+
+    async _refreshAgentforceAvailability() {
+        try {
+            this.isAgentforceAvailable = await isAiAvailable();
+        } catch (e) {
+            this.isAgentforceAvailable = false;
+        }
+    }
+
+    handleOpenAgentforcePanel() {
+        this.agentforceFindings = [];
+        this.agentforceSummary = '';
+        this.isAgentforcePanelOpen = true;
+    }
+
+    handleCloseAgentforcePanel() {
+        this.isAgentforcePanelOpen = false;
+    }
+
+    async handleGenerateWithAgentforce() {
+        if (!this.editTemplateId) {
+            this.dispatchEvent(
+                new ShowToastEvent({
+                    title: 'Save the template first',
+                    message: 'There is nothing to write the generated body onto yet.',
+                    variant: 'warning'
+                })
+            );
+            return;
+        }
+        this.isAgentforceGenerating = true;
+        this.agentforceFindings = [];
+        this.agentforceSummary = '';
+        try {
+            // editAiPrompt already carries the schema, tag cheat sheet and
+            // Flying Saucer constraints. Append the author's description so the
+            // in-org path and the copy-paste path stay the same prompt.
+            const description = (this.aiDocDescription || '').trim();
+            const prompt = description
+                ? `${this.editAiPrompt}\n\nWHAT I WANT THIS DOCUMENT TO BE:\n${description}`
+                : this.editAiPrompt;
+
+            const res = await generateTemplateBody({ templateId: this.editTemplateId, prompt });
+
+            this.agentforceSummary = res.summary || '';
+            this.agentforceFindings = (res.findings || []).map((f, i) => ({
+                key: `af-${i}`,
+                rule: f.rule,
+                detail: f.detail,
+                occurrences: f.occurrences,
+                badge: f.action === 'repaired' ? 'Repaired' : f.action === 'removed' ? 'Removed' : 'Check this',
+                badgeClass:
+                    f.action === 'warning' ? 'slds-theme_warning' : f.action === 'repaired' ? 'slds-theme_success' : ''
+            }));
+
+            // Same handoff the version-restore path uses, so the canvas picks
+            // the body up exactly as it would any other load.
+            const html = res.html || '';
+            if (this.showHtmlBodyVisual) {
+                this._exitVisualMode();
+            }
+            this._syncHtmlBodyEditorDom(html);
+            this._lastUploadedHtmlText = html;
+            this.htmlEditorDirty = true;
+            this._enterVisualMode(html);
+
+            this.dispatchEvent(
+                new ShowToastEvent({
+                    title: 'Template generated',
+                    message: res.summary || 'Loaded into the canvas.',
+                    variant: 'success'
+                })
+            );
+        } catch (e) {
+            const msg = e?.body?.message || e?.message || 'Generation failed.';
+            this.dispatchEvent(
+                new ShowToastEvent({ title: 'Agentforce could not generate this', message: msg, variant: 'error' })
+            );
+        } finally {
+            this.isAgentforceGenerating = false;
+        }
     }
 
     _copyToClipboard(text, successMsg) {
@@ -12726,6 +12840,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         await this._loadBodyIntoEditor();
         // Asset library feeds the Images panel + slash menu + tag pills.
         this._loadWizardAssets();
+        // Not awaited — the toolbar button appears when the answer arrives, and
+        // an org without Einstein just never shows it.
+        this._refreshAgentforceAvailability();
         let body = this._lastUploadedHtmlText;
         if (!body || !body.trim()) {
             // Blank template: seed a clean sheet so click-and-type just works.

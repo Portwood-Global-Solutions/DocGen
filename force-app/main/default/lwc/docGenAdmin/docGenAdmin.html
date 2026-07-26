@@ -1629,6 +1629,16 @@
                                     >
                                         Copy AI Prompt
                                     </button>
+                                    <template if:true={showAgentforceButton}>
+                                        <button
+                                            class="dg-fmt-btn dg-panel-btn dg-tb-chip"
+                                            onclick={handleOpenAgentforcePanel}
+                                            disabled={isAgentforceGenerating}
+                                            title="Send the same prompt to Salesforce AI in this org and load the result straight into the canvas — no copy-paste."
+                                        >
+                                            {agentforceBtnLabel}
+                                        </button>
+                                    </template>
                                     <button
                                         class="dg-fmt-btn dg-panel-btn dg-pdf-preview-btn dg-toolbar-pdf"
                                         onclick={handlePdfPreview}
@@ -5293,6 +5303,90 @@
                         variant="brand"
                         onclick={handleRestoreFromPreview}
                         disabled={isPreviewVersionActive}
+                    ></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+
+    <!-- Generate with Agentforce -->
+    <template if:true={isAgentforcePanelOpen}>
+        <section
+            role="dialog"
+            tabindex="-1"
+            aria-modal="true"
+            aria-labelledby="agentforce-modal-title"
+            class="slds-modal slds-fade-in-open slds-modal_medium"
+        >
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <lightning-button-icon
+                        icon-name="utility:close"
+                        alternative-text="Close"
+                        title="Close"
+                        variant="bare"
+                        class="slds-button slds-button_icon slds-modal__close"
+                        onclick={handleCloseAgentforcePanel}
+                    ></lightning-button-icon>
+                    <h2 id="agentforce-modal-title" class="slds-text-heading_medium">Generate with Agentforce</h2>
+                </header>
+                <div class="slds-modal__content slds-var-p-around_large">
+                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_medium">
+                        Your fields, the DocGen tag syntax and the PDF engine's layout rules are sent automatically —
+                        the same prompt as <strong>Copy AI Prompt</strong>. Just describe the document.
+                    </p>
+                    <lightning-textarea
+                        label="What should this document be?"
+                        value={aiDocDescription}
+                        onchange={handleAiDocDescriptionChange}
+                        placeholder="e.g. A one-page invoice: header band with the account name, a details panel, a line-item table with a grand total row, and a payment-terms footer."
+                        class="slds-var-m-bottom_medium"
+                    ></lightning-textarea>
+
+                    <template if:true={isAgentforceGenerating}>
+                        <div class="slds-is-relative slds-var-m-vertical_large" style="height: 60px">
+                            <lightning-spinner alternative-text="Generating..." size="small"></lightning-spinner>
+                            <p
+                                class="slds-text-align_center slds-text-body_small slds-text-color_weak"
+                                style="padding-top: 42px"
+                            >
+                                Writing the template — this usually takes 10&ndash;20 seconds.
+                            </p>
+                        </div>
+                    </template>
+
+                    <template if:true={hasAgentforceReport}>
+                        <div class="slds-box slds-var-m-top_medium">
+                            <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">{agentforceSummary}</h3>
+                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_small">
+                                The PDF engine is CSS 2.1. Anything it ignores was removed or rewritten before the
+                                template was saved &mdash; here is exactly what changed.
+                            </p>
+                            <template for:each={agentforceFindings} for:item="f">
+                                <div key={f.key} class="slds-var-m-bottom_x-small">
+                                    <lightning-badge label={f.badge} class={f.badgeClass}></lightning-badge>
+                                    <strong class="slds-var-m-left_x-small">{f.rule}</strong>
+                                    <span class="slds-text-body_small slds-text-color_weak">
+                                        &times;{f.occurrences}</span
+                                    >
+                                    <p class="slds-text-body_small slds-var-m-left_medium">{f.detail}</p>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+                <footer class="slds-modal__footer slds-theme_default">
+                    <lightning-button
+                        label="Close"
+                        onclick={handleCloseAgentforcePanel}
+                        class="slds-var-m-right_small"
+                    ></lightning-button>
+                    <lightning-button
+                        label="Generate"
+                        variant="brand"
+                        onclick={handleGenerateWithAgentforce}
+                        disabled={isAgentforceGenerating}
                     ></lightning-button>
                 </footer>
             </div>

@@ -1,0 +1,148 @@
+/**
+ * "Generate with Agentforce" — the Designer endpoint.
+ *
+ *   authoring prompt (built client-side by docGenAuthoringKit.buildAiPrompt)
+ *     -> provider (Einstein via ConnectApi, or the stub)
+ *     -> DocGen_Template__c.Draft_Body__c        raw model output, kept for diffing
+ *     -> DocGenAiHtmlValidator                   strip / repair, and say what changed
+ *     -> ContentVersion 'docgen_html_body_<templateId>_<ts>'
+ *     -> the Designer opens it
+ *
+ * The prompt is assembled in the LWC rather than here on purpose: buildAiPrompt
+ * already owns the schema, the tag cheat sheet and the rendering constraints,
+ * and it is the same text "Copy AI Prompt" hands to an external assistant. One
+ * prompt, two destinations — the in-org path must not drift from the one authors
+ * have been pasting into ChatGPT.
+ */
+public with sharing class DocGenAiTemplateController {
+    public class AiGenerationException extends Exception {
+    }
+
+    public class GenerationResult {
+        /** Validated HTML, already saved and ready for the canvas. */
+        @AuraEnabled
+        public String html { get; set; }
+        @AuraEnabled
+        public String summary { get; set; }
+        @AuraEnabled
+        public List<DocGenAiHtmlValidator.Finding> findings { get; set; }
+        @AuraEnabled
+        public Integer repairedCount { get; set; }
+        @AuraEnabled
+        public Integer removedCount { get; set; }
+        @AuraEnabled
+        public Integer warningCount { get; set; }
+        @AuraEnabled
+        public Id contentVersionId { get; set; }
+        @AuraEnabled
+        public String providerName { get; set; }
+        /** Characters of raw model output, before sanitizing. */
+        @AuraEnabled
+        public Integer rawLength { get; set; }
+    }
+
+    /**
+     * Lets the Designer hide the button rather than let someone click into an
+     * error. The feature must degrade to the existing copy-paste prompt when AI
+     * is not available, never fail loudly.
+     */
+    @AuraEnabled(cacheable=false)
+    public static Boolean isAiAvailable() {
+        try {
+            return DocGenAiProviderFactory.get().isAvailable();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * @param templateId HTML-type DocGen_Template__c to write the body onto.
+     * @param prompt     Fully assembled authoring prompt from buildAiPrompt().
+     */
+    @AuraEnabled
+    public static GenerationResult generateTemplateBody(Id templateId, String prompt) {
+        if (templateId == null) {
+            throw new AuraHandledException(
+                'Save the template first — there is nothing to write the generated body onto.'
+            );
+        }
+        if (String.isBlank(prompt)) {
+            throw new AuraHandledException('Describe the document you want before generating.');
+        }
+
+        try {
+            DocGenAiProvider provider = DocGenAiProviderFactory.get();
+            String raw = provider.generateHtml(prompt);
+            if (String.isBlank(raw)) {
+                throw new AiGenerationException(
+                    'The model returned an empty response. Try again, or add more detail to your description.'
+                );
+            }
+
+            // Stage the RAW output first, so a validator bug can never lose what
+            // the model actually said, and the two can be compared afterwards.
+            stageDraftBody(templateId, raw);
+
+            DocGenAiHtmlValidator.Result checked = DocGenAiHtmlValidator.sanitize(raw);
+
+            Map<String, Object> saved = DocGenController.saveHtmlTemplateBody(
+                templateId,
+                'agentforce-generated.html',
+                checked.html
+            );
+
+            GenerationResult out = new GenerationResult();
+            out.html = checked.html;
+            out.summary = checked.summary;
+            out.findings = checked.findings;
+            out.repairedCount = checked.repairedCount;
+            out.removedCount = checked.removedCount;
+            out.warningCount = checked.warningCount;
+            out.contentVersionId = (Id) saved.get('contentVersionId');
+            out.providerName = provider.getName();
+            out.rawLength = raw.length();
+            return out;
+        } catch (AuraHandledException e) {
+            throw e;
+        } catch (Exception e) {
+            AuraHandledException wrapped = new AuraHandledException(e.getMessage());
+            wrapped.setMessage(e.getMessage());
+            throw wrapped;
+        }
+    }
+
+    /**
+     * Re-run the validator over whatever is currently staged. Useful after a
+     * hand edit, and it makes the rule set inspectable without spending a
+     * generation.
+     */
+    @AuraEnabled
+    public static GenerationResult validateOnly(String html) {
+        DocGenAiHtmlValidator.Result checked = DocGenAiHtmlValidator.sanitize(html);
+        GenerationResult out = new GenerationResult();
+        out.html = checked.html;
+        out.summary = checked.summary;
+        out.findings = checked.findings;
+        out.repairedCount = checked.repairedCount;
+        out.removedCount = checked.removedCount;
+        out.warningCount = checked.warningCount;
+        out.rawLength = String.isBlank(html) ? 0 : html.length();
+        return out;
+    }
+
+    /** Raw model output onto the staging field. Never fatal — this is an audit trail. */
+    private static void stageDraftBody(Id templateId, String raw) {
+        try {
+            DocGen_Template__c t = new DocGen_Template__c(Id = templateId);
+            // Long Text Area caps at 131,072; a real body is 5-70KB, so this is
+            // headroom rather than a limit, but truncate rather than throw.
+            t.Draft_Body__c = raw.length() > 131072 ? raw.substring(0, 131072) : raw;
+            DocGenFlsGuard.assertUpdateable(t, new Set<String>{ 'Draft_Body__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.update(t, AccessLevel.SYSTEM_MODE);
+        } catch (Exception e) {
+            // Staging is a convenience. Losing it must not lose the generation.
+            System.debug(LoggingLevel.WARN, 'DocGen: could not stage Draft_Body__c: ' + e.getMessage());
+        }
+    }
+}
