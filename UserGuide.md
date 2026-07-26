@@ -3337,7 +3337,49 @@ and finds hyphens that were never in the record.
     XHTML-style. This only works for text you type into the template — there is
     no way to place `<wbr/>` inside a merged field's value.
 
-### 15.12 Still stuck?
+### 15.12 "HTML" or "Excel" missing from the Type picklist
+
+**Symptom.** Creating or editing a template, the **Type** picklist offers only
+some of Word / PowerPoint / Excel / HTML / PDF. Commonly HTML or Excel is absent,
+so an HTML template cannot be created — or worse, it saves as **Word** and then
+opens to an empty canvas in the Designer and converts badly on generation.
+
+**Type lives on TWO objects, and both matter.**
+
+| Object                       | Field     | What it controls                                                                         |
+| ---------------------------- | --------- | ---------------------------------------------------------------------------------------- |
+| `DocGen_Template__c`         | `Type__c` | What you pick when creating the template                                                 |
+| `DocGen_Template_Version__c` | `Type__c` | **How the template actually behaves** — the editor that opens and how the body is parsed |
+
+DocGen derives the template's behaviour from the **version's** type, so a
+template that says HTML while its active version says Word behaves as Word. If
+only one of the two is fixed, the symptom persists. Check both.
+
+**To make the values available:**
+
+1. **Setup → Object Manager**, open **DocGen Template**.
+2. **Fields & Relationships → Type → Values**.
+3. Confirm `Word`, `PowerPoint`, `Excel`, `HTML` and `PDF` are all present and
+   **Active**. Use **Activate** on any that are deactivated.
+4. If your org uses **record types** on the object, open each record type and add
+   the values to its available list — a value that exists but is not assigned to
+   the record type will not appear in the picker.
+5. Repeat all of the above for **DocGen Template Version**.
+
+**If a value is genuinely absent rather than inactive**, do not try to add it by
+hand. Both fields are **restricted** picklists owned by the managed package, so a
+subscriber org cannot add a new value to them — and a value typed in manually
+would not match what the engine compares against. An absent value means the org
+is on a package version that predates it: **upgrade DocGen** and the value
+arrives with the upgrade.
+
+**Repairing templates already saved with the wrong type.** Fixing the picklist
+does not retype existing records. Open the template, set **Type** correctly, then
+open its active version record and set **Type** there too. Until the version is
+corrected the template keeps behaving as its old type, whatever the template
+record says.
+
+### 15.13 Still stuck?
 
 Check the **DocGen Error Logs** tab first (§13.2.1) — most generation, bulk, and signature failures leave a log record with the failing context, which beats guessing.
 
