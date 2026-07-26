@@ -20,7 +20,11 @@ public with sharing class DocGenHtmlRenderer {
         // want padding, so a non-zero default ends up "flabby" (extra space the author
         // never asked for). Keep horizontal cell padding because Word's tcMar defaults
         // to ~108 twips (~5.4pt) on each side and zeroing it makes tables visually fuse.
-        'td, th { padding: 0 4pt; vertical-align: top; }' +
+        // #245 — an unbreakable token (URL, record Id, no-spaces reference code) has
+        // nowhere to go under table-layout: fixed and spills across the cell border.
+        // Both spellings are emitted: word-wrap is the legacy property Flying Saucer
+        // recognizes, overflow-wrap is the standard one.
+        'td, th { padding: 0 4pt; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }' +
         'p { margin: 0; orphans: 2; widows: 2; page-break-inside: avoid; }' +
         // v1.97 — no global max-width on images. Inline width/height (emitted from
         // wp:extent or rich-text size tokens) is the authoritative size. Image-field
@@ -597,7 +601,9 @@ public with sharing class DocGenHtmlRenderer {
             // than authored and multi-column tables overflow the page margins.
             'td, th { padding: ' +
             cellPadding +
-            '; vertical-align: top; box-sizing: border-box; }' +
+            // #245 — see the static prefix: break unbreakable tokens rather than
+            // letting them overflow the cell under table-layout: fixed.
+            '; vertical-align: top; box-sizing: border-box; word-wrap: break-word; overflow-wrap: break-word; }' +
             // Tight defaults: Word always emits explicit <w:spacing> when authors want
             // paragraph spacing — letting it default to 8pt produces "flabby" output the
             // author never asked for (especially noticeable in tight address blocks).
@@ -637,11 +643,21 @@ public with sharing class DocGenHtmlRenderer {
             // position:fixed sized watermark — body content sits above via z-index
             bodyHtml += watermarkOverlayHtml;
         }
+        // data-dg-region tells the Designer that these divs are running CHROME, not
+        // body content, so a Word template converted to HTML puts <w:hdr>/<w:ftr>
+        // into Header_Html__c / Footer_Html__c instead of leaving them inline at the
+        // top of the document (DESIGNER_PLAN_V2 step 3). Purely an annotation:
+        // Flying Saucer selects these divs by #id and ignores unknown data
+        // attributes, so PDF output is byte-identical.
+        //
+        // Only the DEFAULT pair is marked. The -first variants below have no
+        // template field to be adopted into (there is one Header_Html__c, not one
+        // per page context), and marking them would drop them on import.
         if (hasHeader) {
-            bodyHtml += '<div id="docgen-header">' + headerHtml + '</div>';
+            bodyHtml += '<div id="docgen-header" data-dg-region="header">' + headerHtml + '</div>';
         }
         if (hasFooter) {
-            bodyHtml += '<div id="docgen-footer">' + footerHtml + '</div>';
+            bodyHtml += '<div id="docgen-footer" data-dg-region="footer">' + footerHtml + '</div>';
         }
         if (hasHeaderFirst) {
             bodyHtml += '<div id="docgen-header-first">' + headerFirstHtml + '</div>';
@@ -926,7 +942,9 @@ public with sharing class DocGenHtmlRenderer {
         css += 'h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }';
         css += 'table { border-collapse: collapse; width: 100%; page-break-inside: auto; }';
         css += 'tr { page-break-inside: avoid; page-break-after: auto; }';
-        css += 'td, th { padding: 4pt; vertical-align: top; }';
+        // #245 — see the static prefix: break unbreakable tokens rather than
+        // letting them overflow the cell under table-layout: fixed.
+        css += 'td, th { padding: 4pt; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }';
         css += 'p { margin: 0 0 8pt 0; orphans: 2; widows: 2; page-break-inside: avoid; }';
         css += // v1.97 — no global max-width on images. Inline width/height (emitted from
             // wp:extent or rich-text size tokens) is the authoritative size. Image-field
@@ -2624,6 +2642,35 @@ public with sharing class DocGenHtmlRenderer {
     }
 
     /**
+     * #246 — maps an OOXML <w:vAlign w:val="..."> value onto a legal CSS
+     * `vertical-align` keyword for a table cell.
+     *
+     * Word uses top | center | bottom | both; CSS 2.1 table cells accept
+     * top | middle | bottom. The mismatch on "center" is the whole point of this
+     * method — see the call site. Returns null for anything unrecognized so the
+     * stylesheet default applies rather than an invalid declaration.
+     */
+    @TestVisible
+    private static String toCssVerticalAlign(String wordVAlign) {
+        if (String.isBlank(wordVAlign)) {
+            return null;
+        }
+        String v = wordVAlign.trim().toLowerCase();
+        if (v == 'top') {
+            return 'top';
+        }
+        // "both" is Word's vertically-justified setting; middle is the closest
+        // thing CSS 2.1 can express.
+        if (v == 'center' || v == 'middle' || v == 'both') {
+            return 'middle';
+        }
+        if (v == 'bottom') {
+            return 'bottom';
+        }
+        return null;
+    }
+
+    /**
      * Processes a <w:tc> element into an HTML <td> or <th>.
      */
     private static String processTableCell(
@@ -2679,9 +2726,19 @@ public with sharing class DocGenHtmlRenderer {
             }
 
             // Vertical alignment: <w:vAlign w:val="center"/>
+            //
+            // #246 — Word's vocabulary is top | center | bottom | both, but CSS
+            // vertical-align on a table cell accepts top | middle | bottom. Emitting
+            // Word's "center" verbatim produced `vertical-align:center`, which is
+            // INVALID CSS — Flying Saucer dropped the declaration and the cell fell back
+            // to the stylesheet default of `top`. Every centre-aligned Word cell has been
+            // silently rendering top-aligned. Translate instead of passing through.
             String vAlign = extractAttr(tcPr, 'w:vAlign', 'w:val');
             if (vAlign != null) {
-                styles.add('vertical-align:' + sanitizeCssToken(vAlign));
+                String cssVAlign = toCssVerticalAlign(vAlign);
+                if (cssVAlign != null) {
+                    styles.add('vertical-align:' + cssVAlign);
+                }
             }
 
             // Cell-specific borders: <w:tcBorders> override; otherwise inherit the

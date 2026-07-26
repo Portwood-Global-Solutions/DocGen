@@ -337,7 +337,11 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         if (html != null) {
             String giantTableCss =
                 'table { border-collapse: collapse; border-spacing: 0; table-layout: fixed; max-width: 100%; -fs-table-paginate: paginate; } ' +
-                'thead { display: table-header-group; } td.gqc { ' +
+                'thead { display: table-header-group; } ' +
+                // #245 — table-layout: fixed above means an unbreakable token has nowhere
+                // to go; without this it spills across the cell border. Applies to every
+                // cell (header, footer, data), not just td.gqc.
+                'td, th { word-wrap: break-word; overflow-wrap: break-word; } td.gqc { ' +
                 cellBorderCss +
                 ' padding: 0pt 5.4pt; } tr { page-break-inside: avoid; } ' +
                 columnCss;
@@ -395,7 +399,8 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
                 'body { font-family: Helvetica, sans-serif; font-size: 9pt; margin: 0; }' +
                 'table { width: 100%; border-collapse: collapse; border-spacing: 0; table-layout: fixed; -fs-table-paginate: paginate; }' +
                 'thead { display: table-header-group; }' +
-                'td, th { border: 0.5pt solid #ccc; padding: 0pt 5.4pt; }' +
+                // #245 — break unbreakable tokens rather than overflowing the cell.
+                'td, th { border: 0.5pt solid #ccc; padding: 0pt 5.4pt; word-wrap: break-word; overflow-wrap: break-word; }' +
                 'th { background-color: #f0f0f0; font-weight: bold; }' +
                 'tr { page-break-inside: avoid; }' +
                 columnCss +
@@ -526,7 +531,9 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
         String rawHtml = cvs[0].VersionData.toString();
 
         String sourceStyles = DocGenService.extractHtmlStyleBlocks(rawHtml);
-        sourceStyles += '<style>table { border-collapse: collapse; border-spacing: 0; -fs-table-paginate: paginate; } thead { display: table-header-group; }</style>';
+        // #245 appends the cell wrap rule here too — this is the HTML-backed giant-query
+        // path, which never passes through DocGenHtmlRenderer's stylesheet.
+        sourceStyles += '<style>table { border-collapse: collapse; border-spacing: 0; -fs-table-paginate: paginate; } thead { display: table-header-group; } td, th { word-wrap: break-word; overflow-wrap: break-word; }</style>';
         String bodyContent = DocGenService.extractHtmlBodyContent(rawHtml);
 
         // Resolve parent-level merge tags (outside the loop) and grand-total

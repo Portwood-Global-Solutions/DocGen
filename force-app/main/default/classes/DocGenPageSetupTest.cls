@@ -333,4 +333,140 @@ private class DocGenPageSetupTest {
         System.assert(wrapped.contains('size: letter'), 'Engine should inject default size when author has none');
         System.assert(wrapped.contains('margin: 1in'), 'Engine should inject default margin when author has none');
     }
+
+    // =====================================================================
+    // #243 — explicit record page-setup beats an author @page.
+    //
+    // Word carries orientation in <w:sectPr>, not in markup, so admins set
+    // Page_Orientation__c on the template record. After a Word→HTML conversion the
+    // converted HTML's own @page was winning unconditionally (the v1.90 rule) and the
+    // admin's landscape choice was silently discarded.
+    // =====================================================================
+
+    @IsTest
+    static void explicitLandscapeOverridesAuthorPageSize() {
+        DocGenHtmlRenderer.pageSizeOverride = 'Letter';
+        DocGenHtmlRenderer.orientationOverride = 'Landscape';
+        DocGenHtmlRenderer.marginsOverride = 'Default';
+        DocGenHtmlRenderer.customMarginsOverride = null;
+        // Converted-from-Word HTML brings its own portrait @page.
+        String authored = '@page { size: 8.5in 11in; margin: 1in; } p { color: red; }';
+        String wrapped = DocGenService.wrapHtmlForPdf('<p>hi</p>', authored, null, null);
+
+        System.assert(
+            wrapped.contains('size: 11.0in 8.5in'),
+            'Explicit Landscape must win over the author @page size: ' + wrapped
+        );
+        System.assert(
+            !wrapped.contains('size: 8.5in 11in'),
+            'The competing author size declaration must be stripped: ' + wrapped
+        );
+        // Only the size declaration is removed — the rest of the author CSS survives.
+        System.assert(wrapped.contains('color: red'), 'Unrelated author CSS must survive: ' + wrapped);
+        System.assert(
+            wrapped.contains('margin: 1in'),
+            'Author margin survives when no explicit margin override is set: ' + wrapped
+        );
+    }
+
+    @IsTest
+    static void defaultPortraitLetterStillDefersToAuthorPage() {
+        // Portrait + Letter are the FIELD DEFAULTS and cannot be distinguished from
+        // "the admin never touched this", so they must NOT override author CSS. This
+        // is what keeps the v1.90 fix for #60 / #71 intact.
+        DocGenHtmlRenderer.pageSizeOverride = 'Letter';
+        DocGenHtmlRenderer.orientationOverride = 'Portrait';
+        DocGenHtmlRenderer.marginsOverride = 'Default';
+        DocGenHtmlRenderer.customMarginsOverride = null;
+        String authored = '@page { size: A4 landscape; margin: 15mm; }';
+        String wrapped = DocGenService.wrapHtmlForPdf('<p>hi</p>', authored, null, null);
+
+        System.assert(wrapped.contains('size: A4 landscape'), 'Author @page size must survive: ' + wrapped);
+        System.assert(wrapped.contains('margin: 15mm'), 'Author @page margin must survive: ' + wrapped);
+        String engine = engineStyleBlock(wrapped);
+        System.assert(!engine.contains('@page'), 'Engine must emit no @page for default values: ' + engine);
+    }
+
+    @IsTest
+    static void explicitMarginOverrideAlsoStripsAuthorMargin() {
+        DocGenHtmlRenderer.pageSizeOverride = 'A4';
+        DocGenHtmlRenderer.orientationOverride = 'Portrait';
+        DocGenHtmlRenderer.marginsOverride = 'Narrow';
+        DocGenHtmlRenderer.customMarginsOverride = null;
+        String authored = '@page { size: 8.5in 11in; margin: 2in; }';
+        String wrapped = DocGenService.wrapHtmlForPdf('<p>hi</p>', authored, null, null);
+
+        System.assert(wrapped.contains('margin: 0.5in'), 'Narrow preset must be applied: ' + wrapped);
+        System.assert(!wrapped.contains('margin: 2in'), 'Author margin must be stripped: ' + wrapped);
+    }
+
+    @IsTest
+    static void stripSourcePageDeclIsSurgical() {
+        // The (^|;) anchor is what stops `size` matching `font-size` and `margin`
+        // matching `margin-top`. Without it this rewrite would corrupt author CSS.
+        String css = '@page { size: A4; margin: 1in; margin-top: 2in; } body { font-size: 10pt; margin-left: 3pt; }';
+        String stripped = DocGenService.stripSourcePageDecl(css, 'size');
+        System.assert(!stripped.contains('size: A4'), 'The @page size must go: ' + stripped);
+        System.assert(stripped.contains('font-size: 10pt'), 'font-size must NOT be treated as size: ' + stripped);
+        System.assert(stripped.contains('margin: 1in'), 'Sibling declarations must survive: ' + stripped);
+
+        String noMargin = DocGenService.stripSourcePageDecl(css, 'margin');
+        System.assert(noMargin.contains('margin-top: 2in'), 'margin-top must NOT match margin: ' + noMargin);
+        System.assert(noMargin.contains('margin-left: 3pt'), 'Rules outside @page are untouched: ' + noMargin);
+        System.assert(noMargin.contains('size: A4'), 'Only the named declaration is removed: ' + noMargin);
+    }
+
+    @IsTest
+    static void explicitOverrideDetection() {
+        DocGenHtmlRenderer.orientationOverride = 'Portrait';
+        DocGenHtmlRenderer.pageSizeOverride = 'Letter';
+        System.assert(!DocGenService.hasExplicitPageOverride(), 'Portrait+Letter are defaults, not explicit');
+        DocGenHtmlRenderer.orientationOverride = 'Landscape';
+        System.assert(DocGenService.hasExplicitPageOverride(), 'Landscape can only be a deliberate choice');
+        DocGenHtmlRenderer.orientationOverride = 'Portrait';
+        DocGenHtmlRenderer.pageSizeOverride = 'A4';
+        System.assert(DocGenService.hasExplicitPageOverride(), 'A4 can only be a deliberate choice');
+
+        DocGenHtmlRenderer.marginsOverride = 'Default';
+        System.assert(!DocGenService.hasExplicitMarginOverride(), 'Default preset is not explicit');
+        DocGenHtmlRenderer.marginsOverride = 'FromSource';
+        System.assert(!DocGenService.hasExplicitMarginOverride(), 'FromSource defers to the document by definition');
+        DocGenHtmlRenderer.marginsOverride = 'Wide';
+        System.assert(DocGenService.hasExplicitMarginOverride(), 'A named preset is explicit');
+    }
+
+    // =====================================================================
+    // #245 / #246 — cell rendering
+    // =====================================================================
+
+    @IsTest
+    static void cellsWrapUnbreakableStrings() {
+        // table-layout: fixed gives a long unbroken token nowhere to go; without an
+        // explicit wrap rule it runs straight through the cell border.
+        DocGenHtmlRenderer.pageSizeOverride = null;
+        DocGenHtmlRenderer.orientationOverride = null;
+        DocGenHtmlRenderer.marginsOverride = null;
+        DocGenHtmlRenderer.customMarginsOverride = null;
+        String wrapped = DocGenService.wrapHtmlForPdf('<table><tr><td>x</td></tr></table>', '', null, null);
+        System.assert(wrapped.contains('word-wrap: break-word'), 'Engine CSS must break long tokens: ' + wrapped);
+        System.assert(wrapped.contains('overflow-wrap: break-word'), 'Standard spelling emitted too: ' + wrapped);
+    }
+
+    @IsTest
+    static void wordVAlignCenterBecomesCssMiddle() {
+        // Word says center; CSS table cells only accept top | middle | bottom.
+        // Emitting "center" verbatim produced an INVALID declaration that Flying
+        // Saucer dropped, so every centre-aligned Word cell rendered top-aligned.
+        System.assertEquals('middle', DocGenHtmlRenderer.toCssVerticalAlign('center'), 'center must map to middle');
+        System.assertEquals('middle', DocGenHtmlRenderer.toCssVerticalAlign('CENTER'), 'match is case-insensitive');
+        System.assertEquals(
+            'middle',
+            DocGenHtmlRenderer.toCssVerticalAlign('both'),
+            'Word "both" is closest to middle'
+        );
+        System.assertEquals('top', DocGenHtmlRenderer.toCssVerticalAlign('top'), 'top passes through');
+        System.assertEquals('bottom', DocGenHtmlRenderer.toCssVerticalAlign('bottom'), 'bottom passes through');
+        System.assertEquals(null, DocGenHtmlRenderer.toCssVerticalAlign('nonsense'), 'unknown yields no declaration');
+        System.assertEquals(null, DocGenHtmlRenderer.toCssVerticalAlign(null), 'null yields no declaration');
+    }
 }

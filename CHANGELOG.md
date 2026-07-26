@@ -1,5 +1,42 @@
 # Changelog
 
+## v3.45.0 — Visual Designer editing overhaul, running-header render fixes, silent-degradation logging
+
+Promoted as `04tVx000000s7pJIAQ` (build 3.45.0-1) — 78% coverage, validation not skipped.
+
+The Designer remains labelled **Beta**; this release is a full release. Nothing previously
+working was removed or changed in behaviour — the work is additive plus fixes.
+
+### Fixed — Visual Designer
+
+- **Merge-tag pills escaped their table cell and made each other unclickable.** Pills were styled `white-space: nowrap` with no width limit, so a long tag (`{Statement_Date__c:MMMM d, yyyy}`) in a narrow cell could not wrap: it spilled out, came to rest on top of the neighbouring cell, and swallowed the clicks meant for it. Both cells then appeared uneditable. Pills are now contained (`max-width: 100%`, wrapping inside the cell). Measured on a real template: 23 pills in cells, none overflowing, none covered.
+- **Toolbar formatting applied to one cell instead of the selection.** Selecting a block of cells and pressing Center centred only the cell holding the caret, while Fill already applied to the whole selection — the same selection meant different things to different buttons. Alignment now writes `text-align` per cell; bold/italic/underline/strike wrap each cell's contents by DOM surgery, because `execCommand` silently declines to act on a programmatically-built range inside a manual-DOM host.
+- **Table border colour needed a second click.** `<input type="color">` fires `change` only on commit, so picking a colour did nothing until you clicked elsewhere. Now applies live as it is picked. Border thickness and colour both apply to the selected cells, or to the whole table when nothing is selected — and the tooltips now say so.
+- **Duplicate table controls.** Every column and row handle carried a `+` that duplicated the insert seam on the boundary. Handles are delete-only now; the seams own insertion, because a seam sits _on_ the boundary the new row lands at.
+- **Table controls vanished before they could be clicked.** They live in the margin around the table, so moving towards one was the very gesture that dismissed them. Dismissal is now delayed (700 ms leaving the canvas, 400 ms moving away on-page) and cancelled by returning.
+- **Block move arrows were nearly invisible and not reachable.** They sat under the editable canvas, so hovering showed a text caret and the click went to the page. Raised above the canvas, enlarged to 22×22, and given contrast.
+- **Dragging a tag or image showed no preview.** A ghost now shows what will land — a dashed-outline pill for a tag, the actual thumbnail for an image.
+- **The toolbar reshuffled as it wrapped.** Groups such as Borders and Fill split across rows, stranding a label from its own buttons. Groups now wrap whole or not at all.
+
+### Added
+
+- **Edit a merge tag from the top line of its menu.** Previously a read-only label with "Edit tag…" two rows below.
+- **Silent degradation is recorded in `DocGen_Error_Log__c`.** DocGen's characteristic failure is a document that generates successfully and is _wrong_ — an image skipped, a chart resolved empty. An audit of all 322 catch blocks found only 4 reaching the error log; 187 swallowed with no trace. The highest-value sites now log a **Warning** with the template and record. Buffered and de-duplicated so a 2,000-row document performs one DML, not thousands, and identical events collapse to one row with an occurrence count.
+
+### Fixed — rendering
+
+- **Running headers overflowed the page margin box** and could sit behind body content; the page margin now grows for a running header even when the source HTML owns `@page`.
+- **Flow actions could not report failure** — an uncatchable exception faulted the interview instead of returning `success = false`.
+- **Bulk generation's active-template filter matched everything**: in SOQL, `= NULL` on a checkbox means `= FALSE`, so `Is_Active__c = TRUE OR Is_Active__c = NULL` excluded nothing.
+- **A running bulk job made the whole screen unclickable** (an inline spinner escaped its row and covered the app).
+- **Admin safety**: confirm before deleting a template; warn before discarding unsaved edits.
+- **34 fields across 6 objects were unreachable** on their page layouts, and `DocGen_Asset__c` / `DocGen_Email_Template__c` had no layout at all.
+
+### Documentation
+
+- **Loops in a table go inside the cells** — `<td>{#Contacts}{FirstName}</td> … <td>{Title}{/Contacts}</td>`. The engine expands the enclosing `<tr>`, exactly as it does for `<w:tr>` in Word and `<row>` in Excel. A loop tag placed directly inside `<table>` is foster-parented out of the table by the HTML parser. All 14 example templates and the paste-ready LLM prompt were corrected.
+- **`border-radius` is not supported** by the PDF engine and never was — it was previously listed as supported in the CSS reference. Neither are `box-shadow`, `opacity`, `transform`, `calc()` or `outline`. `rgba()` is worse than unsupported: it resolves to nothing, so a tinted panel renders invisible rather than falling back to a colour. Use a flat hex. `border: dashed` and `border: dotted` do work. Measured with `scripts/css-capability-probe.apex`; rendered proof in `docs/css-capability-probe.png`.
+
 ## v3.44.0 — E-signature certificate unification, multi-signer verify fix, Designer panel close fix
 
 ### Fixed

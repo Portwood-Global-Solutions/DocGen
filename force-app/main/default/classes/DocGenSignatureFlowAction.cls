@@ -268,6 +268,37 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         // Runtime errors (template not found, DML failures) are caught and returned in Result
         try {
+            // A Template Id that does not resolve is the likeliest Flow-author
+            // mistake — a deleted template, or one copied from another org.
+            //
+            // The signature controller reports failures with AuraHandledException.
+            // That type can only be THROWN from an Aura/VF request; raised anywhere
+            // else it becomes
+            //
+            //     System.LimitException: Can only throw this exception type from
+            //     VisualForce or Aura context
+            //
+            // which is UNCATCHABLE — so this very try/catch never saw it, and the
+            // Flow interview faulted with a cryptic platform error instead of the
+            // Success=false + Error Message this action promises.
+            //
+            // INSIDE the try on purpose: template-not-found is a RUNTIME error,
+            // which this contract returns to the Flow. The block further up is for
+            // INPUT validation, which deliberately stops the Flow instead.
+            List<DocGen_Template__c> tmplCheck = [
+                SELECT Id
+                FROM DocGen_Template__c
+                WHERE Id = :req.templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ]; // NOPMD ApexCRUDViolation - package-internal existence probe
+            if (tmplCheck.isEmpty()) {
+                throw new DocGenException(
+                    'Template not found: ' +
+                        req.templateId +
+                        ' — check the Template Id or Template API Name. It may have been deleted, or belong to another org.'
+                );
+            }
             // Resolve signing order. "Single" = an explicit one-signer request (behaves
             // like Parallel for delivery, but lets authors say so clearly — Sarah's #4).
             String signingOrder = String.isNotBlank(req.signingOrder) ? req.signingOrder : 'Parallel';

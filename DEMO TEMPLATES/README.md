@@ -1,3 +1,17 @@
+<!--
+  WHAT IS SHAREABLE HERE, AND WHAT IS NOT
+  ---------------------------------------
+  Publishable: html/, DATA-DICTIONARY.md and this file. That is the example
+  library, and it is what #174 trimmed this directory down to.
+
+  NOT publishable, and restored since: install/, seed/, reset/, schema/. These
+  are org-specific internal tooling — they build a demo org for us to show
+  customers, and they are useless to anyone else. They live here rather than
+  under scripts/ only because install.mjs resolves template bodies relative to
+  this directory. Driven by scripts/demo/setup-demo.sh; excluded from anything
+  published.
+-->
+
 # Portwood DocGen — Example Template Library
 
 A set of **ready-to-adapt HTML document templates** for **Portwood DocGen**,

@@ -94,6 +94,59 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
      * @param bc The batch context provided by the platform
      * @return QueryLocator for the records to process
      */
+    /**
+     * AND the template's Record_Filter__c onto the job's condition.
+     *
+     * Both fragments are parenthesised before joining: `A OR B` combined with
+     * `C` as `A OR B AND C` would silently mean `A OR (B AND C)` and let
+     * excluded records straight through — the exact bug this closes, reopened by
+     * operator precedence.
+     *
+     * Passed through the same sanitizeCondition() as the job's own condition, so
+     * the filter cannot widen what the query may reach.
+     */
+    // public, not @TestVisible private: the latter is unreachable from anonymous
+    // Apex, which is where the e2e scripts verify behaviour. Still not global, so
+    // it stays invisible to subscribers in the managed package.
+    public String andTemplateFilter(String jobCondition) {
+        String tf;
+        try {
+            List<DocGen_Template__c> ts = [
+                SELECT Record_Filter__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            tf = ts.isEmpty() ? null : ts[0].Record_Filter__c;
+        } catch (Exception e) {
+            // A filter we cannot read must not silently become "no filter" —
+            // but neither should it fail the whole job. Logged, and the job
+            // proceeds on its own condition.
+            DocGenErrorLogger.warn(
+                'DocGenBatch',
+                'Read template record filter',
+                'Could not read Record_Filter__c; the bulk run may include records the template excludes: ' +
+                e.getMessage(),
+                templateId,
+                null
+            );
+            DocGenErrorLogger.flush();
+            return jobCondition;
+        }
+        if (String.isBlank(tf)) {
+            return jobCondition;
+        }
+        String safeFilter = sanitizeCondition(tf);
+        if (String.isBlank(safeFilter)) {
+            return jobCondition;
+        }
+        if (String.isBlank(jobCondition)) {
+            return '(' + safeFilter + ')';
+        }
+        return '(' + jobCondition + ') AND (' + safeFilter + ')';
+    }
+
     public Database.QueryLocator start(Database.BatchableContext bc) {
         // Update Status to Processing
         update new DocGen_Job__c(Id = jobId, Status__c = 'Processing'); // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
@@ -104,6 +157,20 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         }
 
         String sanitizedCondition = sanitizeCondition(condition);
+        // THE TEMPLATE'S OWN AUDIENCE FILTER, applied to the bulk query.
+        //
+        // Record_Filter__c was evaluated only on the per-record path in
+        // DocGenController, and the batch never consulted it — so a bulk run
+        // generated documents for records the template explicitly excludes. It
+        // failed silently and at scale: the documents look correct, they are
+        // simply for the wrong records.
+        //
+        // Applied to the WHERE clause rather than per record because the field
+        // already IS a SOQL fragment. Filtering at the source costs one query
+        // instead of one describe-and-check per record, and — importantly — the
+        // job's Total_Records__c count below then reflects what will actually be
+        // produced, instead of promising a total the run never reaches.
+        sanitizedCondition = andTemplateFilter(sanitizedCondition);
         String query = 'SELECT Id FROM ' + baseObject;
         if (String.isNotBlank(sanitizedCondition)) {
             query += ' WHERE ' + sanitizedCondition;

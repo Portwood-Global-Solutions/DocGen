@@ -53,17 +53,15 @@
         <th>Seat</th>
         <th class="c" style="width:70px;">Checked In</th>
       </tr>
-      {#Attendees__r}
       <tr>
-        <td class="num"></td>
+        <td class="num">{#Attendees__r}</td>
         <td><strong>{Name}</strong><br/><span style="color:#5a6b7b;font-size:8pt;">{Email__c}</span></td>
         <td>{Company__c}</td>
         <td>{Title__c}</td>
         <td>{Ticket_Type__c}</td>
         <td class="c">{Seat__c}</td>
-        <td class="chk">&#9744;</td>
+        <td class="chk">&#9744;{/Attendees__r}</td>
       </tr>
-      {/Attendees__r}
     </table>
 
     <div class="foot">

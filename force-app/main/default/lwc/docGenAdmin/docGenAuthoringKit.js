@@ -454,6 +454,42 @@ export function buildStarterHtml(starterKey, shape) {
 // ---------------------------------------------------------------------------
 
 /**
+ * #248 — annotate a field in the prompt's data-shape listing with its Salesforce type
+ * and the format suffix that type usually wants.
+ *
+ * Without the type the model emits bare {Amount} / {CloseDate} tags and the author has
+ * to go back and add formatting by hand. With it, the model picks sensible suffixes
+ * itself. `type` is the Schema.DisplayType name returned by
+ * DocGenController.getObjectFields (STRING, CURRENCY, DATE, …); when it is missing the
+ * annotation is simply omitted.
+ */
+function describeFieldForPrompt(fieldName, type) {
+    if (!type) {
+        return '';
+    }
+    const t = String(type).toUpperCase();
+    const hint = {
+        CURRENCY: ' — format as {' + fieldName + ':currency}',
+        DOUBLE: ' — format as {' + fieldName + ':#,##0.00}',
+        INTEGER: ' — format as {' + fieldName + ':number}',
+        LONG: ' — format as {' + fieldName + ':number}',
+        PERCENT: ' — format as {' + fieldName + ':percent}',
+        DATE: ' — format as {' + fieldName + ':MMMM d, yyyy}',
+        DATETIME: ' — format as {' + fieldName + ':MMMM d, yyyy h:mm a}',
+        BOOLEAN: ' — render as {' + fieldName + ':checkbox} for an [X]/[ ] box',
+        PICKLIST: ' — use {' + fieldName + ':label} to print the label rather than the API value',
+        MULTIPICKLIST: ' — semicolon-delimited values',
+        REFERENCE: ' — a lookup Id; dot through it for readable text, e.g. {' + fieldName + '.Name}',
+        TEXTAREA: ' — may contain line breaks',
+        EMAIL: '',
+        PHONE: '',
+        URL: '',
+        ID: ''
+    }[t];
+    return ` (${t}${hint === undefined ? '' : hint})`;
+}
+
+/**
  * Assemble a self-contained LLM prompt: rendering constraints + tag syntax +
  * this template's actual schema. Works pasted into any assistant.
  */
@@ -527,14 +563,55 @@ export function buildAiPrompt(shape, options) {
             lines.push('  - (list your provider field names here before pasting)');
         }
     } else {
+        const types = opts.fieldTypes || {};
         lines.push(`- Base object: ${shape.object}`);
         for (const f of [...shape.baseFields, ...shape.parentFields]) {
-            lines.push(`  - {${f}}${f.includes('.') ? ' (parent lookup)' : ''}`);
+            const note = describeFieldForPrompt(f, types[f]);
+            lines.push(`  - {${f}}${note}${f.includes('.') ? ' (parent lookup)' : ''}`);
         }
         for (const c of shape.children) {
-            lines.push(
-                `- Child relationship {#${c.relationshipName}}...{/${c.relationshipName}} with fields: ${c.fields.map((f) => '{' + f + '}').join(', ')}`
-            );
+            lines.push(`- Child relationship: {#${c.relationshipName}} ... {/${c.relationshipName}}`);
+            lines.push('  Fields (write them BARE inside the loop, with no relationship prefix):');
+            for (const f of c.fields) {
+                lines.push(`    - {${f}}${describeFieldForPrompt(f, types[c.relationshipName + '.' + f])}`);
+            }
+        }
+        lines.push('');
+        // #248 — the single most common thing an LLM gets wrong when generating a
+        // DocGen template: it puts the loop tags on their own lines wrapping the
+        // <table>, which repeats the whole table instead of the row.
+        lines.push('REPEATING TABLES — READ THIS TWICE, IT IS THE MOST COMMON MISTAKE:');
+        lines.push(
+            '- Loop tags for a repeating table go INLINE, INSIDE the row that repeats: the opening {#Rel} in the FIRST cell of the data <tr>, and the closing {/Rel} in the LAST cell of that same <tr>.'
+        );
+        lines.push(
+            '- Do NOT put {#Rel} on its own line above <table> and {/Rel} below it. That repeats the ENTIRE TABLE — headers and all — once per child record, which is never what is wanted.'
+        );
+        lines.push('- Column headers belong in a real <thead>, OUTSIDE the loop, so they render once.');
+        if (shape.children && shape.children.length) {
+            const c = shape.children[0];
+            const cols = (c.fields || []).slice(0, 3);
+            if (cols.length) {
+                lines.push('- Correct shape, using this template’s own data:');
+                lines.push('  <table>');
+                lines.push('    <thead>');
+                lines.push(`      <tr>${cols.map((f) => `<th>${f}</th>`).join('')}</tr>`);
+                lines.push('    </thead>');
+                lines.push('    <tbody>');
+                lines.push(
+                    `      <tr><td>{#${c.relationshipName}}{${cols[0]}}</td>` +
+                        cols
+                            .slice(1, -1)
+                            .map((f) => `<td>{${f}}</td>`)
+                            .join('') +
+                        (cols.length > 1
+                            ? `<td>{${cols[cols.length - 1]}}{/${c.relationshipName}}</td>`
+                            : `<td>{/${c.relationshipName}}</td>`) +
+                        '</tr>'
+                );
+                lines.push('    </tbody>');
+                lines.push('  </table>');
+            }
         }
     }
     const assets = opts.assets || [];
@@ -1419,4 +1496,176 @@ export function buildTagPalette(shape) {
     });
 
     return sections;
+}
+
+// ===== Regions: one source document (DESIGNER_PLAN_V2 step 2) ================
+//
+// A template used to have three sources of truth: the body lived in a
+// ContentVersion, the running header in Header_Html__c and the running footer in
+// Footer_Html__c. Nothing tied them together, so "View Source" showed only part of
+// the document, a Word import had nowhere to put <w:hdr>, and every new feature
+// had to be plumbed through each surface separately.
+//
+// Regions give the AUTHOR one source document:
+//
+//   <body>
+//     <div data-dg-region="header">…running header…</div>
+//     <div data-dg-region="body">…the document…</div>
+//     <div data-dg-region="footer">…running footer…</div>
+//   </body>
+//
+// The RENDER ENGINE never sees it. splitRegions() peels the chrome back off on the
+// way to saving and the three fields are written exactly as they are today, so
+// wrapHtmlForPdf keeps its current contract and nothing about PDF output changes.
+// That is what keeps this from being a risky change.
+//
+// Templates saved before this existed carry no markers: splitRegions reports
+// hadRegions === false and hands the document back untouched, so they load, edit
+// and save exactly as before. No migration.
+
+export const DG_REGION_ATTR = 'data-dg-region';
+
+const BODY_TAGS_RE = /(<body\b[^>]*>)([\s\S]*?)(<\/body\s*>)/i;
+
+/** The document's <body> contents, plus a function to put new contents back. */
+function bodySlice(html) {
+    const doc = html || '';
+    const m = doc.match(BODY_TAGS_RE);
+    if (m) {
+        return {
+            inner: m[2],
+            rebuild: (next) => doc.replace(BODY_TAGS_RE, (full, open, mid, close) => open + '\n' + next + '\n' + close)
+        };
+    }
+    // Body-fragment template (no <body> wrapper): the content IS the document.
+    return { inner: doc, rebuild: (next) => next };
+}
+
+function parseFragment(html) {
+    const tpl = document.createElement('template');
+    // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip into an inert <template>; never attached to the page
+    tpl.innerHTML = html || '';
+    return tpl;
+}
+
+function serializeChildren(node) {
+    const box = document.createElement('div');
+    while (node.firstChild) {
+        box.appendChild(node.firstChild);
+    }
+    // eslint-disable-next-line @lwc/lwc/no-inner-html -- serializing an inert fragment back to a string
+    return box.innerHTML.trim();
+}
+
+/**
+ * Peel a region-marked document into its three surfaces.
+ *
+ * Returns { header, body, footer, hadRegions }. `body` is the FULL document with
+ * the body region's contents spliced back between the <body> tags, so <head>,
+ * <style> and @page survive untouched — the same discipline _exitVisualMode uses.
+ *
+ * A document with no markers comes back verbatim as `body` with null chrome and
+ * hadRegions === false. That is the backwards-compatibility guarantee: callers
+ * must check hadRegions before overwriting Header_Html__c / Footer_Html__c, or a
+ * legacy template would have its header blanked the first time it was opened.
+ */
+export function splitRegions(html) {
+    const out = { header: null, body: html || '', footer: null, hadRegions: false };
+    if (!html || html.indexOf(DG_REGION_ATTR) === -1) {
+        return out;
+    }
+    const slice = bodySlice(html);
+    const tpl = parseFragment(slice.inner);
+    const regions = tpl.content.querySelectorAll('[' + DG_REGION_ATTR + ']');
+    if (!regions.length) {
+        return out;
+    }
+    out.hadRegions = true;
+    let bodyRegion = null;
+    for (const el of regions) {
+        // Only TOP-LEVEL regions count. A nested marker is content that happens to
+        // carry the attribute (a pasted fragment, a copied block) and unwrapping it
+        // would silently promote it to running chrome.
+        if (el.parentNode !== tpl.content) {
+            continue;
+        }
+        const kind = (el.getAttribute(DG_REGION_ATTR) || '').toLowerCase();
+        if (kind === 'header') {
+            out.header = serializeChildren(el);
+            el.remove();
+        } else if (kind === 'footer') {
+            out.footer = serializeChildren(el);
+            el.remove();
+        } else if (kind === 'body' && !bodyRegion) {
+            bodyRegion = el;
+        }
+    }
+    let bodyInner;
+    if (bodyRegion) {
+        bodyInner = serializeChildren(bodyRegion);
+    } else {
+        // Header/footer marked but no explicit body region: whatever is left after
+        // removing them IS the body.
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- serializing an inert fragment back to a string
+        bodyInner = serializeChildren(tpl.content);
+    }
+    out.body = stripRegionMarkers(slice.rebuild(bodyInner));
+    return out;
+}
+
+/**
+ * Compose one source document from the three surfaces.
+ *
+ * When there is no header and no footer the document is returned UNCHANGED —
+ * a plain template never grows markers it does not need, so nothing about the
+ * common case differs from before.
+ */
+export function joinRegions(bodyDocHtml, headerHtml, footerHtml) {
+    const header = (headerHtml || '').trim();
+    const footer = (footerHtml || '').trim();
+    if (!header && !footer) {
+        return bodyDocHtml || '';
+    }
+    const slice = bodySlice(bodyDocHtml || '');
+    const parts = [];
+    if (header) {
+        parts.push('<div ' + DG_REGION_ATTR + '="header">\n' + header + '\n</div>');
+    }
+    parts.push('<div ' + DG_REGION_ATTR + '="body">\n' + slice.inner.trim() + '\n</div>');
+    if (footer) {
+        parts.push('<div ' + DG_REGION_ATTR + '="footer">\n' + footer + '\n</div>');
+    }
+    return slice.rebuild(parts.join('\n'));
+}
+
+/**
+ * Unwrap every region marker, keeping its children.
+ *
+ * The last line of defence: a marker must never reach the renderer, the same
+ * discipline already applied to .dg-drop-marker and data-dg-paint. Called on
+ * everything bound for a ContentVersion even when the caller believes it has
+ * already split, because "believes" is how the drop-marker bug happened.
+ */
+export function stripRegionMarkers(html) {
+    if (!html || html.indexOf(DG_REGION_ATTR) === -1) {
+        return html || '';
+    }
+    const slice = bodySlice(html);
+    const tpl = parseFragment(slice.inner);
+    let marked = tpl.content.querySelectorAll('[' + DG_REGION_ATTR + ']');
+    let guard = 0;
+    while (marked.length && guard++ < 50) {
+        for (const el of marked) {
+            const parent = el.parentNode;
+            if (!parent) {
+                continue;
+            }
+            while (el.firstChild) {
+                parent.insertBefore(el.firstChild, el);
+            }
+            parent.removeChild(el);
+        }
+        marked = tpl.content.querySelectorAll('[' + DG_REGION_ATTR + ']');
+    }
+    return slice.rebuild(serializeChildren(tpl.content));
 }

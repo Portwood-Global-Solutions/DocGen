@@ -152,6 +152,56 @@ if (KEEP_TEST_DATA) {
         System.debug('DELETE SIGNATURE REQUESTS: FAIL — ' + e.getMessage());
     }
 
+    // ===== Reclaim generated files =====
+    // Every generation and every signature leaves ContentDocuments behind: the
+    // rendered output on the record, the signing flow's viewing PDF, and the
+    // `docgen_sig_frozen` snapshot — which carries no E2E prefix, so nothing
+    // else here would ever match it. Until now this script only COUNTED files
+    // ("N files attached") and deleted none, so every run of the suite added
+    // more. That inflates any later assertion that counts a record's files and
+    // eventually skews storage in a long-lived verify org.
+    //
+    // This runs in its own transaction, well after e2e-06c signed anything.
+    // Reclaiming these files in the same transaction that creates them is not
+    // possible — the product's own post-render sweep gets there first and the
+    // second delete raises "entity is deleted" at commit.
+    try {
+        Set<Id> docIds = new Set<Id>();
+        if (acctId != null) {
+            for (ContentDocumentLink l : [
+                SELECT ContentDocumentId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :acctId
+            ]) {
+                docIds.add(l.ContentDocumentId);
+            }
+        }
+        for (ContentVersion cv : [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Title = 'docgen_sig_frozen' AND IsLatest = TRUE
+        ]) {
+            docIds.add(cv.ContentDocumentId);
+        }
+        Integer reclaimed = 0;
+        if (!docIds.isEmpty()) {
+            // allOrNone = false: a file the product already swept must not abort
+            // the rest of the teardown.
+            for (
+                Database.DeleteResult r : Database.delete([SELECT Id FROM ContentDocument WHERE Id IN :docIds], false)
+            ) {
+                if (r.isSuccess()) {
+                    reclaimed++;
+                }
+            }
+        }
+        pass++;
+        System.debug('RECLAIM FILES: PASS — ' + reclaimed + ' of ' + docIds.size() + ' documents deleted');
+    } catch (Exception e) {
+        fail++;
+        System.debug('RECLAIM FILES: FAIL — ' + e.getMessage());
+    }
+
     // ===== Delete Jobs =====
     try {
         if (tmplId != null) {

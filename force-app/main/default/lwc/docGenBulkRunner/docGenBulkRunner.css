@@ -1,5 +1,5 @@
 .app-workspace {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     color: var(--docgen-color-neutral-10, #111827);
 }
 
@@ -51,7 +51,9 @@
     margin-top: var(--slds-g-spacing-1, 4px);
     border-radius: var(--slds-g-radius-border-2, 8px);
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .selection-badge {
@@ -176,6 +178,16 @@
 }
 
 .history-row {
+    /* REQUIRED, not cosmetic.
+       A <lightning-spinner> renders an slds-spinner_container that is
+       `position: absolute; inset: 0`, so it fills its nearest POSITIONED
+       ancestor. This row shows an inline spinner while a job is running, and
+       without a positioning context here that container anchored far up the
+       tree and covered the entire Bulk Generation screen — every control,
+       including the template search box, became unclickable until the job
+       reached a terminal status. It rendered perfectly; it just ate all the
+       clicks. Any container holding an inline spinner needs this. */
+    position: relative;
     display: flex;
     justify-content: space-between;
     align-items: center;

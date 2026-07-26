@@ -12,12 +12,18 @@
     "scripts": {
         "format": "prettier --write \"force-app/**/*.{cls,trigger,page,component,cmp,html,js,xml}\" \"scripts/**/*.apex\" \"*.{json,md,yml,yaml}\"",
         "format:check": "prettier --check \"force-app/**/*.{cls,trigger,page,component,cmp,html,js,xml}\" \"scripts/**/*.apex\" \"*.{json,md,yml,yaml}\"",
-        "prepare": "husky"
+        "prepare": "husky",
+        "smoke": "node scripts/ui-smoke.mjs",
+        "qa": "node scripts/qa/run-all.mjs",
+        "qa:offline": "node scripts/qa/run-all.mjs --offline",
+        "org:setup": "./scripts/qa/setup-org.sh",
+        "org:new": "./scripts/qa/setup-org.sh docgen-verify --create"
     },
     "devDependencies": {
         "@prettier/plugin-xml": "3.4.2",
         "husky": "9.1.7",
         "lint-staged": "16.4.0",
+        "playwright": "^1.62.0",
         "prettier": "3.8.3",
         "prettier-plugin-apex": "2.2.6"
     },

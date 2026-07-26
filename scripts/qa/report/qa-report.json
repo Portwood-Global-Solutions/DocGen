@@ -1,0 +1,52 @@
+{
+    "meta": {
+        "org": "docgen-verify",
+        "startedAt": "2026-07-26T13:08:37.461Z",
+        "durationMs": 19995,
+        "args": "--org docgen-verify --suite template-integrity"
+    },
+    "tally": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 1,
+        "evaluated": 2,
+        "total": 3,
+        "rate": 100,
+        "bySeverity": {
+            "blocker": 0,
+            "major": 0,
+            "minor": 0
+        }
+    },
+    "suites": [
+        {
+            "suite": "template-integrity",
+            "area": "Template integrity",
+            "checks": [
+                {
+                    "name": "every HTML template returns a body to the visual Designer",
+                    "ok": true,
+                    "detail": "all 6 HTML templates return a non-empty body from getHtmlTemplateBody",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "each template agrees with its active version about its own type",
+                    "ok": true,
+                    "detail": "no template/version type disagreements",
+                    "severity": "blocker",
+                    "skipped": false
+                },
+                {
+                    "name": "merge-tag pills stay inside their table cells",
+                    "ok": false,
+                    "detail": "could not open a template in the Designer: no Designer tab",
+                    "severity": "major",
+                    "skipped": true
+                }
+            ],
+            "skipped": false,
+            "reason": ""
+        }
+    ]
+}

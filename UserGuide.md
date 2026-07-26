@@ -421,10 +421,109 @@ This section gives you the rules and a paste-ready prompt for ChatGPT / Claude /
 | `padding`, `margin`                      | `gap` (CSS 3 grid/flex gap)                        | `padding` on cells, `margin` on blocks                |
 | Fixed `width`/`height` in `pt`/`in`/`px` | `calc(...)`, CSS variables (`--foo`, `var(--foo)`) | Compute the literal value in your template            |
 | `font-size` in `pt`                      | `rem`, `em` based on a non-default root            | Pt is most predictable for print                      |
-| `border`, `border-radius` (basic)        | `box-shadow`, `text-shadow`                        | Drop shadows; they're print-noisy anyway              |
+| `border` — incl. `dashed` and `dotted`   | `border-radius`, `box-shadow`, `text-shadow`       | Corners stay square; see "Rounded corners" below      |
+| Hex colours (`#eaf2fb`)                  | `rgba(...)`, `hsla(...)`                           | Pre-compute the tint as a flat hex                    |
+| Full-strength colour                     | `opacity`                                          | Pick a lighter hex instead                            |
 | `:nth-child(even)` for zebra striping    | `:has(...)`, `:is(...)`, container queries         | nth-child + nth-of-type are supported                 |
 | `<table>`-based two/three-column layouts | `column-count`, `columns`                          | Tables work everywhere                                |
 | `text-align`, `vertical-align` on `<td>` | `place-items`, `align-self`                        | Old-school alignment on cells                         |
+
+##### Rounded corners, shadows and tints — the honest answer
+
+**There are no rounded corners.** `border-radius` is ignored in _every_ form: on a
+`<div>`, on a `<td>`, on a `<table>` with `border-collapse: separate`, in the
+four-value corner shorthand, and via the engine's own `-fs-border-radius`. Boxes
+render square. This is measured, not inferred — `scripts/css-capability-probe.apex`
+renders a labelled swatch per property and compares each against a control, and
+the rendered proof is in `docs/css-capability-probe.png`.
+
+An earlier version of this table listed "`border-radius` (basic)" as supported.
+It is not, and a template built on that advice renders square with no warning.
+
+What you can use for visual interest, all CSS 2.1 and all confirmed working:
+
+- **`border: 2pt dashed #2b6cb0`** and **`border: 2pt dotted #b02b2b`** — these
+  genuinely render. They are the only border decoration available.
+- Solid fills, contrasting borders, and `:nth-child(even)` zebra striping.
+- A background **image** if you truly need a rounded shape — draw it once and
+  reference it; the engine will place it faithfully.
+
+Two failure modes that look similar and are not:
+
+- **`linear-gradient(...)` is discarded when the stylesheet is parsed.** The
+  cascade then falls back to any solid `background` set earlier, so the element
+  keeps a sensible colour. Harmless.
+- **`rgba(...)` is not.** It parses, resolves to nothing, and the background
+  disappears entirely — so a tinted panel renders **invisible** rather than
+  falling back to a colour. This is the one that quietly ruins a layout. Compute
+  the tint yourself and write it as a flat hex.
+
+`opacity`, `box-shadow`, `transform`, `calc()` and `outline` are all ignored too.
+
+##### Long values overflow a table cell — and no CSS fixes it
+
+A value with no spaces in it (an external id, a URL, a base64 fragment, a long
+product code) will **run straight through the cell border**. This is not a
+styling mistake; the engine cannot break an unbroken run of characters at all.
+Measured across every candidate:
+
+| Technique                   | Result                                                                   |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `word-wrap: break-word`     | **ignored** — the engine injects this on every cell and it does nothing  |
+| `overflow-wrap: break-word` | **ignored**                                                              |
+| `word-break: break-all`     | **ignored**                                                              |
+| `table-layout: fixed`       | the column stops growing, so the text overflows the border instead       |
+| `&#8203;` zero-width space  | **ignored**                                                              |
+| `&shy;` soft hyphen         | breaks, but prints VISIBLE hyphens into the value — it corrupts the data |
+| **`<wbr/>`**                | **works** — breaks cleanly, and the text is unchanged                    |
+
+So the only correct fix is a `<wbr/>` at each allowed break point:
+
+```html
+<!-- overflows the cell -->
+<td>{External_Reference__c}</td>
+
+<!-- wraps, value unchanged -->
+<td>ORD-2026<wbr />-000148<wbr />-REV3<wbr />-APPROVED</td>
+```
+
+For merged values you cannot pre-break by hand, keep the column wide enough for
+the longest value you expect, or split the value into its own row beneath the
+label rather than beside it. Do **not** reach for `&shy;` — a hyphen that was
+never in the data is worse than a column that is too narrow.
+
+##### How to draw a circle (bullets, status dots, timeline markers)
+
+Since `border-radius` does nothing, a circle has to be a **character**, not a box.
+Unicode circle glyphs render correctly and scale with `font-size`, so you can size
+one anywhere from a bullet to a display graphic:
+
+| Want              | Use                           | Character |
+| ----------------- | ----------------------------- | --------- |
+| Small filled dot  | `&#8226;` (U+2022 bullet)     | •         |
+| Filled circle     | `&#9679;` (U+25CF)            | ●         |
+| Hollow circle     | `&#9675;` (U+25CB)            | ○         |
+| Large hollow ring | `&#9711;` (U+25EF)            | ◯         |
+| Small hollow ring | `&#176;` (U+00B0 degree sign) | °         |
+
+```html
+<!-- A 14pt status dot in brand colour -->
+<span style="font-size: 14pt; color: #184d47;">&#9679;</span> Delivered
+
+<!-- A display-size disc — the same glyph at 80pt -->
+<span style="font-size: 80pt; color: #184d47; line-height: 1;">&#8226;</span>
+```
+
+Colour comes from `color`, size from `font-size`, and a light glyph on a dark
+filled table cell reverses cleanly (white `&#8226;` on a solid background).
+
+**Never use ZapfDingbats or Symbol for this.** Those fonts are not present in the
+rendering engine, so `font-family: ZapfDingbats` with the letter `l` or `m` — the
+usual trick for a filled/hollow circle — falls back to a serif face and prints a
+literal **"l"** or **"m"** into the document. That is worse than an unsupported
+property, because nothing fails: a wrong character is silently typeset where a
+circle was intended. Stick to the Unicode glyphs above, which need no particular
+font.
 
 ##### Paste-ready LLM prompt
 
@@ -441,16 +540,35 @@ HARD RULES — never use these (Flying Saucer drops them):
 - calc(...), CSS variables (--name, var(--name))
 - transform, transition, animation, @keyframes
 - position: absolute or position: fixed (use @page running elements only)
-- box-shadow, text-shadow
+- box-shadow, text-shadow, outline
+- border-radius — in EVERY form, including on a <td>, on a <table> with
+  border-collapse: separate, and the -fs-border-radius variant. There are no
+  rounded corners. Every box is square. Do not attempt a workaround.
+- rgba(...) and hsla(...) — these do not fall back to a solid colour, the
+  background disappears completely. Write a pre-computed flat hex instead.
+- opacity — pick a lighter hex colour instead.
 - :has(), :is(), :where(), container queries
 
 USE INSTEAD:
 - <table> for any side-by-side layout. One <tr>, columns are <td>s with explicit widths.
-- Solid background-color (no gradients).
+- Solid background-color as a HEX value (no gradients, no rgba).
 - padding/margin in pt or in. gap is not a thing.
 - font-size in pt. Standard fonts: Helvetica, Arial, "Times New Roman", Courier.
 - text-align / vertical-align on <td> for alignment.
 - Fixed width/height in pt or in.
+- For visual interest use solid fills, contrasting borders, and :nth-child(even)
+  zebra striping. border: dashed and border: dotted DO work and are the only
+  border decoration available.
+- CIRCLES (bullets, status dots, markers) must be CHARACTERS, never CSS boxes,
+  because border-radius does nothing. Use these and size them with font-size,
+  colour them with color:
+    &#8226;  small filled dot (U+2022)      &#9679;  filled circle (U+25CF)
+    &#9675;  hollow circle (U+25CB)         &#9711;  large hollow ring (U+25EF)
+    &#176;   small hollow ring (U+00B0)
+  e.g. <span style="font-size:14pt;color:#184D47;">&#9679;</span> Delivered
+  NEVER use font-family: ZapfDingbats or Symbol to make a circle. Those fonts are
+  absent, so the letter falls back to a serif face and prints a literal "l" or
+  "m" in the document instead of a shape.
 
 PAGE SETUP — put a single <style> in <head> with:
   @page { size: 8.5in 11in; margin: 0.6in; }    /* US Letter portrait */
@@ -463,7 +581,14 @@ DOCGEN MERGE TAGS — use these as plain text:
 - Built-ins:          {Today}, {Now}, {RunningUser.Name}, {RunningUser.Email}
 - Format suffixes:    {Amount:currency}, {CloseDate:MM/dd/yyyy}, {Quantity:#,##0}
 - Loop:               {#RelationshipName} ... {/RelationshipName}
-                      e.g. {#OpportunityLineItems} <tr>...</tr> {/OpportunityLineItems}
+- Loop IN A TABLE:    put the tags INSIDE the cells — open in the first cell of the
+                      repeating row, close in the last. The engine expands the whole <tr>.
+                        <tr><th>First Name</th><th>Last Name</th><th>Title</th></tr>
+                        <tr><td>{#Contacts}{FirstName}</td><td>{LastName}</td><td>{Title}{/Contacts}</td></tr>
+                      Do NOT wrap the row from outside ({#Rel}<tr>...</tr>{/Rel}) and never
+                      put a loop tag on its own line between rows — text placed directly
+                      inside <table> is foster-parented out of the table by the HTML parser.
+                      This is the same pattern Word (<w:tr>) and Excel (<row>) use.
 - Conditional:        {#IF Field = "Value"} ... {:else} ... {/IF}
                       Use double quotes around string literals; numeric needs no quotes.
 - Page counters:      {PageNumber}, {TotalPages}   (only inside header/footer fields, not body)
@@ -3143,7 +3268,118 @@ Notes:
 - You do **not** need to add domains under **Setup → Trusted Domains for Inline Frames** for signing to work (tested; not required when standard clickjack protection settings are in place).
 - If the page loads but the document preview is blank, that's a different problem — see §15.9.
 
-### 15.11 Still stuck?
+### 15.11 Long text breaks out of a table cell
+
+**Symptom.** A value runs straight through the right-hand cell border, over the
+next column or off the page. It looks like a CSS problem. It is not.
+
+**Cause.** The PDF engine cannot break a run of characters that contains no
+spaces. It breaks at spaces and nowhere else. So ordinary text — names,
+addresses, descriptions, long-text areas — wraps perfectly, while an external
+id, URL, SKU, base64 fragment or concatenated key does not, however narrow the
+column.
+
+**No CSS fixes this.** Measured against the engine, not assumed:
+
+| Technique                   | Result                                                         |
+| --------------------------- | -------------------------------------------------------------- |
+| `word-wrap: break-word`     | ignored (DocGen already applies this to every cell)            |
+| `overflow-wrap: break-word` | ignored                                                        |
+| `word-break: break-all`     | ignored                                                        |
+| `table-layout: fixed`       | column stops growing, so the text overflows the border instead |
+| `&#8203;` zero-width space  | ignored                                                        |
+| `&shy;` soft hyphen         | breaks — but prints **visible hyphens into your data**         |
+| `<wbr/>`                    | **works** — breaks cleanly, value unchanged                    |
+
+Avoid `&shy;` in particular. It appears to work until someone reads the value
+and finds hyphens that were never in the record.
+
+**What to do, in order:**
+
+1. **Does the value contain spaces?** Then it already wraps. Nothing to do.
+2. **No spaces, but a known maximum length?** Give the column room. At 10pt
+   Helvetica a full-width cell fits roughly **90 characters**; about 115 at 8pt.
+3. **Still too long?** Put the value on its own full-width row beneath its label
+   instead of beside it:
+
+    ```html
+    <tr>
+        <td colspan="3" style="font-size:8pt; color:#555;">Reference</td>
+    </tr>
+    <tr>
+        <td colspan="3">{External_Reference__c}</td>
+    </tr>
+    ```
+
+    This buys the most width available — but note it does **not** make the value
+    wrap. If it exceeds one full-width line it will still overflow.
+
+4. **Unbounded values (URLs, base64, long keys)?** Make the value breakable at
+   the source with a formula field that inserts a space every N characters, and
+   merge that field instead:
+
+    ```
+    LEFT(Ref__c, 12) & " " & MID(Ref__c, 13, 12) & " " & MID(Ref__c, 25, 12)
+    ```
+
+    Spaces break, so it wraps at any width. The trade-off is visible spaces —
+    fine for a reference code, wrong for a URL someone must copy.
+
+5. **Static text you author yourself?** Put a `<wbr/>` at every point a break is
+   acceptable. One `<wbr/>` at the end of the string does nothing — the tag marks
+   a single allowed break point, so it has to appear throughout:
+
+    ```html
+    <td>REF-00001111<wbr />222233334444<wbr />555566667777<wbr />88889999AAAA</td>
+    ```
+
+    Close it as `<wbr/>`; a bare `<wbr>` is valid HTML5 but the engine parses
+    XHTML-style. This only works for text you type into the template — there is
+    no way to place `<wbr/>` inside a merged field's value.
+
+### 15.12 "HTML" or "Excel" missing from the Type picklist
+
+**Symptom.** Creating or editing a template, the **Type** picklist offers only
+some of Word / PowerPoint / Excel / HTML / PDF. Commonly HTML or Excel is absent,
+so an HTML template cannot be created — or worse, it saves as **Word** and then
+opens to an empty canvas in the Designer and converts badly on generation.
+
+**Type lives on TWO objects, and both matter.**
+
+| Object                       | Field     | What it controls                                                                         |
+| ---------------------------- | --------- | ---------------------------------------------------------------------------------------- |
+| `DocGen_Template__c`         | `Type__c` | What you pick when creating the template                                                 |
+| `DocGen_Template_Version__c` | `Type__c` | **How the template actually behaves** — the editor that opens and how the body is parsed |
+
+DocGen derives the template's behaviour from the **version's** type, so a
+template that says HTML while its active version says Word behaves as Word. If
+only one of the two is fixed, the symptom persists. Check both.
+
+**To make the values available:**
+
+1. **Setup → Object Manager**, open **DocGen Template**.
+2. **Fields & Relationships → Type → Values**.
+3. Confirm `Word`, `PowerPoint`, `Excel`, `HTML` and `PDF` are all present and
+   **Active**. Use **Activate** on any that are deactivated.
+4. If your org uses **record types** on the object, open each record type and add
+   the values to its available list — a value that exists but is not assigned to
+   the record type will not appear in the picker.
+5. Repeat all of the above for **DocGen Template Version**.
+
+**If a value is genuinely absent rather than inactive**, do not try to add it by
+hand. Both fields are **restricted** picklists owned by the managed package, so a
+subscriber org cannot add a new value to them — and a value typed in manually
+would not match what the engine compares against. An absent value means the org
+is on a package version that predates it: **upgrade DocGen** and the value
+arrives with the upgrade.
+
+**Repairing templates already saved with the wrong type.** Fixing the picklist
+does not retype existing records. Open the template, set **Type** correctly, then
+open its active version record and set **Type** there too. Until the version is
+corrected the template keeps behaving as its old type, whatever the template
+record says.
+
+### 15.13 Still stuck?
 
 Check the **DocGen Error Logs** tab first (§13.2.1) — most generation, bulk, and signature failures leave a log record with the failing context, which beats guessing.
 

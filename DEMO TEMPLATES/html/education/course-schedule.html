@@ -67,16 +67,14 @@
         <th>Course Code</th><th>Course Title</th><th>Term</th>
         <th class="c">Credits</th><th>Instructor</th><th>Status</th>
       </tr>
-      {#Enrollments__r}
       <tr>
-        <td>{Course_Code__c}</td>
+        <td>{#Enrollments__r}{Course_Code__c}</td>
         <td>{Course_Name__c}</td>
         <td>{Term__c}</td>
         <td class="c">{Credits__c}</td>
         <td>{Instructor__c}</td>
-        <td><span class="pill">{Status__c}</span></td>
+        <td><span class="pill">{Status__c}</span>{/Enrollments__r}</td>
       </tr>
-      {/Enrollments__r}
     </table>
 
     <table class="summary" style="margin-top:18px;">

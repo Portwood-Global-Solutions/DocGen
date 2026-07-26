@@ -510,6 +510,20 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
      */
     private static void logWritebackError(Id requestId, String message) {
         System.debug(LoggingLevel.ERROR, 'DocGen: writeback error (req ' + requestId + '): ' + message);
+        // ALSO to DocGen_Error_Log__c, not only to the signature audit trail.
+        // Writeback failures used to land exclusively on
+        // DocGen_Signature_Audit__c.Error_Message__c, so "check the Error Log"
+        // genuinely did not find them and nothing said so. The audit row stays —
+        // it is the tamper-evident record for that request — but the error log
+        // is where someone debugging actually looks.
+        DocGenErrorLogger.warn(
+            'DocGenFieldWritebackService',
+            'Form-field writeback',
+            'Writeback did not complete: ' + message,
+            null,
+            String.valueOf(requestId)
+        );
+        DocGenErrorLogger.flush();
         try {
             DocGen_Signature_Audit__c errAudit = new DocGen_Signature_Audit__c();
             errAudit.Signature_Request__c = requestId;

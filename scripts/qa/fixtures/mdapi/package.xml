@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>QA_DocGen_Account_Record</members>
+        <name>FlexiPage</name>
+    </types>
+    <types>
+        <members>Account</members>
+        <name>CustomObject</name>
+    </types>
+    <types>
+        <members>Account.QA_DocGen_Button</members>
+        <name>QuickAction</name>
+    </types>
+    <types>
+        <members>DocGen_Button.QA_Account_Doc</members>
+        <members>DocGen_Button.QA_Account_Inactive</members>
+        <members>DocGen_Button.QA_Contact_Doc</members>
+        <name>CustomMetadata</name>
+    </types>
+    <version>62.0</version>
+</Package>

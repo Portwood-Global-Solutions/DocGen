@@ -2298,6 +2298,78 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * LIST view of every template — the few fields the grid, the search and the
+     * pickers actually read, and nothing else.
+     *
+     * getAllTemplates (below) returns ~28 fields per row INCLUDING the
+     * Header_Html__c / Footer_Html__c / Query_Config__c long-text fields and a
+     * ContentDocumentLinks subquery. At a few dozen templates that is merely
+     * wasteful; at several hundred it is a large Aura payload transferred and
+     * parsed before the admin has clicked anything, for data that is only needed
+     * once a specific template is opened.
+     *
+     * Pair with getTemplateById: list light, load heavy on demand.
+     *
+     * Ordered by LastModifiedDate so "what I was just working on" is first — the
+     * pickers depend on that order and it is cheaper to sort here than in JS.
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<DocGen_Template__c> getTemplateList() {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{
+                'Name',
+                'Description__c',
+                'Type__c',
+                'Base_Object_API__c',
+                'Category__c',
+                'Output_Format__c',
+                'Is_Active__c',
+                'Is_Default__c',
+                'API_Name__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        return [
+            SELECT
+                Id,
+                Name,
+                Description__c,
+                Type__c,
+                Base_Object_API__c,
+                Category__c,
+                Output_Format__c,
+                Is_Active__c,
+                Is_Default__c,
+                API_Name__c,
+                CreatedDate,
+                LastModifiedDate
+            FROM DocGen_Template__c
+            WITH SYSTEM_MODE
+            ORDER BY LastModifiedDate DESC
+            LIMIT 2000
+        ];
+    }
+
+    /**
+     * ONE template with every field the edit modal and the designer need,
+     * including the attached-document link the Document tab reads.
+     *
+     * The second half of the list/detail split — see getTemplateList.
+     */
+    @AuraEnabled
+    public static DocGen_Template__c getTemplateById(Id templateId) {
+        if (templateId == null) {
+            throw new DocGenException('Template ID is required.');
+        }
+        List<DocGen_Template__c> rows = queryTemplateById(templateId);
+        if (rows.isEmpty()) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+        return rows[0];
+    }
+
+    /**
      * Returns all DocGen templates with their latest file attachment info.
      * @return List of all DocGen_Template__c records ordered by category and name
      */
@@ -2373,6 +2445,89 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             WITH SYSTEM_MODE
             ORDER BY Category__c ASC, Name ASC
             LIMIT 2000
+        ];
+    }
+
+    /**
+     * The heavy read, for ONE template. Deliberately a separate static query rather
+     * than a shared dynamic one: SOQL cannot express "this id, or all rows" in a
+     * bind, and dynamic SOQL is not worth the injection surface in a package that
+     * goes through security review for a field list that changes once a year.
+     *
+     * Keep the field list in step with getAllTemplates above — they are the same
+     * projection, one filtered and one not.
+     */
+    private static List<DocGen_Template__c> queryTemplateById(Id templateId) {
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{
+                'Name',
+                'Description__c',
+                'Type__c',
+                'Base_Object_API__c',
+                'Category__c',
+                'Query_Config__c',
+                'Form_Fields_Config__c',
+                'Test_Record_Id__c',
+                'Output_Format__c',
+                'Document_Title_Format__c',
+                'Is_Active__c',
+                'Is_Default__c',
+                'Sort_Order__c',
+                'Lock_Output_Format__c',
+                'Specific_Record_Ids__c',
+                'Required_Permission_Sets__c',
+                'Record_Filter__c',
+                'Header_Html__c',
+                'Footer_Html__c',
+                'Page_Orientation__c',
+                'Page_Size__c',
+                'Page_Margins__c',
+                'Custom_Margins__c',
+                'Signer_Verification__c',
+                'Prefill_Signer_Email__c',
+                'API_Name__c',
+                'Default_Email_Message__c'
+            }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        return [
+            SELECT
+                Id,
+                Name,
+                Description__c,
+                Type__c,
+                Base_Object_API__c,
+                Category__c,
+                Query_Config__c,
+                Form_Fields_Config__c,
+                Test_Record_Id__c,
+                Output_Format__c,
+                Document_Title_Format__c,
+                Is_Active__c,
+                Is_Default__c,
+                Sort_Order__c,
+                Lock_Output_Format__c,
+                Specific_Record_Ids__c,
+                Required_Permission_Sets__c,
+                Record_Filter__c,
+                Header_Html__c,
+                Footer_Html__c,
+                Page_Orientation__c,
+                Page_Size__c,
+                Page_Margins__c,
+                Custom_Margins__c,
+                Signer_Verification__c,
+                Prefill_Signer_Email__c,
+                API_Name__c,
+                Default_Email_Message__c,
+                CreatedDate,
+                LastModifiedDate,
+                (SELECT ContentDocumentId FROM ContentDocumentLinks ORDER BY ContentDocument.CreatedDate DESC LIMIT 1)
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
         ];
     }
 
@@ -3975,12 +4130,22 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * ContentVersion + native file-preview path.
      */
     @AuraEnabled
-    public static Map<String, Object> previewDraftPdfData(Id templateId, Id recordId, String draftHtml) {
+    public static Map<String, Object> previewDraftPdfData(
+        Id templateId,
+        Id recordId,
+        String draftHtml,
+        String draftHeaderHtml,
+        String draftFooterHtml
+    ) {
         if (String.isBlank(draftHtml)) {
             throw DocGenService.ahe('Nothing to preview — the editor is empty.');
         }
         try {
             DocGenService.draftHtmlBodyOverride = draftHtml;
+            // The running header/footer are edited live in the canvas now, so the
+            // preview has to render THOSE, not whatever was last saved.
+            DocGenService.draftHeaderHtmlOverride = draftHeaderHtml;
+            DocGenService.draftFooterHtmlOverride = draftFooterHtml;
             Map<String, Object> result = DocGenService.generatePdfBlob(templateId, recordId);
             Blob pdfBlob = (Blob) result.get('blob');
             // ~6MB AuraEnabled response ceiling; base64 inflates 4/3.
@@ -3997,6 +4162,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe('Preview failed: ' + e.getMessage());
         } finally {
             DocGenService.draftHtmlBodyOverride = null;
+            DocGenService.draftHeaderHtmlOverride = null;
+            DocGenService.draftFooterHtmlOverride = null;
         }
     }
 
@@ -4009,12 +4176,20 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * large for the Aura payload).
      */
     @AuraEnabled
-    public static Map<String, Object> previewDraftPdf(Id templateId, Id recordId, String draftHtml) {
+    public static Map<String, Object> previewDraftPdf(
+        Id templateId,
+        Id recordId,
+        String draftHtml,
+        String draftHeaderHtml,
+        String draftFooterHtml
+    ) {
         if (String.isBlank(draftHtml)) {
             throw DocGenService.ahe('Nothing to preview — the editor is empty.');
         }
         try {
             DocGenService.draftHtmlBodyOverride = draftHtml;
+            DocGenService.draftHeaderHtmlOverride = draftHeaderHtml;
+            DocGenService.draftFooterHtmlOverride = draftFooterHtml;
             Map<String, Object> result = DocGenService.generatePdfBlob(templateId, recordId);
             Blob pdfBlob = (Blob) result.get('blob');
             // Persist as a ContentVersion so the LWC can open Salesforce's
@@ -4059,6 +4234,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe(e, 'PDF preview failed. Check the template HTML and sample record.');
         } finally {
             DocGenService.draftHtmlBodyOverride = null;
+            DocGenService.draftHeaderHtmlOverride = null;
+            DocGenService.draftFooterHtmlOverride = null;
         }
     }
 

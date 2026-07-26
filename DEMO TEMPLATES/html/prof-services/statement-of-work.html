@@ -89,15 +89,13 @@
         <th class="r" style="width:15%;">Rate</th>
         <th class="r" style="width:15%;">Amount</th>
       </tr>
-      {#OpportunityLineItems}
       <tr>
-        <td><strong>{Product2.Name}</strong></td>
+        <td>{#OpportunityLineItems}<strong>{Product2.Name}</strong></td>
         <td class="desc">{Description}</td>
         <td class="r">{Quantity}</td>
         <td class="r">{UnitPrice:currency}</td>
-        <td class="r">{TotalPrice:currency}</td>
+        <td class="r">{TotalPrice:currency}{/OpportunityLineItems}</td>
       </tr>
-      {/OpportunityLineItems}
     </table>
 
     <h2 class="sec">Fees Summary</h2>

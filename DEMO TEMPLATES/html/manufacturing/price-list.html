@@ -57,15 +57,13 @@
         <th style="width:10%;" class="c">Unit</th>
         <th style="width:12%;" class="r">Unit Price</th>
       </tr>
-      {#PricebookEntries}
       <tr>
-        <td class="sku">{Product2.ProductCode}</td>
+        <td class="sku">{#PricebookEntries}{Product2.ProductCode}</td>
         <td>{Product2.Name}</td>
         <td>{Product2.Family}</td>
         <td class="c">{Product2.QuantityUnitOfMeasure}</td>
-        <td class="r pricecell">{UnitPrice:currency}</td>
+        <td class="r pricecell">{UnitPrice:currency}{/PricebookEntries}</td>
       </tr>
-      {/PricebookEntries}
     </table>
 
     <div class="foot">

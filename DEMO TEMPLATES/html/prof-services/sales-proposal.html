@@ -76,14 +76,12 @@
         <th style="width:24%;">Stage</th>
         <th class="r" style="width:20%;">Close Date</th>
       </tr>
-      {#Opportunities}
       <tr>
-        <td>{Name}</td>
+        <td>{#Opportunities}{Name}</td>
         <td class="r">{Amount:currency}</td>
         <td>{StageName}</td>
-        <td class="r">{CloseDate:MMMM d, yyyy}</td>
+        <td class="r">{CloseDate:MMMM d, yyyy}{/Opportunities}</td>
       </tr>
-      {/Opportunities}
     </table>
 
     <h2 class="sec">Investment Summary</h2>

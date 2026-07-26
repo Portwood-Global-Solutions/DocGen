@@ -13,6 +13,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     // Designer live PDF preview: when set, HTML-template merges render this
     // draft body instead of the saved one. See mergeTemplate().
     public static String draftHtmlBodyOverride;
+    // Designer live preview: the UNSAVED running header/footer. Without these the
+    // preview rendered the header/footer from the SAVED record, so header edits never
+    // appeared in the PDF the author was checking them against. Null means "use the
+    // saved values"; empty string is a deliberate "the author cleared it".
+    public static String draftHeaderHtmlOverride;
+    public static String draftFooterHtmlOverride;
     // Signer form fields ({?key} tags): preserved verbatim during the send-time
     // merge / snapshot freeze (so the placeholder survives into the signed-doc
     // template), then resolved when the signature finalize re-render flips this
@@ -669,8 +675,8 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 mr,
                 base64File,
                 recordDataMap,
-                (String) dataMap.get('headerHtml'),
-                (String) dataMap.get('footerHtml'),
+                draftHeaderHtmlOverride != null ? draftHeaderHtmlOverride : (String) dataMap.get('headerHtml'),
+                draftFooterHtmlOverride != null ? draftFooterHtmlOverride : (String) dataMap.get('footerHtml'),
                 (String) dataMap.get('titleFormat')
             );
         }
@@ -1195,6 +1201,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         } else {
             resultBlob = assembleZip(mr);
         }
+
+        // Persist anything the render degraded past. Buffered until here so a
+        // 2,000-row document cannot spend the DML limit on diagnostics; a
+        // successful generation that quietly dropped an image or emptied a chart
+        // now leaves a Warning row behind instead of nothing.
+        DocGenErrorLogger.flush();
 
         return new Map<String, Object>{
             'blob' => resultBlob,
@@ -7282,7 +7294,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // payload survives ZIP roundtrip and grep cleanly.
             return '<!--DGPIC|' + spec.relationshipId + '|' + widthEmu + '|' + heightEmu + '|' + imageCounter + '-->';
         } catch (Exception e) {
-            // Image resolution failed (invalid CV, corrupt base64) — skip silently
+            // Image resolution failed (invalid CV, corrupt base64). The document
+            // still generates — it just has a hole where the logo or photo was
+            // meant to be, which is the single most common "it looks wrong"
+            // support report and previously left NOTHING to look at. Continuing
+            // is right; doing so invisibly was not.
+            DocGenErrorLogger.warn(
+                'DocGenService',
+                'Resolve image for output',
+                'Image omitted from the document — could not be resolved: ' + e.getMessage()
+            );
             return null;
         }
     }
@@ -8378,8 +8399,15 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 }
             }
         } catch (Exception e) {
-            // Intentionally swallowed — image fetch failed (invalid ID, access denied)
-            String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
+            // Intentionally swallowed — image fetch failed (invalid ID, access
+            // denied). Continuing is right; the document should not fail over
+            // one image. But "access denied" in particular is invisible to the
+            // author, who sees a hole and no reason for it, so it is recorded.
+            DocGenErrorLogger.warn(
+                'DocGenService',
+                'Fetch image data',
+                'Image omitted — could not be fetched (invalid Id or no access): ' + e.getMessage()
+            );
         }
         return null;
     }
@@ -9540,6 +9568,26 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // still emitted because the source @page can't supply them on its own.
         Boolean sourceHasPageRule = hasSourcePageRule(sourceStyles);
 
+        // #243 — v1.90's "source always wins" was too broad. A Word template carries its
+        // orientation in <w:sectPr>, NOT in markup, so admins set Page_Orientation__c on
+        // the template record; after a Word→HTML conversion the converted HTML's own
+        // @page then silently discarded that choice and every landscape template came out
+        // portrait. Precedence is now: explicit record override → source @page → engine
+        // default. "Explicit" means a NON-DEFAULT picklist value (Landscape / Legal / A4),
+        // because Portrait+Letter are the field defaults and are indistinguishable from
+        // "admin never touched this" — deferring on those preserves v1.90 (#60, #71).
+        Boolean explicitPageOverride = hasExplicitPageOverride();
+        // The engine's <style> is emitted BEFORE sourceStyles, so simply adding our @page
+        // would lose the cascade to the author's. Strip the competing declaration instead
+        // and leave everything else the author wrote intact.
+        if (explicitPageOverride && sourceHasPageRule) {
+            sourceStyles = stripSourcePageDecl(sourceStyles, 'size');
+            if (hasExplicitMarginOverride()) {
+                sourceStyles = stripSourcePageDecl(sourceStyles, 'margin');
+            }
+            sourceHasPageRule = false;
+        }
+
         // 1.68 — when admin set Page_Size__c or Page_Orientation__c, emit explicit
         // inch dimensions. Otherwise fall back to "size: letter" (the v1.61–1.67
         // default) for backward compat. Never mix dimensions with the `landscape`
@@ -9578,10 +9626,46 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String css = '';
         Boolean hasHeader = String.isNotBlank(header);
         Boolean hasFooter = String.isNotBlank(footer);
+        // A running element lives in the @page margin box, and that box is exactly as
+        // tall as the margin. Content taller than it overflows and paints over the
+        // body — a logo or a multi-line address block in the header landed on top of
+        // the document's first section. Word grows the header area and pushes the body
+        // down; this is the equivalent.
+        Boolean emitMarginsOverSourcePage = false;
+        String growHeader = hasHeader && !headerHasCounters ? header : null;
+        String growFooter = hasFooter && !footerHasCounters ? footer : null;
+        if (!sourceHasPageRule) {
+            marginsCss = growMarginsForRunningChrome(marginsCss, growHeader, growFooter);
+        } else if (growHeader != null || growFooter != null) {
+            // The author owns @page — but a running header that overflows its margin
+            // box is a CORRECTNESS failure, not a style preference, and v1.90's
+            // "source wins" was never meant to cover it. Read the author's own
+            // margins, and only if the chrome genuinely does not fit, strip their
+            // margin declaration and re-emit it with the top/bottom raised. Their
+            // page size and left/right margins are preserved exactly.
+            List<Decimal> src = parseSourcePageMargins(sourceStyles);
+            if (src != null) {
+                String grown = growMarginsForRunningChrome(
+                    'margin: ' + src[0] + 'in ' + src[1] + 'in ' + src[2] + 'in ' + src[3] + 'in',
+                    growHeader,
+                    growFooter
+                );
+                if (grown.contains('margin-top:') || grown.contains('margin-bottom:')) {
+                    sourceStyles = stripSourcePageDecl(sourceStyles, 'margin');
+                    marginsCss = grown;
+                    emitMarginsOverSourcePage = true;
+                }
+            }
+        }
         if (!sourceHasPageRule || hasHeader || hasFooter) {
             css = '@page {';
             if (!sourceHasPageRule) {
                 css += ' size: ' + sizeCss + '; ' + marginsCss + ';';
+            } else if (emitMarginsOverSourcePage) {
+                // Margins only — the author's `size` is untouched. Their own margin
+                // declaration was stripped above, so this is the only one left and
+                // there is no cascade to lose.
+                css += ' ' + marginsCss + ';';
             }
             if (hasHeader) {
                 if (headerHasCounters) {
@@ -9614,6 +9698,10 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         css += ' body { font-family: Arial, Helvetica, "Arial Unicode MS", sans-serif; font-size: 11pt; line-height: 1.4; color: #000; margin: 0; }';
         // v1.97 — no global max-width on images; inline width/height takes precedence.
         css += ' table { border-collapse: collapse; }';
+        // #245 — an unbreakable token (URL, record Id, no-spaces reference code) otherwise
+        // runs straight through the cell border. Emitted in the ENGINE stylesheet, ahead of
+        // sourceStyles, so an author who wants the old behavior can still override it.
+        css += ' td, th { word-wrap: break-word; overflow-wrap: break-word; }';
 
         String html = '<html><head><meta charset="utf-8"/>';
         html += '<style>' + css + '</style>';
@@ -9630,6 +9718,223 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         html += wrapNonLatinGlyphs(body == null ? '' : body);
         html += '</body></html>';
         return html;
+    }
+
+    /** Height the clamp gives an unsized running image, in inches. */
+    private static final Decimal RUNNING_IMG_CLAMP_IN = 0.45;
+    /** Rough line box for chrome text at the 9–11pt sizes headers use, in inches. */
+    private static final Decimal CHROME_LINE_IN = 0.17;
+    /** Breathing room between the running element and the body text below it. */
+    private static final Decimal CHROME_GUTTER_IN = 0.15;
+
+    /**
+     * Grow the top/bottom page margins so the running header/footer actually fits.
+     *
+     * The margin box is exactly as tall as the margin, so anything taller overflows
+     * and paints over the body. Returns the margin shorthand with explicit
+     * margin-top / margin-bottom appended — same rule, later declaration wins — and
+     * only when the chrome needs more room than the author's margin already gives it.
+     */
+    @TestVisible
+    private static String growMarginsForRunningChrome(String marginsCss, String header, String footer) {
+        Decimal needTop = estimateChromeHeightIn(header);
+        Decimal needBottom = estimateChromeHeightIn(footer);
+        if (needTop <= 0 && needBottom <= 0) {
+            return marginsCss;
+        }
+        List<Decimal> sides = parseMarginShorthandIn(marginsCss);
+        String out = marginsCss;
+        if (needTop > 0) {
+            Decimal want = (needTop + CHROME_GUTTER_IN).setScale(2, System.RoundingMode.UP);
+            if (want > sides[0]) {
+                // Leading separator, no trailing one: the caller appends the ';'
+                // that closes the whole declaration list. Getting this wrong emitted
+                // `margin: 1in margin-top: 1.35in;;` — invalid CSS that Flying Saucer
+                // drops silently, taking the page size with it.
+                out += '; margin-top: ' + want + 'in';
+            }
+        }
+        if (needBottom > 0) {
+            Decimal want = (needBottom + CHROME_GUTTER_IN).setScale(2, System.RoundingMode.UP);
+            if (want > sides[2]) {
+                out += '; margin-bottom: ' + want + 'in';
+            }
+        }
+        return out;
+    }
+
+    /**
+     * [top, right, bottom, left] in inches from the SOURCE stylesheet's own @page
+     * margin, or null when it declares none (in which case there is nothing to
+     * preserve and nothing to compare the chrome against).
+     *
+     * Handles the units templates actually use. A margin in a unit we cannot read
+     * returns null rather than a wrong number — better to leave the author's page
+     * alone than to rewrite it from a bad measurement.
+     */
+    @TestVisible
+    private static List<Decimal> parseSourcePageMargins(String styles) {
+        if (String.isBlank(styles)) {
+            return null;
+        }
+        Matcher block = Pattern.compile('(?is)@page[^\\{]*\\{([^\\}]*)\\}').matcher(styles);
+        if (!block.find()) {
+            return null;
+        }
+        Matcher decl = Pattern.compile('(?i)(?:^|;)\\s*margin\\s*:([^;\\}]*)').matcher(block.group(1));
+        if (!decl.find()) {
+            return null;
+        }
+        List<Decimal> vals = new List<Decimal>();
+        Matcher num = Pattern.compile('(?i)([0-9]*\\.?[0-9]+)\\s*(in|pt|px|cm|mm)').matcher(decl.group(1));
+        while (num.find()) {
+            vals.add(toInches(Decimal.valueOf(num.group(1)), num.group(2).toLowerCase()));
+        }
+        if (vals.isEmpty()) {
+            return null;
+        }
+        Decimal t = vals[0];
+        Decimal r = vals.size() >= 2 ? vals[1] : t;
+        Decimal b = vals.size() >= 3 ? vals[2] : t;
+        Decimal l = vals.size() >= 4 ? vals[3] : r;
+        return new List<Decimal>{ t, r, b, l };
+    }
+
+    /** [top, right, bottom, left] from a `margin: …in` shorthand, CSS expansion rules. */
+    private static List<Decimal> parseMarginShorthandIn(String marginsCss) {
+        List<Decimal> vals = new List<Decimal>();
+        Matcher m = Pattern.compile('([0-9]*\\.?[0-9]+)\\s*in').matcher(marginsCss == null ? '' : marginsCss);
+        while (m.find()) {
+            vals.add(Decimal.valueOf(m.group(1)));
+        }
+        if (vals.isEmpty()) {
+            return new List<Decimal>{ 1.0, 1.0, 1.0, 1.0 };
+        }
+        Decimal t = vals[0];
+        Decimal r = vals.size() >= 2 ? vals[1] : t;
+        Decimal b = vals.size() >= 3 ? vals[2] : t;
+        Decimal l = vals.size() >= 4 ? vals[3] : r;
+        return new List<Decimal>{ t, r, b, l };
+    }
+
+    /**
+     * How tall a running header/footer will render, in inches.
+     *
+     * Apex cannot measure a layout, so this is an estimate — but a bounded one, and
+     * far better than the previous assumption that chrome always fits whatever
+     * margin the template happened to specify. Images and text in a header normally
+     * sit SIDE BY SIDE (logo left, address right), so the height is the taller of
+     * the two rather than their sum.
+     */
+    @TestVisible
+    private static Decimal estimateChromeHeightIn(String chrome) {
+        if (String.isBlank(chrome)) {
+            return 0;
+        }
+        // A TABLE stacks: its rows sit one under another, so its height is the SUM
+        // of its rows, not the tallest thing in it. Treating a table like a
+        // paragraph is what let a multi-row header table overlap the body exactly
+        // the way an oversized logo did.
+        if (chrome.containsIgnoreCase('<tr')) {
+            return estimateStackedRowsIn(chrome);
+        }
+        Decimal tallestImage = 0;
+        Matcher im = Pattern.compile('(?i)<img\\b[^>]*>').matcher(chrome);
+        while (im.find()) {
+            Decimal h = imageHeightIn(im.group());
+            if (h > tallestImage) {
+                tallestImage = h;
+            }
+        }
+        // Every block start is a new line; <br> likewise. Starts at one for the
+        // text that precedes any markup.
+        Integer lines = 1;
+        Matcher bm = Pattern.compile('(?i)<(?:p|div|br|h[1-6])\\b').matcher(chrome);
+        while (bm.find()) {
+            lines++;
+        }
+        Decimal textHeight = lines * CHROME_LINE_IN;
+        return tallestImage > textHeight ? tallestImage : textHeight;
+    }
+
+    /**
+     * Height of chrome containing a table: the sum of its rows.
+     *
+     * Within one row, content sits side by side, so the row is as tall as its
+     * tallest cell — the same "beside, not below" rule used for a logo next to
+     * text. Anything outside the rows is added on top, since it stacks with them.
+     */
+    private static Decimal estimateStackedRowsIn(String chrome) {
+        Decimal total = 0;
+        Matcher rows = Pattern.compile('(?is)<tr\\b[^>]*>(.*?)</tr\\s*>').matcher(chrome);
+        String outsideRows = chrome;
+        while (rows.find()) {
+            String row = rows.group(1);
+            outsideRows = outsideRows.replace(rows.group(), '');
+            Decimal tallest = CHROME_LINE_IN;
+            Matcher im = Pattern.compile('(?i)<img\\b[^>]*>').matcher(row);
+            while (im.find()) {
+                Decimal h = imageHeightIn(im.group());
+                if (h > tallest) {
+                    tallest = h;
+                }
+            }
+            // Cell padding and borders — a table row is never as tight as a bare
+            // line of text.
+            total += tallest + 0.06;
+        }
+        // Whatever sits outside the table (a title above it, a note below) stacks.
+        String stripped = outsideRows.replaceAll('(?is)<table\\b[^>]*>|</table\\s*>', '');
+        if (String.isNotBlank(stripped.replaceAll('(?is)<[^>]+>', '').trim())) {
+            total += estimateChromeHeightIn(stripped);
+        }
+        return total;
+    }
+
+    /** An <img>'s effective height in inches — author sizing, else a safe floor. */
+    private static Decimal imageHeightIn(String tag) {
+        Matcher sm = Pattern.compile('(?i)(?:^|[;\\s"\'])height\\s*:\\s*([0-9]*\\.?[0-9]+)\\s*(in|pt|px|cm|mm)')
+            .matcher(tag);
+        if (sm.find()) {
+            return toInches(Decimal.valueOf(sm.group(1)), sm.group(2).toLowerCase());
+        }
+        Matcher am = Pattern.compile('(?i)\\sheight\\s*=\\s*["\']?([0-9]*\\.?[0-9]+)').matcher(tag);
+        if (am.find()) {
+            return toInches(Decimal.valueOf(am.group(1)), 'px');
+        }
+        // Width set but height auto — the height lives in the image file and nothing
+        // here can read it without loading the blob (which the zero-heap PDF path
+        // exists to avoid). Assume SQUARE: it is a floor, not a guess, and it is
+        // wrong only in the safe direction for anything wider than it is tall. The
+        // Designer records the real height on insert/resize, so this is the fallback
+        // for hand-authored templates, not the normal path.
+        Matcher wm = Pattern.compile('(?i)(?:^|[;\\s"\'])width\\s*:\\s*([0-9]*\\.?[0-9]+)\\s*(in|pt|px|cm|mm)')
+            .matcher(tag);
+        if (wm.find()) {
+            return toInches(Decimal.valueOf(wm.group(1)), wm.group(2).toLowerCase());
+        }
+        Matcher wa = Pattern.compile('(?i)\\swidth\\s*=\\s*["\']?([0-9]*\\.?[0-9]+)').matcher(tag);
+        if (wa.find()) {
+            return toInches(Decimal.valueOf(wa.group(1)), 'px');
+        }
+        // Fully unsized — clampRunningImages will give it this height.
+        return RUNNING_IMG_CLAMP_IN;
+    }
+
+    private static Decimal toInches(Decimal v, String unit) {
+        if (unit == 'in') {
+            return v;
+        }
+        if (unit == 'pt') {
+            return v / 72;
+        }
+        if (unit == 'cm') {
+            return v / 2.54;
+        }
+        if (unit == 'mm') {
+            return v / 25.4;
+        }
+        return v / 96; // px
     }
 
     /**
@@ -9651,7 +9956,20 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             out += chrome.substring(last, m.start());
             String tag = m.group();
             Boolean sizedAttr = Pattern.compile('(?i)\\s(width|height)\\s*=').matcher(tag).find();
-            Boolean sizedStyle = Pattern.compile('(?i)style\\s*=\\s*["\'][^"\']*(width|height)\\s*:')
+            // The property must start at a declaration boundary. Without the boundary
+            // this matched the `width:` INSIDE `max-width:` — and max-width is exactly
+            // what the Designer puts on an asset image that the author never sized. The
+            // image was therefore treated as author-sized, skipped the clamp, and
+            // rendered at full intrinsic height: a logo that overflowed the top margin
+            // box and collided with the body on every page.
+            // The property must be a declaration START: either first in the style
+            // attribute, or preceded by a `;` / whitespace. Matching it anywhere hit
+            // the `width:` INSIDE `max-width:` — and max-width is exactly what the
+            // Designer puts on an asset image the author never sized, so the image
+            // was treated as author-sized, skipped the clamp, and rendered at full
+            // intrinsic height: a logo that overflowed the top margin box and painted
+            // over the body on every page.
+            Boolean sizedStyle = Pattern.compile('(?i)style\\s*=\\s*["\'](?:[^"\']*[;\\s])?(width|height)\\s*:')
                 .matcher(tag)
                 .find();
             if (!sizedAttr && !sizedStyle) {
@@ -9921,6 +10239,68 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return false;
         }
         return sourceStyles.toLowerCase().contains('@page');
+    }
+
+    /**
+     * #243 — true when the admin made a DELIBERATE page-setup choice on the template
+     * record, i.e. picked a non-default picklist value. Page_Orientation__c defaults to
+     * Portrait and Page_Size__c to Letter, so those two values cannot be distinguished
+     * from "never touched" and must NOT override an author's @page — that would flip
+     * every existing HTML template that declares its own page (the v1.90 fix for #60/#71).
+     * Landscape / Legal / A4 can only have been chosen on purpose.
+     */
+    @TestVisible
+    private static Boolean hasExplicitPageOverride() {
+        String orient = DocGenHtmlRenderer.orientationOverride;
+        String size = DocGenHtmlRenderer.pageSizeOverride;
+        return 'Landscape'.equalsIgnoreCase(orient) || 'Legal'.equalsIgnoreCase(size) || 'A4'.equalsIgnoreCase(size);
+    }
+
+    /**
+     * #243 — true when Page_Margins__c names a concrete preset. 'Default' is the field
+     * default and 'FromSource' explicitly defers to the source document, so neither
+     * justifies overwriting an author's @page margin.
+     */
+    @TestVisible
+    private static Boolean hasExplicitMarginOverride() {
+        String preset = DocGenHtmlRenderer.marginsOverride;
+        return String.isNotBlank(preset) &&
+            !'Default'.equalsIgnoreCase(preset) &&
+            !'FromSource'.equalsIgnoreCase(preset);
+    }
+
+    /**
+     * #243 — removes a single declaration (`size` or `margin`) from every `@page` block
+     * in the source styles, leaving the rest of the author's CSS untouched.
+     *
+     * Needed because the engine's <style> is emitted BEFORE the source's, so an engine
+     * `@page { size: ... }` loses the cascade to an author declaration of equal
+     * specificity. Dropping the competing declaration lets the engine's value apply
+     * without relocating or rewriting author CSS.
+     *
+     * The `(^|;)` anchor is what keeps this surgical: `size` cannot match `font-size`
+     * and `margin` cannot match `margin-top`, because in both cases the character
+     * following the property name is not `:`.
+     */
+    @TestVisible
+    private static String stripSourcePageDecl(String styles, String prop) {
+        if (String.isBlank(styles)) {
+            return styles;
+        }
+        Matcher blocks = Pattern.compile('(?is)(@page[^\\{]*\\{)([^\\}]*)(\\})').matcher(styles);
+        Pattern decl = Pattern.compile('(?i)(^|;)\\s*' + prop + '\\s*:[^;\\}]*(;|$)');
+        String out = '';
+        Integer last = 0;
+        while (blocks.find()) {
+            out += styles.substring(last, blocks.start());
+            // Collapse the matched declaration to a bare ';' so neighbouring
+            // declarations stay separated.
+            String body = decl.matcher(blocks.group(2)).replaceAll('$1');
+            out += blocks.group(1) + body + blocks.group(3);
+            last = blocks.end();
+        }
+        out += styles.substring(last);
+        return out;
     }
 
     /**

@@ -5,7 +5,27 @@ Integer pass = 0;
 Integer fail = 0;
 
 Boolean containsNs(Set<String> s, String val) {
-    return s.contains(val) || s.contains('portwoodglobal__' + val);
+    if (s.contains(val) || s.contains('portwoodglobal__' + val)) {
+        return true;
+    }
+    // Object.Field needs BOTH halves prefixed. In a managed package
+    // 'DocGen_Job__c.Label__c' is stored as
+    // 'portwoodglobal__DocGen_Job__c.portwoodglobal__Label__c', and prefixing the
+    // whole string once only produces 'portwoodglobal__DocGen_Job__c.Label__c',
+    // which matches nothing. That reported Label__c and Merge_Only__c as ungranted
+    // when the permission set grants both — a FALSE FAILURE that survived because
+    // object-only lookups (the common case here) work fine with one prefix.
+    if (val.contains('.')) {
+        String obj = val.substringBefore('.');
+        String fld = val.substringAfter('.');
+        if (
+            s.contains('portwoodglobal__' + obj + '.portwoodglobal__' + fld) ||
+            s.contains(obj + '.portwoodglobal__' + fld)
+        ) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Boolean containsFld(Set<String> s, String obj, String fld) {

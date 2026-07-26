@@ -1,5 +1,9 @@
 import { LightningElement, track, wire } from 'lwc';
 import { createRecord, updateRecord } from 'lightning/uiRecordApi';
+// #236 — Type__c is a RESTRICTED picklist and the wizard defaults to 'HTML', a value
+// added in v1.61.0. Orgs installed before that and later upgraded may not have it, in
+// which case every create fails. Read the org's real values instead of hardcoding them.
+import { getObjectInfo, getPicklistValues } from 'lightning/uiObjectInfoApi';
 import LightningConfirm from 'lightning/confirm';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
@@ -14,7 +18,10 @@ import {
     prettyPrintHtml,
     scopeHtmlForInlinePreview,
     buildTagPalette,
-    buildBlockPalette
+    buildBlockPalette,
+    splitRegions,
+    joinRegions,
+    stripRegionMarkers
 } from './docGenAuthoringKit';
 
 // Each predesigned starter carries its natural object — the wizard's starter
@@ -39,7 +46,8 @@ function columnsSectionSnippet(n) {
 }
 
 // Apex
-import getAllTemplates from '@salesforce/apex/DocGenController.getAllTemplates';
+import getTemplateList from '@salesforce/apex/DocGenController.getTemplateList';
+import getTemplateById from '@salesforce/apex/DocGenController.getTemplateById';
 import deleteTemplate from '@salesforce/apex/DocGenController.deleteTemplate';
 import saveTemplate from '@salesforce/apex/DocGenController.saveTemplate';
 import generateDocumentData from '@salesforce/apex/DocGenController.generateDocumentData';
@@ -139,6 +147,65 @@ import VER_PAGE_MARGINS_FIELD from '@salesforce/schema/DocGen_Template_Version__
 import VER_CUSTOM_MARGINS_FIELD from '@salesforce/schema/DocGen_Template_Version__c.Custom_Margins__c';
 
 // Field API name map — resolves namespace automatically
+// #236 — every Type__c picklist value this build knows about, mapped to the release
+// that introduced it. Type__c is RESTRICTED, so writing a value the org does not have
+// fails the whole insert. Used as a fallback list and to name what a partially-upgraded
+// org is missing.
+const TYPE_VALUE_HISTORY = {
+    Word: '1.0',
+    PowerPoint: '1.0',
+    Excel: '1.5x',
+    HTML: '1.61.0',
+    PDF: '3.03.0'
+};
+
+/**
+ * #236 — pull the ACTIONABLE message out of an LDS / UI API error.
+ *
+ * `error.body.message` on a DML failure is always the generic
+ * "An error occurred while trying to update the record. Please try again." — which is
+ * why every customer report of the template-create failure was verbatim identical and
+ * none of them identified a cause. The real detail lives in `body.output.fieldErrors`
+ * and `body.output.errors`, which nothing was reading.
+ */
+function ldsErrorDetail(error) {
+    if (!error) {
+        return 'Unknown error.';
+    }
+    const body = error.body || error;
+    const parts = [];
+    const output = body.output || {};
+    // Field-level: { Field__c: [{ message, statusCode, fieldLabel }] }
+    if (output.fieldErrors) {
+        for (const key of Object.keys(output.fieldErrors)) {
+            for (const fe of output.fieldErrors[key] || []) {
+                const label = fe.fieldLabel || key;
+                parts.push(`${label}: ${fe.message}${fe.statusCode ? ` [${fe.statusCode}]` : ''}`);
+            }
+        }
+    }
+    // Record-level: [{ message, statusCode }]
+    for (const re of output.errors || []) {
+        parts.push(`${re.message}${re.statusCode ? ` [${re.statusCode}]` : ''}`);
+    }
+    // Page-level (older shape) and DML arrays from Apex.
+    for (const pe of body.pageErrors || []) {
+        parts.push(pe.message);
+    }
+    if (Array.isArray(body)) {
+        for (const b of body) {
+            if (b && b.message) parts.push(b.message);
+        }
+    }
+    if (!parts.length && body.message) {
+        parts.push(body.message);
+    }
+    if (!parts.length && error.message) {
+        parts.push(error.message);
+    }
+    return parts.length ? parts.join(' | ') : 'Unknown error.';
+}
+
 const F = {
     Name: 'Name',
     Category: CATEGORY_FIELD.fieldApiName,
@@ -1213,7 +1280,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     @track isInstallingSamples = false;
     _samplesChecked = false;
 
-    @wire(getAllTemplates)
+    // LIST light, LOAD heavy on demand. getTemplateList returns only what the
+    // grid, the search and the pickers read — no long-text bodies, no attached
+    // document subquery. openEditModal fetches the full record for the one
+    // template being opened. See DocGenController.getTemplateList.
+    @wire(getTemplateList)
     wiredTemplates(result) {
         this.wiredTemplatesResult = result;
         if (result.data) {
@@ -1351,7 +1422,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     handleEditModalKeydown(event) {
         if (event.key === 'Escape') {
             event.preventDefault();
-            this.closeEditModal();
+            this.handleCloseEditModal();
         }
     }
     handlePreviewModalKeydown(event) {
@@ -1364,6 +1435,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // --- Wizard Logic ---
 
     disconnectedCallback() {
+        this._cancelOverlayClear();
         if (this._selListenerAdded) {
             document.removeEventListener('selectionchange', this._onSelectionChange);
             this._selListenerAdded = false;
@@ -1372,6 +1444,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             document.removeEventListener('mousedown', this._onDocMouseDown, true);
             this._docMouseListenerAdded = false;
         }
+        if (this._surfaceRo) {
+            try {
+                this._surfaceRo.disconnect();
+            } catch (e) {
+                /* already gone */
+            }
+            this._surfaceRo = null;
+            this._surfaceRoSeen = null;
+        }
+        // #244 — Ctrl/Cmd + wheel zoom is bound to the canvas node, not the document.
+        if (this._wheelBoundPv) {
+            this._wheelBoundPv.removeEventListener('wheel', this.handleCanvasWheel);
+            this._wheelBoundPv.removeEventListener('mousemove', this.handleCanvasMouseMove);
+            this._wheelBoundPv = null;
+        }
+
         this._disableFloatPanelChrome();
     }
 
@@ -1512,6 +1600,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     renderedCallback() {
+        // Floating chrome is position: fixed in viewport coordinates, so it can only
+        // be placed once the element exists and has been laid out.
+        if (this.selectionBubble) {
+            const bubble = this.template.querySelector('.dg-sel-bubble');
+            if (bubble) {
+                this._positionSelectionBubble(bubble);
+            }
+        }
+        if (this.pillMenu && this._floatAnchor && this._floatAnchor.isConnected) {
+            const pm = this.template.querySelector('.dg-pill-menu');
+            if (pm) {
+                this._positionFloating(this._floatAnchor, pm, { gap: 6, prefer: 'bottom', align: 'start' });
+            }
+        }
+        // Toolbar popovers are position: fixed, so they need placing the moment they
+        // open — not only when something scrolls. Without this the grid picker fell
+        // back to its static position, which is why moving it out of the toolbar (to
+        // escape that stacking context) needed this to land with it.
+        if (this._floatAnchor && this._floatAnchor.isConnected) {
+            const fm = this.template.querySelector('.dg-fmt-menu');
+            if (fm) {
+                this._positionFloating(this._floatAnchor, fm, { gap: 6, prefer: 'bottom', align: 'start' });
+            }
+        }
         // Sync native textarea DOM value with tracked property after re-render
         if (this.currentWizardStep === '2' && this.newTemplateQuery) {
             const ta = this.template.querySelector('.wizard-query-textarea');
@@ -1562,6 +1674,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._focusPanelSearch = false;
             }
         }
+        // The slash menu's search box is deliberately NOT auto-focused. Taking
+        // focus the instant the menu appears would break the flow it was built
+        // for — type a backtick and keep typing in the page — by yanking the
+        // caret out of the document mid-sentence. The box is there for when the
+        // mouse has already been used, which is precisely the case that had no
+        // way to filter at all.
         // Inline HTML preview: the lwc:dom="manual" host only exists after the
         // re-render that the Preview toggle triggers, so the content write has
         // to happen here rather than in the click handler.
@@ -1576,9 +1694,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     if (pv) {
                         pv.setAttribute('contenteditable', 'true');
                         pv.setAttribute('spellcheck', 'false');
-                        // Component CSS can't reach manual DOM — style inline.
-                        pv.style.outline = '2px dashed #b49aef';
-                        pv.style.outlineOffset = '6px';
+                        // The editing outline moved to .dg-sheet-paper, which encloses
+                        // the header band, the page AND the footer band. Here it boxed
+                        // the body alone, so the running header sat visibly outside
+                        // "the document" and each seam carried two competing dashed
+                        // lines. Component CSS can't reach manual DOM, so the rest is
+                        // still styled inline.
                         pv.style.caretColor = '#7c3aed';
                         pv.style.cursor = 'text';
                         // Merge tags render as friendly atomic pills.
@@ -1592,16 +1713,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // Drag targets: tag chips and image thumbnails drop
                         // exactly where the user points — with a live insertion
                         // marker so the drop point is never a guess.
-                        pv.addEventListener('dragover', (e) => {
-                            e.preventDefault();
-                            this._showDropMarker(e, pv);
-                        });
-                        pv.addEventListener('dragleave', (e) => {
-                            if (e.target === pv) {
-                                this._hideDropMarker(pv);
-                            }
-                        });
-                        pv.addEventListener('drop', (e) => this._handleVisualDrop(e, pv));
+                        // Every interaction that must behave the same on the page
+                        // and in the running header/footer is wired in ONE place.
+                        // Keeping two copies is what left the bands without a
+                        // right-click menu, without pill double-click editing,
+                        // without table handles and without toolbar state — each
+                        // found and fixed separately, which is the tax this removes.
+                        this._wireSurfaceInteractions(pv);
                         // Live dirty signal while typing in the page — and
                         // type-to-pill: a completed {tag} snaps into a pill.
                         pv.addEventListener('input', () => {
@@ -1613,105 +1731,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         });
                         // Click a pill → its formatting menu; click elsewhere closes it.
                         // Double-click a pill → edit its tag text in place.
-                        pv.addEventListener('click', (e) => {
-                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
-                            if (pill && pill.getAttribute('contenteditable') !== 'true') {
-                                e.preventDefault();
-                                this._openPillMenu(pill);
-                            } else if (!pill && e.target && e.target.tagName === 'IMG') {
-                                // Plain body image: toolbar target (align etc.)
-                                // without a pill menu.
-                                this._activePill = e.target;
-                                this.pillMenu = null;
-                            } else if (!pill) {
-                                this.pillMenu = null;
-                                this._activePill = null;
-                                this._closeSlashMenu();
-                                this.ctxMenu = null;
-                                // A plain click clears the cell selection —
-                                // except the mouseup that just finished the
-                                // drag-select (toolbar/right-click don't fire
-                                // a pv click, so the selection survives them).
-                                if (!this._cellSelecting) {
-                                    this._clearCellSel();
-                                }
-                            }
-                        });
-                        pv.addEventListener('dblclick', (e) => {
-                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
-                            if (pill) {
-                                e.preventDefault();
-                                this._beginPillEdit(pill);
-                                return;
-                            }
-                            // Word-style click-and-type: double-click empty page
-                            // space starts a cursor right there.
-                            this._placeCaretAtPoint(e, pv);
-                        });
-                        // Right-click: contextual menu (pill menu on pills;
-                        // insert/format/table actions elsewhere).
-                        pv.addEventListener('contextmenu', (e) => {
-                            e.preventDefault();
-                            this._closeSlashMenu();
-                            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
-                            if (pill && pill.getAttribute('contenteditable') !== 'true') {
-                                this.ctxMenu = null;
-                                this._openPillMenu(pill);
-                                return;
-                            }
-                            this.pillMenu = null;
-                            this._placeCaretAtPoint(e, pv);
-                            const col = this.template.querySelector('.dg-designer-canvas-col');
-                            const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
-                            this._ctxPoint = { x: e.clientX, y: e.clientY };
-                            this._ctxCell = e.target && e.target.closest ? e.target.closest('td, th') : null;
-                            try {
-                                const cs = window.getSelection();
-                                this._ctxRange = cs && cs.rangeCount ? cs.getRangeAt(0).cloneRange() : null;
-                            } catch (err) {
-                                this._ctxRange = null;
-                            }
-                            this._focusCtxSearch = true;
-                            this.ctxMenu = {
-                                inTable: !!(e.target && e.target.closest && e.target.closest('td, th')),
-                                posStyle:
-                                    'left: ' +
-                                    Math.max(0, e.clientX - colRect.left) +
-                                    'px; top: ' +
-                                    (e.clientY - colRect.top + 4) +
-                                    'px;'
-                            };
-                        });
-                        // Column resize: grab a cell's right edge and drag.
-                        pv.addEventListener('mousemove', (e) => {
-                            this._imgResizeHover(e);
-                            this._cellSelMove(e, pv);
-                            this._tableResizeHover(e, pv);
-                        });
-                        pv.addEventListener('mousedown', (e) => {
-                            // Nested-contenteditable blur is unreliable — a click
-                            // outside an in-edit pill commits it explicitly, so
-                            // the user is never "caught" inside the pill.
-                            if (this._editingPill && !this._editingPill.contains(e.target) && this._finishPillEdit) {
-                                this._finishPillEdit();
-                            }
-                            if (this._imgResizeStart(e, pv)) {
-                                return;
-                            }
-                            this._cellSelDown(e, pv);
-                            this._tableResizeStart(e, pv);
-                        });
-                        // Caret moved (typing, clicking, arrow keys) — update
-                        // which format buttons read as pressed.
-                        pv.addEventListener('keyup', () => this._refreshFmtState());
-                        pv.addEventListener('mouseup', () => {
-                            // After the click's selection settles.
-                            setTimeout(() => this._refreshFmtState(), 0);
-                        });
-                        // Chip drops staged by the document-level drag listener
-                        // execute HERE — pv listeners are the context where DOM
-                        // insertion reliably works under LWS.
-                        pv.addEventListener('mouseup', () => this._performPendingDropInsert());
                         // Keep keystrokes OURS: Lightning binds "/" (and more) to
                         // global shortcuts via a capture-phase listener high in the
                         // tree, so stopping propagation at the page is too late.
@@ -1724,8 +1743,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // canvas from the event — track focus from INSIDE it.
                         pv.addEventListener('focusin', () => {
                             this._canvasFocused = true;
+                            // #247 — three editable surfaces now; the toolbar has to
+                            // know which one it is acting on.
+                            this._setActiveSurface('body');
                         });
                         pv.addEventListener('keydown', (e) => {
+                            // Ctrl/Cmd+Z first: it must beat the floor guard and the
+                            // slash menu, and it must preventDefault before the
+                            // browser's own undo can run against the wrong history.
+                            if (this._undoKeydown(e)) {
+                                return;
+                            }
                             // A top-left-corner click parks the caret at the
                             // canvas ROOT, before the scoped <style> — there,
                             // Space types nowhere visible and Backspace eats
@@ -1733,8 +1761,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             // Steer the caret into real content BEFORE the
                             // browser's default edit runs.
                             this._normalizeRootCaret(pv);
+                            this._guardCanvasFloor(e, pv);
                             // Open slash menu drives arrows/Enter/Escape.
                             if (this._slashMenuKeydown(e)) {
+                                return;
+                            }
+                            // Tab walks the table cells (and grows the table at the
+                            // end) before Enter gets a look in.
+                            if (this._handleTabKey(e)) {
+                                return;
+                            }
+                            // Enter = line break, Shift+Enter = new paragraph. After
+                            // the slash menu, which owns Enter while it is open.
+                            if (this._handleEnterKey(e)) {
+                                e.stopPropagation();
                                 return;
                             }
                             // Track typing recency for the "/" recovery below.
@@ -1825,10 +1865,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             document.addEventListener('selectionchange', this._onSelectionChange);
                             this._selListenerAdded = true;
                         }
+                        // #244 — the canvas is rewritten on every re-render, so the
+                        // zoom transform has to be re-applied to the new node.
+                        this._applyZoom();
+                        // The canvas element itself is replaced on every re-render, so
+                        // track WHICH node the wheel handler is bound to rather than a
+                        // boolean — a plain flag would leave it attached to a detached
+                        // node and Ctrl+scroll would stop working after the first
+                        // re-render.
+                        if (this._wheelBoundPv !== pv) {
+                            if (this._wheelBoundPv) {
+                                this._wheelBoundPv.removeEventListener('wheel', this.handleCanvasWheel);
+                            }
+                            pv.addEventListener('wheel', this.handleCanvasWheel, { passive: false });
+                            this._wheelBoundPv = pv;
+                        }
+                        // #241 — the table-handle mousemove moved into
+                        // _wireSurfaceInteractions so the bands get it too; binding it
+                        // here as well would run the overlay twice per pointer move.
                         // Snapshot AFTER pillify so "unchanged" compares
                         // like-for-like on exit.
                         // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
                         this._visualEnteredDom = pv.innerHTML;
+                        // #247 — running header/footer are editable bands on the page.
+                        this._mountChromeBands();
                     }
                 }
                 this._pendingPreviewWrite = null;
@@ -2499,7 +2559,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             dataSourceMode: this.dataSourceMode,
             providerFields: (this.providerFields || []).map((f) => f.name || f),
             assets,
-            docDescription: this.aiDocDescription
+            docDescription: this.aiDocDescription,
+            // #248 — field types let the model pick its own format suffixes
+            // ({Amount:currency}, {CloseDate:MMMM d, yyyy}) instead of emitting bare
+            // tags the author then has to fix by hand.
+            fieldTypes: this._buildFieldTypeMap(this.wizardQueryMeta)
         });
     }
 
@@ -2507,8 +2571,40 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
         return buildAiPrompt(shape, {
             dataSourceMode: this.editTemplateObject === 'FlowJsonData' ? 'flow' : 'record',
-            providerFields: (this.providerFields || []).map((f) => f.name || f)
+            providerFields: (this.providerFields || []).map((f) => f.name || f),
+            fieldTypes: this._buildFieldTypeMap(this.designerQueryMeta)
         });
+    }
+
+    /**
+     * #248 — flatten the already-loaded describe metadata into
+     * { 'Amount': 'CURRENCY', 'Account.Name': 'STRING', 'Lines.Quantity': 'DOUBLE' }.
+     *
+     * The wizard's query-builder step has fetched all of this already
+     * (getObjectFields returns label/value/type), so this costs no extra round trips.
+     * Returns {} when metadata has not loaded — buildAiPrompt degrades to the untyped
+     * listing rather than blocking.
+     */
+    _buildFieldTypeMap(meta) {
+        const out = {};
+        if (!meta) {
+            return out;
+        }
+        const add = (prefix, list) => {
+            for (const f of list || []) {
+                if (f && f.value && f.type) {
+                    out[prefix + f.value] = f.type;
+                }
+            }
+        };
+        add('', meta.fields);
+        for (const rel of Object.keys(meta.childFieldsByRel || {})) {
+            add(rel + '.', meta.childFieldsByRel[rel]);
+        }
+        for (const rel of Object.keys(meta.parentFieldsByRel || {})) {
+            add(rel + '.', meta.parentFieldsByRel[rel]);
+        }
+        return out;
     }
 
     // --- AI-step field checklist (build your query before the prompt) ---
@@ -3910,14 +4006,60 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     // --- Options ---
+    // --- #236: Type__c picklist read from the org, not hardcoded ---------------
+    @wire(getObjectInfo, { objectApiName: DOCGEN_TEMPLATE_OBJECT })
+    templateObjectInfo;
+
+    @wire(getPicklistValues, {
+        recordTypeId: '$templateObjectInfo.data.defaultRecordTypeId',
+        fieldApiName: TYPE_FIELD
+    })
+    wiredTypePicklist(result) {
+        this._typePicklist = result;
+        if (result && result.data && Array.isArray(result.data.values)) {
+            this._orgTypeValues = result.data.values.map((v) => v.value);
+            // The wizard's default is HTML. If this org never received it, fall back
+            // to something it does have rather than failing on every create.
+            if (this._orgTypeValues.length && !this._orgTypeValues.includes(this.newTemplateType)) {
+                this.newTemplateType = this._orgTypeValues.includes('HTML') ? 'HTML' : this._orgTypeValues[0];
+            }
+        }
+    }
+    _typePicklist;
+    @track _orgTypeValues = null;
+
     get typeOptions() {
-        return [
-            { label: 'Word', value: 'Word' },
-            { label: 'PowerPoint', value: 'PowerPoint' },
-            { label: 'Excel', value: 'Excel' },
-            { label: 'HTML', value: 'HTML' },
-            { label: 'PDF', value: 'PDF' }
-        ];
+        const fallback = Object.keys(TYPE_VALUE_HISTORY);
+        // Until the wire resolves (and if it errors) keep the historical hardcoded
+        // list so the wizard is never empty.
+        const values = this._orgTypeValues && this._orgTypeValues.length ? this._orgTypeValues : fallback;
+        return values.map((v) => ({ label: v, value: v }));
+    }
+
+    /**
+     * #236 — true when this org's Type__c picklist is missing values this build
+     * expects. That means the package schema did not fully upgrade, and it is the
+     * leading explanation for "cannot create new templates after upgrading".
+     */
+    get missingTypeValues() {
+        if (!this._orgTypeValues || !this._orgTypeValues.length) {
+            return [];
+        }
+        return Object.keys(TYPE_VALUE_HISTORY).filter((v) => !this._orgTypeValues.includes(v));
+    }
+
+    get hasMissingTypeValues() {
+        return this.missingTypeValues.length > 0;
+    }
+
+    get missingTypeValuesMessage() {
+        const missing = this.missingTypeValues.map((v) => `${v} (added in v${TYPE_VALUE_HISTORY[v]})`).join(', ');
+        return (
+            `This org's Template Type picklist is missing: ${missing}. ` +
+            'That means the package upgrade did not fully apply its schema. ' +
+            'Re-run the package upgrade, or add the missing values to the ' +
+            'DocGen Template > Type field in Setup. Until then those template types cannot be created.'
+        );
     }
 
     get outputFormatOptions() {
@@ -4019,6 +4161,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // --- Create Logic ---
     async createTemplate() {
+        // #236 — fail with a cause the admin can act on, rather than letting UI API
+        // flatten a restricted-picklist rejection into "An error occurred...".
+        const preflight = this._preflightCreate();
+        if (preflight) {
+            this.showToast('Cannot create template', preflight, 'error', 'sticky');
+            return;
+        }
         const fields = {};
         fields[NAME_FIELD.fieldApiName] = this.newTemplateName;
         fields[CATEGORY_FIELD.fieldApiName] = this.newTemplateCategory;
@@ -4108,7 +4257,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
             this.activeMainTab = 'list';
             this.activeEditTab = 'document';
-            this.openEditModal(newRow, 'document');
+            await this.openEditModal(newRow, 'document');
             if (authoringMode === 'starter') {
                 await this._ensureLogoAsset(record.id);
                 await this._applyStarterBody(record.id, starterKey, starterShape, chosenLogoTag);
@@ -4130,8 +4279,46 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 await this._openDesignerSurface();
             }
         } catch (error) {
-            this.showToast('Error creating record', error.body ? error.body.message : error.message, 'error');
+            // #236 — surface the REAL cause. The generic UI API string told us nothing
+            // across dozens of upgrade-failure reports; fieldErrors names the field.
+            const detail = ldsErrorDetail(error);
+            let hint = '';
+            if (/RESTRICTED_PICKLIST|INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST/i.test(detail)) {
+                hint =
+                    ' — This org is missing a picklist value the package expects, which means the ' +
+                    'upgrade did not fully apply its schema. Re-run the package upgrade.';
+            } else if (
+                /INSUFFICIENT_ACCESS|FIELD_INTEGRITY|not writeable|INVALID_FIELD_FOR_INSERT_UPDATE/i.test(detail)
+            ) {
+                hint = ' — Check that the DocGen Admin permission set is assigned to your user.';
+            } else if (/DUPLICATE_VALUE/i.test(detail)) {
+                hint = ' — The API Name is already used by another template. Change it and retry.';
+            }
+            this.showToast('Could not create template', detail + hint, 'error', 'sticky');
+            // eslint-disable-next-line no-console
+            console.error('DocGen createTemplate failed', error);
         }
+    }
+
+    /**
+     * #236 — pre-flight the values we are about to write against what the org actually
+     * has. A restricted-picklist rejection is otherwise indistinguishable from any other
+     * DML failure once UI API has flattened it.
+     *
+     * Returns an error string, or null when the create looks safe to attempt.
+     */
+    _preflightCreate() {
+        if (this._orgTypeValues && this._orgTypeValues.length && !this._orgTypeValues.includes(this.newTemplateType)) {
+            return (
+                `This org's Template Type picklist does not contain "${this.newTemplateType}"` +
+                (TYPE_VALUE_HISTORY[this.newTemplateType]
+                    ? ` (added in v${TYPE_VALUE_HISTORY[this.newTemplateType]})`
+                    : '') +
+                '. The package upgrade did not fully apply its schema. Re-run the upgrade, or pick one of: ' +
+                this._orgTypeValues.join(', ')
+            );
+        }
+        return null;
     }
 
     /**
@@ -4225,6 +4412,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const row = event.detail.row;
 
         if (actionName === 'delete') {
+            // Deleting used to happen on the click, with nothing in between. One
+            // mis-aim in a six-item row menu destroyed a template permanently —
+            // and the inconsistency made it stark, because deleting a VERSION
+            // (far less destructive, and it refuses to touch the active one)
+            // already confirms first.
+            const confirmed = await LightningConfirm.open({
+                message:
+                    'Delete "' +
+                    (row.Name || 'this template') +
+                    '"? Its versions and generated-document history go with it. This cannot be undone.',
+                label: 'Delete template',
+                theme: 'error'
+            });
+            if (!confirmed) {
+                return null;
+            }
             try {
                 // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
                 await deleteTemplate({ templateId: row.Id });
@@ -4329,7 +4532,43 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     // --- Edit Modal ---
-    openEditModal(row, activeTab) {
+    /**
+     * Light list row -> full record. A row that already has the heavy fields is
+     * returned untouched, so this is safe to call from any path.
+     */
+    async _hydrateTemplateRow(row) {
+        if (!row || !row.Id) {
+            return row;
+        }
+        // Query_Config__c is on every full record and on no light one, so its
+        // presence is the marker. `in` rather than a truthiness check: a template
+        // with an empty config still has the key.
+        if (F.QueryConfig in row) {
+            return row;
+        }
+        try {
+            return await getTemplateById({ templateId: row.Id });
+        } catch (error) {
+            const msg = error && error.body && error.body.message ? error.body.message : 'Could not load the template.';
+            this.showToast('Error opening template', msg, 'error');
+            return null;
+        }
+    }
+
+    /**
+     * Open a template for editing, fetching its full record first.
+     *
+     * The list only carries what the grid needs, so `row` here is a light record —
+     * every heavy field (query config, header/footer HTML, signer config, page
+     * setup, the attached document link) arrives with this fetch. Rows that are
+     * already complete are passed straight through, so callers that hand over a
+     * full record cost nothing.
+     */
+    async openEditModal(row, activeTab) {
+        row = await this._hydrateTemplateRow(row);
+        if (!row) {
+            return;
+        }
         try {
             this._editContext = true;
             this.editTemplateId = row.Id;
@@ -4451,6 +4690,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.isCreating = false;
             this.isEditModalOpen = true;
             this._editContext = true;
+            // Baseline for the unsaved-changes warning on close. Taken here, after
+            // every field above has been populated from the record, so the very
+            // act of opening the modal never counts as an edit.
+            this._editSnapshot = this._editFieldSignature();
             this._loadObjectMetadata(this.editTemplateObject);
             // Initialize query tree + sync textarea after DOM renders
             // eslint-disable-next-line @lwc/lwc/no-async-operation
@@ -4468,7 +4711,72 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    /**
+     * A signature of everything the edit modal can change.
+     *
+     * Snapshotted when the modal opens and compared when the user asks to close,
+     * so "you have unsaved changes" is a fact rather than a guess. Cheap: a dozen
+     * scalars stringified, computed twice per modal session.
+     */
+    _editFieldSignature() {
+        return JSON.stringify([
+            this.editTemplateName,
+            this.editTemplateCategory,
+            this.editTemplateType,
+            this.editTemplateObject,
+            this.editTemplateOutputFormat,
+            this.editTemplateDesc,
+            this.editTemplateQuery,
+            this.editFormFieldsConfig,
+            this.editTemplateTestRecordId,
+            this.editTemplateTitleFormat,
+            this.editTemplateIsActive,
+            this.editTemplateIsDefault,
+            this.editTemplateSortOrder,
+            this.editTemplateLockOutputFormat,
+            this.editTemplateSpecificRecordIds,
+            this.editTemplateRequiredPermissionSets,
+            this.editTemplateRecordFilter,
+            this.editTemplateHeaderHtml,
+            this.editTemplateFooterHtml,
+            this.editTemplatePageOrientation,
+            this.editTemplatePageSize,
+            this.editTemplatePageMargins,
+            this.editTemplateCustomMargins,
+            this.editTemplateSignerVerification,
+            this.editTemplatePrefillSignerEmail,
+            this.editTemplateApiName,
+            this.editTemplateDefaultEmailMessage
+        ]);
+    }
+
+    /**
+     * The USER asking to close. Warns before discarding edits.
+     *
+     * Closing used to bin everything typed across eight tabs with no warning at
+     * all — the modal simply set isEditModalOpen = false. Someone could retype a
+     * query config, click the X, and watch it evaporate silently.
+     *
+     * Separate from closeEditModal() on purpose: internal callers close the modal
+     * AFTER saving, and prompting them would be nonsense.
+     */
+    async handleCloseEditModal() {
+        if (this._editSnapshot != null && this._editFieldSignature() !== this._editSnapshot) {
+            const discard = await LightningConfirm.open({
+                message: 'You have unsaved changes to this template. Close and discard them?',
+                label: 'Discard changes?',
+                theme: 'warning'
+            });
+            if (!discard) {
+                return;
+            }
+        }
+        this.closeEditModal();
+    }
+    _editSnapshot = null;
+
     closeEditModal() {
+        this._editSnapshot = null;
         this.isEditModalOpen = false;
         this._editContext = false;
         this.queryTreeNodes = [];
@@ -5733,11 +6041,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * state. Throws on failure — callers own the error toast.
      */
     async _processAndSaveHtmlBody(templateId, htmlText, fileName, zipImages, source) {
+        // REGIONS: this is the single choke point every body reaches on its way to a
+        // ContentVersion — editor save, file upload, AI paste-back, switch-to-HTML.
+        // Adopting here means an author can upload an HTML file that carries
+        // data-dg-region markers and have its header and footer land in the right
+        // fields, and it means no marker can reach the renderer by any route.
+        // Idempotent: a body that came through _currentDraftHtml is already split,
+        // reports hadRegions === false, and passes through untouched.
+        htmlText = this._adoptRegions(htmlText).body;
         // GUARD: never stage editor-internal artifacts. If a preview-wrapped
         // payload (scoped .dg-pv page), tag pills, or drop markers slip in —
         // e.g. from a stale cached bundle's older code path — unwrap and
         // strip them so the stored body is always clean template HTML.
-        htmlText = this._sanitizeStagedHtml(htmlText);
+        htmlText = stripRegionMarkers(this._sanitizeStagedHtml(htmlText));
         const imagePaths = (zipImages && zipImages.imagePaths) || [];
         const imageBytes = (zipImages && zipImages.imageBytes) || [];
 
@@ -6111,6 +6427,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             pv.style.minHeight = h + 'px';
             pv.style.padding = pad + 'px';
         }
+        // The running header/footer are the sheet's top and bottom MARGIN ZONES, not
+        // panels parked above and below it. They must match the page exactly — same
+        // width, same horizontal padding — or the header text will not line up with
+        // the body text directly beneath it and the illusion of one continuous sheet
+        // breaks. This is what makes them read as part of the canvas.
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band) {
+                band.style.width = w + 'px';
+                band.style.maxWidth = w + 'px';
+                band.style.paddingLeft = pad + 'px';
+                band.style.paddingRight = pad + 'px';
+            }
+        }
     }
 
     // --- Format Code + Code ⇄ Preview (shared by the HTML editor and the DOCX viewer) ---
@@ -6234,9 +6564,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         while (node && node.nodeType === 3) {
             node = node.parentNode;
         }
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
-        if (!node || !pv || !pv.contains(node)) {
+        // #247 — the caret can now be in the body OR in a running header/footer band.
+        // Resolve which surface owns it so the tracker and the context label follow.
+        const pv = this._surfaceContaining(node);
+        if (!node || !pv) {
             this.selectionContextLabel = '';
             return;
         }
@@ -6250,6 +6581,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } catch (e) {
             /* best effort */
         }
+        // #238/#239/#240 — record the durable caret while the canvas still owns the
+        // selection. Every toolbar control (color pickers, table tools, chip insert)
+        // reads THIS, not the live selection, because clicking any of them moves focus
+        // out of the canvas and destroys the live one.
+        this._recordCaret(node, pv);
         const names = {
             H1: 'Heading 1',
             H2: 'Heading 2',
@@ -6274,17 +6610,2333 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             el = el.parentElement;
         }
-        this.selectionContextLabel = 'Editing: ' + (label || 'Page');
+        const where =
+            this._activeSurface === 'header' ? 'Header — ' : this._activeSurface === 'footer' ? 'Footer — ' : '';
+        this.selectionContextLabel = 'Editing: ' + where + (label || 'Page');
     };
+
+    /**
+     * #247 — which editable surface (body canvas or chrome band) holds this node, if
+     * any. Also sets _activeSurface, so a caret moved by keyboard rather than by click
+     * still redirects the toolbar to the right surface.
+     */
+    _surfaceContaining(node) {
+        if (!node) {
+            return null;
+        }
+        const body = this._bodyCanvas();
+        if (body && this._isInCanvas(node, body)) {
+            this._setActiveSurface('body');
+            return body;
+        }
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band && this._isInCanvas(node, band)) {
+                this._setActiveSurface(which);
+                return band;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Which surface a node belongs to, WITHOUT changing the active one.
+     *
+     * _surfaceContaining doubles as the setter for _activeSurface, which is right
+     * for the caret and wrong for anything driven by the pointer — hover chrome
+     * must not decide what the toolbar is acting on.
+     */
+    _surfaceOwning(node) {
+        if (!node) {
+            return null;
+        }
+        for (const surface of this._allSurfaces()) {
+            if (this._isInCanvas(node, surface)) {
+                return surface;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Single writer for _activeSurface, mirroring it into a tracked flag.
+     *
+     * The flag drives the contextual header/footer tools in the format bar — the
+     * same idiom as caretInTable, which shows the 24 table controls only when the
+     * caret is in a table. Header and footer tools used to live in a separate
+     * floating panel with its own raw-HTML textareas, so editing a header meant
+     * leaving the page, working in a different medium, and keeping two editors of
+     * the same two fields in your head. Flipped only on change, so the toolbar does
+     * not re-render on every caret move.
+     */
+    _setActiveSurface(which) {
+        this._activeSurface = which;
+        const inChrome = which === 'header' || which === 'footer';
+        if (this.caretInChrome !== inChrome) {
+            this.caretInChrome = inChrome;
+        }
+        const label = which === 'header' ? 'Header' : which === 'footer' ? 'Footer' : '';
+        if (this.activeChromeLabel !== label) {
+            this.activeChromeLabel = label;
+        }
+    }
+    /** True while the caret is in a running header/footer — drives the contextual row. */
+    @track caretInChrome = false;
+    @track activeChromeLabel = '';
+
+    // ===== Durable caret tracker (#238 / #239 / #240) =========================
+    //
+    // The Designer's original model read `window.getSelection()` at the moment a
+    // toolbar control fired. That works for the swatch buttons only because they
+    // preventDefault() on mousedown and so never move focus. Everything else — the
+    // <input type="color"> pickers (which hand focus to a native OS dialog), the chip
+    // rail, the table popovers — loses the selection before its handler runs, which
+    // is why colors silently did nothing and inserts always fell through to
+    // pv.appendChild at the end of the document.
+    //
+    // The fix is to stop asking "where is the caret now?" and instead remember where
+    // it last was while the canvas owned it. `_caret` is written on selectionchange
+    // (above) and read by every action.
+    _caret = { range: null, blockEl: null, cellEl: null };
+    /** True while the caret is inside a table — drives the contextual table row. */
+    @track caretInTable = false;
+    // Blocks that count as "the thing the caret is in" for highlight + fill purposes.
+    static get CARET_BLOCK_SELECTOR() {
+        return 'p, div, h1, h2, h3, h4, h5, h6, td, th, li, blockquote, pre';
+    }
+
+    /** Capture caret position + its block/cell context. Called while the canvas is focused. */
+    _recordCaret(node, pv) {
+        try {
+            const sel = window.getSelection();
+            const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+            const el = node && node.nodeType === 3 ? node.parentElement : node;
+            const blockEl = el && el.closest ? el.closest(DocGenAdmin.CARET_BLOCK_SELECTOR) : null;
+            const cellEl = el && el.closest ? el.closest('td, th') : null;
+            this._caret = { range, blockEl, cellEl };
+            this._paintActiveBlock(pv, blockEl, cellEl);
+            // Drives the contextual table row. Kept as a tracked boolean flipped only
+            // on change, so the toolbar does not re-render on every caret move.
+            const inTable = !!cellEl || !!(this._cellSel && this._cellSel.length);
+            if (this.caretInTable !== inTable) {
+                this.caretInTable = inTable;
+            }
+            this._syncSelectionBubble();
+        } catch (e) {
+            /* best effort — a stale caret beats no caret */
+        }
+    }
+
+    /**
+     * #238 — mark where you are. CSS cannot thicken or restyle a caret beyond
+     * `caret-color`, and a 1px bar is genuinely hard to find on a pill-dense page, so
+     * the containing block (and cell, when in a table) gets a tint instead.
+     *
+     * Applied as INLINE style, not via docGenAdmin.css: the canvas is an
+     * lwc:dom="manual" host and component styles do not reach nodes written into it by
+     * hand — the same reason _showDropMarker sets style.cssText directly.
+     *
+     * Because it is inline it would otherwise serialize into the saved body, so the
+     * author's original `style` attribute is captured verbatim and put back the moment
+     * the caret moves (and unconditionally before serialization).
+     */
+    _paintActiveBlock(pv, blockEl, cellEl) {
+        if (!pv) {
+            return;
+        }
+        try {
+            const target = cellEl || blockEl;
+            if (this._paintedEl === target) {
+                return;
+            }
+            // Sweep EVERY painted element, not just the one we think we painted.
+            // Three systems tint things — the active block, the Excel-style cell
+            // selection and the table band hover — and each kept its own bookkeeping.
+            // When one repainted an element another had already touched, the restore
+            // bookkeeping went stale and the tint was stranded, so moving block to
+            // block or cell to cell left several areas lit at once.
+            this._clearActiveBlockPaint();
+            if (!target || target === pv) {
+                return;
+            }
+            this._paintedEl = target;
+            target.setAttribute('data-dg-paint', 'block');
+            // NO background-color, and NO style-attribute snapshot. See the
+            // CHROME PROPERTY RULE above _clearActiveBlockPaint: this highlight
+            // used to tint the background and restore the whole style attribute it
+            // captured on arrival, so a fill applied while the caret sat in the cell
+            // — which is the normal order: click the cell, then click the swatch —
+            // was reverted the moment the caret moved on.
+            const isCell = target.tagName === 'TD' || target.tagName === 'TH';
+            if (isCell) {
+                target.style.outline = '2px solid #7c3aed';
+                target.style.outlineOffset = '-2px';
+            } else {
+                target.style.boxShadow = '-3px 0 0 0 #7c3aed';
+            }
+        } catch (e) {
+            /* highlight is cosmetic — never let it break editing */
+        }
+    }
+
+    /**
+     * THE CHROME PROPERTY RULE
+     * ------------------------
+     * Editor chrome is drawn with inline styles, because component CSS cannot reach
+     * nodes inside an lwc:dom="manual" host. That makes the canvas a shared writing
+     * surface between the editor and the author, and it only stays safe under two
+     * rules:
+     *
+     *   1. Chrome NEVER writes a property the author can write. Each system owns
+     *      its own channel — caret highlight: outline (cells) / box-shadow (blocks);
+     *      cell selection: inset box-shadow; band hover: filter. background-color
+     *      belongs to the author alone.
+     *   2. Chrome NEVER snapshots and restores a whole style attribute. A snapshot
+     *      is a photograph of the element at one instant, and every edit the author
+     *      makes afterwards is erased when it is put back.
+     *
+     * Both rules were broken here, and between them they are why a cell fill would
+     * not stick: the highlight tinted background-color, captured the style attribute
+     * on arrival, and restored it on departure — so a fill applied while the caret
+     * was in the cell lived exactly as long as the caret stayed there.
+     *
+     * Sweeping by marker rather than by remembered reference is what stops tints
+     * being stranded when the canvas re-renders or two systems touch one element.
+     *
+     * As a bonus, outline and filter are both ignored by Flying Saucer, so even if a
+     * tint ever did leak into a saved template it could not change the PDF.
+     */
+    _clearActiveBlockPaint() {
+        const el = this._paintedEl;
+        this._paintedEl = null;
+        if (el) {
+            try {
+                this._stripCaretProps(el);
+                el.removeAttribute('data-dg-paint');
+            } catch (e) {
+                /* detached */
+            }
+        }
+        // Scoped to the caret highlight's own marker. Sweeping every [data-dg-paint]
+        // also hit the row/column hover tint, which is applied OVER the author's
+        // fill — clearing that blind was the first half of "tables keep overwriting
+        // fill colors". Each system undoes only its own tint.
+        for (const surface of this._allSurfaces()) {
+            let stragglers;
+            try {
+                stragglers = surface.querySelectorAll('[data-dg-paint="block"]');
+            } catch (e) {
+                continue;
+            }
+            for (const node of stragglers) {
+                this._stripCaretProps(node);
+                node.removeAttribute('data-dg-paint');
+            }
+        }
+    }
+
+    /** The caret highlight's own channels — outline on cells, a bar on blocks. */
+    _stripCaretProps(el) {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+        el.style.boxShadow = '';
+        if (!el.getAttribute('style')) {
+            el.removeAttribute('style');
+        }
+    }
+
+    /**
+     * Every channel any chrome system is allowed to write, and nothing else.
+     *
+     * background-color is deliberately absent: it is the author's, and clearing it
+     * is what destroyed cell fills. Drops the style attribute entirely once empty so
+     * serialized HTML does not accumulate `style=""`.
+     */
+    _stripChromeProps(el) {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+        el.style.boxShadow = '';
+        el.style.filter = '';
+        el.style.backgroundClip = '';
+        if (!el.getAttribute('style')) {
+            el.removeAttribute('style');
+        }
+    }
+
+    /**
+     * Drop every transient editor tint, each undone by the system that applied it.
+     *
+     * The caret highlight restores four properties; the row/column hover tint
+     * restores a captured style attribute verbatim, because it paints over whatever
+     * fill the author already set. Anything that serializes or snapshots the canvas
+     * must go through here, or it bakes editor chrome into the saved template.
+     */
+    _clearEditorPaint() {
+        this._highlightTableBand(null);
+        this._clearActiveBlockPaint();
+        // Deliberately does NOT touch the cell SELECTION.
+        //
+        // The selection is a model (_cellSel) as well as a highlight, and it is what
+        // "fill these four cells" means. Clearing it here destroyed multi-cell fill
+        // outright: handleTableAction captures undo first, undo snapshots, the
+        // snapshot cleared the selection, and the fill then had nothing left to
+        // apply to but the caret's own cell. Its chrome is stripped from the
+        // serialized COPY by _unpillifyTags, which is the right place — that strips
+        // what is being saved without touching what the author has selected.
+        for (const surface of this._allSurfaces()) {
+            let residue;
+            try {
+                residue = surface.querySelectorAll('[data-dg-paint]');
+            } catch (e) {
+                continue;
+            }
+            for (const el of residue) {
+                this._stripChromeProps(el);
+                el.removeAttribute('data-dg-paint');
+            }
+        }
+    }
+
+    _paintedEl = null;
+
+    /**
+     * The editing surface the caret is currently in.
+     *
+     * #247 — the Designer now has three editable surfaces, not one: the page body and
+     * the running header/footer bands. Every existing caller of _canvas() (formatting,
+     * table tools, chip insert, the caret tracker) becomes header-aware for free by
+     * resolving through here, which is why the bands support the full toolbar rather
+     * than being a second, weaker editor.
+     */
+    _activeSurface = 'body';
+
+    _canvas() {
+        if (this._activeSurface === 'header' || this._activeSurface === 'footer') {
+            const band = this.template.querySelector('.dg-chrome-band_' + this._activeSurface);
+            if (band && band.isConnected) {
+                return band;
+            }
+        }
+        return this._bodyCanvas();
+    }
+
+    /**
+     * The page body specifically. Anything that is about the SHEET rather than about
+     * the caret — zoom, page dimensions, watermark, oversize-table refitting — must use
+     * this, or it would apply itself to whichever band happens to be focused.
+     */
+    _bodyCanvas() {
+        const host = this.template.querySelector('.dg-visual-host');
+        return (host && host.querySelector('.dg-pv')) || null;
+    }
+
+    // ===== Floating layer ====================================================
+    //
+    // CSS has no anchored positioning, so a popover declared `position: absolute`
+    // inside the toolbar is at the mercy of every ancestor's overflow. That is not a
+    // hypothetical: a toolbar rewrite set `overflow-x: auto`, the spec coerced
+    // `overflow-y` from `visible` to `auto` with it, and every menu silently rendered
+    // inside a 38px clipping box. Nothing was visible and the editor read as dead.
+    //
+    // The fix is structural, not a tweak: floating elements are `position: fixed` and
+    // positioned in VIEWPORT coordinates from the anchor's rect, so no ancestor's
+    // overflow can clip them. Placement flips when it would leave the viewport and is
+    // clamped to stay on screen — the collision behaviour Floating UI exists to provide.
+    //
+    // @param anchorEl  the control the floating element belongs to
+    // @param floatEl   the floating element (must be position: fixed in CSS)
+    // @param opts      { gap, prefer: 'bottom'|'top', align: 'start'|'center'|'end' }
+    _positionFloating(anchorEl, floatEl, opts = {}) {
+        if (!anchorEl || !floatEl) {
+            return;
+        }
+        const gap = opts.gap == null ? 6 : opts.gap;
+        const prefer = opts.prefer || 'bottom';
+        const align = opts.align || 'start';
+        try {
+            // Measure only after the element is laid out; callers call this from
+            // renderedCallback or immediately after making it visible.
+            const a = anchorEl.getBoundingClientRect();
+            const f = floatEl.getBoundingClientRect();
+            const vw = document.documentElement.clientWidth;
+            const vh = document.documentElement.clientHeight;
+            const fw = f.width || floatEl.offsetWidth || 160;
+            const fh = f.height || floatEl.offsetHeight || 120;
+
+            // Vertical: use the preferred side unless it would overflow AND the other
+            // side has more room.
+            const roomBelow = vh - a.bottom;
+            const roomAbove = a.top;
+            let top;
+            if (prefer === 'top') {
+                top = roomAbove >= fh + gap || roomAbove >= roomBelow ? a.top - fh - gap : a.bottom + gap;
+            } else {
+                top = roomBelow >= fh + gap || roomBelow >= roomAbove ? a.bottom + gap : a.top - fh - gap;
+            }
+
+            // Horizontal: align to the anchor, then clamp into the viewport so a
+            // control near the right edge does not push its menu off screen.
+            let left;
+            if (align === 'center') {
+                left = a.left + a.width / 2 - fw / 2;
+            } else if (align === 'end') {
+                left = a.right - fw;
+            } else {
+                left = a.left;
+            }
+            const margin = 8;
+            left = Math.max(margin, Math.min(left, vw - fw - margin));
+            top = Math.max(margin, Math.min(top, vh - fh - margin));
+
+            floatEl.style.position = 'fixed';
+            floatEl.style.left = Math.round(left) + 'px';
+            floatEl.style.top = Math.round(top) + 'px';
+            floatEl.style.zIndex = '9000';
+        } catch (e) {
+            /* positioning is best-effort — never break the editor over chrome */
+        }
+    }
+
+    /**
+     * Reposition every open floating element. Bound to scroll/resize while something
+     * is open, because `fixed` coordinates are viewport-absolute and go stale the
+     * moment anything moves.
+     */
+    _repositionFloatingLayer = () => {
+        const openMenu = this.template.querySelector('.dg-fmt-menu');
+        if (openMenu && this._floatAnchor && this._floatAnchor.isConnected) {
+            this._positionFloating(this._floatAnchor, openMenu);
+        }
+        const bubble = this.template.querySelector('.dg-sel-bubble');
+        if (bubble && this.selectionBubble) {
+            this._positionSelectionBubble(bubble);
+        }
+        const pm = this.template.querySelector('.dg-pill-menu');
+        if (pm && this._floatAnchor && this._floatAnchor.isConnected) {
+            this._positionFloating(this._floatAnchor, pm, { gap: 6 });
+        }
+    };
+
+    _watchFloatingLayer(on) {
+        if (on && !this._floatWatching) {
+            window.addEventListener('scroll', this._repositionFloatingLayer, true);
+            window.addEventListener('resize', this._repositionFloatingLayer);
+            this._floatWatching = true;
+        } else if (!on && this._floatWatching) {
+            window.removeEventListener('scroll', this._repositionFloatingLayer, true);
+            window.removeEventListener('resize', this._repositionFloatingLayer);
+            this._floatWatching = false;
+        }
+    }
+    _floatWatching = false;
+    _floatAnchor = null;
+
+    // ===== Selection bubble ==================================================
+    //
+    // The third layer of the editor's chrome, alongside the persistent bar and the
+    // slash menu. Research on block editors is consistent that you need all three:
+    // a bubble for "format what I just selected", a static bar for discoverability,
+    // and slash for "insert something new". The bubble is what earns the persistent
+    // bar the right to be small.
+    //
+    // Deliberately additive: nothing is removed from the toolbar to make this work,
+    // so it cannot repeat the fae4f53 failure where controls were relocated into
+    // chrome that turned out not to render.
+    @track selectionBubble = null;
+
+    /** A trimmed swatch set — the bubble is for quick hits, not the full palette. */
+    get bubbleColorSwatches() {
+        return (this.textColorSwatches || []).slice(0, 5);
+    }
+
+    // ===== Toolbar popovers ==================================================
+    //
+    // 13 colour swatches, 4 font buttons and an alignment row sat permanently in the
+    // bar — a menu pretending to be a toolbar. They move behind three triggers here.
+    //
+    // This is the change that broke the editor last time, so it is built differently:
+    // the popover uses the PROVEN fixed-position floating layer (_positionFloating,
+    // already covered by smoke assertions for clipping and hit-testing), and the
+    // inline controls are only removed after the popover is verified green.
+    @track openFmtMenu = null;
+
+    handleFmtMenuToggle(event) {
+        const which = event.currentTarget.dataset.menu;
+        const next = this.openFmtMenu === which ? null : which;
+        this.openFmtMenu = next;
+        this._floatAnchor = next ? event.currentTarget : null;
+        this._watchFloatingLayer(!!next || !!this.selectionBubble);
+    }
+
+    closeFmtMenu() {
+        this.openFmtMenu = null;
+        this._watchFloatingLayer(!!this.selectionBubble);
+    }
+
+    get isTextColorMenuOpen() {
+        return this.openFmtMenu === 'textColor';
+    }
+    get isHighlightMenuOpen() {
+        return this.openFmtMenu === 'highlight';
+    }
+    get isFontMenuOpen() {
+        return this.openFmtMenu === 'font';
+    }
+    get isAlignMenuOpen() {
+        return this.openFmtMenu === 'align';
+    }
+
+    /** Current text colour, painted as the underbar on the trigger. */
+    get textColorBarStyle() {
+        return 'background:' + (this._lastTextColor || '#16325c') + ';';
+    }
+    get highlightBarStyle() {
+        return 'background:' + (this._lastHighlight || '#fef3c7') + ';';
+    }
+    _lastTextColor = '#16325c';
+    _lastHighlight = '#fef3c7';
+
+    /** Show/hide the bubble as the selection changes inside any editing surface. */
+    _syncSelectionBubble() {
+        if (!this.showHtmlBodyVisual) {
+            if (this.selectionBubble) {
+                this.selectionBubble = null;
+                this._watchFloatingLayer(false);
+            }
+            return;
+        }
+        let show = false;
+        try {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount && !sel.isCollapsed) {
+                const node = sel.getRangeAt(0).startContainer;
+                const el = node && node.nodeType === 3 ? node.parentElement : node;
+                // Only for real text selections inside an editable surface — a
+                // pill-only selection has its own menu.
+                if (el && this._surfaceContaining(el) && (sel.toString() || '').trim().length) {
+                    show = true;
+                }
+            }
+        } catch (e) {
+            show = false;
+        }
+        if (show !== !!this.selectionBubble) {
+            this.selectionBubble = show ? { visible: true } : null;
+            this._watchFloatingLayer(show || !!this.openFmtMenu);
+        }
+    }
+
+    /**
+     * Park the bubble ABOVE the selection where there is room, below it otherwise —
+     * it must never cover the text being formatted.
+     */
+    _positionSelectionBubble(bubbleEl) {
+        try {
+            const sel = window.getSelection();
+            if (!sel || !sel.rangeCount) {
+                return;
+            }
+            const rects = sel.getRangeAt(0).getClientRects();
+            const r = rects && rects.length ? rects[0] : sel.getRangeAt(0).getBoundingClientRect();
+            if (!r || (!r.width && !r.height)) {
+                return;
+            }
+            // Synthesize an anchor rect from the selection itself.
+            const anchor = {
+                getBoundingClientRect: () => r
+            };
+            this._positionFloating(anchor, bubbleEl, { gap: 8, prefer: 'top', align: 'center' });
+            // _positionFloating clamps into the viewport, and that clamp can land the
+            // bubble back on top of the very text it is meant to format — there is no
+            // room above near the top of the screen, and the flip below can still be
+            // pulled back up. Detect the overlap and force it to the side with room.
+            const full = sel.getRangeAt(0).getBoundingClientRect();
+            const br = bubbleEl.getBoundingClientRect();
+            const overlaps = br.bottom > full.top + 2 && br.top < full.bottom - 2;
+            if (overlaps) {
+                const vh = document.documentElement.clientHeight;
+                const below = full.bottom + 8;
+                const above = full.top - br.height - 8;
+                // Prefer whichever side actually fits; below wins ties because the
+                // sticky toolbar occupies the top of the canvas.
+                const top = below + br.height <= vh ? below : Math.max(2, above);
+                bubbleEl.style.top = Math.round(top) + 'px';
+            }
+        } catch (e) {
+            /* best effort */
+        }
+    }
+
+    /**
+     * #247 — mount the header/footer bands: write their stored HTML in, turn on
+     * contenteditable, pillify merge tags, and wire the listeners that keep the
+     * template record in sync. Runs from renderedCallback alongside the body canvas.
+     */
+    _mountChromeBands() {
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (!band) {
+                continue;
+            }
+            const stored = (which === 'header' ? this.editTemplateHeaderHtml : this.editTemplateFooterHtml) || '';
+            if (this._bandMounted !== band || this._bandSource[which] !== stored) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM band write; content is re-cleaned by _extractBandHtml on the way out
+                band.innerHTML = stored || '<p><br/></p>';
+                this._bandSource[which] = stored;
+                band.setAttribute('contenteditable', 'true');
+                band.setAttribute('spellcheck', 'false');
+                this._pillifyTags(band);
+            }
+            this._matchBandTypographyToPage(band);
+            if (band.dataset.dgWired === '1') {
+                continue;
+            }
+            band.dataset.dgWired = '1';
+            band.addEventListener('focusin', () => {
+                this._setActiveSurface(which);
+                this._canvasFocused = true;
+            });
+            // Same undo capture as the body canvas — the bands are edit surfaces
+            // for two template fields, and Ctrl+Z has to mean the same thing in all
+            // three or the author learns it is unreliable.
+            band.addEventListener('input', () => {
+                this._setActiveSurface(which);
+                this._syncBandToRecord(which, band);
+                this._maybePillifyTyped();
+                // The ` / [ insert menu. _maybeOpenSlashMenu resolves its surface
+                // through _surfaceContaining and has always handled the bands — it
+                // was simply never called from one, so the menu could only ever be
+                // opened in the body.
+                this._maybeOpenSlashMenu();
+            });
+            band.addEventListener('keydown', (e) => {
+                if (this._undoKeydown(e)) {
+                    return;
+                }
+                // BEFORE the Enter handler, exactly as on the body canvas: while the
+                // insert menu is open it owns arrows/Enter/Escape, and Enter there
+                // means "pick this item", not "break the line".
+                if (this._slashMenuKeydown(e)) {
+                    return;
+                }
+                if (this._handleTabKey(e)) {
+                    return;
+                }
+                // Tight line spacing matters most of all in a running header, where
+                // an address block is the common case and a paragraph gap between
+                // its lines is never what the author wanted.
+                if (this._handleEnterKey(e)) {
+                    e.stopPropagation();
+                    return;
+                }
+                e.stopPropagation();
+            });
+            // Image resize/move — the same handlers the body canvas gets.
+            //
+            // Without them, dragging an image's corner in a band fell through to the
+            // browser's NATIVE image drag inside a contenteditable, which copies the
+            // image rather than resizing it: "resizing images in the header adds
+            // additional images and duplicates it". _imgResizeStart preventDefaults
+            // on mousedown, which is what stops the native drag ever starting.
+            // Everything else behaves exactly as it does on the page — one list,
+            // one place. See _wireSurfaceInteractions.
+            this._wireSurfaceInteractions(band);
+        }
+        this._bandMounted = this.template.querySelector('.dg-chrome-band_header');
+    }
+    _bandMounted = null;
+    _bandSource = { header: null, footer: null };
+
+    /**
+     * Give a band the PAGE's typography.
+     *
+     * The template's own CSS is scoped to `.dg-pv` by scopeHtmlForInlinePreview, and
+     * the bands live outside it, so they fell back to the Salesforce UI font at a UI
+     * size in a UI grey. A running header prints in the DOCUMENT's typeface at the
+     * document's size — so the band was showing the author something that would never
+     * appear in the PDF, in the one place where "what you see is what prints" is the
+     * entire point of putting it on the sheet.
+     *
+     * Copies the computed values rather than the declared ones, so a template whose
+     * font comes from a stylesheet, a `body` rule or a default all resolve the same
+     * way. Inline, because component CSS cannot reach an lwc:dom="manual" node.
+     */
+    _matchBandTypographyToPage(band) {
+        const pv = this._bodyCanvas();
+        if (!pv || !band) {
+            return;
+        }
+        try {
+            const cs = getComputedStyle(pv);
+            band.style.fontFamily = cs.fontFamily;
+            band.style.fontSize = cs.fontSize;
+            band.style.lineHeight = cs.lineHeight;
+            // Colour goes through custom properties rather than `color` directly, so
+            // the CSS above can swap between the dim and full-strength inks on focus
+            // — an inline `color` would win over both. The dim is alpha on the
+            // document's OWN ink, so it stays the author's colour, just quieter.
+            const ink = cs.color || 'rgb(44, 44, 56)';
+            band.style.setProperty('--dg-band-ink', ink);
+            band.style.setProperty('--dg-band-ink-dim', this._dimInk(ink));
+        } catch (e) {
+            /* cosmetic — never let it break mounting the band */
+        }
+    }
+
+    /** rgb()/rgba() → the same colour at 62% alpha. Falls back to the input. */
+    _dimInk(color) {
+        const m = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i.exec(color || '');
+        return m ? `rgba(${m[1]}, ${m[2]}, ${m[3]}, 0.62)` : color;
+    }
+
+    /**
+     * Serialize a band back to its template field, pills unwrapped to plain tags.
+     *
+     * markDirty is false when the caller is only READING the model (preview, View
+     * Source), so looking at the document cannot make it look edited.
+     */
+    _syncBandToRecord(which, band, markDirty = true) {
+        const html = this._extractBandHtml(band);
+        if (which === 'header') {
+            this.editTemplateHeaderHtml = html;
+        } else {
+            this.editTemplateFooterHtml = html;
+        }
+        // Keep the remount guard in step, or the next render would overwrite what the
+        // author is typing with the value they started from.
+        this._bandSource[which] = html;
+        if (markDirty) {
+            this.htmlEditorDirty = true;
+        }
+    }
+
+    /**
+     * Band → clean HTML. Same string-round-trip discipline as _extractVisualBody:
+     * read innerHTML as a STRING and re-parse, never cloneNode, because under the LWS
+     * namespace sandbox cloneNode silently drops nodes native contenteditable inserted.
+     */
+    _extractBandHtml(band) {
+        this._clearEditorPaint();
+        const tpl = document.createElement('template');
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip of a live band; re-cleaned below, never cloneNode (LWS drops browser-inserted nodes)
+        tpl.innerHTML = band.innerHTML;
+        const root = tpl.content;
+        for (const el of root.querySelectorAll('style, .dg-drop-marker')) {
+            el.remove();
+        }
+        this._unpillifyTags(root);
+        const container = document.createElement('div');
+        container.appendChild(root);
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- serialize the cleaned fragment back to a string
+        const out = container.innerHTML.trim();
+        // The placeholder an empty band is seeded with must not become real content.
+        return out === '<p><br></p>' || out === '<p><br/></p>' ? '' : out;
+    }
+
+    // ===== #244: Designer zoom ===============================================
+    // A document with several merge-tag pills in one table cell is far denser on
+    // screen than it will be in the PDF — pills carry padding and a border — which
+    // makes precise cursor placement hard exactly where it matters most.
+    //
+    // Implemented as a CSS transform on the canvas. It is a VIEW setting only: the
+    // transform lives on .dg-pv itself, and serialization reads pv.innerHTML (children
+    // only), so zoom can never reach the saved template body.
+    @track designerZoom = 1;
+
+    get zoomOptions() {
+        const opts = [0.5, 0.75, 1, 1.25, 1.5, 2].map((z) => ({
+            value: String(z),
+            label: Math.round(z * 100) + '%',
+            selected: z === this.designerZoom
+        }));
+        // Fit width — a Letter page is 816px, so on a 1358px column 40% of the
+        // screen was empty desk at 100%. This spends it on the document.
+        opts.push({ value: 'fit', label: 'Fit width', selected: this._zoomIsFit });
+        return opts;
+    }
+    _zoomIsFit = false;
+
+    /** Scale that makes the page fill the available column, less breathing room. */
+    _fitWidthZoom() {
+        const pv = this._bodyCanvas();
+        const col = this.template.querySelector('.dg-designer-canvas-col');
+        if (!pv || !col) {
+            return 1;
+        }
+        const pageW = parseFloat(pv.style.width) || pv.getBoundingClientRect().width || 816;
+        const avail = col.getBoundingClientRect().width - 56;
+        if (!(avail > 0) || !(pageW > 0)) {
+            return 1;
+        }
+        // Clamped: never below 50% (unreadable) and never above 200% (the sheet
+        // would dwarf the chrome).
+        return Math.max(0.5, Math.min(2, Math.round((avail / pageW) * 100) / 100));
+    }
+
+    // ===== Focus mode ========================================================
+    //
+    // 389px of chrome sat above the toolbar on a 900px screen — 43% of the viewport
+    // spent before any document was visible. Focus mode collapses the secondary rows
+    // (template picker, save/edit, page setup, status) and leaves the toolbar and the
+    // page. Nothing is removed, only hidden, and one click brings it all back.
+    @track focusMode = false;
+
+    get focusModeLabel() {
+        return this.focusMode ? 'Exit focus' : 'Focus';
+    }
+
+    get designerShellClass() {
+        return this.focusMode ? 'dg-designer-chrome dg-designer-chrome_focus' : 'dg-designer-chrome';
+    }
+
+    handleToggleFocusMode() {
+        this.focusMode = !this.focusMode;
+        // Re-fit after the layout settles: collapsing the chrome changes the space
+        // the page has to fill.
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            if (this._zoomIsFit) {
+                this.designerZoom = this._fitWidthZoom();
+            }
+            this._applyZoom();
+            this._applyCanvasDimensions();
+        }, 60);
+    }
+
+    get zoomLabel() {
+        return Math.round(this.designerZoom * 100) + '%';
+    }
+
+    handleZoomChange(event) {
+        const raw = event.currentTarget.value;
+        if (raw === 'fit') {
+            this._zoomIsFit = true;
+            this.designerZoom = this._fitWidthZoom();
+            this._applyZoom();
+            return;
+        }
+        const z = parseFloat(raw);
+        if (!isNaN(z)) {
+            this._zoomIsFit = false;
+            this.designerZoom = z;
+            this._applyZoom();
+        }
+    }
+
+    handleZoomStep(event) {
+        const dir = parseFloat(event.currentTarget.dataset.zstep) || 0;
+        const steps = [0.5, 0.75, 1, 1.25, 1.5, 2];
+        let idx = steps.indexOf(this.designerZoom);
+        if (idx === -1) {
+            idx = steps.indexOf(1);
+        }
+        idx = Math.min(steps.length - 1, Math.max(0, idx + dir));
+        this.designerZoom = steps[idx];
+        this._applyZoom();
+    }
+
+    /** Ctrl/Cmd + wheel zooms, matching every other canvas tool. */
+    handleCanvasWheel = (event) => {
+        if (!this.showHtmlBodyVisual || !(event.ctrlKey || event.metaKey)) {
+            return;
+        }
+        event.preventDefault();
+        this.handleZoomStep({ currentTarget: { dataset: { zstep: event.deltaY < 0 ? '1' : '-1' } } });
+    };
+
+    /**
+     * Zoom the SHEET — body page and both running-chrome bands together.
+     *
+     * Previously this scaled only the body canvas, so zooming in left the header and
+     * footer at their original size: the page grew out from under its own chrome. They
+     * are part of the same sheet and have to scale as one, which is also the only way
+     * the Word-style margin layout stays true at any zoom level.
+     */
+    _applyZoom() {
+        const z = this.designerZoom || 1;
+        const targets = this._allSurfaces();
+        if (!targets.length) {
+            return;
+        }
+        for (const el of targets) {
+            try {
+                el.style.transformOrigin = 'top center';
+                el.style.transform = z === 1 ? '' : `scale(${z})`;
+            } catch (e) {
+                /* zoom is cosmetic — never let it break editing */
+            }
+        }
+        this._reserveZoomSpace();
+        this._watchSurfaceGrowth();
+        this._applyPillSpread();
+    }
+
+    /**
+     * Give each scaled surface the layout space its transform actually occupies.
+     *
+     * `transform: scale()` does NOT change an element's layout box, so at 150% a
+     * 189px-tall running header paints 284px tall while the flow still believes it
+     * is 189px. The page therefore starts 73px INSIDE the header, and because the
+     * band is an earlier sibling it loses the paint order and disappears behind the
+     * page — "the header does not push the body down and ends up behind it".
+     *
+     * The margin was already being reserved, but only at the moment the zoom
+     * CHANGED. A band that grew afterwards — which is the entire lifecycle of a
+     * header being authored — kept the reservation computed for its old height.
+     * That is why it took a big header to show up.
+     */
+    _reserveZoomSpace() {
+        const z = this.designerZoom || 1;
+        for (const el of this._allSurfaces()) {
+            try {
+                if (z <= 1) {
+                    if (el.style.marginBottom) {
+                        el.style.marginBottom = '';
+                    }
+                    continue;
+                }
+                // offsetHeight is the LAYOUT height, unaffected by the transform.
+                const want = Math.round((z - 1) * (el.offsetHeight || 0)) + 'px';
+                if (el.style.marginBottom !== want) {
+                    el.style.marginBottom = want;
+                }
+            } catch (e) {
+                /* cosmetic */
+            }
+        }
+    }
+
+    /**
+     * Recompute the reservation whenever a surface changes size, whatever caused it.
+     *
+     * Hooking the input handlers would miss every other growth path — an inserted
+     * table, an undo, an image finishing loading, a webfont settling. Observing the
+     * elements catches all of them for one listener. Setting margin-bottom does not
+     * change an observed element's own box, so this cannot feed back on itself.
+     */
+    _watchSurfaceGrowth() {
+        if (typeof ResizeObserver === 'undefined') {
+            return;
+        }
+        try {
+            if (!this._surfaceRo) {
+                this._surfaceRo = new ResizeObserver(() => this._reserveZoomSpace());
+            }
+            const seen = this._surfaceRoSeen || (this._surfaceRoSeen = new Set());
+            for (const el of this._allSurfaces()) {
+                if (!seen.has(el)) {
+                    seen.add(el);
+                    this._surfaceRo.observe(el);
+                }
+            }
+        } catch (e) {
+            /* observation is an optimisation — _applyZoom still reserves on change */
+        }
+    }
+    _surfaceRo = null;
+    _surfaceRoSeen = null;
+
+    /** Body canvas + both chrome bands — every region the author can type into. */
+    _allSurfaces() {
+        const out = [];
+        const body = this._bodyCanvas();
+        if (body) {
+            out.push(body);
+        }
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band) {
+                out.push(band);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Zooming in must make dense merge-tag areas EASIER TO EDIT, not merely bigger.
+     *
+     * A pure transform scales the crowding along with everything else — four pills
+     * jammed into one table cell are still four pills jammed into one cell, just larger.
+     * Above 100% pills therefore gain horizontal margin, padding and line-height ON TOP
+     * of the scale, which pulls them into individually clickable targets and lets a
+     * cramped cell wrap onto more lines.
+     *
+     * Safe to mutate: _unpillifyTags keeps only font-weight/style/decoration/colour/
+     * family/size from a pill when serializing, so margin, padding and line-height are
+     * dropped on the way out and can never reach the saved template.
+     */
+    _applyPillSpread() {
+        const z = this.designerZoom || 1;
+        // Nothing below 1x — shrinking should stay faithful to the printed layout.
+        const extra = z > 1 ? z - 1 : 0;
+        for (const surface of this._allSurfaces()) {
+            let pills;
+            try {
+                pills = surface.querySelectorAll('[data-dg-tag]');
+            } catch (e) {
+                continue;
+            }
+            for (const pill of pills) {
+                if (extra === 0) {
+                    pill.style.margin = '';
+                    pill.style.lineHeight = '';
+                    pill.style.padding = '0 6px';
+                    continue;
+                }
+                pill.style.margin = `${(extra * 2.5).toFixed(1)}px ${(extra * 7).toFixed(1)}px`;
+                pill.style.padding = `0 ${(6 + extra * 5).toFixed(1)}px`;
+                pill.style.lineHeight = (1 + extra * 0.55).toFixed(2);
+            }
+        }
+    }
+
+    /**
+     * Put the caret back where the author left it, and — critically — return focus to
+     * the canvas FIRST. `document.execCommand` is a no-op while an <input> or another
+     * window holds focus, which was the whole reason the color pickers appeared to do
+     * nothing. Returns true when a caret was restored.
+     */
+    _restoreCaret() {
+        const pv = this._canvas();
+        if (!pv) {
+            return false;
+        }
+        // If the LIVE selection is already inside an editable surface, it is the truth —
+        // leave it alone. Restoring unconditionally overwrote a perfectly good selection
+        // with a remembered (and possibly stale, or detached by a re-render) one, which
+        // is why align-left, ordered-list and clear-formatting could silently no-op:
+        // the command ran against the wrong range. Only restore when the live selection
+        // has actually been lost.
+        try {
+            const live = window.getSelection();
+            if (live && live.rangeCount) {
+                const node = live.getRangeAt(0).startContainer;
+                const el = node && node.nodeType === 3 ? node.parentElement : node;
+                if (el && this._surfaceContaining(el)) {
+                    return true;
+                }
+            }
+        } catch (e) {
+            /* fall through to the remembered caret */
+        }
+        const range = (this._caret && this._caret.range) || this._savedFmtRange || this._lastCanvasRange;
+        try {
+            pv.focus();
+        } catch (e) {
+            /* focus is best-effort */
+        }
+        if (!range) {
+            return false;
+        }
+        try {
+            // A range whose containers were detached by a re-render throws on addRange
+            // (or silently selects nothing). Verify it still points into a live surface.
+            const anchor =
+                range.startContainer && range.startContainer.nodeType === 3
+                    ? range.startContainer.parentElement
+                    : range.startContainer;
+            if (!anchor || !anchor.isConnected || !this._surfaceContaining(anchor)) {
+                return false;
+            }
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Containment test that survives the LWS namespace sandbox. `pv.contains(el)` can
+     * report false for a node that IS inside the canvas when the two are different
+     * proxy identities for the same underlying node — the failure behind #240's
+     * "always inserts at the bottom". Walking parentNode compares each hop directly.
+     */
+    _isInCanvas(el, pv) {
+        if (!el || !pv) {
+            return false;
+        }
+        try {
+            if (pv.contains(el)) {
+                return true;
+            }
+        } catch (e) {
+            /* fall through to the manual walk */
+        }
+        let cur = el;
+        let hops = 0;
+        while (cur && hops < 200) {
+            if (cur === pv) {
+                return true;
+            }
+            cur = cur.parentNode;
+            hops++;
+        }
+        return false;
+    }
+
+    // ===== Designer undo stack (DESIGNER_PLAN_V2 step 1) ======================
+    //
+    // Every structural edit in this editor is direct DOM surgery —
+    // insertAdjacentElement, remove(), _safeReplace. The browser's native undo
+    // stack has no record of any of it, so Ctrl+Z stepped straight PAST an
+    // inserted row or a moved block to whatever execCommand last did. There was
+    // nothing to undo to, because no state was ever captured.
+    //
+    // This captures it. _pushUndo(label) snapshots all three editable surfaces
+    // (body + running header + running footer) as HTML STRINGS before a mutation
+    // runs, so undo restores the whole document, not one surface.
+    //
+    // Snapshots, deliberately, rather than an operation log: the ~15 mutation
+    // sites are already written as DOM surgery, so an operation log would mean
+    // rewriting every one of them with an inverse and keeping the pair in sync
+    // forever. A snapshot is one call at the top of the handler and cannot drift
+    // out of sync with the operation it describes.
+    //
+    // The stack owns TYPING TOO (via beforeinput, coalesced into bursts) rather
+    // than leaving plain text edits to native undo. Two undo stacks racing over
+    // one document is the exact failure being fixed here: whichever one the
+    // browser picks, the other's history is silently wrong. One stack, one
+    // model, and Ctrl+Z is preventDefault-ed so native undo never also fires.
+    _undoStack = [];
+    _redoStack = [];
+    /** Label + timestamp of the last capture, for burst coalescing. */
+    _undoMark = { label: null, ts: 0 };
+    /** Snapshots are strings and a large template is ~100KB — memory needs a bound. */
+    UNDO_CAP = 50;
+    /** Same-label edits inside this window are one logical step. */
+    UNDO_COALESCE_MS = 700;
+    @track canUndo = false;
+    @track canRedo = false;
+
+    get undoDisabled() {
+        return !this.canUndo;
+    }
+    get redoDisabled() {
+        return !this.canRedo;
+    }
+
+    /**
+     * All three surfaces as HTML strings, or null when the canvas is not mounted.
+     *
+     * The caret highlight is stripped first. It is applied as `data-dg-paint` plus
+     * inline style on a LIVE block (component CSS cannot reach manual-DOM nodes), so
+     * a snapshot that kept it would restore a purple tint onto a block the caret had
+     * since left, and would make two otherwise-identical documents compare unequal —
+     * defeating the dedupe that stops the stack filling with no-ops. Same discipline
+     * _extractVisualBody already uses before serializing to save.
+     *
+     * It is put straight back afterwards, so the author never sees it blink.
+     */
+    _snapshotSurfaces() {
+        const body = this._bodyCanvas();
+        if (!body) {
+            return null;
+        }
+        const painted = this._paintedEl;
+        this._clearEditorPaint();
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- READ, not a write: snapshots the canvas for undo. Reading innerHTML injects nothing, and under LWS the string is the ONLY faithful way to capture the canvas (cloneNode silently omits browser-inserted nodes — the v3.41 bug).
+        const snap = { body: body.innerHTML, header: null, footer: null };
+        for (const which of ['header', 'footer']) {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (band) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- READ, not a write; same undo snapshot as above.
+                snap[which] = band.innerHTML;
+            }
+        }
+        if (painted && painted.isConnected) {
+            this._paintActiveBlock(body, painted, null);
+        }
+        return snap;
+    }
+
+    _sameSnapshot(a, b) {
+        return !!a && !!b && a.body === b.body && a.header === b.header && a.footer === b.footer;
+    }
+
+    /**
+     * Capture the document as it stands RIGHT NOW, before the caller mutates it.
+     * Call this at the TOP of a mutating handler, never after.
+     */
+    _pushUndo(label) {
+        if (!this.showHtmlBodyVisual || this._restoringUndo) {
+            return;
+        }
+        const snap = this._snapshotSurfaces();
+        if (!snap) {
+            return;
+        }
+        const now = Date.now();
+        const top = this._undoStack[this._undoStack.length - 1];
+        // A typing burst is one logical edit — one Ctrl+Z should take the word
+        // back, not one keystroke. Coalescing is limited to `type:` labels on
+        // purpose: two Bold clicks or two + presses are two deliberate acts and
+        // each deserves its own step, however fast they land.
+        const coalescing =
+            label &&
+            label.indexOf('type:') === 0 &&
+            this._undoMark.label === label &&
+            now - this._undoMark.ts < this.UNDO_COALESCE_MS &&
+            top;
+        if (coalescing || this._sameSnapshot(top, snap)) {
+            this._undoMark = { label, ts: now };
+            return;
+        }
+        snap.label = label || 'edit';
+        this._undoStack.push(snap);
+        if (this._undoStack.length > this.UNDO_CAP) {
+            this._undoStack.shift();
+        }
+        // A fresh edit forks the timeline — anything redone from here is gone.
+        this._redoStack = [];
+        this._undoMark = { label, ts: now };
+        this.canUndo = true;
+        this.canRedo = false;
+    }
+
+    /**
+     * Write a snapshot back into the live surfaces.
+     *
+     * innerHTML, not node grafting: under the LWS namespace sandbox the nodes an
+     * innerHTML write creates are sandbox-owned and therefore behave, which is the
+     * same reason _extractVisualBody reads the string rather than cloning.
+     *
+     * Everything the canvas hangs off a specific NODE has to be re-established:
+     * _pvStyleEl (the floor guard's handle on the scoped <style>), the zoom
+     * transform and pill spread (inline styles on nodes that no longer exist), and
+     * the overlays, which point at rows and blocks that were just detached.
+     */
+    _restoreUndoSnapshot(snap) {
+        const body = this._bodyCanvas();
+        if (!body || !snap) {
+            return false;
+        }
+        this._restoringUndo = true;
+        try {
+            this.pillMenu = null;
+            this._activePill = null;
+            this._clearCellSel();
+            this.tableOverlay = null;
+            this._overlayTable = null;
+            this.blockHandle = null;
+            // eslint-disable-next-line @lwc/lwc/no-inner-html -- restoring a snapshot this component took of its own canvas
+            body.innerHTML = snap.body;
+            this._pvStyleEl = body.querySelector('style');
+            for (const which of ['header', 'footer']) {
+                const band = this.template.querySelector('.dg-chrome-band_' + which);
+                if (band && snap[which] != null) {
+                    // eslint-disable-next-line @lwc/lwc/no-inner-html -- restoring a snapshot this component took of its own band
+                    band.innerHTML = snap[which];
+                    // The bands are the live edit surface for two template FIELDS;
+                    // restoring the DOM without re-syncing would leave the record
+                    // holding the undone version.
+                    this._syncBandToRecord(which, band);
+                }
+            }
+            // Pills survive as elements in the string, but a pill written by an older
+            // bundle (or raw {tag} text typed before the snapshot) needs wrapping.
+            // _pillifyTags is idempotent — it refuses to wrap inside an existing pill.
+            this._pillifyTags(body);
+            this._applyZoom();
+            this._applyPillSpread();
+            this.htmlEditorDirty = true;
+        } finally {
+            this._restoringUndo = false;
+        }
+        try {
+            body.focus();
+        } catch (e) {
+            /* focus is best-effort */
+        }
+        return true;
+    }
+    _restoringUndo = false;
+
+    handleUndo() {
+        if (!this._undoStack.length) {
+            return;
+        }
+        const current = this._snapshotSurfaces();
+        const snap = this._undoStack.pop();
+        if (current) {
+            this._redoStack.push(current);
+        }
+        this._restoreUndoSnapshot(snap);
+        // The next edit after an undo must start a new step, never coalesce into
+        // the one that was just taken off the stack.
+        this._undoMark = { label: null, ts: 0 };
+        this.canUndo = this._undoStack.length > 0;
+        this.canRedo = this._redoStack.length > 0;
+    }
+
+    handleRedo() {
+        if (!this._redoStack.length) {
+            return;
+        }
+        const current = this._snapshotSurfaces();
+        const snap = this._redoStack.pop();
+        if (current) {
+            this._undoStack.push(current);
+        }
+        this._restoreUndoSnapshot(snap);
+        this._undoMark = { label: null, ts: 0 };
+        this.canUndo = this._undoStack.length > 0;
+        this.canRedo = this._redoStack.length > 0;
+    }
+
+    /** A different document is now on the canvas — its history does not apply. */
+    _resetUndoHistory() {
+        this._undoStack = [];
+        this._redoStack = [];
+        this._undoMark = { label: null, ts: 0 };
+        this.canUndo = false;
+        this.canRedo = false;
+    }
+
+    /**
+     * Wire every interaction that must behave IDENTICALLY on all three editable
+     * surfaces — the page body and the two running bands.
+     *
+     * These used to be written out against the body canvas only, and the bands got
+     * whichever ones somebody remembered. The result was a long tail of "it works
+     * on the page but not in the header": no right-click menu, no double-click pill
+     * editing, no table row/column handles, no toolbar state following the caret,
+     * inserts landing in the wrong surface, drops silently discarded, image resizes
+     * duplicating the image. Every one was found separately, by a person, after
+     * shipping.
+     *
+     * One list, applied to every surface, is what stops that recurring. Anything
+     * genuinely surface-specific (the body's caret-floor guard, the bands' field
+     * sync) stays with its own surface.
+     */
+    _wireSurfaceInteractions(surface) {
+        surface.addEventListener('click', (e) => {
+            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+            if (pill && pill.getAttribute('contenteditable') !== 'true') {
+                e.preventDefault();
+                this._openPillMenu(pill);
+            } else if (!pill && e.target && e.target.tagName === 'IMG') {
+                // Plain image: a toolbar target (align etc.) without a pill menu.
+                this._activePill = e.target;
+                this.pillMenu = null;
+            } else if (!pill) {
+                this.pillMenu = null;
+                this._activePill = null;
+                this._closeSlashMenu();
+                this.ctxMenu = null;
+                // A plain click clears the cell selection — except the mouseup that
+                // just finished a drag-select (the toolbar and right-click do not
+                // fire a surface click, so the selection survives them).
+                if (!this._cellSelecting) {
+                    this._clearCellSel();
+                }
+            }
+        });
+        surface.addEventListener('dblclick', (e) => {
+            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+            if (pill) {
+                e.preventDefault();
+                this._beginPillEdit(pill);
+                return;
+            }
+            // Word-style click-and-type: double-click empty space starts a cursor.
+            this._placeCaretAtPoint(e, surface);
+        });
+        // Right-click: contextual menu (pill menu on pills; insert/format/table
+        // actions elsewhere).
+        surface.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this._closeSlashMenu();
+            const pill = e.target && e.target.closest ? e.target.closest('[data-dg-tag]') : null;
+            if (pill && pill.getAttribute('contenteditable') !== 'true') {
+                this.ctxMenu = null;
+                this._openPillMenu(pill);
+                return;
+            }
+            this.pillMenu = null;
+            this._placeCaretAtPoint(e, surface);
+            const col = this.template.querySelector('.dg-designer-canvas-col');
+            const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
+            this._ctxPoint = { x: e.clientX, y: e.clientY };
+            this._ctxCell = e.target && e.target.closest ? e.target.closest('td, th') : null;
+            try {
+                const cs = window.getSelection();
+                this._ctxRange = cs && cs.rangeCount ? cs.getRangeAt(0).cloneRange() : null;
+            } catch (err) {
+                this._ctxRange = null;
+            }
+            this._focusCtxSearch = true;
+            // FIT THE MENU TO THE SPACE THAT ACTUALLY EXISTS.
+            //
+            // `top` used to be the click point with no clamp and the menu had no
+            // max-height, so right-clicking low on the page opened a long menu
+            // straight off the bottom of the screen with its last items
+            // unreachable by any means — no scroll, nowhere to scroll to. The
+            // in-table menu is the worst case because it appends a whole extra
+            // group of row and column commands.
+            //
+            // The inline max-height is computed from the room below the click,
+            // so the menu always ends on-screen and scrolls internally for the
+            // rest. When there is barely any room below, it lifts instead of
+            // being squeezed into a sliver.
+            const MIN_H = 200;
+            const spaceBelow = window.innerHeight - e.clientY - 16;
+            const menuMax = Math.max(MIN_H, Math.min(Math.round(window.innerHeight * 0.62), spaceBelow));
+            let top = e.clientY - colRect.top + 4;
+            if (spaceBelow < MIN_H) {
+                top = Math.max(0, top - (MIN_H - spaceBelow));
+            }
+            this.ctxMenu = {
+                inTable: !!(e.target && e.target.closest && e.target.closest('td, th')),
+                posStyle:
+                    'left: ' +
+                    Math.max(0, e.clientX - colRect.left) +
+                    'px; top: ' +
+                    top +
+                    'px; max-height: ' +
+                    menuMax +
+                    'px;'
+            };
+        });
+        surface.addEventListener('mousemove', (e) => {
+            this._imgResizeHover(e);
+            this._cellSelMove(e, surface);
+            this._tableResizeHover(e, surface);
+        });
+        // Table row/column handles and the block gutter handle follow the pointer.
+        surface.addEventListener('mousemove', this.handleCanvasMouseMove);
+        surface.addEventListener('mousedown', (e) => {
+            // Nested-contenteditable blur is unreliable — a click outside an in-edit
+            // pill commits it explicitly, so the user is never caught inside it.
+            if (this._editingPill && !this._editingPill.contains(e.target) && this._finishPillEdit) {
+                this._finishPillEdit();
+            }
+            if (this._imgResizeStart(e, surface)) {
+                return;
+            }
+            this._cellSelDown(e, surface);
+            this._tableResizeStart(e, surface);
+        });
+        surface.addEventListener('keyup', () => this._refreshFmtState());
+        surface.addEventListener('mouseup', () => {
+            // After the click's selection settles.
+            // eslint-disable-next-line @lwc/lwc/no-async-operation
+            setTimeout(() => this._refreshFmtState(), 0);
+        });
+        // Chip drops staged by the document-level drag listener execute HERE —
+        // surface listeners are the context where DOM insertion reliably works
+        // under LWS.
+        surface.addEventListener('mouseup', () => this._performPendingDropInsert());
+        // Drag targets: tag chips and image thumbnails drop exactly where the user
+        // points, with a live insertion marker so the drop point is never a guess.
+        surface.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this._showDropMarker(e, surface);
+        });
+        surface.addEventListener('dragleave', (e) => {
+            if (e.target === surface) {
+                this._hideDropMarker(surface);
+            }
+        });
+        surface.addEventListener('drop', (e) => this._handleVisualDrop(e, surface));
+        // Undo capture for plain typing. beforeinput fires BEFORE the browser
+        // mutates the DOM, the only moment the pre-edit state still exists.
+        surface.addEventListener('beforeinput', (e) => {
+            this._pushUndo('type:' + ((e && e.inputType) || 'text'));
+        });
+    }
+
+    /**
+     * Tab moves to the next cell; Tab in the last cell adds a row.
+     *
+     * The Word/Excel contract, and the reason tables are quick to fill in there.
+     * Without it Tab moved FOCUS out of the editor entirely — the author lost their
+     * caret and had to click back in for every cell.
+     *
+     * Shift+Tab walks backwards and stops at the first cell rather than wrapping,
+     * because wrapping to the end of the table is never what someone reaching
+     * backwards wants. Outside a table Tab is left alone, so keyboard navigation
+     * out of the editor still works.
+     *
+     * The new cell's contents are SELECTED rather than the caret collapsed into
+     * them, so typing replaces the placeholder the way it does in a spreadsheet.
+     */
+    _handleTabKey(e) {
+        if (!e || e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) {
+            return false;
+        }
+        const cell = this._selectedTableCell();
+        if (!cell) {
+            return false;
+        }
+        const table = cell.closest ? cell.closest('table') : null;
+        if (!table) {
+            return false;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        const cells = Array.prototype.slice.call(table.querySelectorAll('td, th'));
+        const idx = cells.indexOf(cell);
+        let target = null;
+        if (e.shiftKey) {
+            if (idx <= 0) {
+                return true; // already at the first cell — stay put
+            }
+            target = cells[idx - 1];
+        } else if (idx > -1 && idx < cells.length - 1) {
+            target = cells[idx + 1];
+        } else {
+            // Last cell: grow the table, the way Word does.
+            this._pushUndo('table:tab-row');
+            const lastRow = table.rows[table.rows.length - 1];
+            if (!lastRow) {
+                return true;
+            }
+            const clone = lastRow.cloneNode(true);
+            for (const c of clone.children) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('rowspan');
+            }
+            lastRow.insertAdjacentElement('afterend', clone);
+            this._clampTablesToCanvas();
+            this.htmlEditorDirty = true;
+            target = clone.children[0];
+        }
+        if (!target) {
+            return true;
+        }
+        try {
+            const range = document.createRange();
+            range.selectNodeContents(target);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            const surface = this._surfaceOwning(target);
+            if (surface) {
+                surface.focus();
+            }
+            this._recordCaret(target, surface);
+            target.scrollIntoView({ block: 'nearest' });
+        } catch (err) {
+            /* caret placement is best-effort */
+        }
+        return true;
+    }
+
+    /**
+     * Enter inserts a LINE BREAK; Shift+Enter starts a NEW PARAGRAPH.
+     *
+     * Both are handled here. Neither can be delegated: the browser's plain Enter
+     * makes a paragraph and its Shift+Enter makes a line break, so leaving either
+     * to the default would give two keys with the same effect and no way to reach
+     * the other behaviour.
+     *
+     * This is deliberately the inverse of the usual convention, because in a
+     * DOCUMENT template the usual convention produces the wrong output most of the
+     * time. contenteditable's Enter creates a new <p>, and a <p> carries the
+     * template's paragraph margin — so an address block, a signature block, a
+     * multi-line header all came out double-spaced, and the author had to go to the
+     * source to fix what looked like an editor bug. A <br> keeps the lines in one
+     * paragraph and the spacing tight, which is what "the next line" almost always
+     * means here. Shift+Enter is still one keystroke away when a real paragraph
+     * break is wanted.
+     *
+     * Lists are the exception: inside an <li>, Enter genuinely means "next item",
+     * so the browser's own handling is left alone.
+     *
+     * Returns true when it handled the event.
+     */
+    _handleEnterKey(e) {
+        if (!e || e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey) {
+            return false;
+        }
+        let node = null;
+        let sel = null;
+        try {
+            sel = window.getSelection();
+            node = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+        } catch (err) {
+            return false;
+        }
+        if (!node) {
+            return false;
+        }
+        const el = node.nodeType === 3 ? node.parentElement : node;
+        if (!el || !this._surfaceContaining(el)) {
+            return false;
+        }
+        // "Next item" beats "next line" inside a list.
+        if (el.closest && el.closest('li')) {
+            return false;
+        }
+        e.preventDefault();
+        // Shift+Enter must be handled EXPLICITLY, not delegated. The browser's own
+        // Shift+Enter is already a line break, so simply letting it through left
+        // both keys doing the same thing and no way to make a real paragraph at all.
+        if (e.shiftKey) {
+            this._pushUndo('paragraph');
+            try {
+                document.execCommand('insertParagraph');
+                this.htmlEditorDirty = true;
+            } catch (err) {
+                /* nothing sensible to fall back to — the caret is unchanged */
+            }
+            return true;
+        }
+        this._pushUndo('linebreak');
+        try {
+            if (document.execCommand('insertLineBreak')) {
+                this.htmlEditorDirty = true;
+                return true;
+            }
+        } catch (err) {
+            /* fall through to the manual insert */
+        }
+        try {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            const br = document.createElement('br');
+            range.insertNode(br);
+            // A <br> at the very end of a block renders nothing — the line only
+            // becomes visible once something follows it. Browsers solve this with a
+            // trailing filler break; without it Enter at the end of a paragraph
+            // looks like it did nothing at all.
+            if (!br.nextSibling) {
+                br.parentNode.insertBefore(document.createElement('br'), br.nextSibling);
+            }
+            const after = document.createRange();
+            after.setStartAfter(br);
+            after.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(after);
+            this.htmlEditorDirty = true;
+        } catch (err) {
+            /* the browser's default already ran or the selection is gone */
+        }
+        return true;
+    }
+
+    /**
+     * Ctrl/Cmd+Z and Ctrl+Shift+Z / Ctrl+Y on any editable surface.
+     * Returns true when it handled the event, so the caller can stop there.
+     */
+    _undoKeydown(e) {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey) {
+            return false;
+        }
+        const k = (e.key || '').toLowerCase();
+        const isUndo = k === 'z' && !e.shiftKey;
+        const isRedo = (k === 'z' && e.shiftKey) || k === 'y';
+        if (!isUndo && !isRedo) {
+            return false;
+        }
+        // Without preventDefault the browser ALSO runs its own undo, on a history
+        // that knows nothing about the DOM surgery — two stacks, one document.
+        e.preventDefault();
+        e.stopPropagation();
+        if (isUndo) {
+            this.handleUndo();
+        } else {
+            this.handleRedo();
+        }
+        return true;
+    }
+
+    // ===== #241: Confluence-style table row/column handles ====================
+    //
+    // The add/remove actions already existed, but only as four similar-looking text
+    // buttons in the format bar that act on "the current cell" — so the author had to
+    // click the right cell, travel to the toolbar, and guess where the new column
+    // would land. These handles put the affordance on the table itself.
+    //
+    // The handle elements are rendered by the LWC template as siblings of the canvas
+    // (see .dg-canvas-wrap in the markup), NOT injected into it. The canvas gets
+    // serialized straight back into the saved template body, so chrome placed inside
+    // would need stripping on the way out — keeping it outside removes that risk
+    // entirely.
+    @track tableOverlay = null;
+    _overlayTable = null;
+
+    /**
+     * mousemove fires continuously; recomputing rects on every one of them would be
+     * wasteful. Skip the work while the pointer stays inside the table the overlay is
+     * already drawn for, and rAF-coalesce the rest.
+     */
+    handleCanvasMouseMove = (event) => {
+        // Time-based throttle, NOT requestAnimationFrame. The rAF version latched: it
+        // set a pending-flag, and if the frame never ran — background tab, throttled
+        // renderer, headless — the flag was never cleared and every later mousemove
+        // returned early, permanently disabling the table handles. A timestamp cannot
+        // get stuck.
+        const now = Date.now();
+        if (now - this._overlayLastRun < 40) {
+            return;
+        }
+        this._overlayLastRun = now;
+        try {
+            this._updateTableOverlay(event);
+            this._updateBlockHandle(event);
+        } catch (e) {
+            // Was silently swallowed, which hid the handles never rendering at all.
+            // Still non-fatal, but no longer invisible.
+            // eslint-disable-next-line no-console
+            console.warn('DocGen: table overlay failed', e);
+        }
+    };
+    _overlayLastRun = 0;
+    _overlayClearTimer = null;
+
+    /**
+     * Leaving the canvas no longer kills the table chrome instantly.
+     *
+     * There was already a SPATIAL grace — _pointerNearTable keeps the overlay
+     * alive within 72px — but it only applies while the pointer is still on the
+     * canvas. Move up towards the toolbar, or off the sheet entirely, and
+     * mouseleave fired and everything vanished at once. The controls sit in the
+     * margin around the table, so travelling to one is exactly the movement that
+     * used to dismiss it: the + you were aiming at disappeared out from under
+     * the cursor.
+     *
+     * Now the clear is SCHEDULED, and any return cancels it.
+     */
+    handleCanvasMouseLeave() {
+        this._scheduleOverlayClear();
+    }
+
+    _cancelOverlayClear() {
+        if (this._overlayClearTimer) {
+            clearTimeout(this._overlayClearTimer);
+            this._overlayClearTimer = null;
+        }
+    }
+
+    _scheduleOverlayClear(delay = 700) {
+        this._cancelOverlayClear();
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        this._overlayClearTimer = setTimeout(() => {
+            this._overlayClearTimer = null;
+            this.tableOverlay = null;
+            this._overlayTable = null;
+            this.blockHandle = null;
+            this._highlightTableBand(null);
+        }, delay);
+    }
+
+    // ===== Block gutter handle (Notion) ======================================
+    //
+    // A handle in the left gutter of whichever block the pointer is over: `+` to add
+    // a paragraph beneath it, `⋮⋮` to grab and reorder. This is the affordance that
+    // makes a document feel composable rather than typed-into.
+    //
+    // Rendered as an LWC-owned sibling of the canvas (same as the table handles), so
+    // no block chrome can ever reach the serialized template body.
+    @track blockHandle = null;
+
+    /** Track which block the pointer is over, for the gutter handle. */
+    _updateBlockHandle(event) {
+        const pv = this._bodyCanvas();
+        const wrap = this.template.querySelector('.dg-canvas-wrap');
+        if (!pv || !wrap) {
+            return;
+        }
+        let node = event.target;
+        while (node && node.nodeType === 3) {
+            node = node.parentNode;
+        }
+        const blk =
+            node && node.closest ? node.closest('p, h1, h2, h3, h4, h5, h6, li, blockquote, table, div.dg-band') : null;
+        // Never offer a handle for the canvas itself or for content inside a table
+        // cell — the table gutters own that space.
+        if (!blk || blk === pv || !this._isInCanvas(blk, pv) || (blk.closest && blk.closest('td, th'))) {
+            if (this.blockHandle) {
+                this.blockHandle = null;
+                this._handleBlockEl = null;
+            }
+            return;
+        }
+        if (this._handleBlockEl === blk && this.blockHandle) {
+            return;
+        }
+        this._handleBlockEl = blk;
+        const r = blk.getBoundingClientRect();
+        const wrapRect = wrap.getBoundingClientRect();
+        if (r.bottom < wrapRect.top || r.top > wrapRect.bottom) {
+            this.blockHandle = null;
+            return;
+        }
+        // OFFSET BY THE HANDLE'S REAL WIDTH, not a constant that predates it.
+        //
+        // This was a flat 42px, chosen when the handle was three 13px buttons
+        // with 1px gaps (~43px). Enlarging them to 22px with 3px gaps and
+        // padding took it to ~76px — so anchoring at -42 pushed the last 34px
+        // of the handle INTO the block, where it sat on top of the first table
+        // cell and swallowed the clicks meant for the text. Making a control
+        // easier to hit made the thing behind it impossible to edit.
+        //
+        // A table gets extra clearance because its own row gutter already
+        // occupies that margin; without it the two sets of controls stack.
+        const zoom = this.designerZoom || 1;
+        const isTable = blk.tagName === 'TABLE';
+        const handleW = 72; // 3 buttons x 22 + 2 gaps x 3 (no container chip)
+        const clearance = handleW + 10 + (isTable ? 34 : 0);
+        this.blockHandle = {
+            style: `left:${r.left - wrapRect.left - Math.round(clearance * zoom)}px; top:${r.top - wrapRect.top + 1}px;`
+        };
+    }
+    _handleBlockEl = null;
+
+    /** `+` — insert an empty paragraph directly after the hovered block. */
+    handleBlockInsertAfter() {
+        const blk = this._handleBlockEl;
+        if (!blk || !blk.isConnected) {
+            return;
+        }
+        this._pushUndo('block-insert');
+        const p = document.createElement('p');
+        // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+        p.innerHTML = '<br/>';
+        blk.insertAdjacentElement('afterend', p);
+        this.htmlEditorDirty = true;
+        try {
+            const r = document.createRange();
+            r.selectNodeContents(p);
+            r.collapse(true);
+            const s = window.getSelection();
+            s.removeAllRanges();
+            s.addRange(r);
+            p.scrollIntoView({ block: 'nearest' });
+        } catch (e) {
+            /* caret placement is best effort */
+        }
+        this.blockHandle = null;
+    }
+
+    /** Grab handle — move the hovered block up or down one position. */
+    handleBlockMove(event) {
+        const blk = this._handleBlockEl;
+        if (!blk || !blk.isConnected) {
+            return;
+        }
+        const dir = event.currentTarget.dataset.dir;
+        const sibling = dir === 'up' ? blk.previousElementSibling : blk.nextElementSibling;
+        // Never reorder past the canvas's scoped <style> — moving a block above it
+        // would put content before the stylesheet and drop the page styling.
+        if (!sibling || sibling.tagName === 'STYLE') {
+            return;
+        }
+        this._pushUndo('block-move');
+        if (dir === 'up') {
+            sibling.insertAdjacentElement('beforebegin', blk);
+        } else {
+            sibling.insertAdjacentElement('afterend', blk);
+        }
+        this.htmlEditorDirty = true;
+        try {
+            blk.scrollIntoView({ block: 'nearest' });
+        } catch (e) {
+            /* best effort */
+        }
+        // Reposition against the block's new location.
+        this._handleBlockEl = null;
+        this.blockHandle = null;
+    }
+
+    /** Recompute the handle strip for whichever table the pointer is over. */
+    /**
+     * Is the pointer still inside the band of space this table's chrome occupies?
+     *
+     * Scaled with the zoom, because the gutters are: at 1.5x a 50px row gutter is
+     * 75 screen px, and a fixed tolerance would strand the handles again.
+     */
+    _pointerNearTable(event, table) {
+        try {
+            const r = table.getBoundingClientRect();
+            // Must cover the widest chrome — the row gutter (50) plus the handle
+            // itself — with a little slack for pointer travel.
+            const pad = Math.round(72 * (this.designerZoom || 1));
+            return (
+                event.clientX >= r.left - pad &&
+                event.clientX <= r.right + pad &&
+                event.clientY >= r.top - pad &&
+                event.clientY <= r.bottom + pad
+            );
+        } catch (e) {
+            return false;
+        }
+    }
+
+    _updateTableOverlay(event) {
+        if (!this.showHtmlBodyVisual) {
+            return;
+        }
+        const pv = this._canvas();
+        const wrap = this.template.querySelector('.dg-canvas-wrap');
+        if (!pv || !wrap) {
+            return;
+        }
+        let node = event.target;
+        while (node && node.nodeType === 3) {
+            node = node.parentNode;
+        }
+        const table = node && node.closest ? node.closest('table') : null;
+        // Resolve the surface from what the POINTER is over, not from _canvas(),
+        // which follows FOCUS. Hovering a table in the running header while the
+        // caret was still in the body resolved to the body canvas, the containment
+        // test failed, and the handles never appeared for header/footer tables.
+        //
+        // _surfaceOwning, not _surfaceContaining: the latter also SETS the active
+        // surface, so merely moving the pointer over the header would have
+        // redirected the toolbar away from where the caret actually is.
+        const owner = (table && this._surfaceOwning(table)) || pv;
+        if (!table || !this._isInCanvas(table, owner)) {
+            // Do NOT drop the overlay the instant the pointer leaves the table.
+            //
+            // The handles and seams are deliberately positioned OUTSIDE the table
+            // edge (8px for a seam, up to 50px for a row handle), so moving the
+            // pointer towards one necessarily leaves the table first — which cleared
+            // the overlay and made the + vanish out from under the cursor mid-click.
+            // Keep it alive while the pointer is still within the gutter the chrome
+            // occupies; leaving the canvas entirely is handled by mouseleave.
+            if (this.tableOverlay && this._overlayTable && this._pointerNearTable(event, this._overlayTable)) {
+                // Still in the gutter the chrome occupies — cancel any pending
+                // dismissal, the pointer is on its way to a control.
+                this._cancelOverlayClear();
+                return;
+            }
+            if (this.tableOverlay) {
+                // Shorter than the leave-the-canvas grace: the pointer is
+                // demonstrably still on the page and has moved away on purpose.
+                this._scheduleOverlayClear(400);
+            }
+            return;
+        }
+        // Back over a table — whatever dismissal was pending is off.
+        this._cancelOverlayClear();
+        this._overlayTable = table;
+        const wrapRect = wrap.getBoundingClientRect();
+        // The overlay elements are positioned inside .dg-canvas-wrap, which spans the
+        // PAGE only — but a table can live in a running band, which sits above or
+        // below it. Culling against the wrap therefore discarded every column and row
+        // of a header/footer table as "off-screen" and the handles never rendered.
+        // Cull against the whole sheet instead; the offsets stay relative to the wrap
+        // and simply go negative for a header, which absolute positioning handles.
+        const paper = this.template.querySelector('.dg-sheet-paper');
+        const clipRect = paper ? paper.getBoundingClientRect() : wrapRect;
+        // Gutter offsets are in SCREEN pixels, but the page is transform-scaled. A
+        // fixed 20px gutter is only ~12 document px at 1.6x, which slides the handles
+        // on top of the table. Scale the offsets so the gutter stays proportional.
+        const gz = this.designerZoom || 1;
+        // The ROW gutter must clear the handle's own width (42px in CSS), not just
+        // leave a 20px gap — offsetting by 20 put the buttons on top of the first
+        // column. Columns only need the bar height.
+        const gut = Math.round(20 * gz);
+        const rowGut = Math.round(50 * gz);
+        const seamOff = Math.round(8 * gz);
+        const colTop = Math.round(24 * gz);
+        // Column boundaries come from the widest row so a header with colspans
+        // doesn't produce fewer handles than the table has columns.
+        let widest = null;
+        let widestSpan = -1;
+        for (const tr of table.rows) {
+            let span = 0;
+            for (const c of tr.children) {
+                span += c.colSpan || 1;
+            }
+            if (span > widestSpan) {
+                widestSpan = span;
+                widest = tr;
+            }
+        }
+        const cols = [];
+        const seams = [];
+        if (widest) {
+            let i = 0;
+            const tRect = table.getBoundingClientRect();
+            for (const cell of widest.children) {
+                const r = cell.getBoundingClientRect();
+                // Skip anything scrolled out of view — the handles are absolutely
+                // positioned in a non-scrolling wrapper, so an off-screen handle would
+                // float over unrelated chrome.
+                if (r.bottom < clipRect.top || r.top > clipRect.bottom) {
+                    i += cell.colSpan || 1;
+                    continue;
+                }
+                // Confluence's model: the BAR is the select target and carries no
+                // buttons at rest — that is what removes the clutter. Insert lives on
+                // the seam between bars, delete lives in the bar's own menu.
+                cols.push({
+                    key: 'c' + i,
+                    index: i,
+                    style: `left:${r.left - wrapRect.left}px; top:${tRect.top - wrapRect.top - gut}px; width:${r.width}px;`
+                });
+                // Leading seam for the first column, then one after every column.
+                if (i === 0) {
+                    seams.push({
+                        key: 's-lead',
+                        index: 0,
+                        axis: 'col',
+                        style: `left:${r.left - wrapRect.left - seamOff}px; top:${tRect.top - wrapRect.top - colTop}px;`
+                    });
+                }
+                seams.push({
+                    key: 'sc' + i,
+                    index: i + (cell.colSpan || 1),
+                    axis: 'col',
+                    style: `left:${r.right - wrapRect.left - seamOff}px; top:${tRect.top - wrapRect.top - colTop}px;`
+                });
+                i += cell.colSpan || 1;
+            }
+        }
+        const rows = [];
+        let ri = 0;
+        const tRect2 = table.getBoundingClientRect();
+        for (const tr of table.rows) {
+            const r = tr.getBoundingClientRect();
+            if (r.bottom < clipRect.top || r.top > clipRect.bottom) {
+                ri++;
+                continue;
+            }
+            rows.push({
+                key: 'r' + ri,
+                index: ri,
+                style: `left:${tRect2.left - wrapRect.left - rowGut}px; top:${r.top - wrapRect.top}px; height:${r.height}px;`
+            });
+            if (ri === 0) {
+                seams.push({
+                    key: 's-rlead',
+                    index: 0,
+                    axis: 'row',
+                    style: `left:${tRect2.left - wrapRect.left - rowGut - seamOff}px; top:${r.top - wrapRect.top - seamOff}px;`
+                });
+            }
+            seams.push({
+                key: 'sr' + ri,
+                index: ri + 1,
+                axis: 'row',
+                style: `left:${tRect2.left - wrapRect.left - rowGut - seamOff}px; top:${r.bottom - wrapRect.top - seamOff}px;`
+            });
+            ri++;
+        }
+        this.tableOverlay = { cols, rows, seams };
+    }
+
+    // ===== Ghost preview =====================================================
+    //
+    // Hovering an insert control paints a translucent column/row exactly where the new
+    // one will land; hovering a delete control paints the band that will disappear in
+    // red. Showing the RESULT beats labelling the action — you stop having to hold a
+    // model of "before or after this cell?" in your head.
+    @track tableGhost = null;
+
+    /** Ghost for a seam `+`: a column/row sized like its neighbour, at the seam. */
+    handleSeamPreview(event) {
+        this._cancelOverlayClear();
+        const table = this._overlayTable;
+        const wrap = this.template.querySelector('.dg-canvas-wrap');
+        if (!table || !table.isConnected || !wrap) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const axis = event.currentTarget.dataset.axis;
+        const wrapRect = wrap.getBoundingClientRect();
+        const tRect = table.getBoundingClientRect();
+        try {
+            if (axis === 'col') {
+                const row = table.rows[0];
+                if (!row) {
+                    return;
+                }
+                // Width of the column it will sit beside; clamp to the last one when
+                // inserting at the trailing edge.
+                const ref = row.children[Math.min(idx, row.children.length - 1)];
+                if (!ref) {
+                    return;
+                }
+                const rr = ref.getBoundingClientRect();
+                const left = idx >= row.children.length ? rr.right : rr.left;
+                this.tableGhost = {
+                    style: `left:${left - wrapRect.left}px; top:${tRect.top - wrapRect.top}px; width:${rr.width}px; height:${tRect.height}px;`,
+                    cls: 'dg-tbl-ghost'
+                };
+            } else {
+                const ref = table.rows[Math.min(idx, table.rows.length - 1)];
+                if (!ref) {
+                    return;
+                }
+                const rr = ref.getBoundingClientRect();
+                const top = idx >= table.rows.length ? rr.bottom : rr.top;
+                this.tableGhost = {
+                    style: `left:${tRect.left - wrapRect.left}px; top:${top - wrapRect.top}px; width:${tRect.width}px; height:${rr.height}px;`,
+                    cls: 'dg-tbl-ghost'
+                };
+            }
+        } catch (e) {
+            this.tableGhost = null;
+        }
+    }
+
+    /** Ghost for a delete control: paint what is about to be removed, in red. */
+    handleRemovePreview(event) {
+        const table = this._overlayTable;
+        const wrap = this.template.querySelector('.dg-canvas-wrap');
+        if (!table || !table.isConnected || !wrap) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const axis = event.currentTarget.dataset.axis || (event.currentTarget.dataset.dir ? 'row' : 'col');
+        const wrapRect = wrap.getBoundingClientRect();
+        const tRect = table.getBoundingClientRect();
+        try {
+            if (axis === 'col') {
+                const row = table.rows[0];
+                const ref = row && row.children[idx];
+                if (!ref) {
+                    return;
+                }
+                const rr = ref.getBoundingClientRect();
+                this.tableGhost = {
+                    style: `left:${rr.left - wrapRect.left}px; top:${tRect.top - wrapRect.top}px; width:${rr.width}px; height:${tRect.height}px;`,
+                    cls: 'dg-tbl-ghost dg-tbl-ghost_remove'
+                };
+            } else {
+                const ref = table.rows[idx];
+                if (!ref) {
+                    return;
+                }
+                const rr = ref.getBoundingClientRect();
+                this.tableGhost = {
+                    style: `left:${tRect.left - wrapRect.left}px; top:${rr.top - wrapRect.top}px; width:${tRect.width}px; height:${rr.height}px;`,
+                    cls: 'dg-tbl-ghost dg-tbl-ghost_remove'
+                };
+            }
+        } catch (e) {
+            this.tableGhost = null;
+        }
+    }
+
+    handleGhostClear() {
+        this.tableGhost = null;
+    }
+
+    /**
+     * Insert at a SEAM — the boundary between two bars, not "before/after the current
+     * cell". Confluence's affordance: you point at the gap where the new column or row
+     * will go, so the insertion point is never a guess. index is the grid position the
+     * new column/row takes.
+     */
+    handleSeamInsert(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        this._pushUndo('seam-insert');
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const axis = event.currentTarget.dataset.axis;
+        if (axis === 'col') {
+            for (const tr of table.rows) {
+                const ref = tr.children[Math.min(idx, tr.children.length - 1)];
+                if (!ref) {
+                    continue;
+                }
+                const c = ref.cloneNode(false);
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('colspan');
+                if (idx >= tr.children.length) {
+                    ref.insertAdjacentElement('afterend', c);
+                } else {
+                    ref.insertAdjacentElement('beforebegin', c);
+                }
+            }
+        } else {
+            const ref = table.rows[Math.min(idx, table.rows.length - 1)];
+            if (!ref) {
+                return;
+            }
+            const clone = ref.cloneNode(true);
+            for (const c of clone.children) {
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('rowspan');
+            }
+            if (idx >= table.rows.length) {
+                ref.insertAdjacentElement('afterend', clone);
+            } else {
+                ref.insertAdjacentElement('beforebegin', clone);
+            }
+        }
+        this._clampTablesToCanvas();
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
+    }
+
+    /** Tint the column/row a handle refers to, so "which one" is never a guess. */
+    handleTableHandleEnter(event) {
+        // The pointer is ON a control — it cannot be a dismissal.
+        this._cancelOverlayClear();
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const isCol = event.currentTarget.classList.contains('dg-tbl-handle_col');
+        this._highlightTableBand(isCol ? { col: idx } : { row: idx });
+    }
+
+    handleTableHandleLeave() {
+        this._highlightTableBand(null);
+    }
+
+    _highlightTableBand(spec) {
+        // Undo the previous band first. Clears only `filter`, never a captured style
+        // attribute — see THE CHROME PROPERTY RULE. Restoring a snapshot here erased
+        // any fill the author applied to those cells while the band was lit, which is
+        // precisely what the row/column handles invite you to do.
+        for (const el of this._bandPainted || []) {
+            try {
+                el.style.filter = '';
+                if (!el.getAttribute('style')) {
+                    el.removeAttribute('style');
+                }
+                el.removeAttribute('data-dg-paint');
+            } catch (e) {
+                /* detached */
+            }
+        }
+        this._bandPainted = [];
+        const table = this._overlayTable;
+        if (!spec || !table || !table.isConnected) {
+            return;
+        }
+        const targets = [];
+        if (typeof spec.col === 'number') {
+            for (const tr of table.rows) {
+                let i = 0;
+                for (const cell of tr.children) {
+                    const span = cell.colSpan || 1;
+                    if (spec.col >= i && spec.col < i + span) {
+                        targets.push(cell);
+                    }
+                    i += span;
+                }
+            }
+        } else if (typeof spec.row === 'number' && table.rows[spec.row]) {
+            for (const cell of table.rows[spec.row].children) {
+                targets.push(cell);
+            }
+        }
+        for (const cell of targets) {
+            this._bandPainted.push(cell);
+            cell.setAttribute('data-dg-paint', 'band');
+            // `filter` tints whatever is underneath — the author's fill included —
+            // without writing a property the author owns. Flying Saucer ignores
+            // filter, so even a leaked tint could not reach the PDF.
+            cell.style.filter = 'brightness(0.93) saturate(1.25)';
+        }
+    }
+    _bandPainted = [];
+
+    /**
+     * The handle actions address a column/row by INDEX, whereas handleTableAction
+     * addresses "the cell the caret is in". Rather than fake a caret, operate on the
+     * grid directly — and clear the band highlight first so its inline style can't be
+     * cloned into a newly inserted row.
+     */
+    _tableFromOverlay() {
+        this._highlightTableBand(null);
+        const table = this._overlayTable;
+        return table && table.isConnected ? table : null;
+    }
+
+    handleInsertColAt(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        for (const tr of table.rows) {
+            const ref = tr.children[Math.min(idx, tr.children.length - 1)];
+            if (ref) {
+                const c = ref.cloneNode(false);
+                // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+                c.innerHTML = '&nbsp;';
+                c.removeAttribute('colspan');
+                ref.insertAdjacentElement('beforebegin', c);
+            }
+        }
+        this._clampTablesToCanvas();
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
+    }
+
+    handleDeleteColAt(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        for (const tr of table.rows) {
+            if (tr.children[idx]) {
+                tr.children[idx].remove();
+            }
+        }
+        if (!table.querySelector('td, th')) {
+            table.remove();
+        }
+        this._clampTablesToCanvas();
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
+    }
+
+    handleInsertRowAt(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const row = table.rows[idx];
+        if (!row) {
+            return;
+        }
+        const clone = row.cloneNode(true);
+        for (const c of clone.children) {
+            // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
+            c.innerHTML = '&nbsp;';
+            c.removeAttribute('rowspan');
+        }
+        row.insertAdjacentElement('beforebegin', clone);
+        this._clampTablesToCanvas();
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
+    }
+
+    handleDeleteRowAt(event) {
+        const table = this._tableFromOverlay();
+        if (!table) {
+            return;
+        }
+        const idx = parseInt(event.currentTarget.dataset.index, 10);
+        const row = table.rows[idx];
+        if (row) {
+            row.remove();
+        }
+        if (!table.querySelector('tr')) {
+            table.remove();
+        }
+        this._clampTablesToCanvas();
+        this.htmlEditorDirty = true;
+        this.tableOverlay = null;
+    }
 
     // --- Table tools (visual mode): operate on the cell holding the caret ---
     // ===== Excel-style cell selection =====
     // Drag from one cell into another to select a rectangle (purple tint).
     // The selection SURVIVES right-clicks and toolbar clicks — Fill, Merge,
     // and row/column ops act on it. Click outside a table to clear.
+    // _isInCanvas, not pv.contains: contains() is unreliable under the LWS namespace
+    // sandbox and has already broken four features. It matters more here now that
+    // these run on the running header and footer as well as the page.
     _cellSelDown(e, pv) {
         const cell = e.target && e.target.closest ? e.target.closest('td, th') : null;
-        this._cellSelAnchor = cell && pv.contains(cell) ? cell : null;
+        this._cellSelAnchor = cell && this._isInCanvas(cell, pv) ? cell : null;
         this._cellSelecting = false;
     }
 
@@ -6293,7 +8945,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         const cell = e.target && e.target.closest ? e.target.closest('td, th') : null;
-        if (!cell || !pv.contains(cell)) {
+        if (!cell || !this._isInCanvas(cell, pv)) {
             return;
         }
         const table = this._cellSelAnchor.closest('table');
@@ -6334,17 +8986,82 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._cellSel = sel;
     }
 
+    /**
+     * Clear the Excel-style cell selection.
+     *
+     * Sweeps the DOM for the selection marker rather than only walking the tracked
+     * array. Any cell that left the array — replaced by a re-render, moved by a
+     * row/column insert, or orphaned when _cellSel was reassigned — kept its
+     * data-dg-selcell attribute and its highlight, so the table appeared to have more
+     * cells selected than it did and the highlight "hung" until the canvas was rebuilt.
+     * The array is still cleared first so detached nodes are handled too.
+     */
     _clearCellSel() {
         for (const el of this._cellSel || []) {
             try {
                 el.removeAttribute('data-dg-selcell');
                 el.style.boxShadow = '';
                 el.style.backgroundClip = '';
+                if (!el.getAttribute('style')) {
+                    el.removeAttribute('style');
+                }
             } catch (e) {
                 /* detached */
             }
         }
         this._cellSel = null;
+        for (const surface of this._allSurfaces()) {
+            let stragglers;
+            try {
+                stragglers = surface.querySelectorAll('[data-dg-selcell]');
+            } catch (e) {
+                continue;
+            }
+            for (const el of stragglers) {
+                el.removeAttribute('data-dg-selcell');
+                el.style.boxShadow = '';
+                el.style.backgroundClip = '';
+                if (!el.getAttribute('style')) {
+                    el.removeAttribute('style');
+                }
+            }
+        }
+    }
+
+    /**
+     * A table must never extend past the sheet.
+     *
+     * _fitOversizeTables only runs once, at mount, so a table that GREW after that —
+     * a column added, a border dragged, a merge undone — could overhang the page with
+     * nothing to pull it back. This runs after every table mutation. Silent by design:
+     * the overflow is a direct consequence of the edit the author just made, so a toast
+     * would fire on their own action every time.
+     */
+    _clampTablesToCanvas() {
+        for (const surface of this._allSurfaces()) {
+            let cs;
+            try {
+                cs = getComputedStyle(surface);
+            } catch (e) {
+                continue;
+            }
+            const contentW =
+                surface.getBoundingClientRect().width -
+                (parseFloat(cs.paddingLeft) || 0) -
+                (parseFloat(cs.paddingRight) || 0);
+            if (!(contentW > 0)) {
+                continue;
+            }
+            for (const t of surface.querySelectorAll('table')) {
+                // max-width alone is not enough: table-layout:auto refuses to shrink
+                // below min-content, so a table of wide cells still overhangs.
+                t.style.maxWidth = '100%';
+                if (t.getBoundingClientRect().width > contentW + 1) {
+                    t.style.width = '100%';
+                    t.style.tableLayout = 'fixed';
+                }
+            }
+        }
     }
 
     _selectedTableCell() {
@@ -6361,23 +9078,32 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         while (node && node.nodeType === 3) {
             node = node.parentNode;
         }
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
-        if (!node || !pv || !pv.contains(node) || !node.closest) {
-            const host2 = this.template.querySelector('.dg-visual-host');
-            const pv2 = host2 && host2.querySelector('.dg-pv');
-            if (this._ctxCell && this._ctxCell.isConnected && pv2 && pv2.contains(this._ctxCell)) {
+        const pv = this._canvas();
+        if (!node || !pv || !this._isInCanvas(node, pv) || !node.closest) {
+            // #239 — the live selection is gone (a color picker or popover took focus).
+            // The remembered cell is the whole point of the caret tracker: without it
+            // this returned null and cell fill toasted "Click inside a table cell first"
+            // even though the author's caret was plainly in a cell.
+            const remembered = this._caret && this._caret.cellEl;
+            if (remembered && remembered.isConnected && this._isInCanvas(remembered, pv)) {
+                return remembered;
+            }
+            if (this._ctxCell && this._ctxCell.isConnected && pv && this._isInCanvas(this._ctxCell, pv)) {
                 return this._ctxCell;
             }
             return null;
         }
         const cell = node.closest('td, th');
-        if (cell && pv.contains(cell)) {
+        if (cell && this._isInCanvas(cell, pv)) {
             return cell;
+        }
+        const remembered = this._caret && this._caret.cellEl;
+        if (remembered && remembered.isConnected && this._isInCanvas(remembered, pv)) {
+            return remembered;
         }
         // Right-click doesn't reliably move the caret under LWS — fall back
         // to the cell the context menu was opened on.
-        if (this._ctxCell && this._ctxCell.isConnected && pv.contains(this._ctxCell)) {
+        if (this._ctxCell && this._ctxCell.isConnected && this._isInCanvas(this._ctxCell, pv)) {
             return this._ctxCell;
         }
         return null;
@@ -6389,6 +9115,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const action = event.currentTarget.dataset.taction;
         const value = event.currentTarget.dataset.value || null;
+        // Every branch below is DOM surgery the browser's undo history cannot see.
+        // One capture at the top covers all ~20 of them.
+        this._pushUndo('table:' + action);
+        // #239 — the <select> controls (border width, cell padding, table alignment)
+        // take focus when opened, which destroys the live selection before this runs.
+        // Restore before resolving the target cell.
+        this._restoreCaret();
         const cell = this._selectedTableCell();
         if (!cell) {
             // Fill works everywhere: outside a table it colors the block the
@@ -6511,6 +9244,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             for (const c of targets) {
                 c.style.background = value === 'transparent' ? '' : value;
             }
+        } else if (action === 'vAlign') {
+            // #246 — top | middle | bottom, the only three CSS 2.1 allows on a table
+            // cell (and therefore the only three Flying Saucer honors). Applies to the
+            // Excel-style multi-cell selection when there is one.
+            const targets = this._cellSel && this._cellSel.length ? this._cellSel : [cell];
+            for (const c of targets) {
+                c.style.verticalAlign = value;
+            }
+        } else if (action === 'vAlignTable') {
+            // Whole-table sweep — the common case is "make this entire header band
+            // middle-aligned", which is tedious cell by cell.
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.verticalAlign = value;
+            }
+        } else if (action === 'distributeCols') {
+            this._distributeColumnsEvenly(table);
+        } else if (action === 'tableWidth') {
+            table.style.width = value;
+            if (value === 'auto') {
+                table.style.tableLayout = 'auto';
+            }
+        } else if (action === 'cellPadding') {
+            for (const c of table.querySelectorAll('td, th')) {
+                c.style.padding = value;
+            }
+        } else if (action === 'tableAlign') {
+            // margin auto is the CSS 2.1 way to centre a table; float would break the
+            // page flow Flying Saucer builds.
+            if (value === 'center') {
+                table.style.marginLeft = 'auto';
+                table.style.marginRight = 'auto';
+            } else if (value === 'right') {
+                table.style.marginLeft = 'auto';
+                table.style.marginRight = '0';
+            } else {
+                table.style.marginLeft = '0';
+                table.style.marginRight = 'auto';
+            }
         } else if (
             action === 'bordersAll' ||
             action === 'bordersOutline' ||
@@ -6520,7 +9291,65 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._lastBorderMode = action;
             this._applyBorders(action, table);
         }
+        // Any structural change can push the table past the sheet edge.
+        this._clampTablesToCanvas();
         this.htmlEditorDirty = true;
+    }
+
+    /**
+     * #242 — snap every column to the same width.
+     *
+     * Operates on the GRID, not on row.children: with colspans a row can have fewer
+     * cells than the table has columns, so counting children would produce uneven
+     * widths on exactly the tables that need this most.
+     *
+     * Rewrites an existing <colgroup> rather than adding one — two colgroups on a
+     * single table was the v2.8.0 giant-table bug that rendered everything at 200%
+     * width and packed the cells into the left half of the page.
+     */
+    _distributeColumnsEvenly(table) {
+        if (!table) {
+            return;
+        }
+        // Widest row in grid terms = the real column count.
+        let columns = 0;
+        for (const tr of table.rows) {
+            let span = 0;
+            for (const c of tr.children) {
+                span += c.colSpan || 1;
+            }
+            columns = Math.max(columns, span);
+        }
+        if (columns < 1) {
+            return;
+        }
+        const pct = (100 / columns).toFixed(4) + '%';
+        // Authored per-cell widths would override the colgroup, so clear them.
+        for (const c of table.querySelectorAll('td, th')) {
+            c.style.width = '';
+            c.removeAttribute('width');
+        }
+        let colgroup = table.querySelector('colgroup');
+        if (colgroup) {
+            while (colgroup.firstChild) {
+                colgroup.removeChild(colgroup.firstChild);
+            }
+        } else {
+            colgroup = document.createElement('colgroup');
+            table.insertBefore(colgroup, table.firstChild);
+        }
+        for (let i = 0; i < columns; i++) {
+            const col = document.createElement('col');
+            col.style.width = pct;
+            colgroup.appendChild(col);
+        }
+        // table-layout: fixed is what makes the colgroup authoritative; without it the
+        // browser (and Flying Saucer) size columns from content and ignore the widths.
+        table.style.tableLayout = 'fixed';
+        if (!table.style.width) {
+            table.style.width = '100%';
+        }
+        this.showToast('Columns distributed', `All ${columns} columns set to ${pct}.`, 'success');
     }
 
     // --- Table borders: style presets x width x color, selection-aware ---
@@ -6584,6 +9413,49 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    // --- #242: whole-table properties ----------------------------------------
+    @track _tablePrefs = { padding: '4pt', align: 'left' };
+
+    get cellPaddingOptions() {
+        return [
+            { value: '0pt 4pt', label: 'Padding: tight' },
+            { value: '4pt', label: 'Padding: normal' },
+            { value: '0pt 5.4pt', label: 'Padding: Word default' },
+            { value: '8pt', label: 'Padding: roomy' }
+        ].map((o) => ({ ...o, selected: o.value === this._tablePrefs.padding }));
+    }
+
+    get tableAlignOptions() {
+        return [
+            { value: 'left', label: 'Table: left' },
+            { value: 'center', label: 'Table: centered' },
+            { value: 'right', label: 'Table: right' }
+        ].map((o) => ({ ...o, selected: o.value === this._tablePrefs.align }));
+    }
+
+    handleCellPaddingChange(event) {
+        const value = event.currentTarget.value;
+        this._tablePrefs = { ...this._tablePrefs, padding: value };
+        this._applyTableProp('cellPadding', value);
+    }
+
+    handleTableAlignChange(event) {
+        const value = event.currentTarget.value;
+        this._tablePrefs = { ...this._tablePrefs, align: value };
+        this._applyTableProp('tableAlign', value);
+    }
+
+    /**
+     * The <select> controls can't reuse handleTableAction directly — it reads the
+     * action and value off data- attributes, and a <select> carries its value on the
+     * element. Synthesize the same shape so all table mutation stays in one place.
+     */
+    _applyTableProp(action, value) {
+        this.handleTableAction({
+            currentTarget: { dataset: { taction: action, value: value } }
+        });
+    }
+
     handleBorderWidthChange(event) {
         this._borderPrefs = { ...this._borderPrefs, width: event.currentTarget.value };
         this._reapplyBorders();
@@ -6611,7 +9483,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             cell = this._selectedTableCell();
         }
-        const table = cell && cell.closest('table');
+        // Fall back to what was captured on mousedown. After the native colour
+        // dialog the live lookup finds nothing, and this is the only record of
+        // which table the user was pointing at.
+        let table = cell && cell.closest ? cell.closest('table') : null;
+        if (!table && this._borderTargetTable && this._borderTargetTable.isConnected) {
+            table = this._borderTargetTable;
+        }
+        // Last resort: the table the pointer was last over. Reaching the border
+        // controls means crossing out of the table, and a user who has merely
+        // HOVERED a table — never clicked into it — has no caret and no
+        // selection, so both lookups above come back empty and the control did
+        // nothing with no explanation. _overlayTable is already tracked for the
+        // row/column chrome, so the answer was there to be used.
+        if (!table && this._overlayTable && this._overlayTable.isConnected) {
+            table = this._overlayTable;
+        }
+        // Restore the cell selection too, so a colour picked for three selected
+        // cells still lands on those three and not on the whole table.
+        if ((!this._cellSel || !this._cellSel.length) && this._borderTargetCells) {
+            const alive = this._borderTargetCells.filter((c) => c && c.isConnected);
+            if (alive.length) {
+                this._cellSel = alive;
+            }
+        }
         if (table) {
             this._applyBorders(this._lastBorderMode || 'bordersAll', table);
             this.htmlEditorDirty = true;
@@ -6777,7 +9672,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     _imgResizeStart(event, pv) {
         const img = event.target && event.target.tagName === 'IMG' ? event.target : null;
-        if (!img || !pv.contains(img)) {
+        // _isInCanvas, not pv.contains — contains() is unreliable under the LWS
+        // namespace sandbox and would silently refuse to resize an image that IS in
+        // the surface, dropping the drag back to the native (duplicating) one.
+        if (!img || !this._isInCanvas(img, pv)) {
             return false;
         }
         // Body of the image = pick it up and move it; only the bottom-right
@@ -6801,8 +9699,21 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const attr = img.getAttribute('data-dg-tag');
             const m = attr && /^\{%asset:([a-z0-9-]+)/i.exec(attr);
             if (m) {
-                const w = Math.round(img.getBoundingClientRect().width);
-                img.setAttribute('data-dg-tag', '{%asset:' + m[1] + ':' + w + 'x}');
+                // Record BOTH dimensions, not just the width.
+                //
+                // A width-only tag renders as `width:Npx;height:auto`, and nothing
+                // server-side can know what height that resolves to — the aspect
+                // ratio lives in the image file. For a running header that matters a
+                // lot: the engine has to grow the page's top margin to fit the
+                // header, and it cannot size a margin it cannot measure, so a tall
+                // logo silently overflowed the margin box and painted behind the
+                // body. The browser is the only place the rendered height is known,
+                // so it is the place that should write it down.
+                const box = img.getBoundingClientRect();
+                const w = Math.round(box.width);
+                const h = Math.round(box.height);
+                const size = h > 0 ? w + 'x' + h : w + 'x';
+                img.setAttribute('data-dg-tag', '{%asset:' + m[1] + ':' + size + '}');
                 img.title = img.getAttribute('data-dg-tag') + ' — drag the corner to resize';
             }
             this.htmlEditorDirty = true;
@@ -6886,6 +9797,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         event.preventDefault();
+        // Capture once at grab, not per mousemove: a drag is one edit, and the
+        // move handler fires dozens of times.
+        this._pushUndo('table-resize');
         this._colResizing = true;
         const doc = pv.ownerDocument || document;
         let onMove;
@@ -6955,6 +9869,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             );
             return;
         }
+        // List toggling is DOM surgery here, not execCommand (LWS breaks the list
+        // commands) — so it needs its own capture like every other surgical edit.
+        this._pushUndo('list');
         const doc = blk.ownerDocument || document;
         const placeCaret = (el) => {
             try {
@@ -7004,25 +9921,42 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.htmlEditorDirty = true;
     }
 
-    /** The block element (p, heading, list item, div, td) holding the caret. */
+    /**
+     * The block element (p, heading, list item, div, td) holding the caret.
+     *
+     * Two defects fixed here, both caught by the UI smoke harness:
+     *
+     * 1. It resolved the canvas as `.dg-visual-host .dg-pv` and tested membership with
+     *    `pv.contains(node)`. That is the call documented as unreliable across LWS proxy
+     *    identities in #240 — when it returned a false negative this method returned
+     *    null and BOTH list buttons silently did nothing but show "Click into some text
+     *    first". Now uses the surface resolver and the parentNode walk.
+     * 2. It could only ever see the body, so lists (and anything else built on it) were
+     *    dead in the running header and footer bands.
+     */
     _selectedBlockElement() {
         let node = null;
         try {
             const sel = window.getSelection();
             node = sel && sel.anchorNode;
         } catch (e) {
-            return null;
+            node = null;
         }
         while (node && node.nodeType === 3) {
             node = node.parentNode;
         }
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
-        if (!node || !pv || !pv.contains(node) || !node.closest) {
+        let surface = node ? this._surfaceContaining(node) : null;
+        if (!surface || !node || !node.closest) {
+            // Selection lost (a toolbar control took focus) — fall back to the caret
+            // the tracker remembered while the surface still had it.
+            const remembered = this._caret && this._caret.blockEl;
+            if (remembered && remembered.isConnected && this._surfaceContaining(remembered)) {
+                return remembered;
+            }
             return null;
         }
-        const blk = node.closest('p, h1, h2, h3, h4, li, div, td, th');
-        return blk && pv.contains(blk) && blk !== pv ? blk : null;
+        const blk = node.closest('p, h1, h2, h3, h4, h5, h6, li, div, td, th, blockquote');
+        return blk && blk !== surface && this._isInCanvas(blk, surface) ? blk : null;
     }
 
     /**
@@ -7214,10 +10148,54 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!cmd) {
             return;
         }
+        // Undo/redo are the designer's own stack, not execCommand's. execCommand
+        // only ever knew about typing, so the toolbar buttons appeared to skip
+        // straight past every table and block edit.
+        if (cmd === 'undo') {
+            this.handleUndo();
+            return;
+        }
+        if (cmd === 'redo') {
+            this.handleRedo();
+            return;
+        }
+        // Formatting is a mutation like any other — capture before execCommand
+        // runs, or Ctrl+Z after "Bold" would jump back past it.
+        this._pushUndo('fmt:' + cmd);
+        // #239 — the swatch buttons preventDefault on mousedown so the selection is
+        // normally still live here, but the border-width <select> and any control that
+        // does take focus land in this handler too. Restoring is idempotent when the
+        // caret never moved.
+        this._restoreCaret();
+        // Keep the trigger's underbar showing the colour that was actually applied,
+        // and dismiss the popover the way every other menu in Lightning does.
+        if (cmd === 'foreColor' && value) {
+            this._lastTextColor = value;
+        } else if (cmd === 'hiliteColor' && value) {
+            this._lastHighlight = value;
+        }
+        if (this.openFmtMenu) {
+            this.closeFmtMenu();
+        }
         // Lists via DOM surgery — LWS quietly breaks execCommand's list
         // commands, and this way numbers/bullets always render.
         if (cmd === 'insertUnorderedList' || cmd === 'insertOrderedList') {
             this._toggleListAtCaret(cmd === 'insertOrderedList');
+            return;
+        }
+        // MULTI-CELL SELECTION TAKES PRECEDENCE.
+        //
+        // Selecting a block of cells and pressing Center used to centre exactly
+        // one of them — whichever happened to hold the caret — because
+        // execCommand only ever sees the caret, and the cell selection is a
+        // model of ours it knows nothing about. Fill colour already applied to
+        // the whole selection, so the toolbar behaved inconsistently with itself.
+        //
+        // Captured before any mutation: the array must not be read back after
+        // the DOM has moved underneath it.
+        const selCells = this._cellSel && this._cellSel.length ? this._cellSel.filter((c) => c && c.isConnected) : [];
+        if (selCells.length > 1 && this._applyFmtAcrossCells(selCells, cmd, value)) {
+            this.htmlEditorDirty = true;
             return;
         }
         // Alignment on a clicked image: align the block that holds it —
@@ -7295,6 +10273,26 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } catch (e) {
             this._savedFmtRange = null;
         }
+        // ALSO capture the border target, now, before anything steals focus.
+        //
+        // A saved text RANGE is not enough for the border controls. Clicking the
+        // colour swatch opens the native OS colour dialog, which takes focus off
+        // the page entirely; by the time change fires, _selectedTableCell()
+        // finds nothing and _reapplyBorders returns without touching the table —
+        // so picking a border colour appeared to do nothing at all. A drag
+        // selection of cells has no useful caret range either, so the range
+        // alone could never have covered that case.
+        try {
+            const cell = this._selectedTableCell();
+            this._borderTargetTable = cell && cell.closest ? cell.closest('table') : null;
+            if (!this._borderTargetTable && this._cellSel && this._cellSel.length && this._cellSel[0].closest) {
+                this._borderTargetTable = this._cellSel[0].closest('table');
+            }
+            this._borderTargetCells = this._cellSel && this._cellSel.length ? this._cellSel.slice() : null;
+        } catch (e) {
+            this._borderTargetTable = null;
+            this._borderTargetCells = null;
+        }
     }
 
     handleColorPickChange(event) {
@@ -7303,15 +10301,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         const cmd = event.currentTarget.dataset.cmd;
         const value = event.currentTarget.value;
-        if (this._savedFmtRange) {
-            try {
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(this._savedFmtRange);
-            } catch (e) {
-                /* selection restore is best-effort */
-            }
-        }
+        // #239 — re-focus the canvas BEFORE restoring the range. The old code restored
+        // the range but left focus on the <input type="color"> (or on the native OS
+        // color dialog), and execCommand does nothing in that state — the picker looked
+        // like it worked and changed nothing.
+        this._restoreCaret();
         if (cmd === 'cellFill') {
             const cell = this._selectedTableCell();
             if (cell) {
@@ -7374,8 +10368,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _enterVisualMode(html) {
+        // Regions: the source the author edits is ONE document, header and footer
+        // included. The canvas only ever renders the body, and the bands render the
+        // chrome, so peel them apart on the way in. A legacy template carries no
+        // markers — hadRegions is false and nothing is touched, which is why an
+        // existing header is never blanked by opening the designer.
+        const parts = this._adoptRegions(html);
+        html = parts.body;
         this._visualOriginalCode = html;
         this._visualEnteredDom = null; // captured in renderedCallback after mount
+        // A different document is about to occupy the canvas — undoing into the
+        // previous one's history would splice two unrelated documents together.
+        this._resetUndoHistory();
         this._parsePageSetup(html);
         this.showHtmlBodyVisual = true;
         // Reuse the preview pipeline, but flag the write as editable so
@@ -7491,14 +10495,146 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         pill.style.borderStyle = 'dashed';
     }
 
+    /**
+     * Apply a toolbar command to EVERY cell in the multi-cell selection.
+     *
+     * Returns true when it handled the command, false to let the normal
+     * caret-based path run — a command this does not understand must fall
+     * through rather than be silently swallowed.
+     *
+     * Two different mechanisms, because two different things are being set:
+     *
+     *  - Alignment is a property of the CELL. Written as cell.style.textAlign,
+     *    which is CSS 2.1 and exactly what the PDF engine honours. Running
+     *    execCommand('justifyCenter') per cell would instead wrap the contents
+     *    in alignment divs that survive into the generated document.
+     *  - Character formatting belongs to the cell's CONTENTS, so each cell's
+     *    contents are selected in turn and the command run over them.
+     */
+    _applyFmtAcrossCells(cells, cmd, value) {
+        const align = /^justify(Left|Center|Right)$/.exec(cmd);
+        if (align) {
+            const dir = align[1].toLowerCase();
+            for (const cell of cells) {
+                cell.style.textAlign = dir;
+            }
+            this._repaintCellSel(cells);
+            return true;
+        }
+
+        // DOM SURGERY, NOT execCommand.
+        //
+        // The obvious implementation — select each cell's contents and run
+        // document.execCommand('bold') — was written first and does NOTHING.
+        // It reported success and left all three cells unbolded. This is the
+        // same LWS behaviour that already forced the list commands off
+        // execCommand: inside a manual-DOM host it quietly declines to act on a
+        // programmatically-built range. Wrapping the contents by hand always
+        // works, and produces the plain <b>/<i>/<u>/<s> the PDF engine wants.
+        const WRAP = { bold: 'b', italic: 'i', underline: 'u', strikeThrough: 's' };
+        // Cell-level properties. Setting these on the CELL rather than around
+        // its contents keeps the markup clean and inherits to everything inside,
+        // which is what selecting a whole cell implies anyway.
+        const CELL_STYLE = { foreColor: 'color', fontName: 'fontFamily' };
+
+        if (WRAP[cmd]) {
+            const tag = WRAP[cmd];
+            // Toggle on the whole selection, decided ONCE: if every cell is
+            // already wrapped, this is an un-bold. Deciding per cell would make
+            // a mixed selection alternate instead of converging.
+            const allWrapped = cells.every((c) => {
+                const kids = Array.from(c.childNodes).filter((n) => n.nodeType !== 3 || n.nodeValue.trim());
+                return kids.length === 1 && kids[0].nodeName && kids[0].nodeName.toLowerCase() === tag;
+            });
+            for (const cell of cells) {
+                if (allWrapped) {
+                    const only = Array.from(cell.childNodes).find(
+                        (n) => n.nodeName && n.nodeName.toLowerCase() === tag
+                    );
+                    if (only) {
+                        while (only.firstChild) {
+                            cell.insertBefore(only.firstChild, only);
+                        }
+                        only.remove();
+                    }
+                } else if (cell.innerHTML.trim()) {
+                    const el = (cell.ownerDocument || document).createElement(tag);
+                    while (cell.firstChild) {
+                        el.appendChild(cell.firstChild);
+                    }
+                    cell.appendChild(el);
+                }
+            }
+            this._repaintCellSel(cells);
+            return true;
+        }
+
+        if (CELL_STYLE[cmd] && value) {
+            for (const cell of cells) {
+                cell.style[CELL_STYLE[cmd]] = value;
+            }
+            this._repaintCellSel(cells);
+            return true;
+        }
+
+        // Anything else falls through to the normal caret path rather than
+        // being half-applied. hiliteColor in particular is the table Fill
+        // control's job, and removeFormat/super/subscript across whole cells
+        // would mean something different from what the button promises.
+        return false;
+    }
+
+    /**
+     * Re-assert the cell-selection highlight after a formatting pass.
+     *
+     * execCommand rewrites a cell's inner markup, and _pushUndo's snapshot
+     * clears the caret paint, so the purple ring can be lost even though the
+     * selection is logically unchanged. Losing it makes the next command look
+     * like it applied to nothing — the user pressed Center, then Bold, and Bold
+     * only hit one cell because the selection had visually evaporated.
+     */
+    _repaintCellSel(cells) {
+        for (const cell of cells) {
+            if (!cell || !cell.isConnected) {
+                continue;
+            }
+            cell.setAttribute('data-dg-selcell', '1');
+            cell.style.boxShadow = 'inset 0 0 0 2px #7c3aed';
+            cell.style.backgroundClip = 'padding-box';
+        }
+        this._cellSel = cells.filter((c) => c && c.isConnected);
+    }
+
     _pillStyleFor(tagText) {
         // Chrome only (tint + border) — font family/size/color/weight INHERIT
         // from the surrounding text, so a pill inside a 24pt serif heading
         // reads exactly like the value will print.
+        //
+        // CONTAINMENT is the load-bearing part, not the tint. This used to be
+        // `white-space: nowrap` with no width limit, so a long tag such as
+        // {Statement_Date__c:MMMM d, yyyy} in a narrow table cell could not
+        // wrap: it spilled straight out of the cell and sat on top of the
+        // neighbouring one. The overlapping pill then swallowed the clicks meant
+        // for whatever was underneath, so both became uneditable — a pill you
+        // can see, cannot click, and cannot get rid of.
+        //
+        //   max-width:100%   — never wider than the cell that holds it
+        //   white-space:normal + overflow-wrap:anywhere
+        //                    — wrap INSIDE the cell instead of escaping it. A
+        //                      tag may break across two lines, which is far
+        //                      better than one that cannot be edited.
+        //   display:inline-block + vertical-align:baseline
+        //                    — max-width only applies to a block-ish box, and
+        //                      baseline keeps it sitting on the text line.
         const isStructural = /^[#/:%@*]/.test((tagText || '').charAt(1));
+        const containment =
+            'display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere;' +
+            'vertical-align:baseline;box-sizing:border-box;';
         return isStructural
-            ? 'background:#e3f5e9;border:1px solid #9fd6b1;border-radius:9px;padding:0 6px;white-space:nowrap;cursor:pointer;'
-            : 'background:#ede7fd;border:1px solid #c9b8f5;border-radius:9px;padding:0 6px;white-space:nowrap;cursor:pointer;';
+            ? 'background:#e3f5e9;border:1px solid #9fd6b1;border-radius:9px;padding:0 6px;cursor:pointer;' +
+                  containment
+            : 'background:#ede7fd;border:1px solid #c9b8f5;border-radius:9px;padding:0 6px;cursor:pointer;' +
+                  containment;
     }
 
     /**
@@ -7727,22 +10863,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
             ];
         }
-        // Position the menu just under the pill, relative to the canvas column.
-        const col = this.template.querySelector('.dg-designer-canvas-col');
-        const colRect = col ? col.getBoundingClientRect() : { left: 0, top: 0 };
-        const rect = pill.getBoundingClientRect();
+        // The menu was positioned absolutely against .dg-designer-canvas-col — which is
+        // `overflow-y: auto`, so the menu was clipped by the scroll container and
+        // scrolled away with the content. Same defect class as the toolbar popovers.
+        // It now joins the fixed floating layer and is placed from the pill's viewport
+        // rect in renderedCallback, once the element exists and can be measured.
+        this._floatAnchor = pill;
         this.pillMenu = {
             tagText: raw,
             sections,
             hasOptions: sections.length > 0,
-            posStyle:
-                'left: ' + Math.max(0, rect.left - colRect.left) + 'px; top: ' + (rect.bottom - colRect.top + 6) + 'px;'
+            posStyle: 'left: -9999px; top: -9999px;'
         };
+        this._watchFloatingLayer(true);
     }
 
     handlePillTransform(event) {
         const tag = event.currentTarget.dataset.tag;
         if (this._activePill && tag) {
+            this._pushUndo('pill-transform');
             this._activePill.textContent = tag;
             this._activePill.style.cssText = this._pillStyleFor(tag);
             this.htmlEditorDirty = true;
@@ -7750,8 +10889,58 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.pillMenu = null;
     }
 
+    /**
+     * The menu's first line edits the tag directly.
+     *
+     * Enter applies, Escape abandons. Both stopPropagation: the canvas has its
+     * own Enter/Escape handling (new paragraph, dismiss menus), and without this
+     * typing a tag would also split the block underneath.
+     */
+    handlePillHeadKeydown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            this._commitPillHead(event.currentTarget.value);
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.pillMenu = null;
+        } else {
+            // Every other key too — a '/' or backtick typed into this field must
+            // not reach the canvas and open the slash or tag menu on top of it.
+            event.stopPropagation();
+        }
+    }
+
+    handlePillHeadCommit(event) {
+        this._commitPillHead(event.currentTarget.value);
+    }
+
+    _commitPillHead(raw) {
+        const text = (raw || '').trim();
+        // A blank field is treated as "no change", never as delete. Committing ''
+        // is how an image pill previously got destroyed by an edit — removal is
+        // what the Remove command is for, and it should be deliberate.
+        if (!text || !this._activePill) {
+            this.pillMenu = null;
+            return;
+        }
+        // Typing "Name" rather than "{Name}" is the common case; brace it.
+        const tag = text.startsWith('{') ? text : '{' + text.replace(/^\{|\}$/g, '') + '}';
+        if (tag === (this._activePill.textContent || '').trim()) {
+            this.pillMenu = null;
+            return;
+        }
+        this._pushUndo('pill-edit');
+        this._activePill.textContent = tag;
+        this._activePill.style.cssText = this._pillStyleFor(tag);
+        this.htmlEditorDirty = true;
+        this.pillMenu = null;
+    }
+
     handlePillRemove() {
         if (this._activePill) {
+            this._pushUndo('pill-remove');
             this._activePill.remove();
             this.htmlEditorDirty = true;
         }
@@ -7889,6 +11078,58 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * community report, Edge). Move such a caret to the start of the first
      * real content node so native editing always acts on content.
      */
+    /**
+     * Backspace/Delete must not be able to destroy the document's floor.
+     *
+     * On a new or nearly-empty page, holding Backspace ate the last block and then
+     * the scoped <style> element that gives the canvas its page styling — the white
+     * sheet vanished and the editor became unusable with no obvious way back. Nothing
+     * short of reloading recovered it.
+     *
+     * Two guards: refuse a deleting keystroke that would leave no editable block, and
+     * refuse one whose selection has swallowed the <style>.
+     */
+    _guardCanvasFloor(e, pv) {
+        if (!e || (e.key !== 'Backspace' && e.key !== 'Delete')) {
+            return;
+        }
+        try {
+            const style = this._pvStyleEl;
+            const blocks = pv.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, div, blockquote, table');
+            const sel = window.getSelection();
+
+            // A selection that spans the stylesheet would take it with it.
+            if (style && sel && sel.rangeCount && !sel.isCollapsed) {
+                const r = sel.getRangeAt(0);
+                if (r.intersectsNode && r.intersectsNode(style)) {
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // Last block, caret at its very start, nothing selected: the next
+            // Backspace merges it into the canvas root and strands the caret before
+            // the stylesheet. Keep one empty paragraph as the floor.
+            if (blocks.length <= 1 && e.key === 'Backspace' && sel && sel.isCollapsed) {
+                const only = blocks[0];
+                const atStart =
+                    !only ||
+                    (sel.anchorNode === only && sel.anchorOffset === 0) ||
+                    (sel.anchorNode &&
+                        sel.anchorNode.nodeType === 3 &&
+                        sel.anchorOffset === 0 &&
+                        only &&
+                        only.contains(sel.anchorNode) &&
+                        (only.textContent || '').length <= 1);
+                if (atStart) {
+                    e.preventDefault();
+                }
+            }
+        } catch (err) {
+            /* never let a guard break typing */
+        }
+    }
+
     _normalizeRootCaret(pv) {
         try {
             const sel = window.getSelection();
@@ -7935,9 +11176,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (!parent || parent.tagName === 'STYLE' || parent.closest('[data-dg-tag]')) {
                 return;
             }
-            const host = this.template.querySelector('.dg-visual-host');
-            const pv = host && host.querySelector('.dg-pv');
-            if (!pv || !pv.contains(node) || !/\{[^{}]+\}/.test(node.nodeValue)) {
+            // #247 — type-to-pill has to work in the running header/footer bands too,
+            // not just the page body.
+            const pv = this._surfaceContaining(node);
+            if (!pv || !/\{[^{}]+\}/.test(node.nodeValue)) {
                 return;
             }
             const doc = node.ownerDocument || document;
@@ -7957,6 +11199,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
             }
             node.parentNode.replaceChild(frag, node);
+            // An asset tag becomes the real image, the same as one dropped in from
+            // the rail. Only the INSERT paths ran _assetImgFor, so a tag the author
+            // typed (or pasted) stayed a green text pill and they could not see the
+            // logo they had just placed. Done before the caret is parked, because
+            // imagifying swaps the node the caret would be anchored to.
+            if (lastPill && /^\{%asset:/i.test(lastPill.textContent || '')) {
+                const img = this._assetImgFor((lastPill.textContent || '').trim(), doc);
+                if (img) {
+                    this._safeReplace(lastPill, img);
+                    lastPill = img;
+                }
+            }
             if (lastPill) {
                 const r = doc.createRange();
                 r.setStartAfter(lastPill);
@@ -7964,6 +11218,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 sel.removeAllRanges();
                 sel.addRange(r);
             }
+            // A freshly typed pill takes its style straight from _pillStyleFor, which
+            // knows nothing about zoom — re-apply the spread so it matches its
+            // neighbours instead of snapping back to tight spacing.
+            this._applyPillSpread();
         } catch (e) {
             /* best effort */
         }
@@ -7984,6 +11242,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const img = doc.createElement('img');
         img.setAttribute('data-dg-tag', tag);
         img.setAttribute('contenteditable', 'false');
+        // The editor implements its own move (_imgMoveStart) and resize with mouse
+        // events. Leaving the image natively draggable means any mousedown the
+        // editor does not claim becomes a browser drag inside a contenteditable —
+        // which COPIES the image rather than moving it, so a fumbled resize left a
+        // duplicate behind. Nothing here needs the native behaviour.
+        img.setAttribute('draggable', 'false');
         img.src = url;
         img.style.cssText = 'vertical-align:middle;outline:1px dashed #b8e6c9;outline-offset:2px;cursor:nwse-resize;';
         const size = m[2];
@@ -8002,22 +11266,79 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return img;
     }
 
+    /**
+     * Turn {%asset:key} pills into the real image, on EVERY surface.
+     *
+     * This walked the body canvas only, so an asset dropped into a running header
+     * stayed a green text pill on the sheet and only became an image in the PDF
+     * preview — the author could not see their own logo while placing it, in the
+     * one place a logo almost always goes.
+     *
+     * It matters that this runs over the bands and not just at pillify time: the
+     * asset URL map arrives asynchronously, so a band mounted before the assets
+     * load has text pills that only this pass can upgrade.
+     */
     _imagifyAssetPills() {
         try {
-            const pv = this._getVisualPv();
-            if (!pv) {
-                return;
-            }
-            const doc = pv.ownerDocument || document;
-            for (const pill of Array.from(pv.querySelectorAll('span[data-dg-tag]'))) {
-                const tag = (pill.textContent || '').trim();
-                const img = this._assetImgFor(tag, doc);
-                if (img) {
-                    this._safeReplace(pill, img);
+            for (const surface of this._allSurfaces()) {
+                const doc = surface.ownerDocument || document;
+                for (const pill of Array.from(surface.querySelectorAll('span[data-dg-tag]'))) {
+                    const tag = (pill.textContent || '').trim();
+                    const img = this._assetImgFor(tag, doc);
+                    if (img) {
+                        this._safeReplace(pill, img);
+                    }
                 }
+                this._stampAssetImageHeights(surface);
             }
         } catch (e) {
             /* best effort */
+        }
+    }
+
+    /**
+     * Repair width-only asset tags by measuring the rendered image.
+     *
+     * `{%asset:logo:200x}` renders as `width:200px;height:auto`, and the height
+     * exists only in the image file — so the PDF engine cannot size the page margin
+     * a running header needs, and a tall logo overflows it. Templates saved before
+     * the resize handler recorded both dimensions are all in this state.
+     *
+     * Measuring here fixes them in place: the PDF preview reads the live surfaces,
+     * so it is correct immediately, and the repaired tag persists on the next save.
+     * Deliberately does NOT set htmlEditorDirty — opening a template must not
+     * announce unsaved changes the author did not make.
+     */
+    _stampAssetImageHeights(surface) {
+        let imgs;
+        try {
+            imgs = surface.querySelectorAll('img[data-dg-tag]');
+        } catch (e) {
+            return;
+        }
+        for (const img of imgs) {
+            const m = /^\{%asset:([a-z0-9-]+):(\d+)x\}$/i.exec(img.getAttribute('data-dg-tag') || '');
+            if (!m) {
+                continue;
+            }
+            const stamp = () => {
+                let h = Math.round(img.getBoundingClientRect().height);
+                if (!(h > 0) && img.naturalWidth > 0) {
+                    // Not laid out yet (a hidden surface) — derive it from the file.
+                    h = Math.round((parseInt(m[2], 10) * img.naturalHeight) / img.naturalWidth);
+                }
+                if (!(h > 0)) {
+                    return;
+                }
+                const next = '{%asset:' + m[1] + ':' + m[2] + 'x' + h + '}';
+                img.setAttribute('data-dg-tag', next);
+                img.title = next + ' — drag the corner to resize';
+            };
+            if (img.complete && img.naturalWidth) {
+                stamp();
+            } else {
+                img.addEventListener('load', stamp, { once: true });
+            }
         }
     }
 
@@ -8091,11 +11412,98 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    // ===== Regions plumbing (DESIGNER_PLAN_V2 step 2) =========================
+    //
+    // The author has ONE source document; the render engine keeps the three-field
+    // contract it has today. These two methods are the whole boundary between
+    // those views, so there is exactly one place a region marker can leak.
+
+    /**
+     * Take a document that may carry region markers, move its header and footer
+     * into the template fields, and hand back the body-only document.
+     *
+     * Only overwrites the header/footer fields when markers were actually present.
+     * A legacy template reports hadRegions === false, so opening one can never
+     * blank a header that lives only in Header_Html__c — the backwards-compatibility
+     * guarantee, and the reason this needs no migration.
+     */
+    _adoptRegions(html) {
+        const parts = splitRegions(html || '');
+        if (parts.hadRegions) {
+            if (parts.header !== null) {
+                this.editTemplateHeaderHtml = parts.header;
+            }
+            if (parts.footer !== null) {
+                this.editTemplateFooterHtml = parts.footer;
+            }
+        }
+        return parts;
+    }
+
+    /**
+     * The one source document, header and footer included — what "View Source"
+     * shows and what the author thinks of as "the template". Never goes to a
+     * ContentVersion; _currentDraftHtml is the renderer-bound view.
+     */
+    _currentDraftDocument() {
+        const s = this._draftSurfaces();
+        return joinRegions(s.body, s.header, s.footer);
+    }
+
+    /**
+     * The whole document as one model, read in a single pass.
+     *
+     * Previously the body came from the live canvas while the header and footer
+     * came from the template FIELDS — two independent reads, taken at two
+     * different moments, of state kept in step by an input listener. A header
+     * keystroke whose input event had not yet synced produced a preview showing
+     * the body the author was looking at next to the header they had already
+     * changed, and every new surface needed its own copy of that plumbing.
+     *
+     * Reading all three from the live surfaces at the same instant is what
+     * DESIGNER_PLAN_V2 step 5 means by "preview from the model": there is one
+     * document, and the preview renders it. The fields stay the persistence
+     * format and remain the fallback for source mode, where there are no bands.
+     */
+    _draftSurfaces() {
+        const chrome = this._liveChrome();
+        return { body: this._currentDraftHtml() || '', header: chrome.header, footer: chrome.footer };
+    }
+
+    /**
+     * The running header and footer as they stand on the LIVE bands.
+     *
+     * Reads through _syncBandToRecord so the template fields — the persistence
+     * format — are brought current in the same pass. That is what makes an
+     * un-synced keystroke reach Save as well as Preview, instead of each caller
+     * needing its own copy of the plumbing. markDirty is false: reading the
+     * document must not mark it edited.
+     *
+     * In source mode there are no bands, so the fields are the model.
+     */
+    _liveChrome() {
+        if (this.showHtmlBodyVisual) {
+            for (const which of ['header', 'footer']) {
+                const band = this.template.querySelector('.dg-chrome-band_' + which);
+                if (band) {
+                    this._syncBandToRecord(which, band, false);
+                }
+            }
+        }
+        return { header: this.editTemplateHeaderHtml || '', footer: this.editTemplateFooterHtml || '' };
+    }
+
     /** Leave visual mode — lossless when nothing changed. */
     /**
-     * The full document as it stands RIGHT NOW — visual-mode edits serialized
+     * The BODY document as it stands RIGHT NOW — visual-mode edits serialized
      * non-destructively (same clone/unpillify/body-swap as exit, without
      * leaving visual mode), source mode read straight from the textarea.
+     *
+     * Renderer-bound: this is what gets staged into a ContentVersion and what the
+     * PDF preview merges, so it is body-only and carries no region markers. The
+     * source textarea holds the JOINED document, so reading it back here splits it
+     * first — that is how an author's edit to the header inside View Source finds
+     * its way to Header_Html__c.
      */
     _currentDraftHtml() {
         if (this.showHtmlBodyVisual) {
@@ -8104,13 +11512,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (pv && this._visualOriginalCode != null) {
                 const edited = this._extractVisualBody(pv);
                 const bodyRe = /(<body\b[^>]*>)[\s\S]*?(<\/body\s*>)/i;
-                return bodyRe.test(this._visualOriginalCode)
+                const doc = bodyRe.test(this._visualOriginalCode)
                     ? this._visualOriginalCode.replace(bodyRe, (m, open, close) => open + '\n' + edited + '\n' + close)
                     : edited;
+                // Belt and braces — the canvas holds body only, but a marker pasted
+                // into it must not survive to the renderer.
+                return stripRegionMarkers(doc);
             }
         }
         const ta = this.template.querySelector('.dg-html-body-editor');
-        return (ta && ta.value) || this._lastUploadedHtmlText || '';
+        const raw = (ta && ta.value) || this._lastUploadedHtmlText || '';
+        return this._adoptRegions(raw).body;
     }
 
     /**
@@ -8130,6 +11542,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * upload path (see _sanitizeStagedHtml, which uses the same technique).
      */
     _extractVisualBody(pv) {
+        // #238 — drop EVERY editor tint before the string round-trip. They are applied
+        // as inline style (component CSS can't reach manual-DOM nodes), so leaving one
+        // on would bake a purple tint into the saved template body — and the
+        // row/column tint sits on top of the author's own cell fill.
+        this._clearEditorPaint();
         const tpl = document.createElement('template');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- string round-trip of the live canvas; re-cleaned below, never cloneNode (LWS drops browser-inserted nodes)
         tpl.innerHTML = pv.innerHTML;
@@ -8157,7 +11574,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             );
             return;
         }
-        const draftHtml = (this._currentDraftHtml() || '').trim();
+        // ONE read of the model, not three reads of three surfaces — see
+        // _draftSurfaces. Taken before the popup-blocked early return so both
+        // request shapes below send the same document.
+        const draft = this._draftSurfaces();
+        const draftHtml = (draft.body || '').trim();
         if (!draftHtml) {
             this.showToast('Nothing to preview', 'The editor is empty.', 'warning');
             return;
@@ -8177,7 +11598,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const res = await previewDraftPdfData({
                 templateId: this.editTemplateId,
                 recordId: this.editTemplateTestRecordId,
-                draftHtml
+                draftHtml,
+                draftHeaderHtml: draft.header,
+                draftFooterHtml: draft.footer
             });
             if (res && res.base64) {
                 const raw = atob(res.base64);
@@ -8207,7 +11630,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const res2 = await previewDraftPdf({
                 templateId: this.editTemplateId,
                 recordId: this.editTemplateTestRecordId,
-                draftHtml
+                draftHtml,
+                draftHeaderHtml: draft.header,
+                draftFooterHtml: draft.footer
             });
             if (!res2 || !res2.contentDocumentId) {
                 throw new Error('Preview returned no PDF.');
@@ -8239,6 +11664,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     _exitVisualMode() {
+        // #238 — MUST come before the innerHTML read below. The caret highlight is an
+        // inline style, so leaving it on makes an untouched session compare unequal to
+        // _visualEnteredDom and rewrite the body — breaking the documented guarantee
+        // that an unchanged session restores the original code byte-for-byte.
+        this._clearEditorPaint();
+        // Read the chrome off the live bands while they still exist, so View Source
+        // shows the header the author is looking at rather than the last value an
+        // input event happened to sync.
+        const chrome = this._liveChrome();
         const host = this.template.querySelector('.dg-visual-host');
         const pv = host && host.querySelector('.dg-pv');
         const ta = this.template.querySelector('.dg-html-body-editor');
@@ -8265,11 +11699,18 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     // Body-fragment template (no <body> wrapper): the content IS the doc.
                     newCode = edited;
                 }
-                ta.value = prettyPrintHtml(newCode);
+                // Regions: what the author sees in View Source is the WHOLE
+                // document, running header and footer included. This is the join;
+                // _currentDraftHtml splits it back apart on the way to the renderer.
+                // Templates with neither header nor footer come back unmarked, so a
+                // plain document's source is byte-for-byte what it always was.
+                ta.value = prettyPrintHtml(joinRegions(newCode, chrome.header, chrome.footer));
                 this.htmlEditorDirty = true;
             } else {
-                // Untouched — hand back the original text exactly.
-                ta.value = this._visualOriginalCode;
+                // Untouched — hand back the original text exactly, but still show
+                // the chrome: the author asked to see the source of the document,
+                // not of the body.
+                ta.value = joinRegions(this._visualOriginalCode, chrome.header, chrome.footer);
             }
         }
         this.showHtmlBodyVisual = false;
@@ -8519,8 +11960,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Switch templates without leaving the designer. */
+    /**
+     * The in-designer switcher. Ordered by what you touched last, so the top of the
+     * dropdown is useful in an org with hundreds rather than alphabetical-by-accident.
+     *
+     * Deliberately NOT capped: capping would make templates unreachable from the
+     * switcher, and losing capability is a worse answer to scale than a long
+     * dropdown. The searched, bounded picker on the empty state is the route that
+     * scales; this is the "switch to something I was just in" shortcut.
+     */
     get designerTemplateOptions() {
-        return (this.templates || []).filter((t) => t[F.Type] === 'HTML').map((t) => ({ label: t.Name, value: t.Id }));
+        return this._designerCandidates().map((t) => ({ label: t.Name, value: t.Id }));
     }
 
     // --- Right-click context menu handlers ---
@@ -9054,9 +12504,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             name: '{Name}'
         };
         const tok = TOKS[event.currentTarget.dataset.tok];
+        if (!tok) {
+            return;
+        }
+        // On the sheet, a page counter goes in at the caret like anything else —
+        // same path as a merge-tag chip, so it pillifies, undoes and formats
+        // identically. _insertIntoVisualPage resolves the target from the caret, so
+        // it lands in whichever band the author is actually in.
+        if (this.showHtmlBodyVisual) {
+            this._restoreCaret();
+            this._insertIntoVisualPage(tok);
+            return;
+        }
+        // Source mode has no bands — fall back to the raw field.
         const which = this._lastHfFocus === 'header' ? 'header' : 'footer';
         const ta = this.template.querySelector(which === 'header' ? '.dg-hf-header' : '.dg-hf-footer');
-        if (!ta || !tok) {
+        if (!ta) {
             return;
         }
         const st = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
@@ -9068,6 +12531,40 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.editTemplateFooterHtml = ta.value;
         }
         this.htmlEditorDirty = true;
+    }
+
+    /**
+     * Put the caret in a running band and scroll it into view.
+     *
+     * The Header/Footer panel is a way to GET to the bands, not a second place to
+     * edit them — so this is the whole of it. Closes the panel on the way, because
+     * leaving a floating panel open over the sheet you were just sent to edit is
+     * the kind of small friction that made the header feel like a separate mode.
+     */
+    handleJumpToBand(event) {
+        const which = event.currentTarget.dataset.surface === 'footer' ? 'footer' : 'header';
+        this.activePanel = null;
+        // eslint-disable-next-line @lwc/lwc/no-async-operation -- wait for the panel to unmount so the scroll lands correctly
+        setTimeout(() => {
+            const band = this.template.querySelector('.dg-chrome-band_' + which);
+            if (!band) {
+                return;
+            }
+            try {
+                band.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                band.focus();
+                const first = band.querySelector('p, div, span') || band;
+                const r = document.createRange();
+                r.selectNodeContents(first);
+                r.collapse(false);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(r);
+                this._setActiveSurface(which);
+            } catch (e) {
+                /* focus is best-effort */
+            }
+        }, 80);
     }
 
     async handleDesignerTemplateSwitch(event) {
@@ -9100,8 +12597,117 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Row action / modal button → full-screen designer for HTML templates. */
+    // ===== Designer tab: choosing a template at scale =========================
+    //
+    // An org with 400 templates is not an edge case, and a flat list of every one
+    // is unusable at that size AND expensive — 400 buttons is 400 DOM nodes on a
+    // tab you have not started working on yet. The list is therefore SEARCHED,
+    // ordered by what you touched last, and capped: you see the handful you
+    // probably want, the count tells you what is behind the filter, and the DOM
+    // stays the same size whether the org has 5 templates or 5000.
+    @track designerPickerQuery = '';
+    @track designerPickerLimit = 8;
+    /** How many more to reveal per click of "Show more". */
+    DESIGNER_PICKER_PAGE = 25;
+
+    get hasDesignerTemplates() {
+        return this._designerCandidates().length > 0;
+    }
+
+    /** Every template the designer can open, most recently modified first. */
+    _designerCandidates() {
+        const rows = (this.templates || []).filter((t) => t[F.Type] === 'HTML');
+        return rows.sort((a, b) => String(b.LastModifiedDate || '').localeCompare(String(a.LastModifiedDate || '')));
+    }
+
+    _designerMatches() {
+        const q = (this.designerPickerQuery || '').trim().toLowerCase();
+        const rows = this._designerCandidates();
+        if (!q) {
+            return rows;
+        }
+        return rows.filter((t) =>
+            [t.Name, t[F.Category], t[F.BaseObject], t.displayBaseObject, t[F.ApiName], t[F.Desc]]
+                .filter(Boolean)
+                .some((v) => String(v).toLowerCase().includes(q))
+        );
+    }
+
+    get designerOpenList() {
+        return this._designerMatches()
+            .slice(0, this.designerPickerLimit)
+            .map((t) => ({
+                value: t.Id,
+                label: t.Name,
+                // One quiet line of context, so two templates called "Invoice" are
+                // still tellable apart without opening them.
+                meta: [t[F.Category], t.displayBaseObject].filter(Boolean).join(' · ')
+            }));
+    }
+
+    get designerPickerSummary() {
+        const total = this._designerCandidates().length;
+        const matched = this._designerMatches().length;
+        const shown = Math.min(matched, this.designerPickerLimit);
+        if (matched === 0) {
+            return 'No templates match “' + this.designerPickerQuery + '”';
+        }
+        if (matched === total && matched <= shown) {
+            return total === 1 ? '1 template' : total + ' templates';
+        }
+        return (
+            'Showing ' + shown + ' of ' + matched + (matched === total ? '' : ' matching') + ' · ' + total + ' total'
+        );
+    }
+
+    get designerPickerHasMore() {
+        return this._designerMatches().length > this.designerPickerLimit;
+    }
+
+    handleDesignerPickerSearch(event) {
+        this.designerPickerQuery = event.target.value || '';
+        // A new search starts from the top again, or "show more" state from the
+        // previous query silently widens this one.
+        this.designerPickerLimit = 8;
+    }
+
+    /** Enter opens the best match — the fastest path when you know the name. */
+    handleDesignerPickerKeydown(event) {
+        if (event.key !== 'Enter') {
+            return;
+        }
+        event.preventDefault();
+        const first = this._designerMatches()[0];
+        if (first) {
+            this.openDesignerForRow(first);
+        }
+    }
+
+    handleDesignerPickerMore() {
+        this.designerPickerLimit += this.DESIGNER_PICKER_PAGE;
+    }
+
+    /**
+     * Open a template straight from the Designer tab's empty state.
+     *
+     * Same path as the "Design" row action, so there is one way a template gets
+     * opened and no second code path to keep in step.
+     */
+    async handleOpenTemplateInDesigner(event) {
+        const id = event.currentTarget.dataset.id;
+        const row = (this.templates || []).find((t) => t.Id === id);
+        if (!row) {
+            this.showToast('Template not found', 'It may have been deleted — refresh and try again.', 'warning');
+            return;
+        }
+        await this.openDesignerForRow(row);
+    }
+
     async openDesignerForRow(row) {
-        this.openEditModal(row, 'document');
+        // AWAITED: openEditModal fetches the template's full record now, and
+        // _openDesignerSurface reads the fields it populates. Without the await the
+        // designer mounted against an empty template and simply did not open.
+        await this.openEditModal(row, 'document');
         this.isEditModalOpen = false;
         await this._openDesignerSurface();
     }
@@ -9454,9 +13060,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._closeSlashMenu();
                 return;
             }
-            const host = this.template.querySelector('.dg-visual-host');
-            const pv = host && host.querySelector('.dg-pv');
-            if (!pv || !pv.contains(node) || (node.parentElement && node.parentElement.closest('[data-dg-tag]'))) {
+            // pv.contains() is the LWS-unreliable call documented in #240; a false
+            // negative here meant the ` / [ insert menu simply never opened. It also
+            // could not see the running header/footer bands at all.
+            const pv = this._surfaceContaining(node);
+            if (!pv || (node.parentElement && node.parentElement.closest('[data-dg-tag]'))) {
                 this._closeSlashMenu();
                 return;
             }
@@ -9472,7 +13080,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._slashSel = 0;
             }
             this._slashQuery = query;
-            this._slashCtx = { node, slashIndex: upto.length - query.length - 1 };
+            // endOffset is where the caret was when the menu opened. The removal
+            // path used to fall back to the END OF THE TEXT NODE whenever the
+            // live selection was no longer in that node — which is exactly what
+            // happens the moment focus moves into the menu's own search box, so
+            // choosing an item would have deleted everything after the trigger
+            // character. Recording the offset makes clicking into the menu safe.
+            this._slashCtx = { node, slashIndex: upto.length - query.length - 1, endOffset: upto.length };
             const range = sel.getRangeAt(0).cloneRange();
             let rect = range.getBoundingClientRect();
             if (!rect || (!rect.width && !rect.height)) {
@@ -9506,15 +13120,38 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                   return terms.every((t) => hay.includes(t));
               })
             : all;
-        const items = scored.slice(0, 10);
+        // Was 10. With no search box in the menu and no scrolling, ten was also
+        // the number of commands that EXISTED as far as a mouse was concerned:
+        // everything after the tenth was unreachable unless you knew to type.
+        // The menu scrolls now, so the cap only exists to keep the list sane.
+        const items = scored.slice(0, 40);
         if (this._slashSel >= items.length) {
             this._slashSel = Math.max(0, items.length - 1);
         }
-        const posStyle = rect
-            ? 'left: ' + Math.max(0, rect.left - colRect.left) + 'px; top: ' + (rect.bottom - colRect.top + 6) + 'px;'
-            : this.slashMenu
-              ? this.slashMenu.posStyle
-              : '';
+        // Sized to the room below the trigger, same as the right-click menu:
+        // without this a menu opened low on the page runs off the bottom and
+        // its last commands are unreachable however tall the list is allowed
+        // to be.
+        let posStyle;
+        if (rect) {
+            const MIN_H = 200;
+            const spaceBelow = window.innerHeight - rect.bottom - 16;
+            const menuMax = Math.max(MIN_H, Math.min(Math.round(window.innerHeight * 0.62), spaceBelow));
+            let top = rect.bottom - colRect.top + 6;
+            if (spaceBelow < MIN_H) {
+                top = Math.max(0, top - (MIN_H - spaceBelow));
+            }
+            posStyle =
+                'left: ' +
+                Math.max(0, rect.left - colRect.left) +
+                'px; top: ' +
+                top +
+                'px; max-height: ' +
+                menuMax +
+                'px;';
+        } else {
+            posStyle = this.slashMenu ? this.slashMenu.posStyle : '';
+        }
         this.slashMenu = {
             query: this._slashQuery,
             hasItems: items.length > 0,
@@ -9571,6 +13208,57 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._closeSlashMenu();
     }
 
+    /**
+     * Filter from the menu's OWN search box.
+     *
+     * The menu used to filter from what you typed in the page, which works only
+     * for as long as the caret stays there. Clicking the menu — the obvious
+     * thing to do with a menu — moved focus and silently ended filtering, and
+     * with a long catalog the commands below the fold could not be reached at
+     * all. Typing here does not touch the document; _slashCtx still records
+     * where the trigger character was, so inserting still lands in the right
+     * place.
+     */
+    handleSlashSearch(event) {
+        this._slashQuery = event.currentTarget.value || '';
+        this._slashSel = 0;
+        this._renderSlashMenu(null, { left: 0, top: 0 });
+    }
+
+    /** Arrow/Enter/Escape inside that search box, so it works without the mouse. */
+    handleSlashSearchKeydown(event) {
+        const items = (this.slashMenu && this.slashMenu.items) || [];
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!items.length) {
+                return;
+            }
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            this._slashSel = (this._slashSel + step + items.length) % items.length;
+            this._renderSlashMenu(null, { left: 0, top: 0 });
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (items[this._slashSel]) {
+                this._executeSlashItem(items[this._slashSel]);
+            }
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            this._closeSlashMenu();
+            return;
+        }
+        // Everything else stays here: the canvas has its own handlers for
+        // backtick and "[", and a search box that reopened the menu it lives in
+        // would be its own kind of broken.
+        event.stopPropagation();
+    }
+
     /** Remove the typed "/query" trigger text, then insert the chosen thing there. */
     _executeSlashItem(item) {
         const ctx = this._slashCtx;
@@ -9581,8 +13269,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         try {
             if (ctx && ctx.node && ctx.node.parentNode) {
                 const sel = window.getSelection();
+                // Live caret when the user is still typing in the page; the
+                // offset recorded at open when they are not (they clicked into
+                // the menu, or typed in its search box). Never the end of the
+                // node — that deletes whatever followed the trigger.
                 const end =
-                    sel && sel.rangeCount && sel.anchorNode === ctx.node ? sel.anchorOffset : ctx.node.nodeValue.length;
+                    sel && sel.rangeCount && sel.anchorNode === ctx.node
+                        ? sel.anchorOffset
+                        : typeof ctx.endOffset === 'number'
+                          ? ctx.endOffset
+                          : ctx.node.nodeValue.length;
                 const r = document.createRange();
                 r.setStart(ctx.node, Math.max(0, ctx.slashIndex));
                 r.setEnd(ctx.node, Math.min(end, ctx.node.nodeValue.length));
@@ -9649,6 +13345,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } catch (e) {
             /* malformed config — skip */
         }
+        // The configured-fields section above only appears once a template already HAS
+        // form fields, which made the {?key} writeback grammar undiscoverable to anyone
+        // who had not used it before. Always offer the syntax itself, plus a pointer to
+        // where keys are configured.
+        sections.push({
+            key: 'writeback',
+            label: 'Signer inputs & writeback',
+            hint: 'The signer fills these in during e-signing. The answer is merged into the signed PDF and can be written back to the record — configure keys under Edit Template → Signer Inputs.',
+            items: [
+                {
+                    key: 'wb_basic',
+                    label: 'Signer answer',
+                    snippet: '{?key}',
+                    title: "{?key} — the signer's answer for the form field named `key`. Renders empty if unanswered."
+                },
+                {
+                    key: 'wb_fallback',
+                    label: 'Signer answer + default',
+                    snippet: '{?key|fallback}',
+                    title: '{?key|fallback} — same, but prints `fallback` when the signer leaves it blank.'
+                }
+            ]
+        });
+        // {RepeatHeader} was only reachable as a table-toolbar toggle, so it was
+        // invisible to anyone browsing the tag rail for it.
+        sections.push({
+            key: 'tablemarkers',
+            label: 'Table markers',
+            hint: 'Place inside a table to control how it paginates in the PDF.',
+            items: [
+                {
+                    key: 'tm_repeat',
+                    label: 'Repeat header row',
+                    snippet: '{RepeatHeader}',
+                    title: '{RepeatHeader} — put it in the header row and that row repeats at the top of every PDF page the table spans.'
+                }
+            ]
+        });
         return sections;
     }
 
@@ -9669,11 +13403,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         if (this.showHtmlBodyVisual) {
             this._insertIntoVisualPage(snippet);
+            // #240 — the message now reflects where it actually landed.
+            const appended = this._lastInsertWasAppended;
             this.showToast(
                 isBlock ? 'Block added' : 'Tag inserted',
-                isBlock
-                    ? 'Added at the end of the document — click into it to edit, or drag chips from the rail to drop them exactly where you point.'
-                    : 'Added at the end of the document — move it where you need it.',
+                appended
+                    ? 'Added at the end of the document — click into the page first to place it at your cursor, or drag chips from the rail to drop them exactly where you point.'
+                    : 'Added at your cursor.',
                 'success'
             );
             return;
@@ -9690,16 +13426,77 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /**
+     * Which surface an insert belongs to: the one that owns the caret.
+     *
+     * This used to be hardcoded to the body canvas. With the caret in a running
+     * header, the containment test below therefore failed for EVERY candidate
+     * range — the caret was in the band, the test asked whether it was in the
+     * body — and the insert fell through to appending at the end of the body.
+     * That is the whole of "tags and images never land in the header, they go to
+     * the bottom of the page": headers with images or merge tags in them were
+     * simply not buildable from the rail.
+     *
+     * The remembered caret is the primary signal, because clicking a chip in the
+     * rail moves focus out of whichever surface the author was editing (the same
+     * reason #240 had to stop asking for the live selection). _activeSurface is
+     * the fallback for a band that was focused but never had a selection recorded.
+     */
+    /**
+     * Whichever editable surface the pointer is over — body, running header or
+     * running footer. Drag paths asked only about the body canvas, so a chip or
+     * image dragged onto a band showed no drop marker and, on release, inserted
+     * into the body instead.
+     */
+    _surfaceAtPoint(x, y) {
+        for (const surface of this._allSurfaces()) {
+            try {
+                const r = surface.getBoundingClientRect();
+                if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+                    return surface;
+                }
+            } catch (e) {
+                /* a detached surface is simply not under the pointer */
+            }
+        }
+        return null;
+    }
+
+    _insertTargetSurface() {
+        const remembered = this._caret && this._caret.range;
+        if (remembered) {
+            try {
+                const node = remembered.startContainer;
+                const el = node && node.nodeType === 3 ? node.parentElement : node;
+                const surface = el && this._surfaceContaining(el);
+                if (surface) {
+                    return surface;
+                }
+            } catch (e) {
+                /* fall through to the active surface */
+            }
+        }
+        if (this._activeSurface === 'header' || this._activeSurface === 'footer') {
+            const band = this.template.querySelector('.dg-chrome-band_' + this._activeSurface);
+            if (band) {
+                return band;
+            }
+        }
+        return this._bodyCanvas();
+    }
+
+    /**
      * Insert markup into the editable visual page — at the caret when there
      * is one (chips keep it alive via mousedown-preventDefault), otherwise
-     * appended at the end.
+     * appended at the end of whichever surface owns it.
      */
     _insertIntoVisualPage(markup) {
-        const host = this.template.querySelector('.dg-visual-host');
-        const pv = host && host.querySelector('.dg-pv');
+        const pv = this._insertTargetSurface();
         if (!pv) {
             return;
         }
+        // Covers every insert route that funnels through here — slash menu, block
+        // palette, tag chips, image assets, the table grid picker.
+        this._pushUndo('insert');
         const doc = pv.ownerDocument || document;
         const tpl = doc.createElement('template');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
@@ -9708,24 +13505,48 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Capture BEFORE insertion — insertNode empties the fragment.
         const firstEl = tpl.content.firstElementChild;
         let inserted = false;
+        // #240 — prefer the REMEMBERED caret over the live selection. Clicking a chip in
+        // the rail moves focus out of the canvas, so by the time this runs the live
+        // selection is usually gone and every insert fell through to pv.appendChild —
+        // the "always inserts at the bottom" report.
+        const candidates = [];
+        if (this._caret && this._caret.range) {
+            candidates.push(this._caret.range);
+        }
         try {
             const sel = window.getSelection();
             if (sel && sel.rangeCount) {
-                const range = sel.getRangeAt(0);
-                let node = range.startContainer;
-                const el = node.nodeType === 3 ? node.parentElement : node;
-                if (el && pv.contains(el) && !el.closest('[data-dg-tag]')) {
-                    range.collapse(true);
-                    range.insertNode(tpl.content);
-                    inserted = true;
-                }
+                candidates.push(sel.getRangeAt(0));
             }
         } catch (e) {
-            inserted = false;
+            /* live selection is optional — the remembered one is the primary */
+        }
+        if (this._lastCanvasRange) {
+            candidates.push(this._lastCanvasRange);
+        }
+        for (const range of candidates) {
+            try {
+                const node = range.startContainer;
+                const el = node.nodeType === 3 ? node.parentElement : node;
+                // Never split a merge-tag pill: they are contenteditable=false atoms and
+                // an insert inside one corrupts the tag.
+                if (el && this._isInCanvas(el, pv) && el.closest && !el.closest('[data-dg-tag]')) {
+                    const target = range.cloneRange();
+                    target.collapse(true);
+                    target.insertNode(tpl.content);
+                    inserted = true;
+                    break;
+                }
+            } catch (e) {
+                /* try the next candidate */
+            }
         }
         if (!inserted) {
             pv.appendChild(tpl.content);
         }
+        // Report what ACTUALLY happened — the old toast said "added at the end"
+        // unconditionally, which misreported every successful caret insert.
+        this._lastInsertWasAppended = !inserted;
         // Never make the user hunt for what they just added.
         if (firstEl && firstEl.scrollIntoView) {
             try {
@@ -9872,7 +13693,116 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /** Table group's "+ Table": a styled 3-column data table at the caret. */
-    handleInsertTable() {
+    // ===== Word-style insert-table grid picker ===============================
+    //
+    // The old button dropped a fixed 3-column table and left the author to add or
+    // delete their way to the shape they wanted. This is the Word/Google Docs
+    // affordance: hover a grid, see "4 x 3 table", click to place exactly that.
+    @track tableGrid = null;
+    static GRID_MAX_COLS = 8;
+    static GRID_MAX_ROWS = 8;
+
+    handleTableGridToggle(event) {
+        if (this.tableGrid) {
+            this.tableGrid = null;
+            this._watchFloatingLayer(!!this.selectionBubble);
+            return;
+        }
+        // Remember where the caret was BEFORE the picker took focus, or the table
+        // lands at the end of the document instead of where the author was working.
+        this.tableGrid = { rows: 0, cols: 0, label: 'Pick a size' };
+        this._floatAnchor = event.currentTarget;
+        this._watchFloatingLayer(true);
+    }
+
+    /** Cells for the picker, flagged so the hovered rectangle lights up. */
+    get tableGridCells() {
+        const cells = [];
+        const hotR = this.tableGrid ? this.tableGrid.rows : 0;
+        const hotC = this.tableGrid ? this.tableGrid.cols : 0;
+        for (let r = 1; r <= DocGenAdmin.GRID_MAX_ROWS; r++) {
+            for (let c = 1; c <= DocGenAdmin.GRID_MAX_COLS; c++) {
+                cells.push({
+                    key: r + 'x' + c,
+                    r,
+                    c,
+                    cls: r <= hotR && c <= hotC ? 'dg-grid-cell dg-grid-cell_on' : 'dg-grid-cell'
+                });
+            }
+        }
+        return cells;
+    }
+
+    get tableGridLabel() {
+        if (!this.tableGrid || !this.tableGrid.rows) {
+            return 'Pick a size';
+        }
+        return `${this.tableGrid.cols} × ${this.tableGrid.rows} table`;
+    }
+
+    handleTableGridHover(event) {
+        const r = parseInt(event.currentTarget.dataset.r, 10);
+        const c = parseInt(event.currentTarget.dataset.c, 10);
+        if (!isNaN(r) && !isNaN(c)) {
+            this.tableGrid = { rows: r, cols: c };
+        }
+    }
+
+    handleTableGridPick(event) {
+        const rows = parseInt(event.currentTarget.dataset.r, 10);
+        const cols = parseInt(event.currentTarget.dataset.c, 10);
+        this.tableGrid = null;
+        this._watchFloatingLayer(!!this.selectionBubble);
+        if (isNaN(rows) || isNaN(cols)) {
+            return;
+        }
+        this.handleInsertTable(cols, rows);
+    }
+
+    /**
+     * @param cols  columns to build (default 3 — the historic behaviour)
+     * @param bodyRows  body rows BENEATH the header row (default 2)
+     */
+    handleInsertTable(cols, bodyRows) {
+        const nCols = typeof cols === 'number' && cols > 0 ? cols : 3;
+        const nRows = typeof bodyRows === 'number' && bodyRows > 0 ? bodyRows : 2;
+        const thStyle = 'background: #1f3a5f; color: #ffffff; text-align: left; padding: 5pt 7pt; font-size: 9.5pt';
+        const tdStyle = 'padding: 5pt 7pt; border-bottom: 0.75pt solid #dddddd';
+        let head = '';
+        for (let c = 1; c <= nCols; c++) {
+            head += '<th style="' + thStyle + '">Column ' + c + '</th>';
+        }
+        let body = '';
+        for (let r = 0; r < nRows; r++) {
+            body += '<tr style="page-break-inside: avoid">';
+            for (let c = 0; c < nCols; c++) {
+                body += '<td style="' + tdStyle + '">&nbsp;</td>';
+            }
+            body += '</tr>';
+        }
+        // width:100% + table-layout:fixed so an 8-column table cannot overhang the
+        // sheet the moment it is created.
+        const markup =
+            '\n<table style="width: 100%; border-collapse: collapse; table-layout: fixed; max-width: 100%">' +
+            '<thead><tr>' +
+            head +
+            '</tr></thead><tbody>' +
+            body +
+            '</tbody></table>\n';
+        if (this.showHtmlBodyVisual) {
+            this._insertIntoVisualPage(markup);
+            this._clampTablesToCanvas();
+        } else {
+            this._insertAtEditorCursor(markup);
+        }
+        this.showToast(
+            'Table added',
+            `${nCols} × ${nRows + 1} table inserted. Drag a cell edge to resize columns; hover the table for row and column controls.`,
+            'success'
+        );
+    }
+
+    _legacyInsertTableUnused() {
         const th = 'background: #1f3a5f; color: #ffffff; text-align: left; padding: 5pt 7pt; font-size: 9.5pt';
         const cell = 'padding: 5pt 7pt; border-bottom: 0.75pt solid #dddddd';
         const snippet =
@@ -9942,9 +13872,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         if (rect) {
             const pvRect = pv.getBoundingClientRect();
-            marker.style.left = rect.left - pvRect.left + 'px';
-            marker.style.top = rect.top - pvRect.top + 'px';
-            marker.style.height = (rect.height || 16) + 'px';
+            // #244 — getBoundingClientRect returns SCALED screen pixels, but the marker
+            // is positioned in the canvas's own (unscaled) coordinate space because it
+            // is a child of the scaled element. Divide the delta back out or the marker
+            // drifts further from the pointer the more you zoom.
+            const z = this.designerZoom || 1;
+            marker.style.left = (rect.left - pvRect.left) / z + 'px';
+            marker.style.top = (rect.top - pvRect.top) / z + 'px';
+            marker.style.height = (rect.height || 16) / z + 'px';
             marker.style.display = 'block';
         } else {
             marker.style.display = 'none';
@@ -9979,6 +13914,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!text) {
             return;
         }
+        this._pushUndo('drop');
         const doc = pv.ownerDocument || document;
         const tpl = doc.createElement('template');
         // eslint-disable-next-line @lwc/lwc/no-inner-html -- deliberate manual-DOM canvas write; content passes _sanitizeStagedHtml / scopeHtmlForInlinePreview
@@ -10060,14 +13996,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
         d.ghost.style.left = e.clientX + 14 + 'px';
         d.ghost.style.top = e.clientY + 10 + 'px';
-        const pv = this._getVisualPv();
-        if (pv) {
-            const r = pv.getBoundingClientRect();
-            const over = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-            if (over) {
-                this._showDropMarker(e, pv);
+        // Any surface, not just the body — dragging into the running header has to
+        // show where it will land, exactly as it does on the page.
+        const over = this._surfaceAtPoint(e.clientX, e.clientY);
+        for (const surface of this._allSurfaces()) {
+            if (surface === over) {
+                this._showDropMarker(e, surface);
             } else {
-                this._hideDropMarker(pv);
+                this._hideDropMarker(surface);
             }
         }
         e.preventDefault();
@@ -10118,7 +14054,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         this._pendingDropInsert = null;
-        const pv = this._getVisualPv();
+        // Drop into whatever was under the pointer — body, header or footer.
+        const pv = this._surfaceAtPoint(drop.x, drop.y) || this._getVisualPv();
         if (!pv) {
             return;
         }
@@ -10133,7 +14070,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     range.setStart(pos.offsetNode, pos.offset);
                 }
             }
-            if (range && pv.contains(range.startContainer)) {
+            // _isInCanvas, not pv.contains — contains() is unreliable under the LWS
+            // namespace sandbox and has broken four separate features.
+            if (range && this._isInCanvas(range.startContainer, pv)) {
                 range.collapse(true);
                 const s = window.getSelection();
                 s.removeAllRanges();
@@ -10146,6 +14085,64 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._insertIntoVisualPage(drop.snippet);
     }
 
+    /**
+     * A drag ghost that shows WHAT is being placed.
+     *
+     * Without setDragImage the browser drags a translucent snapshot of the chip
+     * you grabbed — which, for a rail of near-identical chips, says nothing
+     * about what will land. The ghost is built to look like the thing being
+     * inserted: a pill for a tag, a framed thumbnail for an image, both with a
+     * dashed outline that reads as "not placed yet".
+     *
+     * It must be IN the document when setDragImage is called — a detached node
+     * is silently ignored and you are back to the default. Parked off-screen and
+     * removed on a timer, since dragend does not reliably fire when the drop
+     * lands outside the window.
+     */
+    _setDragGhost(event, label, imgUrl) {
+        if (!event.dataTransfer || !event.dataTransfer.setDragImage) {
+            return;
+        }
+        try {
+            const doc = document;
+            const ghost = doc.createElement('div');
+            ghost.style.cssText =
+                'position:fixed;top:-1000px;left:-1000px;z-index:-1;' +
+                'display:inline-flex;align-items:center;gap:6px;' +
+                'padding:4px 9px;border:1.5px dashed #7c3aed;border-radius:9px;' +
+                'background:#f6f3ff;color:#3b2a6b;' +
+                'font:12px/1.2 Helvetica,Arial,sans-serif;white-space:nowrap;' +
+                'box-shadow:0 2px 6px rgba(60,40,120,0.18);';
+            if (imgUrl) {
+                const thumb = doc.createElement('img');
+                thumb.src = imgUrl;
+                thumb.style.cssText = 'width:26px;height:26px;object-fit:cover;border-radius:3px;';
+                ghost.appendChild(thumb);
+            }
+            const text = doc.createElement('span');
+            // Long tags would otherwise produce a ghost wider than the page.
+            text.textContent = label.length > 42 ? label.slice(0, 40) + '…' : label;
+            ghost.appendChild(text);
+            doc.body.appendChild(ghost);
+            // Offset so the ghost sits just below-right of the cursor rather
+            // than under it, keeping the drop point visible while dragging.
+            event.dataTransfer.setDragImage(ghost, -12, -8);
+            this._dragGhostEl = ghost;
+            // eslint-disable-next-line @lwc/lwc/no-async-operation
+            setTimeout(() => {
+                if (ghost.parentNode) {
+                    ghost.parentNode.removeChild(ghost);
+                }
+                if (this._dragGhostEl === ghost) {
+                    this._dragGhostEl = null;
+                }
+            }, 1000);
+        } catch (e) {
+            // A missing ghost is cosmetic — never let it stop the drag itself.
+            const noop = e && e.message; // NOPMD
+        }
+    }
+
     handleTagDragStart(event) {
         const snippet = event.currentTarget.dataset.snippet;
         this._dragSnippet = snippet || null;
@@ -10156,6 +14153,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             } catch (e) {
                 /* dataTransfer best-effort */
             }
+            this._setDragGhost(event, snippet, null);
         }
     }
 
@@ -10170,6 +14168,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             } catch (e) {
                 /* dataTransfer best-effort */
             }
+            // The image itself, not its markup — dragging a picture should look
+            // like dragging that picture.
+            this._setDragGhost(event, name || 'image', url);
         }
     }
 
@@ -10389,12 +14390,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return refreshApex(this.wiredTemplatesResult);
     }
 
-    showToast(title, message, variant) {
+    // mode is optional — 'sticky' keeps error detail on screen long enough to read
+    // and copy (used by the #236 create-failure path, where the message names a field).
+    showToast(title, message, variant, mode) {
         this.dispatchEvent(
             new ShowToastEvent({
                 title: title,
                 message: message,
-                variant: variant
+                variant: variant,
+                mode: mode || 'dismissable'
             })
         );
     }

@@ -84,15 +84,13 @@
         <th class="r">Qty Ordered</th>
         <th class="c">Qty Packed</th>
       </tr>
-      {#OpportunityLineItems}
       <tr>
-        <td class="chk">&#9744;</td>
+        <td class="chk">{#OpportunityLineItems}&#9744;</td>
         <td>{Product2.ProductCode}</td>
         <td>{Product2.Name}</td>
         <td class="r">{Quantity:#,##0}</td>
-        <td class="packcol">&nbsp;</td>
+        <td class="packcol">&nbsp;{/OpportunityLineItems}</td>
       </tr>
-      {/OpportunityLineItems}
     </table>
 
     <table class="box totals" style="margin-top:16px;">

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  QA-only. docGenButton declares ONE target: lightning__RecordAction. A
+  RecordAction cannot be dropped into a FlexiPage region the way a
+  lightning__RecordPage component can, so the QA_DocGen_Account_Record fixture
+  could reach docGenRunner and docGenSignatureSender but never this component —
+  it was the one customer-facing LWC with no path to it from a browser at all.
+
+  A screen quick action is the only way in, and it is also exactly how a customer
+  deploys it, so testing through here tests the real integration rather than a
+  test-only harness around the component.
+-->
+<QuickAction xmlns="http://soap.sforce.com/2006/04/metadata">
+    <height>500</height>
+    <label>DocGen Button (QA)</label>
+    <lightningWebComponent>docGenButton</lightningWebComponent>
+    <!--
+      optionsCreateFeedItem is REQUIRED even for an LWC action that posts
+      nothing to a feed; omitting it fails with "Required field is missing".
+      optionsSubmitBehavior, by contrast, is REJECTED here ("invalid at this
+      location") — it belongs to Create/Update actions only.
+    -->
+    <optionsCreateFeedItem>false</optionsCreateFeedItem>
+    <type>LightningWebComponent</type>
+</QuickAction>

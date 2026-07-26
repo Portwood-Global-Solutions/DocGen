@@ -509,12 +509,695 @@
     white-space: nowrap;
 }
 
-/* Visual mode: the editable rendered page needs a visible caret + focus cue */
+/* Visual mode: the editable rendered page needs a visible caret.
+   The dashed focus ring is NOT here — it belongs on .dg-sheet-paper, which
+   encloses the header band, the page and the footer band. Drawn on the page
+   alone it boxed the body and left the running header outside it, and put a
+   second dashed line 6px from the band's own margin rule at every seam. */
 .dg-html-preview-frame .dg-pv[contenteditable='true'] {
-    outline: 2px dashed #b49aef;
-    outline-offset: 6px;
     cursor: text;
     caret-color: #7c3aed;
+}
+
+/* #238 — the active-block/cell highlight is deliberately NOT defined here.
+   The canvas is an lwc:dom="manual" host, and component CSS does not reach nodes
+   written into it by hand (which is why _showDropMarker sets style.cssText inline).
+   The highlight is applied as inline style in _paintActiveBlock and removed again in
+   _clearActiveBlockPaint, which also runs before serialization so it can never reach
+   the saved template body. */
+
+/* #247 — running header/footer bands.
+   Styled to read as page CHROME rather than body content: dimmed, dashed, labelled.
+   They are real editing surfaces (the format bar, rail chips and table tools all work
+   in them), but they write Header_Html__c / Footer_Html__c, not the body. */
+/* Focus mode — the setup rows collapse and the page takes the screen.
+   Measured motivation: 389px of chrome sat above the toolbar on a 900px viewport,
+   43% of the screen spent before any document was visible. Everything here is
+   hidden, never removed, and one click restores it. The format bar and the canvas
+   deliberately survive. */
+.dg-designer-chrome_focus .dg-designer-toolbar,
+.dg-designer-chrome_focus .dg-html-editor-statusbar,
+.dg-designer-chrome_focus .dg-status-strip {
+    display: none;
+}
+
+/* With the chrome gone the sheet should claim the reclaimed height. */
+.dg-designer-chrome_focus .dg-designer-canvas-col {
+    max-height: calc(100vh - 150px);
+}
+
+/* Ghost preview: shows the column/row a control is about to add, or paints the one
+   it is about to remove. Showing the RESULT is clearer than labelling the action —
+   nobody has to hold "before or after this cell?" in their head. Purely decorative,
+   so it must never intercept a click on the control that summoned it. */
+.dg-tbl-ghost {
+    position: absolute;
+    z-index: 18;
+    pointer-events: none;
+    background: rgba(124, 58, 237, 0.16);
+    border: 1px dashed #7c3aed;
+    border-radius: 2px;
+    animation: dg-ghost-in 90ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.dg-tbl-ghost_remove {
+    background: rgba(194, 57, 52, 0.16);
+    border-color: #c23934;
+    border-style: solid;
+}
+
+@keyframes dg-ghost-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Word-style insert-table grid picker. */
+.dg-grid-menu {
+    min-width: 0;
+    gap: 6px;
+}
+
+.dg-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 18px);
+    gap: 2px;
+}
+
+.dg-grid-cell {
+    width: 18px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    border-radius: 2px;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px #d8dde6;
+    cursor: pointer;
+    transition: background-color 0.06s linear;
+}
+
+.dg-grid-cell_on {
+    background: #c4aef7;
+    box-shadow: inset 0 0 0 1px #7c3aed;
+}
+
+.dg-grid-label {
+    font-size: 0.72rem;
+    color: #5b6b83;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The sheet: header band + page + footer band as ONE piece of paper. The grey
+   "desk" gradient lives here rather than on the canvas host, and the host is
+   stripped to a pure scroll viewport — the host previously drew its own panel AND a
+   border between the header band and the page, a visible seam that made the header
+   read as a separate widget floating above the paper. */
+.dg-sheet {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 18px 0;
+    background: radial-gradient(ellipse at 50% 0%, #eceef4 0%, #dde1ea 70%, #d4d9e4 100%);
+    border: 1px solid #d3d0e6;
+    border-radius: 8px;
+}
+
+/* The host stops being a scroll viewport and becomes plain flow.
+   While it had its own fixed height and internal scrollbar, the footer band was
+   laid out after the VIEWPORT rather than after the PAGE — a 1000px gap opened
+   between the bottom of the sheet and its own footer, and the bands scrolled
+   independently of the content they belong to. Letting the sheet size to its
+   content and handing scrolling to .dg-designer-canvas-col (already overflow-y:
+   auto) makes header, page and footer one object that moves together, which is
+   the whole point of them being page chrome. */
+.dg-sheet .dg-visual-host,
+.dg-sheet .dg-visual-host.dg-designer-size {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    width: 100%;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible;
+    display: flex;
+    justify-content: center;
+}
+
+.dg-sheet .dg-canvas-wrap {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* The paper — header band, page and footer band as one object.
+   .dg-sheet is a centred flex column, so this sizes to its widest child and is
+   therefore exactly the page width without any measurement to keep in sync.
+
+   The editing outline lives HERE. It used to be an inline outline on .dg-pv,
+   which drew a dashed rectangle around the body and left the running header
+   sitting outside it — the sheet said "one piece of paper" and the outline said
+   "the document is this box, and the header is not in it". It also put a second
+   dashed line 6px from the band's own dashed margin rule, so each seam showed
+   two parallel dashes that meant different things. */
+.dg-sheet-paper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border-radius: 8px;
+    outline: 2px dashed #d9cdf7;
+    outline-offset: 7px;
+    transition: outline-color 0.12s ease-in-out;
+}
+
+/* Editing is happening — the ring firms up. Applied to the whole paper, so it
+   reads the same whether the caret is in the header, the body or the footer. */
+.dg-sheet-paper:focus-within {
+    outline-color: #b49aef;
+}
+
+/* Word's in-margin label, on hover/focus only so it never competes with content. */
+.dg-chrome-band::before {
+    content: attr(data-band-label);
+    position: absolute;
+    top: 2px;
+    left: 8px;
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #b9b7c8;
+    opacity: 0;
+    transition: opacity 0.12s ease-in-out;
+    pointer-events: none;
+}
+
+.dg-chrome-band_footer::before {
+    top: auto;
+    bottom: 2px;
+}
+
+.dg-chrome-band:hover::before,
+.dg-chrome-band:focus::before,
+.dg-chrome-band:focus-within::before {
+    opacity: 1;
+}
+
+/* Typography is set INLINE from the page's computed style at mount time (see
+   _mountChromeBands) — a running header prints in the DOCUMENT's typeface, so
+   showing it in the Salesforce UI font at a UI size meant the screen did not
+   match the print. These values are only the pre-mount fallback.
+
+   The dim is opacity rather than a grey colour for the same reason: Word greys
+   inactive header text, but greying it here would also override a colour the
+   author deliberately set, and opacity costs no layout so the on-screen metrics
+   still match the PDF. */
+.dg-chrome-band {
+    box-sizing: border-box;
+    background: #fff;
+    border: none;
+    min-height: 42px;
+    font-size: 0.8rem;
+    /* Dimmed until focused — Word greys inactive header/footer text. Done with
+       COLOUR, not opacity: element opacity made the band's white background
+       translucent, so the grey desk showed through and the header read as a
+       different piece of paper from the page it sits on. --dg-band-ink is set
+       inline from the page's computed colour (see _matchBandTypographyToPage). */
+    color: var(--dg-band-ink-dim, #6b6b7b);
+    cursor: text;
+    margin: 0 auto;
+    position: relative;
+    overflow-x: auto;
+    transition: color 0.12s ease-in-out;
+}
+
+.dg-chrome-band:hover,
+.dg-chrome-band:focus,
+.dg-chrome-band:focus-within {
+    color: var(--dg-band-ink, #2c2c38);
+    background: #fff;
+    outline: none;
+}
+
+.dg-chrome-band_header {
+    border-bottom: 1px dashed #d6d3e6;
+    border-radius: 6px 6px 0 0;
+    padding-top: 14px;
+    padding-bottom: 6px;
+}
+
+.dg-chrome-band_footer {
+    border-top: 1px dashed #d6d3e6;
+    border-radius: 0 0 6px 6px;
+    padding-top: 6px;
+    padding-bottom: 14px;
+}
+
+.dg-chrome-band-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8b8ba7;
+    margin: 2px 0;
+}
+
+.dg-chrome-band-hint {
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: italic;
+    margin-left: 6px;
+}
+
+/* #241 — table row/column handles.
+   These ARE component-owned nodes (LWC renders them as siblings of the canvas, not
+   inside the lwc:dom="manual" host), so unlike the caret highlight they can be
+   styled from here. The wrapper is the positioning context. */
+.dg-canvas-wrap {
+    position: relative;
+}
+
+.dg-tbl-handle {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity 0.12s cubic-bezier(0.2, 0.8, 0.3, 1);
+    /* MUST be none while invisible. opacity: 0 does NOT remove an element from
+       hit-testing, so handles left at pointer-events: auto sat over the page as
+       invisible click targets and swallowed clicks meant for the document —
+       placing a caret near a table could silently do nothing. */
+    pointer-events: none;
+}
+
+.dg-sheet-paper:hover .dg-tbl-handle {
+    opacity: 0.55;
+    pointer-events: auto;
+}
+
+.dg-tbl-handle:hover {
+    opacity: 1;
+}
+
+.dg-tbl-handle_col {
+    height: 20px;
+}
+
+.dg-tbl-handle_row {
+    width: 42px;
+    flex-direction: row;
+}
+
+/*
+ * ONE CONTROL LANGUAGE for everything that floats in the page margin.
+ *
+ * The row/column handles were 18px, bordered, white, bold; the block handles
+ * were 22px, borderless, grey, regular. Two vocabularies inches apart in the
+ * same strip of margin, which is most of why the area felt fiddly: nothing read
+ * as belonging to the same set, and the smaller pair were harder to hit.
+ *
+ * Both are now 22x22 white chips with a hairline and a purple glyph, filling
+ * solid purple on hover. Same size, same radius, same weight — a reader learns
+ * the shape once. 22px because anything smaller in a narrow margin is a
+ * precision-aiming exercise.
+ */
+.dg-tbl-handle-btn {
+    width: 22px;
+    height: 22px;
+    line-height: 1;
+    padding: 0;
+    border: 1px solid #ddd2f7;
+    border-radius: 4px;
+    background: #fff;
+    color: #5b21b6;
+    font-size: 12px;
+    /* 600, not bold: at 12px in a 22px box, 700 turns a "+" into a blob. */
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(40, 30, 80, 0.1);
+    transition:
+        background-color 0.09s ease,
+        border-color 0.09s ease,
+        color 0.09s ease;
+}
+
+.dg-tbl-handle-btn:hover {
+    background: #7c3aed;
+    border-color: #7c3aed;
+    color: #fff;
+}
+
+.dg-tbl-handle-btn_del:hover {
+    background: #c23934;
+    border-color: #c23934;
+}
+
+/* Block gutter handle (Notion). Sits in the left margin of the block under the
+   pointer: add a paragraph beneath, or move the block up/down. Same visibility
+   contract as every other overlay — pointer-events none while invisible. */
+.dg-blk-handle {
+    position: absolute;
+    /* Above the table chrome AND the editable canvas. At 19 the pointer was
+       landing on the contenteditable underneath, so hovering the up-arrow showed
+       a TEXT CARET and the click went to the page instead of the button — the
+       control looked broken rather than merely small. */
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    /* Was 1px: the four buttons formed one indivisible smudge that also collided
+       with the table's own row gutter. */
+    gap: 3px;
+    /* No container chip. Once each button became a white chip in its own right
+       (matching the table handles), a second chip around them was a box inside a
+       box — and every pixel of it was width reaching toward the text. Removing
+       it narrows the whole cluster and sharpens what is left. */
+    /* The whole group is clickable furniture — say so before the pointer
+       reaches an individual button. */
+    cursor: pointer;
+    /* Never wider than its buttons. The chip is decoration; if it grows it
+       reaches over the content beside it and eats clicks meant for the page. */
+    width: max-content;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.dg-sheet-paper:hover .dg-blk-handle {
+    /* Was 0.65 — combined with a pale #9aa8bd glyph at 9px, the move-up/down
+       arrows were effectively invisible. Three separate things were dimming the
+       same control at once: low opacity, a low-contrast colour, and a tiny
+       glyph. Opacity now only softens the resting state. */
+    opacity: 0.92;
+    pointer-events: auto;
+}
+
+.dg-blk-handle:hover {
+    opacity: 1;
+}
+
+.dg-blk-handle-btn {
+    /* Bigger target as well as a bigger glyph: 13x18 is under half the ~24px
+       minimum for something meant to be clicked, and these sit in a narrow
+       margin where the pointer arrives at an angle. */
+    /* 22x22 — a real target. Anything under ~24px in a narrow margin is a
+       precision-aiming exercise, which is what "hard to reach" meant. */
+    /* Identical to .dg-tbl-handle-btn — same size, hairline, radius and glyph
+       colour. Both float in the same margin; they should be the same object. */
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid #ddd2f7;
+    border-radius: 4px;
+    background: #fff;
+    color: #5b21b6;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(40, 30, 80, 0.1);
+    transition:
+        background-color 0.09s ease,
+        border-color 0.09s ease,
+        color 0.09s ease;
+}
+
+.dg-blk-handle-btn:hover {
+    background: #7c3aed;
+    border-color: #7c3aed;
+    color: #fff;
+}
+
+/* Insert seam — a circular + on the boundary where the new column/row lands.
+   Same visibility contract as the handles: pointer-events must be none while
+   invisible, or it becomes a dead click target over the page. */
+.dg-tbl-seam {
+    position: absolute;
+    z-index: 21;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: #fff;
+    color: #5a21b6;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow:
+        inset 0 0 0 1px #c4aef7,
+        0 1px 3px rgba(22, 50, 92, 0.18);
+    transition:
+        opacity 0.12s cubic-bezier(0.2, 0.8, 0.3, 1),
+        background-color 0.09s ease,
+        color 0.09s ease;
+}
+
+.dg-sheet-paper:hover .dg-tbl-seam {
+    opacity: 0.85;
+    pointer-events: auto;
+}
+
+/* A 16px circle is a small target for a control you have to travel to. This
+   grows the HIT area to 32px without growing the dot, so the pointer can arrive
+   slightly off and still land. It inherits the button's pointer-events, so while
+   the seam is hidden (pointer-events: none) this cannot eat clicks on the
+   document — the ghost-target rule the smoke gate enforces. */
+.dg-tbl-seam::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    right: -8px;
+    bottom: -8px;
+    border-radius: 50%;
+}
+
+.dg-tbl-seam:hover {
+    opacity: 1;
+    background: #7c3aed;
+    color: #fff;
+    box-shadow:
+        inset 0 0 0 1px #7c3aed,
+        0 2px 6px rgba(124, 58, 237, 0.35);
+}
+
+/* ===== Toolbar popovers =================================================
+   Colour and font collapse from 19 permanent controls to 3 triggers.
+   position: fixed is load-bearing: it removes the popover from every ancestor's
+   overflow context. The previous attempt used position: absolute inside the bar,
+   overflow-x: auto coerced overflow-y to auto with it, and every menu rendered
+   invisibly inside a 38px box. Coordinates come from _positionFloating. */
+.dg-fmt-menu-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Trigger carries a live underbar of the colour it will apply, so the current
+   value is readable without opening anything — this is what lets 13 swatches
+   leave the bar without losing information. */
+.dg-fmt-trigger {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 30px;
+    height: 28px;
+    padding: 0 6px;
+}
+
+.dg-fmt-trigger-glyph {
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.dg-fmt-trigger-bar {
+    width: 16px;
+    height: 3px;
+    border-radius: 1px;
+    box-shadow: inset 0 0 0 1px rgba(22, 50, 92, 0.18);
+}
+
+.dg-fmt-trigger_wide {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.dg-fmt-caret {
+    font-size: 0.55rem;
+    color: #5b6b83;
+    line-height: 1;
+}
+
+.dg-fmt-menu {
+    position: fixed;
+    z-index: 9000;
+    min-width: 172px;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #e4e8ef;
+    border-radius: 10px;
+    box-shadow:
+        0 2px 4px -1px rgba(22, 50, 92, 0.1),
+        0 10px 24px -6px rgba(22, 50, 92, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: dg-pop-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dg-pop-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.dg-fmt-menu_list {
+    min-width: 200px;
+}
+
+.dg-fmt-menu-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #5b6b83;
+}
+
+.dg-fmt-menu-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 20px);
+    gap: 4px;
+}
+
+/* Ring as an inset shadow, not a border — a 1px border on a 20px swatch eats
+   10% of the colour area it exists to show. */
+.dg-fmt-menu-grid .dg-fmt-swatch {
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 3px;
+    box-shadow: inset 0 0 0 1px rgba(22, 50, 92, 0.14);
+    cursor: pointer;
+}
+
+.dg-fmt-menu-grid .dg-fmt-swatch:hover {
+    box-shadow:
+        inset 0 0 0 1px rgba(22, 50, 92, 0.14),
+        0 0 0 2px #fff,
+        0 0 0 4px #a684f2;
+}
+
+.dg-fmt-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 0.85rem;
+    color: #16325c;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.dg-fmt-menu-item:hover {
+    background: #f4f1fe;
+}
+
+.dg-fmt-menu-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.72rem;
+    color: #5b6b83;
+    white-space: nowrap;
+}
+
+/* Selection bubble — floating format toolbar over the current text selection.
+   position: fixed is load-bearing, not stylistic: it takes the element out of every
+   ancestor's overflow context, which is the only reliable way to stop a scrolling
+   parent clipping it. Coordinates come from _positionFloating in JS. */
+.dg-sel-bubble {
+    position: fixed;
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 5px 7px;
+    background: #1c1533;
+    border: 1px solid #2f2450;
+    border-radius: 9px;
+    box-shadow:
+        0 10px 28px rgba(16, 10, 40, 0.34),
+        0 2px 6px rgba(16, 10, 40, 0.22);
+    animation: dg-bubble-in 110ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+@keyframes dg-bubble-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Dark bubble → invert the button chrome so it reads on the dark ground. */
+.dg-sel-bubble .dg-fmt-btn {
+    background: transparent;
+    border-color: transparent;
+    color: #f2eeff;
+    min-width: 26px;
+    height: 24px;
+}
+
+.dg-sel-bubble .dg-fmt-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: transparent;
+    color: #fff;
+}
+
+.dg-sel-bubble .dg-fmt-btn.dg-fmt-on {
+    background: #7c3aed;
+    border-color: #7c3aed;
+    color: #fff;
+}
+
+.dg-sel-bubble .dg-fmt-swatch {
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.dg-sel-bubble-sep {
+    width: 1px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.18);
+    margin: 0 3px;
 }
 
 .dg-tag-panel {
@@ -572,9 +1255,10 @@
     position: sticky;
     top: 0;
     z-index: 40;
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    /* No backdrop-filter — see .dg-format-bar. It would make this chrome a
+       containing block for every position: fixed popover inside it, re-anchoring
+       them to the chrome instead of the viewport. */
+    background: rgba(255, 255, 255, 0.97);
     border: 1px solid #e2e0ef;
     border-top: 3px solid #7c3aed;
     border-radius: 0 0 12px 12px;
@@ -694,9 +1378,16 @@
     flex-wrap: wrap;
     gap: 4px;
     padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.94);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    /* NO backdrop-filter here.
+       A backdrop-filter makes an element a CONTAINING BLOCK for position: fixed
+       descendants, and a stacking context. Every popover in this bar is
+       position: fixed, so the blur silently re-anchored them to the toolbar
+       instead of the viewport and capped their z-index at the bar's 30 — the
+       insert-table grid picker fell behind the page and its bottom rows could
+       not be reached, so a 1-column table was impossible to pick.
+       The background is 0.94 opaque; the blur was contributing almost nothing
+       visually and was costing the entire floating layer. */
+    background: rgba(255, 255, 255, 0.97);
     border: 1px solid #e2e0ef;
     border-radius: 10px;
     margin-bottom: 6px;
@@ -769,6 +1460,32 @@
 
 .dg-fmt-btn_word {
     font-size: 0.72rem;
+}
+
+/*
+ * A toolbar group that never splits across rows.
+ *
+ * .dg-format-bar is a flat flex-wrap list, so before this the bar broke wherever
+ * it happened to run out of width: the "Borders" label ended one row and its own
+ * buttons began the next, so the label pointed at nothing and the buttons
+ * belonged to nothing. Worse, the break point moved as the window resized, so
+ * the toolbar never looked the same twice and nothing had a fixed home to aim
+ * for. Groups wrap as UNITS; their contents do not.
+ */
+.dg-fmt-group {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    /* A hairline keeps a group visually distinct once it has wrapped onto its
+       own row, without the heavier separator used between loose controls. */
+    padding: 0 6px;
+    border-left: 1px solid #e6e2f0;
+}
+
+.dg-fmt-group:first-child {
+    border-left: none;
+    padding-left: 0;
 }
 
 .dg-fmt-sep {
@@ -898,9 +1615,13 @@
     position: relative;
 }
 
+/* Joins the fixed floating layer. It was position: absolute inside
+   .dg-designer-canvas-col, which is overflow-y: auto — so it was clipped by the
+   scroll container and scrolled away with the content. Coordinates come from
+   _positionFloating in renderedCallback. */
 .dg-pill-menu {
-    position: absolute;
-    z-index: 120;
+    position: fixed;
+    z-index: 9000;
     background: #fff;
     border: 1px solid #c9b8f5;
     border-radius: 8px;
@@ -926,6 +1647,35 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/*
+ * The tag on the menu's first line is an input, not a label — it is the thing
+ * you came here to change. Styled to still READ as the tag it replaced
+ * (monospace, same size and colour) so the menu does not suddenly look like a
+ * form; the border only appears on focus.
+ */
+.dg-pill-menu-edit {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.72rem;
+    color: #5a3fc4;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+
+.dg-pill-menu-edit:hover {
+    border-color: #e0d8f7;
+}
+
+.dg-pill-menu-edit:focus {
+    outline: none;
+    background: #fff;
+    border-color: #c9b8f5;
+    box-shadow: 0 0 0 2px rgba(201, 184, 245, 0.35);
 }
 
 .dg-pill-menu-x {
@@ -1059,6 +1809,17 @@
     border-radius: 10px;
     box-shadow: 0 10px 30px rgba(28, 20, 68, 0.18);
     padding: 4px;
+    /* SCROLLS. There was no max-height and no overflow at all, so a long menu
+       simply ran off the bottom of the screen and its last items could not be
+       reached by any means — the right-click menu inside a table is the worst
+       case, because the in-table branch appends a whole extra group of row and
+       column commands to an already long list.
+       62vh keeps the menu inside the viewport wherever it opens. */
+    max-height: 62vh;
+    overflow-y: auto;
+    /* Momentum scrolling on trackpads, and a scrollbar that does not overlay
+       the last item's click target. */
+    overscroll-behavior: contain;
 }
 
 .dg-slash-menu-head {
@@ -1536,4 +2297,153 @@
 
 .dg-designer-toolbar__actions lightning-button button {
     white-space: nowrap;
+}
+
+/* --- Designer tab: pick a template to open ------------------------------- */
+/* Landing here with nothing open used to be a dead end that named two other
+   tabs. The templates you can design belong on the tab you design on. */
+.dg-designer-empty {
+    text-align: center;
+    padding: 40px 20px 48px;
+    color: #5b6b83;
+}
+
+.dg-designer-empty__title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #2c2c38;
+    margin: 10px 0 4px;
+}
+
+.dg-designer-empty__hint {
+    font-size: 0.85rem;
+    margin-bottom: 18px;
+}
+
+.dg-designer-open-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 520px;
+    margin: 0 auto;
+    text-align: left;
+}
+
+.dg-designer-open-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    background: #fff;
+    border: 1px solid #e2e0ef;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #2c2c38;
+    text-align: left;
+    transition:
+        border-color 0.12s ease,
+        box-shadow 0.12s ease,
+        background-color 0.12s ease;
+}
+
+.dg-designer-open-item:hover,
+.dg-designer-open-item:focus-visible {
+    border-color: #b49aef;
+    background: #faf8ff;
+    box-shadow: 0 2px 10px rgba(28, 20, 68, 0.08);
+    outline: none;
+}
+
+.dg-designer-open-item__text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.dg-designer-open-item__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Enough context to tell two templates called "Invoice" apart, quiet enough not
+   to compete with the name. */
+.dg-designer-open-item__meta {
+    font-size: 0.72rem;
+    color: #8b8ba7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dg-designer-open-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 520px;
+    margin: 0 auto 10px;
+    padding: 7px 12px;
+    background: #fff;
+    border: 1px solid #e2e0ef;
+    border-radius: 10px;
+}
+
+.dg-designer-open-search:focus-within {
+    border-color: #b49aef;
+    box-shadow: 0 0 0 3px rgba(180, 154, 239, 0.18);
+}
+
+.dg-designer-open-search__input {
+    flex: 1 1 auto;
+    border: none;
+    outline: none;
+    font-size: 0.9rem;
+    color: #2c2c38;
+    background: transparent;
+}
+
+.dg-designer-open-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 520px;
+    margin: 10px auto 0;
+    font-size: 0.78rem;
+    color: #8b8ba7;
+}
+
+.dg-designer-open-more {
+    border: 1px solid #e2e0ef;
+    background: #fff;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #7c3aed;
+    cursor: pointer;
+}
+
+.dg-designer-open-more:hover {
+    border-color: #b49aef;
+    background: #faf8ff;
+}
+
+/* The affordance only needs to be loud on the row you are actually on. */
+.dg-designer-open-item__go {
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #7c3aed;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.dg-designer-open-item:hover .dg-designer-open-item__go,
+.dg-designer-open-item:focus-visible .dg-designer-open-item__go {
+    opacity: 1;
 }
