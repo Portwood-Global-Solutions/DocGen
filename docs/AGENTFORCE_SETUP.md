@@ -62,7 +62,25 @@ code fences and do not add commentary. Instructions: {{Input.Instructions}}
 Insert `{{Input.Instructions}}` using **Insert Resource → Inputs → Instructions**
 rather than typing it, so it binds properly.
 
+**Pick the model deliberately — do not accept the default.** Prompt Builder
+pre-selects **GPT 5 Mini**, and that choice matters more than anything else on
+this page. Measured on a four-part edit instruction, repeated:
+
+| Model      | Edits applied | Refusals                                |
+| ---------- | ------------- | --------------------------------------- |
+| GPT 5.4    | 4/4 every run | none in 4 runs                          |
+| GPT 5 Mini | partial       | returned "I don't know." more than once |
+
+A refusal is not just a failed generation. Before DocGen guarded against it, a
+refusal was saved over the template — a 6,883-character document replaced by 13
+characters. DocGen now refuses to persist a non-document, but a small model still
+means wasted round trips and half-applied edits. Open **Model** in the right-hand
+panel and choose a frontier model: GPT 5.x, Claude Sonnet/Opus, or Gemini Pro are
+all available. Larger models consume more Einstein credits per call.
+
 Then **Save**, and **Activate**. An inactive template returns no content.
+(Changing the model on an already-active template needs **Save As → Save as a New
+Version**, then Activate — active versions are read-only.)
 
 > This template is deliberately thin. DocGen assembles the real prompt — your
 > object's fields and relationships, the merge-tag syntax, the PDF engine's CSS
