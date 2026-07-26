@@ -7961,13 +7961,35 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._ctxRange = null;
             }
             this._focusCtxSearch = true;
+            // FIT THE MENU TO THE SPACE THAT ACTUALLY EXISTS.
+            //
+            // `top` used to be the click point with no clamp and the menu had no
+            // max-height, so right-clicking low on the page opened a long menu
+            // straight off the bottom of the screen with its last items
+            // unreachable by any means — no scroll, nowhere to scroll to. The
+            // in-table menu is the worst case because it appends a whole extra
+            // group of row and column commands.
+            //
+            // The inline max-height is computed from the room below the click,
+            // so the menu always ends on-screen and scrolls internally for the
+            // rest. When there is barely any room below, it lifts instead of
+            // being squeezed into a sliver.
+            const MIN_H = 200;
+            const spaceBelow = window.innerHeight - e.clientY - 16;
+            const menuMax = Math.max(MIN_H, Math.min(Math.round(window.innerHeight * 0.62), spaceBelow));
+            let top = e.clientY - colRect.top + 4;
+            if (spaceBelow < MIN_H) {
+                top = Math.max(0, top - (MIN_H - spaceBelow));
+            }
             this.ctxMenu = {
                 inTable: !!(e.target && e.target.closest && e.target.closest('td, th')),
                 posStyle:
                     'left: ' +
                     Math.max(0, e.clientX - colRect.left) +
                     'px; top: ' +
-                    (e.clientY - colRect.top + 4) +
+                    top +
+                    'px; max-height: ' +
+                    menuMax +
                     'px;'
             };
         });

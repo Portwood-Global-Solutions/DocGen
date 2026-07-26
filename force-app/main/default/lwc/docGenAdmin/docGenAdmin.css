@@ -1782,6 +1782,17 @@
     border-radius: 10px;
     box-shadow: 0 10px 30px rgba(28, 20, 68, 0.18);
     padding: 4px;
+    /* SCROLLS. There was no max-height and no overflow at all, so a long menu
+       simply ran off the bottom of the screen and its last items could not be
+       reached by any means — the right-click menu inside a table is the worst
+       case, because the in-table branch appends a whole extra group of row and
+       column commands to an already long list.
+       62vh keeps the menu inside the viewport wherever it opens. */
+    max-height: 62vh;
+    overflow-y: auto;
+    /* Momentum scrolling on trackpads, and a scrollbar that does not overlay
+       the last item's click target. */
+    overscroll-behavior: contain;
 }
 
 .dg-slash-menu-head {
