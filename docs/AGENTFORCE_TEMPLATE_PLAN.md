@@ -115,22 +115,63 @@ them up, and a subscriber without Einstein installs normally with the feature
 dormant (button hidden). Verified by dry-run against `Portwood Dev`: 409
 components, 0 failures, no Einstein classes in the set.
 
-Whether a managed package _install_ fails the same way a source deploy does is
-**unmeasured** — 2GP Apex is compiled in the packaging org at version-create
-time, and how much the subscriber org re-validates on install is not
-established. Do not assume either way.
+### Distribution — MEASURED 2026-07-26, and it settles the question
 
-**DECIDED (Dave, 2026-07-26): extension package.** `DocGenEinsteinProvider`
-ships in a small separate "DocGen AI" package that only Einstein subscribers
-install. The base package never contains a `ConnectApi` reference, so the
-install question above never has to be answered for the base — which is the
-point. The base already degrades correctly via `Type.forName`, so **no base
-change is required**: the extension simply makes `Type.forName` start returning
-non-null.
+The install-vs-deploy question turned out to be the wrong question. The binding
+constraint is **the package BUILD**, and it was measured directly by creating a
+namespaced developer-edition scratch org from the Dev Hub — which is what a
+package build org is:
 
-That makes the `.forceignore` entries the permanent state for the base package,
-not a stopgap. When the extension is built, those two classes become its
-contents.
+```
+sf org create scratch -f config/project-scratch-def.json -v "Portwood Global - Production"
+→ ConnectApi.EinsteinLLM : "Type is not visible"   (compile failure)
+→ full force-app deploy WITH the .forceignore fence: 411/411, 0 failures
+```
+
+So:
+
+- **A package version containing `DocGenEinsteinProvider` cannot be built at
+  all.** It fails at Apex compile in the build org, long before install.
+- **An extension package does not help** — it would be built from the same
+  non-entitled Dev Hub and fail identically. The earlier extension-package plan
+  is therefore dead.
+- **The `.forceignore` fence is load-bearing for the whole product**, not just
+  this feature: leaving those two files in `force-app` breaks the next DocGen
+  release build outright.
+
+Beware a misleading signal: `ConnectApi.EinsteinLLM` **does** compile in
+`Portwood Dev`, `Portwood Global - Production` and the namespace org, because
+those orgs have Einstein enabled. Probing any of them suggests the class is
+packageable. It is not. Only a fresh org from the Dev Hub tells the truth.
+
+### The shipping shape: subscriber-supplied Apex
+
+DocGen already solves exactly this, and the pattern should simply be reused.
+`DocGenDataProvider` is a **`global interface`** implemented by a class the
+SUBSCRIBER writes in their own org, with `DocGenDataProviderExample.cls` as the
+documented reference (also `.forceignore`d). Resolution at
+`DocGenDataRetriever.cls:2149`:
+
+```apex
+Type providerType = Type.forName(providerClassName);              // subscriber namespace first
+if (providerType == null) {
+    providerType = Type.forName('portwoodglobal', providerClassName);
+}
+```
+
+| Ships where          | What                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| Base package         | Validator, edit guard, controller, factory, stub, `Draft_Body__c`, LWC — zero ConnectApi references |
+| Subscriber's own org | `DocGenEinsteinProvider.cls`, from the repo/docs                                                    |
+| Subscriber's own org | The `DocGen_HTML_Body` prompt template (unpackageable — platform-generated versionIdentifier)       |
+
+**One base change is required, and it is irreversible:** `DocGenAiProvider` must
+become `global`, because a subscriber's class cannot implement a `public`
+interface across namespaces. In a managed package a `global` signature can never
+change, so the shape must be right first time. Recommended additions while that
+is open: a namespace fallback in `DocGenAiProviderFactory` to match the house
+pattern, and two `DocGen_Settings__c` fields for the provider class name and the
+prompt template API name (both are hardcoded today).
 
 ## Why this fits DocGen specifically
 
