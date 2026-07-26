@@ -816,18 +816,37 @@
     flex-direction: row;
 }
 
+/*
+ * ONE CONTROL LANGUAGE for everything that floats in the page margin.
+ *
+ * The row/column handles were 18px, bordered, white, bold; the block handles
+ * were 22px, borderless, grey, regular. Two vocabularies inches apart in the
+ * same strip of margin, which is most of why the area felt fiddly: nothing read
+ * as belonging to the same set, and the smaller pair were harder to hit.
+ *
+ * Both are now 22x22 white chips with a hairline and a purple glyph, filling
+ * solid purple on hover. Same size, same radius, same weight — a reader learns
+ * the shape once. 22px because anything smaller in a narrow margin is a
+ * precision-aiming exercise.
+ */
 .dg-tbl-handle-btn {
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
     line-height: 1;
     padding: 0;
-    border: 1px solid #b49aef;
-    border-radius: 3px;
+    border: 1px solid #ddd2f7;
+    border-radius: 4px;
     background: #fff;
     color: #5b21b6;
     font-size: 12px;
-    font-weight: bold;
+    /* 600, not bold: at 12px in a 22px box, 700 turns a "+" into a blob. */
+    font-weight: 600;
     cursor: pointer;
+    box-shadow: 0 1px 2px rgba(40, 30, 80, 0.1);
+    transition:
+        background-color 0.09s ease,
+        border-color 0.09s ease,
+        color 0.09s ease;
 }
 
 .dg-tbl-handle-btn:hover {
@@ -856,14 +875,16 @@
     /* Was 1px: the four buttons formed one indivisible smudge that also collided
        with the table's own row gutter. */
     gap: 3px;
-    padding: 2px;
-    border-radius: 6px;
-    /* A chip so the group reads as a toolbar, not as marks on the page. */
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 1px 4px rgba(40, 30, 80, 0.16);
+    /* No container chip. Once each button became a white chip in its own right
+       (matching the table handles), a second chip around them was a box inside a
+       box — and every pixel of it was width reaching toward the text. Removing
+       it narrows the whole cluster and sharpens what is left. */
     /* The whole group is clickable furniture — say so before the pointer
        reaches an individual button. */
     cursor: pointer;
+    /* Never wider than its buttons. The chip is decoration; if it grows it
+       reaches over the content beside it and eats clicks meant for the page. */
+    width: max-content;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.12s cubic-bezier(0.2, 0.8, 0.3, 1);
@@ -888,24 +909,30 @@
        margin where the pointer arrives at an angle. */
     /* 22x22 — a real target. Anything under ~24px in a narrow margin is a
        precision-aiming exercise, which is what "hard to reach" meant. */
+    /* Identical to .dg-tbl-handle-btn — same size, hairline, radius and glyph
+       colour. Both float in the same margin; they should be the same object. */
     width: 22px;
     height: 22px;
     padding: 0;
-    border: none;
+    border: 1px solid #ddd2f7;
     border-radius: 4px;
-    background: #f4f2fb;
-    color: #4a5568;
+    background: #fff;
+    color: #5b21b6;
     font-size: 12px;
+    font-weight: 600;
     line-height: 1;
     cursor: pointer;
+    box-shadow: 0 1px 2px rgba(40, 30, 80, 0.1);
     transition:
         background-color 0.09s ease,
+        border-color 0.09s ease,
         color 0.09s ease;
 }
 
 .dg-blk-handle-btn:hover {
-    background: #ede7fd;
-    color: #5a21b6;
+    background: #7c3aed;
+    border-color: #7c3aed;
+    color: #fff;
 }
 
 /* Insert seam — a circular + on the boundary where the new column/row lands.

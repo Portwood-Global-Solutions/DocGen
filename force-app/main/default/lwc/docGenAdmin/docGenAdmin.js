@@ -8366,8 +8366,23 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this.blockHandle = null;
             return;
         }
+        // OFFSET BY THE HANDLE'S REAL WIDTH, not a constant that predates it.
+        //
+        // This was a flat 42px, chosen when the handle was three 13px buttons
+        // with 1px gaps (~43px). Enlarging them to 22px with 3px gaps and
+        // padding took it to ~76px — so anchoring at -42 pushed the last 34px
+        // of the handle INTO the block, where it sat on top of the first table
+        // cell and swallowed the clicks meant for the text. Making a control
+        // easier to hit made the thing behind it impossible to edit.
+        //
+        // A table gets extra clearance because its own row gutter already
+        // occupies that margin; without it the two sets of controls stack.
+        const zoom = this.designerZoom || 1;
+        const isTable = blk.tagName === 'TABLE';
+        const handleW = 72; // 3 buttons x 22 + 2 gaps x 3 (no container chip)
+        const clearance = handleW + 10 + (isTable ? 34 : 0);
         this.blockHandle = {
-            style: `left:${r.left - wrapRect.left - Math.round(42 * (this.designerZoom || 1))}px; top:${r.top - wrapRect.top + 1}px;`
+            style: `left:${r.left - wrapRect.left - Math.round(clearance * zoom)}px; top:${r.top - wrapRect.top + 1}px;`
         };
     }
     _handleBlockEl = null;
