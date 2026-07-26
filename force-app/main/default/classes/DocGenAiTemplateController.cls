@@ -91,6 +91,11 @@ public with sharing class DocGenAiTemplateController {
 
             // Stage the RAW output first, so a validator bug can never lose what
             // the model actually said, and the two can be compared afterwards.
+            // A refusal is not a document. Check BEFORE anything is written.
+            assertLooksLikeDocument(raw, previousBody);
+
+            // Stage the RAW output first, so a validator bug can never lose what
+            // the model actually said, and the two can be compared afterwards.
             stageDraftBody(templateId, raw);
 
             DocGenAiHtmlValidator.Result checked = DocGenAiHtmlValidator.sanitize(raw);
@@ -192,6 +197,7 @@ public with sharing class DocGenAiTemplateController {
                     'The model returned an empty response. Try again, or add more detail to your description.'
                 );
             }
+            assertLooksLikeDocument(raw, null);
             DocGenAiHtmlValidator.Result checked = DocGenAiHtmlValidator.sanitize(raw);
 
             GenerationResult out = new GenerationResult();
@@ -212,6 +218,48 @@ public with sharing class DocGenAiTemplateController {
             wrapped.setMessage(e.getMessage());
             throw wrapped;
         }
+    }
+
+    /**
+     * Refuse to persist anything that is not a document.
+     *
+     * Einstein INTERMITTENTLY answers a perfectly good prompt with a refusal —
+     * literally "I don't know." — and the old code saved it, replacing a 6,883
+     * character template with 13 characters. Measured 2026-07-26: the same
+     * prompt that produced this failure succeeded on a later attempt, so it is
+     * model non-determinism, not a malformed request. Nothing downstream can
+     * recover from it either: the validator happily sanitizes plain prose, and
+     * the edit guard reports every merge tag as "lost" — technically true and
+     * completely unhelpful.
+     *
+     * So the check belongs here, before the staging field, before the
+     * ContentVersion, before anything the author would have to undo.
+     *
+     * The test is for MARKUP, not length. A refusal is prose; a template is
+     * markup, however short. An earlier version also imposed a 200-character
+     * floor and rejected perfectly valid small templates — the length of a
+     * document is not evidence of anything.
+     */
+    private static void assertLooksLikeDocument(String raw, String previousBody) {
+        String probe = raw == null ? '' : raw.trim();
+        Boolean looksLikeMarkup =
+            probe.containsIgnoreCase('<html') ||
+            probe.containsIgnoreCase('<!doctype') ||
+            probe.containsIgnoreCase('<body') ||
+            probe.containsIgnoreCase('<table') ||
+            probe.containsIgnoreCase('<div');
+        if (looksLikeMarkup) {
+            return;
+        }
+        String quoted = probe.length() > 200 ? probe.substring(0, 200) + '…' : probe;
+        throw new AiGenerationException(
+            (String.isNotBlank(previousBody)
+                    ? 'Agentforce did not return a document, so your template has NOT been changed. '
+                    : 'Agentforce did not return a document, so nothing was saved. ') +
+                'It replied: "' +
+                quoted +
+                '". This happens intermittently even with a good instruction — try again, and if it repeats, make the instruction more specific.'
+        );
     }
 
     /** Raw model output onto the staging field. Never fatal — this is an audit trail. */

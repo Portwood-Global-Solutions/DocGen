@@ -118,16 +118,24 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
 
     /**
      * Prefer the DocGen setting so an admin can rename the template without
-     * editing Apex; fall back to the constant. Wrapped because the setting field
-     * only exists from the DocGen release that introduced it.
+     * editing Apex; fall back to the constant.
+     *
+     * Reads the packaged CUSTOM SETTING directly rather than calling
+     * DocGenAiProviderFactory. That class is `public`, so it is NOT visible
+     * across a namespace boundary — a subscriber class calling it fails to
+     * compile with "Type is not visible: portwoodglobal.DocGenAiProviderFactory".
+     * Measured against a real managed install, 2026-07-26. The custom setting is
+     * Public and IS readable, which is why this route works.
      */
     private String resolveTemplateName() {
         try {
-            String configured = DocGenAiProviderFactory.configuredPromptTemplate();
-            // Managed-package installs use:
-            //   portwoodglobal.DocGenAiProviderFactory.configuredPromptTemplate()
+            // Managed-package installs use the namespaced names:
+            //   portwoodglobal__DocGen_Settings__c s = portwoodglobal__DocGen_Settings__c.getOrgDefaults();
+            //   String configured = s == null ? null : s.portwoodglobal__AI_Prompt_Template__c;
+            DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+            String configured = s == null ? null : s.AI_Prompt_Template__c;
             if (String.isNotBlank(configured)) {
-                return configured;
+                return configured.trim();
             }
         } catch (Exception e) {
             // Older DocGen, or the setting is unreadable — the constant is fine.

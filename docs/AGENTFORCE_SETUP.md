@@ -87,10 +87,19 @@ Or paste it into a new Apex class in Setup → Apex Classes.
 places (both are marked with a comment in the file):
 
 ```apex
+// 1. the interface
 public with sharing class DocGenEinsteinProvider implements portwoodglobal.DocGenAiProvider {
-    ...
-    String configured = portwoodglobal.DocGenAiProviderFactory.configuredPromptTemplate();
+
+// 2. the settings lookup inside resolveTemplateName()
+portwoodglobal__DocGen_Settings__c s = portwoodglobal__DocGen_Settings__c.getOrgDefaults();
+String configured = s == null ? null : s.portwoodglobal__AI_Prompt_Template__c;
 ```
+
+Note it reads the custom setting directly. `DocGenAiProviderFactory` is not
+visible across a namespace boundary — calling it fails to compile with
+`Type is not visible: portwoodglobal.DocGenAiProviderFactory`. The interface and
+the custom setting are the supported surface; everything else in DocGen's Apex is
+internal.
 
 ## Step 3 — Point DocGen at it (optional)
 

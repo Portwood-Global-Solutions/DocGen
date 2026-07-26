@@ -261,6 +261,65 @@ private class DocGenAiTemplateControllerTest {
     }
 
     @isTest
+    static void aRefusalNeverOverwritesTheTemplate() {
+        // Einstein intermittently answers a good prompt with "I don't know."
+        // The old code saved it, replacing a 6,883-character template with 13.
+        // Nothing downstream can recover from that, so it must be refused here.
+        DocGen_Template__c t = makeTemplate();
+        String previous = '<!DOCTYPE html><html><body><h1>{Account.Name}</h1><p>{Name}</p></body></html>';
+        DocGenAiTemplateController.generateTemplateBody(t.Id, 'seed', null); // establish a body
+        String bodyBefore = DocGenController.getHtmlTemplateBody(t.Id);
+
+        DocGenAiProviderFactory.setProvider(new FakeProvider('I don\'t know.'));
+
+        Test.startTest();
+        Boolean threw = false;
+        try {
+            DocGenAiTemplateController.generateTemplateBody(t.Id, 'make the header green', previous);
+        } catch (Exception e) {
+            threw = true;
+            System.assert(
+                e.getMessage().containsIgnoreCase('has NOT been changed'),
+                'the author must be told the template is intact: ' + e.getMessage()
+            );
+            System.assert(e.getMessage().contains('I don\'t know.'), 'quote what came back: ' + e.getMessage());
+        }
+        Test.stopTest();
+
+        System.assert(threw, 'a refusal must not be treated as a document');
+        System.assertEquals(
+            bodyBefore,
+            DocGenController.getHtmlTemplateBody(t.Id),
+            'THE TEMPLATE MUST BE UNTOUCHED — this is the whole point'
+        );
+    }
+
+    @isTest
+    static void shortProseIsRefusedButRealHtmlIsAccepted() {
+        DocGen_Template__c t = makeTemplate();
+        DocGenAiProviderFactory.setProvider(new FakeProvider('Sure! Here is a summary of what I would do.'));
+        Integer caught = 0;
+        Test.startTest();
+        try {
+            DocGenAiTemplateController.generateBodyPreview('x');
+        } catch (Exception e) {
+            caught++;
+            System.assert(e.getMessage().containsIgnoreCase('nothing was saved'), e.getMessage());
+        }
+        // A real document of adequate length passes.
+        String realDoc =
+            '<!DOCTYPE html><html><head><style>@page{size:Letter portrait;}</style></head><body>' +
+            '<table><tr><td>{Name}</td></tr></table><p>' +
+            'x'.repeat(200) +
+            '</p></body></html>';
+        DocGenAiProviderFactory.setProvider(new FakeProvider(realDoc));
+        DocGenAiTemplateController.GenerationResult ok = DocGenAiTemplateController.generateBodyPreview('x');
+        Test.stopTest();
+        System.assertEquals(1, caught, 'prose must be refused');
+        System.assert(ok.html.contains('{Name}'), 'real HTML must pass through');
+    }
+
+    @isTest
     static void generatingFreshDoesNotRunTheEditGuard() {
         DocGen_Template__c t = makeTemplate();
         Test.startTest();

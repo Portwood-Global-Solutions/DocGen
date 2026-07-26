@@ -5417,8 +5417,9 @@
                         label={agentforceDescriptionLabel}
                         value={aiDocDescription}
                         onchange={handleAiDocDescriptionChange}
+                        oninput={handleAiDocDescriptionChange}
                         placeholder={agentforceDescriptionPlaceholder}
-                        class="slds-var-m-bottom_medium"
+                        class="dg-af-desc slds-var-m-bottom_medium"
                     ></lightning-textarea>
 
                     <template if:true={agentforceNeedsDiscardConfirm}>

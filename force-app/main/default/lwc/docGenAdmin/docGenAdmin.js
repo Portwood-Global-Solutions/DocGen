@@ -2955,7 +2955,26 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         try {
             // buildAiPrompt owns BOTH the create and the edit framing, so the
             // in-org path, the copy-paste path and the edit path cannot drift.
+            //
+            // Read the box directly rather than trusting aiDocDescription.
+            // lightning-textarea fires `change` on BLUR, so clicking straight
+            // from the textarea to Apply Edit could submit a stale (or empty)
+            // instruction — the model then receives the template with the
+            // placeholder "<<DESCRIBE THE CHANGE YOU WANT>>" and hands it
+            // straight back, which reads as "it says it updated but nothing
+            // changed". Measured 2026-07-26.
+            const descBox = this.template.querySelector('.dg-af-desc');
+            if (descBox && typeof descBox.value === 'string') {
+                this.aiDocDescription = descBox.value;
+            }
             const description = (this.aiDocDescription || '').trim();
+            if (!description) {
+                throw new Error(
+                    this.isAgentforceEditMode
+                        ? 'Describe the change you want before applying an edit.'
+                        : 'Describe the document you want before generating.'
+                );
+            }
             const editing = this.isAgentforceEditMode;
             const currentBody = editing ? this._currentDesignerBody : '';
             if (editing && !currentBody.trim()) {
@@ -2992,16 +3011,37 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     f.action === 'warning' ? 'slds-theme_warning' : f.action === 'repaired' ? 'slds-theme_success' : ''
             }));
 
-            // Same handoff the version-restore path uses, so the canvas picks
-            // the body up exactly as it would any other load.
             const html = res.html || '';
-            if (this.showHtmlBodyVisual) {
+            const wasVisual = this.showHtmlBodyVisual;
+            if (wasVisual) {
                 this._exitVisualMode();
             }
             this._syncHtmlBodyEditorDom(html);
             this._lastUploadedHtmlText = html;
             this.htmlEditorDirty = true;
-            this._enterVisualMode(html);
+            if (wasVisual) {
+                // Re-enter on a LATER tick. _enterVisualMode only queues the
+                // canvas write; renderedCallback flushes it. Toggling the mode
+                // off and on inside one tick coalesces into no re-render at
+                // all, so the flush never happens and the canvas stays painted
+                // with the previous document — the source textarea updates, the
+                // canvas does not, and the edit looks like it did nothing.
+                // eslint-disable-next-line @lwc/lwc/no-async-operation
+                setTimeout(() => this._enterVisualMode(html), 0);
+            } else {
+                this._enterVisualMode(html);
+            }
+
+            // Close on a clean result. Leaving the modal up over the canvas is
+            // what made a working edit look like a no-op: the one thing the
+            // author needs to see is the document behind it.
+            this.aiDocDescription = '';
+            if (descBox) {
+                descBox.value = '';
+            }
+            if (!res.warningCount) {
+                this.isAgentforcePanelOpen = false;
+            }
 
             this.dispatchEvent(
                 new ShowToastEvent({
