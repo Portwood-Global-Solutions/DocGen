@@ -333,6 +333,54 @@ private class DocGenAiTemplateControllerTest {
     }
 
     @isTest
+    static void providerClassNameComesFromSettings() {
+        // An admin can point DocGen at their own class without editing Apex.
+        System.assertEquals(
+            'DocGenEinsteinProvider',
+            DocGenAiProviderFactory.configuredProviderClass(),
+            'blank settings fall back to the documented default'
+        );
+        System.assertEquals(
+            'DocGen_HTML_Body',
+            DocGenAiProviderFactory.configuredPromptTemplate(),
+            'blank settings fall back to the documented default'
+        );
+
+        DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
+        s.AI_Provider_Class__c = '  MyOwnProvider  ';
+        s.AI_Prompt_Template__c = 'My_Template';
+        upsert s;
+
+        Test.startTest();
+        System.assertEquals('MyOwnProvider', DocGenAiProviderFactory.configuredProviderClass(), 'trimmed and honoured');
+        System.assertEquals('My_Template', DocGenAiProviderFactory.configuredPromptTemplate(), 'honoured');
+        Test.stopTest();
+    }
+
+    @isTest
+    static void aClassThatDoesNotImplementTheInterfaceSaysSo() {
+        // Named but wrong. Reporting "AI unavailable" would send an admin
+        // hunting a missing entitlement that is not missing.
+        DocGenAiProvider p = new DocGenAiProviderFactory.DocGenUnavailableProvider(
+            'The class "Foo" does not implement the DocGenAiProvider interface, so DocGen cannot use it.'
+        );
+        System.assertEquals(false, p.isAvailable());
+        Test.startTest();
+        Boolean threw = false;
+        try {
+            p.generateHtml('x');
+        } catch (DocGenAiProviderFactory.DocGenAiUnavailableException e) {
+            threw = true;
+            System.assert(
+                e.getMessage().contains('does not implement'),
+                'the real reason must reach the admin: ' + e.getMessage()
+            );
+        }
+        Test.stopTest();
+        System.assert(threw);
+    }
+
+    @isTest
     static void unavailableProviderIsHonestRatherThanBroken() {
         // What an org with no Einstein classes gets. It must report false and
         // give an actionable message, never blow up on the availability probe.

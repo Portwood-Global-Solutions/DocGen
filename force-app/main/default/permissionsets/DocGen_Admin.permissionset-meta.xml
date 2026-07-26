@@ -303,6 +303,17 @@
         <readable>true</readable>
     </fieldPermissions>
     <!-- DocGen Settings (hierarchy custom setting) fields -->
+    <!-- AI authoring: which provider class and prompt template to use -->
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Settings__c.AI_Prompt_Template__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Settings__c.AI_Provider_Class__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Settings__c.Company_Name__c</field>

@@ -1,42 +1,56 @@
 /**
- * Einstein / Prompt Builder provider.
+ * REFERENCE IMPLEMENTATION — DEPLOY THIS INTO YOUR OWN ORG.
  *
- * Calls a Flex prompt template through ConnectApi — NOT an HTTP callout, which
- * is what keeps DocGen's "no external services" claim true. The template is a
- * thin carrier: DocGen assembles the real authoring prompt (schema + tag syntax
- * + Flying Saucer constraints) in the Designer and passes it as one input.
+ * This class is deliberately NOT part of the Portwood DocGen package, and cannot
+ * be: it references `ConnectApi.EinsteinLLM`, which is not a visible Apex type in
+ * an org without the Einstein entitlement — including the org Salesforce spins up
+ * to build the package. A package version containing this file fails to compile
+ * at BUILD time, long before anyone installs it. Measured, not assumed. It is in
+ * `.forceignore` for exactly that reason; removing it from there will break the
+ * next DocGen release build.
  *
- * SETUP REQUIRED IN THE SUBSCRIBER ORG (this is org-owned, not packaged — a
- * GenAiPromptTemplate cannot be hand-authored into a package because its
- * versionIdentifier is platform-generated):
- *   Setup > Einstein > Prompt Builder > New Prompt Template
- *     Type:  Flex
- *     API name: DocGen_HTML_Body
- *     Input: Free Text, API name "Instructions", required
- *     Prompt: any framing text, then insert the Instructions resource
- *     Save, then Activate.
+ * So it ships as source you deploy yourself:
  *
- * MEASURED QUIRKS (talentstacker-buildalong, 2026-07-26):
- *  - additionalConfig.applicationName is REQUIRED. Leave additionalConfig null
+ *   sf project deploy start -o <your-org> \
+ *     -d force-app/main/default/classes/DocGenEinsteinProvider.cls
+ *
+ * Full instructions, including the prompt template you must create, are in
+ * docs/AGENTFORCE_SETUP.md.
+ *
+ * NAMESPACE NOTE
+ * --------------
+ * When DocGen is installed as a managed package, its Apex lives under the
+ * `portwoodglobal` namespace, so the interface is referenced with that prefix
+ * below. If you are working against unmanaged DocGen source (the development
+ * repo), drop the prefix — see the commented alternative on the class line.
+ *
+ * MEASURED QUIRKS (2026-07-26)
+ * ----------------------------
+ *  - `additionalConfig.applicationName` is REQUIRED. Leave additionalConfig null
  *    and the call fails with the useless "Failed to generate Einstein LLM
- *    generations response" and a null cause. 'PromptBuilderPreview' is accepted;
- *    arbitrary names are rejected with "Application Name is a required field
- *    providing existing registered ai applicaton".
- *  - Limits.getCallouts() stays at 0 — this does not consume the callout limit.
- *  - Wall clock ~13s for a ~5KB body. The caller must budget for a slow call.
+ *    generations response", a null cause, and "(System Code)" as the entire
+ *    stack trace. 'PromptBuilderPreview' is accepted; most other names are
+ *    rejected with "Application Name is a required field providing existing
+ *    registered ai applicaton".
+ *  - This is NOT an HTTP callout — Limits.getCallouts() stays 0 — which is what
+ *    keeps DocGen's "no external services" guarantee true.
+ *  - Budget 10-25 seconds for a 5KB document.
  */
 public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
-    /** Flex prompt template the subscriber creates. */
-    public static final String TEMPLATE_DEV_NAME = 'DocGen_HTML_Body';
+    // Managed-package installs use:
+    //   implements portwoodglobal.DocGenAiProvider
 
-    /** Free Text input on that template. Both 'Input:X' and 'Input.X' resolve. */
+    /** Free Text input on the Flex template. Both 'Input:X' and 'Input.X' work. */
     private static final String INPUT_KEY = 'Input:Instructions';
 
     /**
      * Must name an AI application the org already has registered. Empty string
-     * is also accepted by the platform, but the named value is clearer in logs.
+     * is also accepted by the platform, but a named value is clearer in logs.
      */
     private static final String APPLICATION_NAME = 'PromptBuilderPreview';
+
+    /** Fallback when the DocGen setting is blank and for unmanaged source. */
+    private static final String FALLBACK_TEMPLATE = 'DocGen_HTML_Body';
 
     public String getName() {
         return 'Einstein';
@@ -44,12 +58,11 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
 
     /**
      * There is no cheap capability probe for Prompt Builder — no SObject to
-     * query (GenAiPromptTemplate is metadata-only), no describe, and the only
-     * honest test is a generation, which costs ~13s and real credits. So this
-     * reports availability of the CODE path (guaranteed, or the class would not
-     * compile) and lets generateHtml surface an actionable message on failure.
-     * The Designer treats a failed generation as "AI unavailable" and points the
-     * author back at Copy AI Prompt.
+     * query (GenAiPromptTemplate is metadata-only) and no describe. The only
+     * honest test is a generation, which costs real time and credits. So report
+     * that the code path exists and let generateHtml surface an actionable
+     * message. Must never throw: DocGen calls this to decide whether to show
+     * the button.
      */
     public Boolean isAvailable() {
         return !Test.isRunningTest();
@@ -59,6 +72,8 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
         if (String.isBlank(prompt)) {
             throw new DocGenAiException('Nothing to send — the authoring prompt was empty.');
         }
+        String templateName = resolveTemplateName();
+
         ConnectApi.EinsteinPromptTemplateGenerationsInput input = new ConnectApi.EinsteinPromptTemplateGenerationsInput();
         input.isPreview = false;
 
@@ -74,31 +89,50 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
 
         try {
             ConnectApi.EinsteinPromptTemplateGenerationsRepresentation response = ConnectApi.EinsteinLLM.generateMessagesForPromptTemplate(
-                TEMPLATE_DEV_NAME,
+                templateName,
                 input
             );
             if (response == null || response.generations == null || response.generations.isEmpty()) {
                 throw new DocGenAiException(
-                    'Einstein returned no content. Check that the ' +
-                        TEMPLATE_DEV_NAME +
-                        ' prompt template has an active version.'
+                    'Einstein returned no content. Check that the "' +
+                        templateName +
+                        '" prompt template has an ACTIVE version.'
                 );
             }
             return response.generations[0].text;
         } catch (DocGenAiException e) {
             throw e;
         } catch (Exception e) {
-            // ConnectApiException messages here are frequently generic, so say
-            // what the author should go look at rather than echoing it alone.
+            // ConnectApiException messages here are frequently generic, so name
+            // what the admin should go and look at rather than echoing it alone.
             throw new DocGenAiException(
                 'Einstein could not generate the template: ' +
                     e.getMessage() +
                     ' — confirm the "' +
-                    TEMPLATE_DEV_NAME +
-                    '" prompt template exists and is Activated, and that you have an Einstein Generative AI permission set.',
+                    templateName +
+                    '" prompt template exists and is Activated, and that you hold an Einstein Generative AI permission set.',
                 e
             );
         }
+    }
+
+    /**
+     * Prefer the DocGen setting so an admin can rename the template without
+     * editing Apex; fall back to the constant. Wrapped because the setting field
+     * only exists from the DocGen release that introduced it.
+     */
+    private String resolveTemplateName() {
+        try {
+            String configured = DocGenAiProviderFactory.configuredPromptTemplate();
+            // Managed-package installs use:
+            //   portwoodglobal.DocGenAiProviderFactory.configuredPromptTemplate()
+            if (String.isNotBlank(configured)) {
+                return configured;
+            }
+        } catch (Exception e) {
+            // Older DocGen, or the setting is unreadable — the constant is fine.
+        }
+        return FALLBACK_TEMPLATE;
     }
 
     public class DocGenAiException extends Exception {
