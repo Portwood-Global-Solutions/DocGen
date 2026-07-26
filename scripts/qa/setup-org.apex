@@ -113,7 +113,19 @@ if (vers.isEmpty()) {
     );
     insert cv;
     cv = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
-    insert new DocGen_Template_Version__c(Template__c = tpl.Id, Content_Version_Id__c = cv.Id, Is_Active__c = true);
+    // Type__c MUST be set explicitly, even though the template already says HTML.
+    // Word is default=true on this picklist, so omitting it does not leave it
+    // blank — the platform stamps Word. DocGenController then does
+    // template.Type__c = version.Type__c, and the editor tries to open an HTML
+    // body as a DOCX archive and shows an empty canvas. Generation still works
+    // (it reads the template's own type), so the template looks fine right up
+    // until someone opens it.
+    insert new DocGen_Template_Version__c(
+        Template__c = tpl.Id,
+        Content_Version_Id__c = cv.Id,
+        Type__c = 'HTML',
+        Is_Active__c = true
+    );
 }
 System.debug('SETUP template: ' + tpl.Id + ' (' + VERIFY_NAME + ')');
 System.debug('SETUP complete');

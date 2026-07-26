@@ -222,9 +222,22 @@ for (Object o : specs) {
     if (hh != null && hh != '') ver.${ns}Header_Html__c = hh;
     if (fh != null && fh != '') ver.${ns}Footer_Html__c = fh;
     if (cm != null && cm != '') ver.${ns}Custom_Margins__c = cm;
-    // Version Type__c is a restricted picklist (Word / PowerPoint only); leave blank for HTML.
+    // ALWAYS set the version type, INCLUDING HTML.
+    //
+    // This previously said "restricted picklist (Word / PowerPoint only); leave
+    // blank for HTML" and skipped it. Both halves were wrong. The picklist does
+    // have an HTML value, and — the part that actually bit — Word is marked
+    // default=true on the field, so leaving it blank does not leave it blank:
+    // the platform stamps Word.
+    //
+    // DocGenController then does template.Type__c = version.Type__c, so every
+    // HTML template in the demo org was typed as Word. It still GENERATED
+    // correctly (generation reads the template's own type), which is why this
+    // survived a check that only looked at output — but the editor reads the
+    // VERSION type, tried to open an HTML body as a DOCX archive, and showed
+    // nothing. Every HTML demo template opened blank.
     String tp = (String) s.get('type');
-    if (tp == 'Word' || tp == 'PowerPoint' || tp == 'Excel') ver.${ns}Type__c = tp;
+    if (tp != null && tp != '') ver.${ns}Type__c = tp;
     insert ver;
     created++;
     System.debug('DEMO-INSTALL CREATED ' + key + ' -> tpl=' + tpl.Id + ' ver=' + ver.Id + ' test=' + testId);
