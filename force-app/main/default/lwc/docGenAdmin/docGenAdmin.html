@@ -2712,7 +2712,11 @@
                                                 </template>
                                             </select>
                                             <span class="dg-fmt-sep"></span>
-                                            <span class="dg-fmt-label" title="Table borders">Borders</span>
+                                            <span
+                                                class="dg-fmt-label"
+                                                title="Table borders — every control here applies to the selected cells, or to the whole table when nothing is selected"
+                                                >Borders</span
+                                            >
                                             <button
                                                 class="dg-fmt-btn dg-fmt-btn_word"
                                                 data-taction="bordersAll"
@@ -2749,9 +2753,17 @@
                                             >
                                                 None
                                             </button>
+                                            <!--
+                                              Both border controls are SCOPE-AWARE and always were:
+                                              with cells selected they restyle just those cells, with
+                                              only a caret they restyle the whole table. The tooltips
+                                              used to promise "the table under the cursor" in both
+                                              cases, so the selected-cells behaviour read as the
+                                              control ignoring you rather than doing something useful.
+                                            -->
                                             <select
                                                 class="dg-page-select"
-                                                title="Border thickness — restyles the table under the cursor"
+                                                title="Border thickness — applies to the selected cells, or to the whole table when nothing is selected"
                                                 onmousedown={handleColorPickMouseDown}
                                                 onchange={handleBorderWidthChange}
                                             >
@@ -2764,7 +2776,7 @@
                                             <input
                                                 type="color"
                                                 class="dg-fmt-colorpick"
-                                                title="Border color — restyles the table under the cursor"
+                                                title="Border color — applies to the selected cells, or to the whole table when nothing is selected"
                                                 value={borderColorValue}
                                                 onmousedown={handleColorPickMouseDown}
                                                 onchange={handleBorderColorChange}
