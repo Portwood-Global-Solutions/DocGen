@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.44.0 — E-signature certificate unification, multi-signer verification fix, Designer panel close fix",
-      "versionNumber": "3.44.0.NEXT",
+      "versionName": "v3.45.0 \u2014 Visual Designer editing overhaul, running-header render fixes, silent-degradation logging, QA harness",
+      "versionNumber": "3.45.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.44 unifies the e-signature Certificate of Completion across both signing paths — every completed document now carries the same ESIGN/UETA attestation and a link to the verify page. It fixes multi-signer verification so uploading a signed PDF to the verify page returns every signer, not just the last one. And it resolves a Designer issue where the slide-in panels (Insert, Tags, Images, Query, Versions, Header/Footer, Watermark) could sit behind the Salesforce tab bar: panels now stay clear of the chrome, keep their close button pinned, and close with Escape. 100% native Salesforce — no external services or callouts. Free for all users.",
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.45 is a large quality release for the template Designer: edit a merge tag straight from its menu, format a whole block of table cells at once, set table border thickness and colour, and see a preview of what you are dragging before you drop it. Table controls are easier to find and stay put long enough to click. Documents with a running header now keep it clear of the page content. Generation problems that used to pass silently \u2014 a logo that could not be loaded, a chart that came back empty \u2014 are now recorded in the DocGen Error Log so they can be found and fixed. 100% native Salesforce \u2014 no external services or callouts. Free for all users.",
       "ancestorVersion": "3.43.0"
     }
   ],
