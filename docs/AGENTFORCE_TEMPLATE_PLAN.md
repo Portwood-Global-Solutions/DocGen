@@ -104,6 +104,30 @@ in every org without Einstein. `DocGenAiProviderFactory` therefore resolves it
 with `Type.forName('DocGenEinsteinProvider')` and falls back to an honest
 `DocGenUnavailableProvider`. This is a packaging constraint, not a style choice.
 
+Worse than it first looks: **deploys are atomic**, so the one bad class took all
+411 components down with it (409/411, full rollback). `--ignore-errors` is not a
+workaround — it made things worse (302/411), because one uncompilable class
+poisons the whole Apex compile unit. The only clean answer is for the file not
+to be in the deploy set.
+
+**So the two Einstein files are in `.forceignore`.** A package build cannot pick
+them up, and a subscriber without Einstein installs normally with the feature
+dormant (button hidden). Verified by dry-run against `Portwood Dev`: 409
+components, 0 failures, no Einstein classes in the set.
+
+**Still unmeasured, and it gates shipping the feature live:** whether a managed
+package _install_ behaves like a source deploy here. 2GP Apex is compiled in the
+packaging org at version-create time, and how much the subscriber org
+re-validates on install is not established. Do not assume either way. Two routes
+when the feature graduates:
+
+1. Measure it — throwaway package version with the Einstein class included,
+   installed into a non-Einstein org.
+2. Ship `DocGenEinsteinProvider` in a small **extension package** that only
+   Einstein subscribers install. The base package already degrades correctly, so
+   this needs no base change, and it keeps the base install surface free of an
+   entitlement it does not need. This is the likely end state either way.
+
 ## Why this fits DocGen specifically
 
 - **No external callout.** Einstein is reached through `ConnectApi`, not `Http`.
