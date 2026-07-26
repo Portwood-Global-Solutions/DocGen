@@ -123,7 +123,26 @@ ContentVersion cv = new ContentVersion(
 );
 insert cv;
 cv = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
-insert new DocGen_Template_Version__c(Template__c = t.Id, Content_Version_Id__c = cv.Id, Is_Active__c = true);
+// Type__c AND a docgen_html_body_ ContentVersion — the two things every
+// programmatic template creation has to do and that nothing reminds you of.
+// Word is the picklist DEFAULT on the version, so omitting it mistypes the
+// template; and the visual Designer reads a CV titled
+// docgen_html_body_<templateId>, not Content_Version_Id__c, so without it the
+// template opens to an empty canvas. This seed was caught by the very
+// template-integrity suite added to catch exactly this — the fixture had the
+// same defect as the product tooling it was written to police.
+insert new DocGen_Template_Version__c(
+    Template__c = t.Id,
+    Content_Version_Id__c = cv.Id,
+    Type__c = 'HTML',
+    Is_Active__c = true
+);
+insert new ContentVersion(
+    Title = 'docgen_html_body_' + t.Id + '_' + Datetime.now().getTime(),
+    PathOnClient = 'body.html',
+    VersionData = Blob.valueOf(body),
+    FirstPublishLocationId = t.Id
+);
 
 System.debug('ACCT=' + a.Id);
 System.debug('TPL=' + t.Id);
