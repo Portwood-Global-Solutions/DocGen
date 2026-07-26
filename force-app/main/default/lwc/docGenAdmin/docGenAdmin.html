@@ -2712,48 +2712,58 @@
                                                 </template>
                                             </select>
                                             <span class="dg-fmt-sep"></span>
-                                            <span
-                                                class="dg-fmt-label"
-                                                title="Table borders — every control here applies to the selected cells, or to the whole table when nothing is selected"
-                                                >Borders</span
-                                            >
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                data-taction="bordersAll"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleTableAction}
-                                                title="Full grid — every cell outlined"
-                                            >
-                                                All
-                                            </button>
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                data-taction="bordersOutline"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleTableAction}
-                                                title="Outline around the table only"
-                                            >
-                                                Outline
-                                            </button>
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                data-taction="bordersRows"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleTableAction}
-                                                title="Horizontal row lines only"
-                                            >
-                                                Rows
-                                            </button>
-                                            <button
-                                                class="dg-fmt-btn dg-fmt-btn_word"
-                                                data-taction="bordersNone"
-                                                onmousedown={handleFmtMouseDown}
-                                                onclick={handleTableAction}
-                                                title="No borders"
-                                            >
-                                                None
-                                            </button>
                                             <!--
+                                              ONE GROUP, never split. .dg-format-bar is a flat
+                                              flex-wrap list, so it used to break wherever it ran
+                                              out of width — which put the "Borders" label at the
+                                              end of one row and its own buttons at the start of
+                                              the next. The label pointed at nothing and the
+                                              buttons belonged to nothing, and the whole bar
+                                              reshuffled as the window resized.
+                                            -->
+                                            <div class="dg-fmt-group">
+                                                <span
+                                                    class="dg-fmt-label"
+                                                    title="Table borders — every control here applies to the selected cells, or to the whole table when nothing is selected"
+                                                    >Borders</span
+                                                >
+                                                <button
+                                                    class="dg-fmt-btn dg-fmt-btn_word"
+                                                    data-taction="bordersAll"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleTableAction}
+                                                    title="Full grid — every cell outlined"
+                                                >
+                                                    All
+                                                </button>
+                                                <button
+                                                    class="dg-fmt-btn dg-fmt-btn_word"
+                                                    data-taction="bordersOutline"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleTableAction}
+                                                    title="Outline around the table only"
+                                                >
+                                                    Outline
+                                                </button>
+                                                <button
+                                                    class="dg-fmt-btn dg-fmt-btn_word"
+                                                    data-taction="bordersRows"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleTableAction}
+                                                    title="Horizontal row lines only"
+                                                >
+                                                    Rows
+                                                </button>
+                                                <button
+                                                    class="dg-fmt-btn dg-fmt-btn_word"
+                                                    data-taction="bordersNone"
+                                                    onmousedown={handleFmtMouseDown}
+                                                    onclick={handleTableAction}
+                                                    title="No borders"
+                                                >
+                                                    None
+                                                </button>
+                                                <!--
                                               Both border controls are SCOPE-AWARE and always were:
                                               with cells selected they restyle just those cells, with
                                               only a caret they restyle the whole table. The tooltips
@@ -2761,52 +2771,60 @@
                                               cases, so the selected-cells behaviour read as the
                                               control ignoring you rather than doing something useful.
                                             -->
-                                            <select
-                                                class="dg-page-select"
-                                                title="Border thickness — applies to the selected cells, or to the whole table when nothing is selected"
-                                                onmousedown={handleColorPickMouseDown}
-                                                onchange={handleBorderWidthChange}
-                                            >
-                                                <template for:each={borderWidthOptions} for:item="opt">
-                                                    <option key={opt.value} value={opt.value} selected={opt.selected}>
-                                                        {opt.label}
-                                                    </option>
+                                                <select
+                                                    class="dg-page-select"
+                                                    title="Border thickness — applies to the selected cells, or to the whole table when nothing is selected"
+                                                    onmousedown={handleColorPickMouseDown}
+                                                    onchange={handleBorderWidthChange}
+                                                >
+                                                    <template for:each={borderWidthOptions} for:item="opt">
+                                                        <option
+                                                            key={opt.value}
+                                                            value={opt.value}
+                                                            selected={opt.selected}
+                                                        >
+                                                            {opt.label}
+                                                        </option>
+                                                    </template>
+                                                </select>
+                                                <input
+                                                    type="color"
+                                                    class="dg-fmt-colorpick"
+                                                    title="Border color — applies to the selected cells, or to the whole table when nothing is selected"
+                                                    value={borderColorValue}
+                                                    onmousedown={handleColorPickMouseDown}
+                                                    oninput={handleBorderColorChange}
+                                                    onchange={handleBorderColorChange}
+                                                />
+                                            </div>
+                                            <div class="dg-fmt-group">
+                                                <span
+                                                    class="dg-fmt-label"
+                                                    title="Fill the current cell — or, outside a table, the paragraph/panel the cursor is in"
+                                                    >Fill</span
+                                                >
+                                                <template for:each={highlightSwatches} for:item="sw">
+                                                    <button
+                                                        key={sw.key}
+                                                        class="dg-fmt-swatch"
+                                                        style={sw.style}
+                                                        data-taction="cellFill"
+                                                        data-value={sw.value}
+                                                        onmousedown={handleFmtMouseDown}
+                                                        onclick={handleTableAction}
+                                                        title={sw.title}
+                                                    ></button>
                                                 </template>
-                                            </select>
-                                            <input
-                                                type="color"
-                                                class="dg-fmt-colorpick"
-                                                title="Border color — applies to the selected cells, or to the whole table when nothing is selected"
-                                                value={borderColorValue}
-                                                onmousedown={handleColorPickMouseDown}
-                                                onchange={handleBorderColorChange}
-                                            />
-                                            <span
-                                                class="dg-fmt-label"
-                                                title="Fill the current cell — or, outside a table, the paragraph/panel the cursor is in"
-                                                >Fill</span
-                                            >
-                                            <template for:each={highlightSwatches} for:item="sw">
-                                                <button
-                                                    key={sw.key}
-                                                    class="dg-fmt-swatch"
-                                                    style={sw.style}
-                                                    data-taction="cellFill"
-                                                    data-value={sw.value}
-                                                    onmousedown={handleFmtMouseDown}
-                                                    onclick={handleTableAction}
-                                                    title={sw.title}
-                                                ></button>
-                                            </template>
-                                            <input
-                                                type="color"
-                                                class="dg-fmt-colorpick"
-                                                data-cmd="cellFill"
-                                                value="#f2f4f7"
-                                                onmousedown={handleColorPickMouseDown}
-                                                onchange={handleColorPickChange}
-                                                title="Custom cell fill color"
-                                            />
+                                                <input
+                                                    type="color"
+                                                    class="dg-fmt-colorpick"
+                                                    data-cmd="cellFill"
+                                                    value="#f2f4f7"
+                                                    onmousedown={handleColorPickMouseDown}
+                                                    onchange={handleColorPickChange}
+                                                    title="Custom cell fill color"
+                                                />
+                                            </div>
                                         </template>
                                     </div>
                                     <!-- #247 — the running header is page chrome, so it

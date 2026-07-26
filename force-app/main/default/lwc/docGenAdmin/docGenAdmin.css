@@ -846,10 +846,24 @@
    contract as every other overlay — pointer-events none while invisible. */
 .dg-blk-handle {
     position: absolute;
-    z-index: 19;
+    /* Above the table chrome AND the editable canvas. At 19 the pointer was
+       landing on the contenteditable underneath, so hovering the up-arrow showed
+       a TEXT CARET and the click went to the page instead of the button — the
+       control looked broken rather than merely small. */
+    z-index: 40;
     display: flex;
     align-items: center;
-    gap: 1px;
+    /* Was 1px: the four buttons formed one indivisible smudge that also collided
+       with the table's own row gutter. */
+    gap: 3px;
+    padding: 2px;
+    border-radius: 6px;
+    /* A chip so the group reads as a toolbar, not as marks on the page. */
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 1px 4px rgba(40, 30, 80, 0.16);
+    /* The whole group is clickable furniture — say so before the pointer
+       reaches an individual button. */
+    cursor: pointer;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.12s cubic-bezier(0.2, 0.8, 0.3, 1);
@@ -872,16 +886,16 @@
     /* Bigger target as well as a bigger glyph: 13x18 is under half the ~24px
        minimum for something meant to be clicked, and these sit in a narrow
        margin where the pointer arrives at an angle. */
-    width: 18px;
-    height: 20px;
+    /* 22x22 — a real target. Anything under ~24px in a narrow margin is a
+       precision-aiming exercise, which is what "hard to reach" meant. */
+    width: 22px;
+    height: 22px;
     padding: 0;
     border: none;
     border-radius: 4px;
-    /* A faint chip so the arrows read as BUTTONS against the page rather than
-       as stray punctuation in the margin. */
     background: #f4f2fb;
-    color: #5b6478;
-    font-size: 11px;
+    color: #4a5568;
+    font-size: 12px;
     line-height: 1;
     cursor: pointer;
     transition:
@@ -1419,6 +1433,32 @@
 
 .dg-fmt-btn_word {
     font-size: 0.72rem;
+}
+
+/*
+ * A toolbar group that never splits across rows.
+ *
+ * .dg-format-bar is a flat flex-wrap list, so before this the bar broke wherever
+ * it happened to run out of width: the "Borders" label ended one row and its own
+ * buttons began the next, so the label pointed at nothing and the buttons
+ * belonged to nothing. Worse, the break point moved as the window resized, so
+ * the toolbar never looked the same twice and nothing had a fixed home to aim
+ * for. Groups wrap as UNITS; their contents do not.
+ */
+.dg-fmt-group {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    /* A hairline keeps a group visually distinct once it has wrapped onto its
+       own row, without the heavier separator used between loose controls. */
+    padding: 0 6px;
+    border-left: 1px solid #e6e2f0;
+}
+
+.dg-fmt-group:first-child {
+    border-left: none;
+    padding-left: 0;
 }
 
 .dg-fmt-sep {
