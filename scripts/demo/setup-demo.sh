@@ -81,7 +81,29 @@ say "Base org (product, permission sets, record page)"
 # (events, education, certificates, statements). Deployed from outside force-app
 # so a package build can never pick them up.
 say "Deploying demo schema"
-sf project deploy start --target-org "$ORG" --source-dir "$HERE/schema/force-app" --ignore-conflicts --wait 20
+# Converted to metadata format in a THROWAWAY sfdx project first.
+#
+# `sf project deploy start --source-dir` only resolves source that lives inside a
+# registered packageDirectory, and this schema deliberately does not — force-app
+# is the sole package directory and adding this to it would put demo objects in
+# the managed package. Deploying it directly fails with "NothingToDeploy: No
+# local changes to deploy", which reads like the schema is already there. It is
+# not: the org silently ends up with none of the Demo_*__c objects, seeds 02-04
+# fail, and the events/education/certificate demos are simply absent from an org
+# that otherwise looks fine.
+SCHEMA_TMP="$(mktemp -d)"
+mkdir -p "$SCHEMA_TMP/proj"
+cp -R "$HERE/schema/force-app" "$SCHEMA_TMP/proj/force-app"
+cat >"$SCHEMA_TMP/proj/sfdx-project.json" <<'JSON'
+{
+    "packageDirectories": [{ "path": "force-app", "default": true }],
+    "namespace": "",
+    "sourceApiVersion": "62.0"
+}
+JSON
+(cd "$SCHEMA_TMP/proj" && sf project convert source -r force-app -d "$SCHEMA_TMP/mdapi" >/dev/null)
+sf project deploy start --target-org "$ORG" --metadata-dir "$SCHEMA_TMP/mdapi" --wait 25
+rm -rf "$SCHEMA_TMP"
 
 say "Assigning the demo permission set"
 sf org assign permset --target-org "$ORG" --name DocGen_Demo 2>/dev/null ||
