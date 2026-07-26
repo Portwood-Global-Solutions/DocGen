@@ -115,18 +115,22 @@ them up, and a subscriber without Einstein installs normally with the feature
 dormant (button hidden). Verified by dry-run against `Portwood Dev`: 409
 components, 0 failures, no Einstein classes in the set.
 
-**Still unmeasured, and it gates shipping the feature live:** whether a managed
-package _install_ behaves like a source deploy here. 2GP Apex is compiled in the
-packaging org at version-create time, and how much the subscriber org
-re-validates on install is not established. Do not assume either way. Two routes
-when the feature graduates:
+Whether a managed package _install_ fails the same way a source deploy does is
+**unmeasured** — 2GP Apex is compiled in the packaging org at version-create
+time, and how much the subscriber org re-validates on install is not
+established. Do not assume either way.
 
-1. Measure it — throwaway package version with the Einstein class included,
-   installed into a non-Einstein org.
-2. Ship `DocGenEinsteinProvider` in a small **extension package** that only
-   Einstein subscribers install. The base package already degrades correctly, so
-   this needs no base change, and it keeps the base install surface free of an
-   entitlement it does not need. This is the likely end state either way.
+**DECIDED (Dave, 2026-07-26): extension package.** `DocGenEinsteinProvider`
+ships in a small separate "DocGen AI" package that only Einstein subscribers
+install. The base package never contains a `ConnectApi` reference, so the
+install question above never has to be answered for the base — which is the
+point. The base already degrades correctly via `Type.forName`, so **no base
+change is required**: the extension simply makes `Type.forName` start returning
+non-null.
+
+That makes the `.forceignore` entries the permanent state for the base package,
+not a stopgap. When the extension is built, those two classes become its
+contents.
 
 ## Why this fits DocGen specifically
 
