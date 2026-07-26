@@ -7,6 +7,7 @@ Every template merges against records seeded by `seed/seed-01..05.apex`. Use the
 
 - **HTML → PDF only.** Layout with `<table>`. NO flex/grid/gap/calc/CSS-vars/linear-gradient/box-shadow/transform — they silently collapse.
 - Solid colors only. Fixed units (pt/px/in). `:nth-child(even)` zebra is OK. Fonts: Helvetica/Arial/Times/Courier only.
+- **Circles are CHARACTERS, not CSS.** `border-radius` is ignored in every form, so a rounded box renders square. Use `&#8226;` (small filled), `&#9679;` (filled), `&#9675;` (hollow), `&#9711;` (large ring), `&#176;` (small ring), sized with `font-size` and coloured with `color`. **Never** `font-family: ZapfDingbats` or `Symbol` — those fonts are absent and the letter falls back to a serif face, printing a literal "l"/"m" instead of a shape.
 - **Charts: use only `bar`, `stacked`, `clustered`, `pivot`** (CSS-bar styles render server-side). NEVER `pie`/`donut`/`line`/`area` (need the UI LWC). Chart field = **API name** (e.g. `Category__c`).
 - `{PageNumber}`/`{TotalPages}` go in the template **footer field** (set via manifest), never the body.
 - Currency `{F:currency}`, date `{F:MMMM d, yyyy}`, number `{F:#,##0}`, percent `{F:percent}`, picklist label `{F:label}`.

@@ -460,6 +460,39 @@ Two failure modes that look similar and are not:
 
 `opacity`, `box-shadow`, `transform`, `calc()` and `outline` are all ignored too.
 
+##### How to draw a circle (bullets, status dots, timeline markers)
+
+Since `border-radius` does nothing, a circle has to be a **character**, not a box.
+Unicode circle glyphs render correctly and scale with `font-size`, so you can size
+one anywhere from a bullet to a display graphic:
+
+| Want              | Use                           | Character |
+| ----------------- | ----------------------------- | --------- |
+| Small filled dot  | `&#8226;` (U+2022 bullet)     | •         |
+| Filled circle     | `&#9679;` (U+25CF)            | ●         |
+| Hollow circle     | `&#9675;` (U+25CB)            | ○         |
+| Large hollow ring | `&#9711;` (U+25EF)            | ◯         |
+| Small hollow ring | `&#176;` (U+00B0 degree sign) | °         |
+
+```html
+<!-- A 14pt status dot in brand colour -->
+<span style="font-size: 14pt; color: #184d47;">&#9679;</span> Delivered
+
+<!-- A display-size disc — the same glyph at 80pt -->
+<span style="font-size: 80pt; color: #184d47; line-height: 1;">&#8226;</span>
+```
+
+Colour comes from `color`, size from `font-size`, and a light glyph on a dark
+filled table cell reverses cleanly (white `&#8226;` on a solid background).
+
+**Never use ZapfDingbats or Symbol for this.** Those fonts are not present in the
+rendering engine, so `font-family: ZapfDingbats` with the letter `l` or `m` — the
+usual trick for a filled/hollow circle — falls back to a serif face and prints a
+literal **"l"** or **"m"** into the document. That is worse than an unsupported
+property, because nothing fails: a wrong character is silently typeset where a
+circle was intended. Stick to the Unicode glyphs above, which need no particular
+font.
+
 ##### Paste-ready LLM prompt
 
 Copy this verbatim into ChatGPT / Claude / Gemini. Replace the bracketed sections with what you want:
@@ -494,6 +527,16 @@ USE INSTEAD:
 - For visual interest use solid fills, contrasting borders, and :nth-child(even)
   zebra striping. border: dashed and border: dotted DO work and are the only
   border decoration available.
+- CIRCLES (bullets, status dots, markers) must be CHARACTERS, never CSS boxes,
+  because border-radius does nothing. Use these and size them with font-size,
+  colour them with color:
+    &#8226;  small filled dot (U+2022)      &#9679;  filled circle (U+25CF)
+    &#9675;  hollow circle (U+25CB)         &#9711;  large hollow ring (U+25EF)
+    &#176;   small hollow ring (U+00B0)
+  e.g. <span style="font-size:14pt;color:#184D47;">&#9679;</span> Delivered
+  NEVER use font-family: ZapfDingbats or Symbol to make a circle. Those fonts are
+  absent, so the letter falls back to a serif face and prints a literal "l" or
+  "m" in the document instead of a shape.
 
 PAGE SETUP — put a single <style> in <head> with:
   @page { size: 8.5in 11in; margin: 0.6in; }    /* US Letter portrait */

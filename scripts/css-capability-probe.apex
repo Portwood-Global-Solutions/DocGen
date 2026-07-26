@@ -24,6 +24,15 @@
 //   entirely. A tinted panel silently becomes invisible. Use a pre-computed
 //   flat hex instead.
 //
+// CIRCLES (measured separately, 2026-07-26): since border-radius does nothing, a
+// circle must be a CHARACTER. These render correctly and scale with font-size:
+//   &#8226; U+2022 small filled   &#9679; U+25CF filled   &#9675; U+25CB hollow
+//   &#9711; U+25EF large ring     &#176;  U+00B0 small ring
+// ZapfDingbats and Symbol are NOT available: font-family:ZapfDingbats with the
+// letter l/m — the usual filled/hollow circle trick — falls back to a serif face
+// and typesets a literal "l" or "m" into the document. That is worse than an
+// ignored property, because nothing fails and a wrong character ships.
+//
 // Re-run this after any Salesforce release that might move the engine version.
 String html =
     '<!DOCTYPE html><html><head><meta charset="utf-8"/><style>' +
