@@ -2656,32 +2656,86 @@ export async function run({ org, headed }) {
                 // then press the move button. Re-querying the source list each
                 // time matters — moving an option removes it, so the "first"
                 // option is a different template on the second pass.
+                // Coordinates first, then REAL mouse clicks. A dispatched
+                // el.click() moved nothing at all — the source column still held
+                // all 16 options afterwards — which is house rule 3 of this file
+                // biting: a synthetic event is not a user gesture, and
+                // lightning-dual-listbox does not respond to one.
+                const geom = await ev(
+                    page,
+                    `
+          const lb = __dgFind('lightning-dual-listbox', true).find(x => x.name === 'packetTemplates');
+          if (!lb) return { ok: false, why: 'no packetTemplates dual listbox on the page' };
+          const root = lb.shadowRoot || lb;
+          const cols = root.querySelectorAll('ul[role="listbox"], ul.slds-dueling-list__options');
+          if (!cols.length) return { ok: false, why: 'no listbox columns' };
+          const opts = Array.from(cols[0].querySelectorAll('li[role="option"], li'));
+          if (!opts.length) return { ok: false, why: 'the source column is empty' };
+          const box = (el) => { const r = el.getBoundingClientRect();
+            return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; };
+          let mover = null;
+          for (const b of root.querySelectorAll('lightning-button-icon, button')) {
+            const t = ((b.title || '') + ' ' + (b.getAttribute('alternative-text') || '') +
+                       ' ' + (b.getAttribute('icon-name') || '')).toLowerCase();
+            if (t.indexOf('right') !== -1 || t.indexOf('to selected') !== -1) { mover = box(b); break; }
+          }
+          if (!mover) return { ok: false, why: 'no move-right control' };
+          return { ok: true, count: opts.length, first: box(opts[0]),
+                   name: (opts[0].textContent || '').trim(), mover };
+        `
+                );
+                if (geom && geom.ok) {
+                    // Two passes; the source list re-flows after each move, so
+                    // the geometry is re-read rather than reused.
+                    for (let pass = 0; pass < 2; pass++) {
+                        const g =
+                            pass === 0
+                                ? geom
+                                : await ev(
+                                      page,
+                                      `
+              const lb = __dgFind('lightning-dual-listbox', true).find(x => x.name === 'packetTemplates');
+              const root = lb.shadowRoot || lb;
+              const cols = root.querySelectorAll('ul[role="listbox"], ul.slds-dueling-list__options');
+              const opts = Array.from(cols[0].querySelectorAll('li[role="option"], li'));
+              if (!opts.length) return { ok: false };
+              const r = opts[0].getBoundingClientRect();
+              return { ok: true, first: { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) },
+                       name: (opts[0].textContent || '').trim() };
+            `
+                                  );
+                        if (!g || !g.ok) break;
+                        await page.mouse.click(g.first.x, g.first.y);
+                        await page.waitForTimeout(400);
+                        await page.mouse.click(geom.mover.x, geom.mover.y);
+                        await page.waitForTimeout(700);
+                    }
+                }
+
                 const moved = await ev(
                     page,
                     `
-          const lb = __dgFind('lightning-dual-listbox');
-          if (!lb) return { ok: false, why: 'no dual listbox' };
+          // BY PROPERTY, not attribute selector: LWC passes the name down as a
+          // property and it is not necessarily reflected to the DOM, so
+          // [name="packetTemplates"] matches nothing even though the component
+          // plainly has that name.
+          // (No backticks in this body -- it is inside a JS template literal.)
+          const lb = __dgFind('lightning-dual-listbox', true).find(x => x.name === 'packetTemplates');
+          if (!lb) return { ok: false, why: 'no packetTemplates dual listbox on the page' };
           const root = lb.shadowRoot || lb;
-          const names = [];
-          for (let pass = 0; pass < 2; pass++) {
-            const cols = root.querySelectorAll('ul[role="listbox"], ul.slds-dueling-list__options');
-            if (!cols.length) return { ok: false, why: 'no listbox columns' };
-            const opt = cols[0].querySelector('li[role="option"], li');
-            if (!opt) return { ok: false, why: 'source column empty on pass ' + pass };
-            names.push((opt.textContent || '').trim());
-            opt.click();
-            const btns = root.querySelectorAll('lightning-button-icon, button');
-            let movedThis = false;
-            for (const b of btns) {
-              const t = ((b.title || '') + ' ' + (b.getAttribute('alternative-text') || '') +
-                         ' ' + (b.getAttribute('icon-name') || '')).toLowerCase();
-              if (t.indexOf('right') !== -1 || t.indexOf('to selected') !== -1 || t.indexOf('in packet') !== -1) {
-                b.click(); movedThis = true; break;
-              }
-            }
-            if (!movedThis) return { ok: false, why: 'no move-right control' };
+          // REPORT what the real clicks achieved. Reading the SELECTED column is
+          // the only honest measure: clicking a plausible-looking control is not
+          // evidence, and the first version of this reported moving the same
+          // option twice ("Account, Account") as a success while the source list
+          // had not changed at all.
+          const cols = root.querySelectorAll('ul[role="listbox"], ul.slds-dueling-list__options');
+          if (cols.length < 2) return { ok: false, why: 'expected two listbox columns, found ' + cols.length };
+          const chosen = Array.from(cols[1].querySelectorAll('li[role="option"], li'))
+                              .map(o => (o.textContent || '').trim());
+          if (!chosen.length) {
+            return { ok: false, why: 'nothing reached the "In Packet" column — the move did not take' };
           }
-          return { ok: true, names };
+          return { ok: true, names: chosen, moved: chosen.length };
         `
                 );
 
@@ -2694,11 +2748,37 @@ export async function run({ org, headed }) {
                         )
                     );
                 } else {
+                    // The button LABEL is the component's own confirmation that
+                    // the move registered: packetButtonLabel becomes
+                    // "Create Packet (N Designs)" once N templates are selected.
+                    // Checking it here separates "the listbox did not move" from
+                    // "the merge failed", which otherwise look identical.
+                    const label = await ev(
+                        page,
+                        `const b = __dgFind('button.cool-brand-btn', true)
+               .find(x => (x.textContent || '').indexOf('Packet') !== -1);
+             return b ? (b.textContent || '').trim() : null;`
+                    );
+                    const registered = /\((\d+)\s*Designs?\)/.exec(label || '');
+                    add(
+                        check(
+                            'moving templates into the packet registers the selection',
+                            !!registered && Number(registered[1]) === moved.names.length,
+                            registered
+                                ? `the button reads "${label}" after moving ${moved.names.length}`
+                                : `the button still reads "${label}" — the listbox move did not reach the component`,
+                            SEVERITY.MAJOR
+                        )
+                    );
+
                     const dl = page
                         .waitForEvent('download', { timeout: 300000 })
                         .then((d) => d.path().then((p) => ({ name: d.suggestedFilename(), path: p })))
                         .catch(() => null);
-                    const genBtn = await locateByText(page, 'button', 'Packet');
+                    // The generate button specifically — 'Packet' alone also
+                    // matches the TAB, which is what the first attempt clicked,
+                    // so nothing generated and the wait timed out at 300s.
+                    const genBtn = await locateByText(page, 'button.cool-brand-btn', 'Create Packet');
                     if (genBtn.found && genBtn.hit === 'ok') await clickAt(page, genBtn, 3000);
                     const file = await dl;
 
@@ -2725,23 +2805,46 @@ export async function run({ org, headed }) {
                             );
                         } else {
                             const { readFileSync } = await import('node:fs');
-                            const { pages, text, pageCount } = await pdfText(readFileSync(file.path));
-                            // Each source template's title text should survive
-                            // into the packet. Matching on the template NAMES
-                            // taken off the listbox keeps this honest: it
-                            // compares against what was actually selected, not
-                            // against a hardcoded guess.
-                            const found = moved.names.filter((n) => n && text.toLowerCase().includes(n.toLowerCase().slice(0, 12)));
+                            const { text, pageCount } = await pdfText(readFileSync(file.path));
+
+                            // A packet of N templates must be at least N pages.
+                            // Fewer means the merge kept only some of them —
+                            // and a packet that silently drops a document
+                            // downloads exactly as happily as a correct one.
                             add(
                                 check(
-                                    'a Document Packet contains every document it was built from',
-                                    pageCount > 1 && found.length === moved.names.length,
-                                    found.length === moved.names.length
-                                        ? `${pageCount} pages, and content from all ${moved.names.length} selected documents`
-                                        : `${pageCount} pages but only ${found.length} of ${moved.names.length} selected ` +
-                                              `documents are present (selected: ${moved.names.join(', ')}). A merge that ` +
-                                              'drops a document downloads exactly like one that does not.',
+                                    'a Document Packet is at least as long as the documents it merged',
+                                    pageCount >= moved.names.length,
+                                    `${pageCount} pages from ${moved.names.length} templates ` +
+                                        `(${moved.names.join(', ')})`,
                                     SEVERITY.MAJOR
+                                )
+                            );
+                            // Real rendered content, not an empty shell.
+                            const merged = /[A-Za-z]{4,}/.test(text) && !/\{[A-Za-z#/][^}\n]{0,40}\}/.test(text);
+                            add(
+                                check(
+                                    'the merged packet contains rendered text with no raw merge tags',
+                                    merged,
+                                    merged
+                                        ? `${text.replace(/\s+/g, ' ').trim().length} characters of rendered text`
+                                        : 'the packet is empty, or a raw {Tag} reached the page',
+                                    SEVERITY.MAJOR
+                                )
+                            );
+                            // NOT claimed: that each specific source document is
+                            // identifiable inside the packet. The templates are
+                            // merged against the same record and share most of
+                            // their text, so per-document identity cannot be
+                            // established from the text alone without templates
+                            // authored to carry a unique marker.
+                            add(
+                                skip(
+                                    'each individual document is identifiable within the packet',
+                                    'the merged templates render against the same record and share most of their ' +
+                                        'text, so page count and rendered content are asserted instead. Proving ' +
+                                        'per-document identity needs fixture templates each carrying a unique marker.',
+                                    SEVERITY.MINOR
                                 )
                             );
                         }
