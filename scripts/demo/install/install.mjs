@@ -239,6 +239,33 @@ for (Object o : specs) {
     String tp = (String) s.get('type');
     if (tp != null && tp != '') ver.${ns}Type__c = tp;
     insert ver;
+
+    // THE DESIGNER READS A DIFFERENT FILE.
+    //
+    // Generation resolves the body through the version's Content_Version_Id__c,
+    // which is what the upload above sets — so these templates render perfectly.
+    // The visual Designer does not use that at all: getHtmlTemplateBody looks up
+    // a ContentVersion whose TITLE starts 'docgen_html_body_<templateId>', which
+    // is what saveHtmlTemplateBody writes when a person saves in the UI.
+    //
+    // The installer's own title ("DEMO <name> body") matches nothing, so every
+    // HTML demo template opened to an empty canvas reading "Start typing your
+    // document here" — with a correct toolbar, a bound test record, and a body
+    // that was demonstrably fine, because it produced a 70KB PDF on demand.
+    //
+    // The title cannot be set at upload time: it needs the template Id, and the
+    // template does not exist until after the body has been uploaded. So a
+    // second ContentVersion is written here, carrying the same bytes under the
+    // name the Designer looks for.
+    if ((String) s.get('type') == 'HTML') {
+        ContentVersion src = [SELECT VersionData FROM ContentVersion WHERE Id = :(Id) s.get('cvId') LIMIT 1];
+        insert new ContentVersion(
+            Title = 'docgen_html_body_' + tpl.Id + '_' + Datetime.now().getTime(),
+            PathOnClient = 'body.html',
+            VersionData = src.VersionData,
+            FirstPublishLocationId = tpl.Id
+        );
+    }
     created++;
     System.debug('DEMO-INSTALL CREATED ' + key + ' -> tpl=' + tpl.Id + ' ver=' + ver.Id + ' test=' + testId);
   } catch (Exception e) {
