@@ -1435,6 +1435,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // --- Wizard Logic ---
 
     disconnectedCallback() {
+        this._cancelOverlayClear();
         if (this._selListenerAdded) {
             document.removeEventListener('selectionchange', this._onSelectionChange);
             this._selListenerAdded = false;
@@ -8257,12 +8258,42 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     };
     _overlayLastRun = 0;
+    _overlayClearTimer = null;
 
+    /**
+     * Leaving the canvas no longer kills the table chrome instantly.
+     *
+     * There was already a SPATIAL grace — _pointerNearTable keeps the overlay
+     * alive within 72px — but it only applies while the pointer is still on the
+     * canvas. Move up towards the toolbar, or off the sheet entirely, and
+     * mouseleave fired and everything vanished at once. The controls sit in the
+     * margin around the table, so travelling to one is exactly the movement that
+     * used to dismiss it: the + you were aiming at disappeared out from under
+     * the cursor.
+     *
+     * Now the clear is SCHEDULED, and any return cancels it.
+     */
     handleCanvasMouseLeave() {
-        this.tableOverlay = null;
-        this._overlayTable = null;
-        this.blockHandle = null;
-        this._highlightTableBand(null);
+        this._scheduleOverlayClear();
+    }
+
+    _cancelOverlayClear() {
+        if (this._overlayClearTimer) {
+            clearTimeout(this._overlayClearTimer);
+            this._overlayClearTimer = null;
+        }
+    }
+
+    _scheduleOverlayClear(delay = 700) {
+        this._cancelOverlayClear();
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        this._overlayClearTimer = setTimeout(() => {
+            this._overlayClearTimer = null;
+            this.tableOverlay = null;
+            this._overlayTable = null;
+            this.blockHandle = null;
+            this._highlightTableBand(null);
+        }, delay);
     }
 
     // ===== Block gutter handle (Notion) ======================================
@@ -8426,14 +8457,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // Keep it alive while the pointer is still within the gutter the chrome
             // occupies; leaving the canvas entirely is handled by mouseleave.
             if (this.tableOverlay && this._overlayTable && this._pointerNearTable(event, this._overlayTable)) {
+                // Still in the gutter the chrome occupies — cancel any pending
+                // dismissal, the pointer is on its way to a control.
+                this._cancelOverlayClear();
                 return;
             }
             if (this.tableOverlay) {
-                this.tableOverlay = null;
-                this._overlayTable = null;
+                // Shorter than the leave-the-canvas grace: the pointer is
+                // demonstrably still on the page and has moved away on purpose.
+                this._scheduleOverlayClear(400);
             }
             return;
         }
+        // Back over a table — whatever dismissal was pending is off.
+        this._cancelOverlayClear();
         this._overlayTable = table;
         const wrapRect = wrap.getBoundingClientRect();
         // The overlay elements are positioned inside .dg-canvas-wrap, which spans the
@@ -8552,6 +8589,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     /** Ghost for a seam `+`: a column/row sized like its neighbour, at the seam. */
     handleSeamPreview(event) {
+        this._cancelOverlayClear();
         const table = this._overlayTable;
         const wrap = this.template.querySelector('.dg-canvas-wrap');
         if (!table || !table.isConnected || !wrap) {
@@ -8693,6 +8731,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     /** Tint the column/row a handle refers to, so "which one" is never a guess. */
     handleTableHandleEnter(event) {
+        // The pointer is ON a control — it cannot be a dismissal.
+        this._cancelOverlayClear();
         const idx = parseInt(event.currentTarget.dataset.index, 10);
         const isCol = event.currentTarget.classList.contains('dg-tbl-handle_col');
         this._highlightTableBand(isCol ? { col: idx } : { row: idx });
@@ -9400,7 +9440,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             }
             cell = this._selectedTableCell();
         }
-        const table = cell && cell.closest('table');
+        // Fall back to what was captured on mousedown. After the native colour
+        // dialog the live lookup finds nothing, and this is the only record of
+        // which table the user was pointing at.
+        let table = cell && cell.closest ? cell.closest('table') : null;
+        if (!table && this._borderTargetTable && this._borderTargetTable.isConnected) {
+            table = this._borderTargetTable;
+        }
+        // Last resort: the table the pointer was last over. Reaching the border
+        // controls means crossing out of the table, and a user who has merely
+        // HOVERED a table — never clicked into it — has no caret and no
+        // selection, so both lookups above come back empty and the control did
+        // nothing with no explanation. _overlayTable is already tracked for the
+        // row/column chrome, so the answer was there to be used.
+        if (!table && this._overlayTable && this._overlayTable.isConnected) {
+            table = this._overlayTable;
+        }
+        // Restore the cell selection too, so a colour picked for three selected
+        // cells still lands on those three and not on the whole table.
+        if ((!this._cellSel || !this._cellSel.length) && this._borderTargetCells) {
+            const alive = this._borderTargetCells.filter((c) => c && c.isConnected);
+            if (alive.length) {
+                this._cellSel = alive;
+            }
+        }
         if (table) {
             this._applyBorders(this._lastBorderMode || 'bordersAll', table);
             this.htmlEditorDirty = true;
@@ -10166,6 +10229,26 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             this._savedFmtRange = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
         } catch (e) {
             this._savedFmtRange = null;
+        }
+        // ALSO capture the border target, now, before anything steals focus.
+        //
+        // A saved text RANGE is not enough for the border controls. Clicking the
+        // colour swatch opens the native OS colour dialog, which takes focus off
+        // the page entirely; by the time change fires, _selectedTableCell()
+        // finds nothing and _reapplyBorders returns without touching the table —
+        // so picking a border colour appeared to do nothing at all. A drag
+        // selection of cells has no useful caret range either, so the range
+        // alone could never have covered that case.
+        try {
+            const cell = this._selectedTableCell();
+            this._borderTargetTable = cell && cell.closest ? cell.closest('table') : null;
+            if (!this._borderTargetTable && this._cellSel && this._cellSel.length && this._cellSel[0].closest) {
+                this._borderTargetTable = this._cellSel[0].closest('table');
+            }
+            this._borderTargetCells = this._cellSel && this._cellSel.length ? this._cellSel.slice() : null;
+        } catch (e) {
+            this._borderTargetTable = null;
+            this._borderTargetCells = null;
         }
     }
 
@@ -13871,6 +13954,64 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._insertIntoVisualPage(drop.snippet);
     }
 
+    /**
+     * A drag ghost that shows WHAT is being placed.
+     *
+     * Without setDragImage the browser drags a translucent snapshot of the chip
+     * you grabbed — which, for a rail of near-identical chips, says nothing
+     * about what will land. The ghost is built to look like the thing being
+     * inserted: a pill for a tag, a framed thumbnail for an image, both with a
+     * dashed outline that reads as "not placed yet".
+     *
+     * It must be IN the document when setDragImage is called — a detached node
+     * is silently ignored and you are back to the default. Parked off-screen and
+     * removed on a timer, since dragend does not reliably fire when the drop
+     * lands outside the window.
+     */
+    _setDragGhost(event, label, imgUrl) {
+        if (!event.dataTransfer || !event.dataTransfer.setDragImage) {
+            return;
+        }
+        try {
+            const doc = document;
+            const ghost = doc.createElement('div');
+            ghost.style.cssText =
+                'position:fixed;top:-1000px;left:-1000px;z-index:-1;' +
+                'display:inline-flex;align-items:center;gap:6px;' +
+                'padding:4px 9px;border:1.5px dashed #7c3aed;border-radius:9px;' +
+                'background:#f6f3ff;color:#3b2a6b;' +
+                'font:12px/1.2 Helvetica,Arial,sans-serif;white-space:nowrap;' +
+                'box-shadow:0 2px 6px rgba(60,40,120,0.18);';
+            if (imgUrl) {
+                const thumb = doc.createElement('img');
+                thumb.src = imgUrl;
+                thumb.style.cssText = 'width:26px;height:26px;object-fit:cover;border-radius:3px;';
+                ghost.appendChild(thumb);
+            }
+            const text = doc.createElement('span');
+            // Long tags would otherwise produce a ghost wider than the page.
+            text.textContent = label.length > 42 ? label.slice(0, 40) + '…' : label;
+            ghost.appendChild(text);
+            doc.body.appendChild(ghost);
+            // Offset so the ghost sits just below-right of the cursor rather
+            // than under it, keeping the drop point visible while dragging.
+            event.dataTransfer.setDragImage(ghost, -12, -8);
+            this._dragGhostEl = ghost;
+            // eslint-disable-next-line @lwc/lwc/no-async-operation
+            setTimeout(() => {
+                if (ghost.parentNode) {
+                    ghost.parentNode.removeChild(ghost);
+                }
+                if (this._dragGhostEl === ghost) {
+                    this._dragGhostEl = null;
+                }
+            }, 1000);
+        } catch (e) {
+            // A missing ghost is cosmetic — never let it stop the drag itself.
+            const noop = e && e.message; // NOPMD
+        }
+    }
+
     handleTagDragStart(event) {
         const snippet = event.currentTarget.dataset.snippet;
         this._dragSnippet = snippet || null;
@@ -13881,6 +14022,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             } catch (e) {
                 /* dataTransfer best-effort */
             }
+            this._setDragGhost(event, snippet, null);
         }
     }
 
@@ -13895,6 +14037,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             } catch (e) {
                 /* dataTransfer best-effort */
             }
+            // The image itself, not its markup — dragging a picture should look
+            // like dragging that picture.
+            this._setDragGhost(event, name || 'image', url);
         }
     }
 

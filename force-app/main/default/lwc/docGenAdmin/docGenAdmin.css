@@ -856,7 +856,11 @@
 }
 
 .dg-sheet-paper:hover .dg-blk-handle {
-    opacity: 0.65;
+    /* Was 0.65 — combined with a pale #9aa8bd glyph at 9px, the move-up/down
+       arrows were effectively invisible. Three separate things were dimming the
+       same control at once: low opacity, a low-contrast colour, and a tiny
+       glyph. Opacity now only softens the resting state. */
+    opacity: 0.92;
     pointer-events: auto;
 }
 
@@ -865,14 +869,19 @@
 }
 
 .dg-blk-handle-btn {
-    width: 13px;
-    height: 18px;
+    /* Bigger target as well as a bigger glyph: 13x18 is under half the ~24px
+       minimum for something meant to be clicked, and these sit in a narrow
+       margin where the pointer arrives at an angle. */
+    width: 18px;
+    height: 20px;
     padding: 0;
     border: none;
-    border-radius: 3px;
-    background: transparent;
-    color: #9aa8bd;
-    font-size: 9px;
+    border-radius: 4px;
+    /* A faint chip so the arrows read as BUTTONS against the page rather than
+       as stray punctuation in the margin. */
+    background: #f4f2fb;
+    color: #5b6478;
+    font-size: 11px;
     line-height: 1;
     cursor: pointer;
     transition:

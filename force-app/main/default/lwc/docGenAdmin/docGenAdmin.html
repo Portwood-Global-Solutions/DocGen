@@ -2934,18 +2934,17 @@
                                                             onmouseenter={handleTableHandleEnter}
                                                             onmouseleave={handleTableHandleLeave}
                                                         >
-                                                            <button
-                                                                class="dg-tbl-handle-btn"
-                                                                data-index={col.index}
-                                                                data-axis="col"
-                                                                onmouseenter={handleSeamPreview}
-                                                                onmouseleave={handleGhostClear}
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleInsertColAt}
-                                                                title="Insert a column here"
-                                                            >
-                                                                +
-                                                            </button>
+                                                            <!--
+                                                              DELETE ONLY. The "+" that used to sit here
+                                                              inserted a column too, duplicating the
+                                                              circular seam on the boundary — two controls,
+                                                              one action, side by side, which is most of
+                                                              why this gutter looked so busy.
+                                                              The seam wins because it is unambiguous: it
+                                                              sits ON the boundary the new column lands at,
+                                                              whereas "Insert a column here" over a column
+                                                              never says whether "here" is before or after.
+                                                            -->
                                                             <button
                                                                 class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
                                                                 data-index={col.index}
@@ -2970,18 +2969,7 @@
                                                             onmouseenter={handleTableHandleEnter}
                                                             onmouseleave={handleTableHandleLeave}
                                                         >
-                                                            <button
-                                                                class="dg-tbl-handle-btn"
-                                                                data-index={row.index}
-                                                                data-axis="row"
-                                                                onmouseenter={handleSeamPreview}
-                                                                onmouseleave={handleGhostClear}
-                                                                onmousedown={handleFmtMouseDown}
-                                                                onclick={handleInsertRowAt}
-                                                                title="Insert a row here"
-                                                            >
-                                                                +
-                                                            </button>
+                                                            <!-- Delete only — the seams own insertion. -->
                                                             <button
                                                                 class="dg-tbl-handle-btn dg-tbl-handle-btn_del"
                                                                 data-index={row.index}
