@@ -12,6 +12,29 @@ Every template merges against records seeded by `seed/seed-01..05.apex`. Use the
 - Currency `{F:currency}`, date `{F:MMMM d, yyyy}`, number `{F:#,##0}`, percent `{F:percent}`, picklist label `{F:label}`.
 - Aggregates over a child rel: `{SUM:Rel__r.Field:currency}`, `{COUNT:Rel__r}`, `{AVG:…}`, `{MIN:…}`, `{MAX:…}`.
 - Child loop: `{#Rel__r}…{/Rel__r}`. Conditional: `{#IF Field > 0}…{/IF}` / `{^Field}…{/Field}`. Today: `{Today:MMMM d, yyyy}`. Running user: `{RunningUser.Name}`.
+- **Loops in a table go INSIDE the cells** — open in the first cell, close in the last:
+
+    ```html
+    <tr>
+        <th>First Name</th>
+        <th>Last Name</th>
+        <th>Title</th>
+    </tr>
+    <tr>
+        <td>{#Contacts}{FirstName}</td>
+        <td>{LastName}</td>
+        <td>{Title}{/Contacts}</td>
+    </tr>
+    ```
+
+    The engine auto-expands the enclosing `<tr>`, exactly as it does for `<w:tr>` in
+    Word and `<row>` in Excel — one pattern for all three formats. Do **not** wrap
+    the row from outside (`{#Rel}<tr>…</tr>{/Rel}`) and never put a loop tag on its
+    own line between rows: text placed directly inside `<table>` is _foster-parented_
+    out of the table by the HTML parser, which drags the tag away from the rows it is
+    meant to control. Keeping the tags in cells also means they appear as editable
+    pills in the visual Designer instead of stray text.
+
 - **Barcodes/QR** `{*Field:qr}` `{*Field:code128}` work in **both Word and HTML** templates (HTML support added in v3.15; render as CSS in the PDF).
 - Signature tags (work in HTML + DOCX): `{@Signature_Role:Order:Type}` where Type ∈ Full|Initials|Date|DatePick. Put each on its own line/cell.
 

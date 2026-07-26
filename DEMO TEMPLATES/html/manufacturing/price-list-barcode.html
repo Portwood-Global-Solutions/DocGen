@@ -32,13 +32,13 @@
 
     <table class="pl">
       <tr><th>SKU</th><th>Barcode</th><th>Product</th><th>Family</th><th class="r">Unit Price</th></tr>
-      {#PricebookEntries}<tr>
-        <td class="sku">{Product2.ProductCode}</td>
+      <tr>
+        <td class="sku">{#PricebookEntries}{Product2.ProductCode}</td>
         <td>{*Product2.ProductCode:code128:220x46}</td>
         <td>{Product2.Name}</td>
         <td>{Product2.Family}</td>
-        <td class="r">{UnitPrice:currency}</td>
-      </tr>{/PricebookEntries}
+        <td class="r">{UnitPrice:currency}{/PricebookEntries}</td>
+      </tr>
     </table>
 
     <div class="foot">Prices subject to change without notice. Scan any barcode to look up the SKU in your inventory system. &middot; {Name}</div>

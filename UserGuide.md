@@ -506,7 +506,14 @@ DOCGEN MERGE TAGS — use these as plain text:
 - Built-ins:          {Today}, {Now}, {RunningUser.Name}, {RunningUser.Email}
 - Format suffixes:    {Amount:currency}, {CloseDate:MM/dd/yyyy}, {Quantity:#,##0}
 - Loop:               {#RelationshipName} ... {/RelationshipName}
-                      e.g. {#OpportunityLineItems} <tr>...</tr> {/OpportunityLineItems}
+- Loop IN A TABLE:    put the tags INSIDE the cells — open in the first cell of the
+                      repeating row, close in the last. The engine expands the whole <tr>.
+                        <tr><th>First Name</th><th>Last Name</th><th>Title</th></tr>
+                        <tr><td>{#Contacts}{FirstName}</td><td>{LastName}</td><td>{Title}{/Contacts}</td></tr>
+                      Do NOT wrap the row from outside ({#Rel}<tr>...</tr>{/Rel}) and never
+                      put a loop tag on its own line between rows — text placed directly
+                      inside <table> is foster-parented out of the table by the HTML parser.
+                      This is the same pattern Word (<w:tr>) and Excel (<row>) use.
 - Conditional:        {#IF Field = "Value"} ... {:else} ... {/IF}
                       Use double quotes around string literals; numeric needs no quotes.
 - Page counters:      {PageNumber}, {TotalPages}   (only inside header/footer fields, not body)

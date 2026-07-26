@@ -60,9 +60,9 @@
         <td style="width:48%; vertical-align:top;">
           <h2 class="sec">Featured Guests</h2>
           <table class="speakers">
-            {#Attendees__r}<tr>
-              <td><strong>{Name}</strong><br/><span class="tt">{Ticket_Type__c}</span></td>
-            </tr>{/Attendees__r}
+            <tr>
+              <td>{#Attendees__r}<strong>{Name}</strong><br/><span class="tt">{Ticket_Type__c}</span>{/Attendees__r}</td>
+            </tr>
           </table>
         </td>
       </tr>

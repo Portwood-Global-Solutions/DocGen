@@ -63,11 +63,11 @@
     <h2 class="sec">Gift History</h2>
     <table class="gifts">
       <tr><th style="width:130px;">Date</th><th>Designated Fund</th><th class="r" style="width:120px;">Amount</th></tr>
-      {#Opportunities}<tr>
-        <td>{CloseDate:MMMM d, yyyy}</td>
+      <tr>
+        <td>{#Opportunities}{CloseDate:MMMM d, yyyy}</td>
         <td>{Designation__c}</td>
-        <td class="r">{Amount:currency}</td>
-      </tr>{/Opportunities}
+        <td class="r">{Amount:currency}{/Opportunities}</td>
+      </tr>
     </table>
 
     <p class="closing">

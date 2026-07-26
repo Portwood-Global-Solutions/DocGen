@@ -86,15 +86,15 @@
         <th class="c">Credits</th><th class="c">Grade</th>
         <th class="r">Grade Pts</th><th class="r">Quality Pts</th>
       </tr>
-      {#Enrollments__r}<tr>
-        <td>{Term__c}</td>
+      <tr>
+        <td>{#Enrollments__r}{Term__c}</td>
         <td>{Course_Code__c}</td>
         <td>{Course_Name__c}</td>
         <td class="c">{Credits__c}</td>
         <td class="c"><strong>{Grade__c}</strong></td>
         <td class="r">{Grade_Points__c}</td>
-        <td class="r">{Quality_Points__c}</td>
-      </tr>{/Enrollments__r}
+        <td class="r">{Quality_Points__c}{/Enrollments__r}</td>
+      </tr>
     </table>
 
     <table class="sumbox">
