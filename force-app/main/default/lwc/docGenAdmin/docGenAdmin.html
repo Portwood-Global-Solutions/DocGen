@@ -1917,7 +1917,7 @@
                                 <template if:true={slashMenu}>
                                     <div class="dg-slash-menu" style={slashMenu.posStyle} role="menu">
                                         <div class="dg-slash-menu-head">
-                                            <span>Insert&nbsp;&#8212;&nbsp;keep typing to filter</span>
+                                            <span>Insert</span>
                                             <button
                                                 class="dg-pill-menu-x"
                                                 onclick={handleSlashMenuClose}
@@ -1926,6 +1926,23 @@
                                                 &#10005;
                                             </button>
                                         </div>
+                                        <!--
+                                          The menu owns its own search box now. It used to say
+                                          "keep typing to filter" and filter from what you typed
+                                          in the PAGE — so the moment you clicked the menu, the
+                                          caret left the page and typing did nothing. With no
+                                          way to filter and only the first items visible, every
+                                          command past the top of the list was unreachable.
+                                        -->
+                                        <input
+                                            type="search"
+                                            class="dg-panel-search dg-slash-search"
+                                            placeholder="Search commands…"
+                                            value={slashMenu.query}
+                                            oninput={handleSlashSearch}
+                                            onkeydown={handleSlashSearchKeydown}
+                                            autocomplete="off"
+                                        />
                                         <template if:true={slashMenu.hasItems}>
                                             <template for:each={slashMenu.items} for:item="opt">
                                                 <button

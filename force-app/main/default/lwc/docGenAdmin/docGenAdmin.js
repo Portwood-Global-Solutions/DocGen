@@ -1674,6 +1674,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._focusPanelSearch = false;
             }
         }
+        // The slash menu's search box is deliberately NOT auto-focused. Taking
+        // focus the instant the menu appears would break the flow it was built
+        // for — type a backtick and keep typing in the page — by yanking the
+        // caret out of the document mid-sentence. The box is there for when the
+        // mouse has already been used, which is precisely the case that had no
+        // way to filter at all.
         // Inline HTML preview: the lwc:dom="manual" host only exists after the
         // re-render that the Preview toggle triggers, so the content write has
         // to happen here rather than in the click handler.
@@ -13059,7 +13065,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._slashSel = 0;
             }
             this._slashQuery = query;
-            this._slashCtx = { node, slashIndex: upto.length - query.length - 1 };
+            // endOffset is where the caret was when the menu opened. The removal
+            // path used to fall back to the END OF THE TEXT NODE whenever the
+            // live selection was no longer in that node — which is exactly what
+            // happens the moment focus moves into the menu's own search box, so
+            // choosing an item would have deleted everything after the trigger
+            // character. Recording the offset makes clicking into the menu safe.
+            this._slashCtx = { node, slashIndex: upto.length - query.length - 1, endOffset: upto.length };
             const range = sel.getRangeAt(0).cloneRange();
             let rect = range.getBoundingClientRect();
             if (!rect || (!rect.width && !rect.height)) {
@@ -13093,15 +13105,38 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                   return terms.every((t) => hay.includes(t));
               })
             : all;
-        const items = scored.slice(0, 10);
+        // Was 10. With no search box in the menu and no scrolling, ten was also
+        // the number of commands that EXISTED as far as a mouse was concerned:
+        // everything after the tenth was unreachable unless you knew to type.
+        // The menu scrolls now, so the cap only exists to keep the list sane.
+        const items = scored.slice(0, 40);
         if (this._slashSel >= items.length) {
             this._slashSel = Math.max(0, items.length - 1);
         }
-        const posStyle = rect
-            ? 'left: ' + Math.max(0, rect.left - colRect.left) + 'px; top: ' + (rect.bottom - colRect.top + 6) + 'px;'
-            : this.slashMenu
-              ? this.slashMenu.posStyle
-              : '';
+        // Sized to the room below the trigger, same as the right-click menu:
+        // without this a menu opened low on the page runs off the bottom and
+        // its last commands are unreachable however tall the list is allowed
+        // to be.
+        let posStyle;
+        if (rect) {
+            const MIN_H = 200;
+            const spaceBelow = window.innerHeight - rect.bottom - 16;
+            const menuMax = Math.max(MIN_H, Math.min(Math.round(window.innerHeight * 0.62), spaceBelow));
+            let top = rect.bottom - colRect.top + 6;
+            if (spaceBelow < MIN_H) {
+                top = Math.max(0, top - (MIN_H - spaceBelow));
+            }
+            posStyle =
+                'left: ' +
+                Math.max(0, rect.left - colRect.left) +
+                'px; top: ' +
+                top +
+                'px; max-height: ' +
+                menuMax +
+                'px;';
+        } else {
+            posStyle = this.slashMenu ? this.slashMenu.posStyle : '';
+        }
         this.slashMenu = {
             query: this._slashQuery,
             hasItems: items.length > 0,
@@ -13158,6 +13193,57 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._closeSlashMenu();
     }
 
+    /**
+     * Filter from the menu's OWN search box.
+     *
+     * The menu used to filter from what you typed in the page, which works only
+     * for as long as the caret stays there. Clicking the menu — the obvious
+     * thing to do with a menu — moved focus and silently ended filtering, and
+     * with a long catalog the commands below the fold could not be reached at
+     * all. Typing here does not touch the document; _slashCtx still records
+     * where the trigger character was, so inserting still lands in the right
+     * place.
+     */
+    handleSlashSearch(event) {
+        this._slashQuery = event.currentTarget.value || '';
+        this._slashSel = 0;
+        this._renderSlashMenu(null, { left: 0, top: 0 });
+    }
+
+    /** Arrow/Enter/Escape inside that search box, so it works without the mouse. */
+    handleSlashSearchKeydown(event) {
+        const items = (this.slashMenu && this.slashMenu.items) || [];
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!items.length) {
+                return;
+            }
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            this._slashSel = (this._slashSel + step + items.length) % items.length;
+            this._renderSlashMenu(null, { left: 0, top: 0 });
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (items[this._slashSel]) {
+                this._executeSlashItem(items[this._slashSel]);
+            }
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            this._closeSlashMenu();
+            return;
+        }
+        // Everything else stays here: the canvas has its own handlers for
+        // backtick and "[", and a search box that reopened the menu it lives in
+        // would be its own kind of broken.
+        event.stopPropagation();
+    }
+
     /** Remove the typed "/query" trigger text, then insert the chosen thing there. */
     _executeSlashItem(item) {
         const ctx = this._slashCtx;
@@ -13168,8 +13254,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         try {
             if (ctx && ctx.node && ctx.node.parentNode) {
                 const sel = window.getSelection();
+                // Live caret when the user is still typing in the page; the
+                // offset recorded at open when they are not (they clicked into
+                // the menu, or typed in its search box). Never the end of the
+                // node — that deletes whatever followed the trigger.
                 const end =
-                    sel && sel.rangeCount && sel.anchorNode === ctx.node ? sel.anchorOffset : ctx.node.nodeValue.length;
+                    sel && sel.rangeCount && sel.anchorNode === ctx.node
+                        ? sel.anchorOffset
+                        : typeof ctx.endOffset === 'number'
+                          ? ctx.endOffset
+                          : ctx.node.nodeValue.length;
                 const r = document.createRange();
                 r.setStart(ctx.node, Math.max(0, ctx.slashIndex));
                 r.setEnd(ctx.node, Math.min(end, ctx.node.nodeValue.length));
