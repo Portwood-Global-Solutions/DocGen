@@ -755,6 +755,42 @@ public with sharing class DocGenAiHtmlValidator {
     // -----------------------------------------------------------------------
 
     private void checkMergeTags() {
+        // A model writing Salesforce markup reaches for Visualforce/Flow syntax
+        // — {!Account.Name} — because that is what most Salesforce templating
+        // looks like. DocGen does not use the bang. Measured 2026-07-26: a real
+        // wizard generation emitted two bare {!} placeholders.
+        // {!Field} converts cleanly; a bare {!} carries no field name at all.
+        Integer namedBang = 0;
+        Matcher bm = Pattern.compile('\\{!\\s*([A-Za-z][A-Za-z0-9_.:]*)\\s*\\}').matcher(this.work);
+        List<String> sb = new List<String>();
+        Integer last = 0;
+        while (bm.find()) {
+            sb.add(this.work.substring(last, bm.start()));
+            sb.add('{' + bm.group(1) + '}');
+            last = bm.end();
+            namedBang++;
+        }
+        if (namedBang > 0) {
+            sb.add(this.work.substring(last));
+            this.work = String.join(sb, '');
+            note(
+                'repaired',
+                'Visualforce-style merge tag',
+                namedBang,
+                'DocGen uses {Field}, not the Visualforce {!Field}. Rewrote them — check the field names are ones your Query Config actually returns.'
+            );
+        }
+
+        Integer emptyBang = countAndStrip('\\{!\\s*\\}', '');
+        if (emptyBang > 0) {
+            note(
+                'removed',
+                'Empty merge tag',
+                emptyBang,
+                'A {!} with no field name inside it. It binds to nothing and prints as literal text, so it has been removed — put the real field in, e.g. {Industry}.'
+            );
+        }
+
         Integer page = countMatches('\\{(?:PageNumber|TotalPages)\\}');
         if (page > 0) {
             note(

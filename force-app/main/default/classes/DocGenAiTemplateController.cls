@@ -98,8 +98,13 @@ public with sharing class DocGenAiTemplateController {
             // An edit that quietly drops a merge tag or truncates the document
             // looks perfectly fine in the canvas. Say so before it is saved.
             Boolean wasEdit = String.isNotBlank(previousBody);
+            // Compare like with like. The guard runs against the SANITIZED
+            // previous body, not the raw one, because the validator legitimately
+            // removes and rewrites tags of its own accord — an empty {!} it
+            // stripped, or a {!Field} it converted, would otherwise be reported
+            // as "lost in the edit" when the edit had nothing to do with it.
             List<DocGenAiHtmlValidator.Finding> editFindings = wasEdit
-                ? DocGenAiEditGuard.compare(previousBody, checked.html)
+                ? DocGenAiEditGuard.compare(DocGenAiHtmlValidator.sanitize(previousBody).html, checked.html)
                 : new List<DocGenAiHtmlValidator.Finding>();
             for (DocGenAiHtmlValidator.Finding f : editFindings) {
                 checked.findings.add(f);

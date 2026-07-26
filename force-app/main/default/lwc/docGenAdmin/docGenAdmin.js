@@ -2229,9 +2229,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             {
                 mode: 'ai',
                 title: 'Generate with AI',
-                badge: null,
+                badge: this.isAgentforceAvailable ? 'Agentforce' : null,
                 icon: 'utility:einstein',
-                desc: "We assemble a ready-to-paste prompt with your fields and DocGen's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor."
+                // Both routes send the identical prompt; the only difference is
+                // whether it leaves the org. Say that, rather than describing
+                // copy-paste as the only option once Agentforce is available.
+                desc: this.isAgentforceAvailable
+                    ? "We assemble a prompt with your fields and DocGen's tag syntax. Generate it right here with Agentforce, or copy the prompt into Claude, ChatGPT, or Copilot and paste the HTML back. Either way you land in the designer."
+                    : "We assemble a ready-to-paste prompt with your fields and DocGen's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor."
             },
             {
                 mode: 'scratch',
@@ -2759,21 +2764,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.agentforceFindings && this.agentforceFindings.length > 0;
     }
 
-    /** Whatever is on the canvas right now, unsaved edits included. */
+    /**
+     * Whatever is on the canvas right now, unsaved edits included.
+     *
+     * Delegates to _currentDraftHtml() — the same reader the PDF preview and
+     * the save path use — rather than hand-rolling one. An earlier version of
+     * this getter called _extractVisualBody() with no argument (it requires the
+     * .dg-pv element), threw, was swallowed by a catch, and silently returned
+     * ''. That sent Agentforce an "edit this" instruction with no template
+     * attached, and the model replied "I do not know. Please specify the exact
+     * change you want made to the template." Reuse the real reader.
+     */
     get _currentDesignerBody() {
         try {
-            if (this.showHtmlBodyVisual) {
-                const live = this._extractVisualBody();
-                if (live && live.trim()) {
-                    return live;
-                }
+            const draft = this._currentDraftHtml();
+            if (draft && draft.trim()) {
+                return draft;
             }
         } catch (e) {
-            // Fall through to the staged/saved text below.
-        }
-        const ta = this.template.querySelector('.dg-html-body-editor');
-        if (ta && ta.value && ta.value.trim()) {
-            return ta.value;
+            // Fall through to the staged text below.
         }
         return this._lastUploadedHtmlText || '';
     }
@@ -2949,6 +2958,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             const description = (this.aiDocDescription || '').trim();
             const editing = this.isAgentforceEditMode;
             const currentBody = editing ? this._currentDesignerBody : '';
+            if (editing && !currentBody.trim()) {
+                // Never send "edit this" with nothing attached — the model
+                // answers "I do not know" and the reply overwrites the body.
+                throw new Error(
+                    'Could not read the template off the canvas, so there is nothing to edit. Switch to Source view and try again, or use "Start over from scratch".'
+                );
+            }
             const shape = extractQueryShape(this.editTemplateQuery, this.editTemplateObject);
             const prompt = buildAiPrompt(shape, {
                 dataSourceMode: this.editTemplateObject === 'FlowJsonData' ? 'flow' : 'record',

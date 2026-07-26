@@ -657,6 +657,9 @@ export function buildAiPrompt(shape, options) {
         lines.push('');
         lines.push('EDIT RULES — these matter more than anything else here:');
         lines.push(
+            '0. Apply EVERY change asked for above, not just the first one. If the instruction lists two or three things, all of them must be in the result. Use the exact wording given for any text to add, and the exact colour named — if a colour is named without a hex value, pick a specific hex for it and actually change the rule that sets it.'
+        );
+        lines.push(
             '1. Return the COMPLETE modified HTML document (<!DOCTYPE html> ... </html>). Not a fragment, not a diff, not only the part you changed, no commentary, no markdown fences.'
         );
         lines.push(

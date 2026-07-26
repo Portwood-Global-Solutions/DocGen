@@ -217,10 +217,62 @@ Deliberately **not** stripped, because they are measured to work: `border:
 dashed`/`dotted`, `:nth-child(even)`, `display: table|table-row|table-cell`,
 `@page`.
 
-## Phase 3 — conversational refinement
+## Phase 3 — conversational refinement (BUILT)
 
-"Make the header darker", "add a totals row". Needs the current body as context,
-which `Draft_Body__c` now provides. Still open.
+"Make the header dark green", "add a totals row". The current canvas body —
+unsaved edits included — is sent with the instruction, so Agentforce revises the
+template instead of replacing it. `buildAiPrompt` owns both the create and the
+edit framing, so the three paths (Copy AI Prompt, in-org create, in-org edit)
+cannot drift.
+
+Editing is the default whenever there is something to edit. Starting over needs
+an explicit tick-box, because that is the only path that discards work.
+
+**`DocGenAiEditGuard` is the safety net.** A bad generation is obviously bad; a
+bad EDIT is invisible — a dropped `{Amount:currency}` renders as nothing and the
+canvas looks fine. It diffs what went in against what came back and reports lost
+merge tags by name, truncation, a dropped `@page`, and vanished tables. It never
+blocks or rewrites: losing a tag can be exactly what was asked for.
+
+Two bugs it flushed out, both fixed and pinned with regression tests:
+
+- **CSS blocks are brace-wrapped too.** `{display:block; font-size:16pt; …}` was
+  reported as a lost merge tag three times on the first live edit. A guard that
+  cries wolf is worse than none — it trains people past the warnings that
+  matter. Now strips `<style>` and `style=""` before extracting tags, and
+  rejects anything containing a semicolon.
+- **The guard was blaming the validator.** It compared the RAW previous body
+  against the SANITIZED result, so a `{!}` the validator deliberately stripped
+  came back as "lost in the edit". Now both sides are sanitized first.
+
+### Known model-fidelity limit
+
+Multi-part instructions are applied unreliably. "Change the header to dark green
+AND add a footer line" first produced only the footer line, and reworded it.
+An explicit rule 0 ("apply EVERY change asked for… if a colour is named without
+a hex, pick a specific hex and actually change the rule that sets it") fixed it
+in a measured re-run — both changes landed, exact wording preserved. Concrete
+values work better than adjectives. This is prompt quality, not pipeline
+failure: the mechanism sent the body, got a full document back, validated it,
+preserved every tag, and saved it in all runs.
+
+## Wizard entry point (BUILT)
+
+"Generate it here with Agentforce" sits on the wizard's AI step next to Copy
+Prompt, and the Step-1 card now says so when the org has Einstein.
+
+`generateBodyPreview()` generates and validates **without saving** — the
+template record does not exist yet at that point — and the HTML is dropped into
+the same field the paste box fills. The wizard's existing create path then
+stages it exactly as it stages HTML pasted from ChatGPT: **one create path, not
+two.** Then the designer opens on it, where it can be edited or refined further.
+
+## Deployment coupling — do not separate
+
+`generateTemplateBody` takes a third `previousBody` argument. Apex and the
+`docGenAdmin` LWC must deploy TOGETHER: deploying either alone leaves a broken
+Apex reference in the component, which stops the whole Designer rendering, not
+just the AI button. The atomic deploy catches this and refuses — it did, once.
 
 ## Open questions
 

@@ -232,6 +232,35 @@ private class DocGenAiTemplateControllerTest {
     }
 
     @isTest
+    static void theValidatorsOwnRemovalsAreNotBlamedOnTheEdit() {
+        // The validator strips {!} and rewrites {!Field} by design. Comparing a
+        // RAW previous body against a SANITIZED result reported both as "lost in
+        // the edit" — a false alarm on the guard's most important signal.
+        DocGen_Template__c t = makeTemplate();
+        String previous = '<html><body><p>{Name}</p><td>Industry {!}</td><p>{!Account.Name}</p></body></html>';
+        // A faithful edit: only the colour changed. The {!} / {!Field} handling
+        // is entirely the validator's doing, on both sides.
+        String edited = '<html><body><p style="color:#184d47;">{Name}</p><td>Industry {!}</td><p>{!Account.Name}</p></body></html>';
+        DocGenAiProviderFactory.setProvider(new FakeProvider(edited));
+
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateTemplateBody(
+            t.Id,
+            'make it green',
+            previous
+        );
+        Test.stopTest();
+
+        for (DocGenAiHtmlValidator.Finding f : res.findings) {
+            System.assertNotEquals(
+                'Merge tags lost in the edit',
+                f.rule,
+                'the validator cleaning both sides is not a loss: ' + f.detail
+            );
+        }
+    }
+
+    @isTest
     static void generatingFreshDoesNotRunTheEditGuard() {
         DocGen_Template__c t = makeTemplate();
         Test.startTest();

@@ -193,6 +193,33 @@ private class DocGenAiHtmlValidatorTest {
     }
 
     @isTest
+    static void visualforceStyleTagsAreRewritten() {
+        // A model writing Salesforce markup reaches for {!Field} — that is what
+        // most Salesforce templating looks like. DocGen has no bang.
+        DocGenAiHtmlValidator.Result r = DocGenAiHtmlValidator.sanitize(
+            '<p>{!Account.Name} — {!Industry}</p><p>{Name}</p>'
+        );
+        System.assert(!r.html.contains('{!'), 'the bang must be gone: ' + r.html);
+        System.assert(r.html.contains('{Account.Name}'), 'converted, not deleted: ' + r.html);
+        System.assert(r.html.contains('{Industry}'), 'converted, not deleted: ' + r.html);
+        System.assert(r.html.contains('{Name}'), 'correct tags untouched');
+        DocGenAiHtmlValidator.Finding f = findRule(r, 'Visualforce-style merge tag');
+        System.assertNotEquals(null, f, 'must be reported');
+        System.assertEquals(2, f.occurrences);
+        System.assertEquals('repaired', f.action);
+    }
+
+    @isTest
+    static void emptyBangTagsAreRemoved() {
+        // Measured on a real wizard generation 2026-07-26: two bare {!}.
+        DocGenAiHtmlValidator.Result r = DocGenAiHtmlValidator.sanitize('<td>Industry {!}</td><td>Contact {!}</td>');
+        System.assert(!r.html.contains('{!'), 'an empty tag binds to nothing: ' + r.html);
+        DocGenAiHtmlValidator.Finding f = findRule(r, 'Empty merge tag');
+        System.assertNotEquals(null, f, 'must be reported');
+        System.assertEquals(2, f.occurrences);
+    }
+
+    @isTest
     static void pageCountersInBodyAreWarnedAbout() {
         DocGenAiHtmlValidator.Result r = DocGenAiHtmlValidator.sanitize('<p>Page {PageNumber} of {TotalPages}</p>');
         System.assertNotEquals(
