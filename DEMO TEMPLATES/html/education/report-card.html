@@ -68,16 +68,14 @@
         <th>Course Code</th><th>Course</th><th>Term</th>
         <th class="c">Credits</th><th>Instructor</th><th class="c">Grade</th>
       </tr>
-      {#Enrollments__r}
-      <tr>
+      {#Enrollments__r}<tr>
         <td>{Course_Code__c}</td>
         <td>{Course_Name__c}</td>
         <td>{Term__c}</td>
         <td class="c">{Credits__c}</td>
         <td>{Instructor__c}</td>
         <td class="c"><strong>{Grade__c}</strong></td>
-      </tr>
-      {/Enrollments__r}
+      </tr>{/Enrollments__r}
     </table>
 
     <h2 class="sec">Academic Summary</h2>

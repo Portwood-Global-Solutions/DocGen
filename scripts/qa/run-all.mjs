@@ -66,7 +66,11 @@ const SUITES = [
     // Reads the generated PDF's TEXT. The only suite that can see the
     // v2.5.0 missing-chrome class of regression, which produced a valid
     // PDF of a plausible size with its title and headers silently gone.
-    { id: 'pdf-content', file: './suites/pdf-content.mjs', needsOrg: true, heavy: true }
+    { id: 'pdf-content', file: './suites/pdf-content.mjs', needsOrg: true, heavy: true },
+    // Asserts what the UI needs, not what the server holds. Every bug this
+    // covers was found by a person clicking, after the rest of the harness
+    // had passed.
+    { id: 'template-integrity', file: './suites/template-integrity.mjs', needsOrg: true, heavy: true }
 ];
 
 const args = process.argv.slice(2);

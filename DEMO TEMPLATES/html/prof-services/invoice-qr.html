@@ -60,15 +60,13 @@
 
     <table class="items" style="margin-top:18px;">
       <tr><th>Item</th><th>Description</th><th class="r">Qty</th><th class="r">Unit Price</th><th class="r">Amount</th></tr>
-      {#OpportunityLineItems}
-      <tr>
+      {#OpportunityLineItems}<tr>
         <td>{Product2.Name}</td>
         <td>{Description}</td>
         <td class="r">{Quantity:#,##0}</td>
         <td class="r">{UnitPrice:currency}</td>
         <td class="r">{TotalPrice:currency}</td>
-      </tr>
-      {/OpportunityLineItems}
+      </tr>{/OpportunityLineItems}
     </table>
 
     <table style="margin-top:10px;"><tr>

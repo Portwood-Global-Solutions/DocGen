@@ -83,15 +83,13 @@
           <h2 class="sec">Transactions &nbsp;<span style="font-size:9pt;color:#5a6b7b;font-weight:normal;">({COUNT:Lines__r} this period)</span></h2>
           <table class="tx">
             <tr><th>Date</th><th>Description</th><th>Category</th><th class="r">Amount</th><th class="r">Balance</th></tr>
-            {#Lines__r}
-            <tr>
+            {#Lines__r}<tr>
               <td>{Transaction_Date__c:MM/dd}</td>
               <td>{Description__c}</td>
               <td>{Category__c}</td>
               <td class="r">{Amount__c:currency}</td>
               <td class="r">{Running_Balance__c:currency}</td>
-            </tr>
-            {/Lines__r}
+            </tr>{/Lines__r}
           </table>
         </td>
         <td style="width:38%; vertical-align:top; padding-left:18px;">

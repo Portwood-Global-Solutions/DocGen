@@ -126,17 +126,33 @@ if (vers.isEmpty()) {
         Type__c = 'HTML',
         Is_Active__c = true
     );
-    // The visual Designer does NOT read Content_Version_Id__c. It looks up a
-    // ContentVersion titled 'docgen_html_body_<templateId>' — what
-    // saveHtmlTemplateBody writes when a person saves in the UI. Without this
-    // the template opens to an empty canvas even though it generates perfectly,
-    // which is exactly how the demo templates looked blank.
+}
+
+// OUTSIDE the "new template" branch on purpose.
+//
+// The visual Designer does NOT read Content_Version_Id__c. It looks up a
+// ContentVersion titled 'docgen_html_body_<templateId>' — what
+// saveHtmlTemplateBody writes when a person saves in the UI. Without it the
+// template opens to an empty canvas even though it generates perfectly.
+//
+// Writing this only when the template is CREATED means an org seeded before
+// that was understood keeps a blank canvas forever, because every later run
+// takes the update branch and skips it. This script is meant to be idempotent
+// and safe to re-run; "repairs an existing org" is part of that, not a bonus.
+// The template-integrity suite caught exactly this on the second run.
+Integer designerBodies = [
+    SELECT COUNT()
+    FROM ContentVersion
+    WHERE Title LIKE :('docgen_html_body_' + tpl.Id + '%') AND IsLatest = TRUE
+];
+if (designerBodies == 0) {
     insert new ContentVersion(
         Title = 'docgen_html_body_' + tpl.Id + '_' + Datetime.now().getTime(),
         PathOnClient = 'body.html',
         VersionData = Blob.valueOf(body),
         FirstPublishLocationId = tpl.Id
     );
+    System.debug('SETUP designer body: created');
 }
 System.debug('SETUP template: ' + tpl.Id + ' (' + VERIFY_NAME + ')');
 System.debug('SETUP complete');

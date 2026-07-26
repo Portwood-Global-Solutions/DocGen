@@ -40,14 +40,12 @@
         </tr>
       </thead>
       <tbody>
-        {#PricebookEntries}
-        <tr>
+        {#PricebookEntries}<tr>
           <td class="sku">{Product2.ProductCode}</td>
           <td>{Product2.Name}</td>
           <td>{Product2.Family}</td>
           <td class="r pricecell">{UnitPrice:currency}</td>
-        </tr>
-        {/PricebookEntries}
+        </tr>{/PricebookEntries}
       </tbody>
     </table>
   </body>
