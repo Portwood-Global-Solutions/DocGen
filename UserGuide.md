@@ -956,91 +956,84 @@ pasting the HTML back. It sends exactly the same prompt as **Copy AI Prompt** �
 your fields, the merge-tag syntax, the PDF engine's layout rules — through
 `ConnectApi`, not an HTTP callout, so nothing leaves the Salesforce platform.
 
-**This is optional and off until you set it up.** Without it the Designer simply
-hides the Agentforce button and everything else works exactly as before.
+**This is optional.** It arrives with the separate **Portwood DocGen Agentforce
+Extension** package; without that installed, the Designer simply hides the
+Agentforce button and everything else works exactly as before.
 
-#### Setup — four steps, about ten minutes
+#### Setup — install the extension
 
-**1. Turn on Einstein.** You need Einstein Generative AI / Prompt Builder, plus
-the **Einstein GPT Prompt Template Manager** permission set for whoever creates
-the template. Not sure whether it is on? Run this in Developer Console →
-Anonymous Apex; if it fails to compile, Einstein is not enabled yet:
+The quickest route is one package install. **Portwood DocGen Agentforce
+Extension** carries everything: the Apex provider that talks to Einstein, and a
+ready-made prompt template already set to a capable model. Nothing to write,
+nothing to configure.
+
+**Prerequisites**
+
+- Portwood DocGen **3.46 or later**
+- **Einstein Generative AI / Prompt Builder** enabled in your org
+
+Salesforce enforces both at install, so you cannot end up half-configured. Not
+sure whether Einstein is on? Run this in Developer Console → Anonymous Apex; if
+it fails to compile, Einstein is not enabled yet:
 
 ```apex
 ConnectApi.EinsteinPromptTemplateGenerationsInput probe = new ConnectApi.EinsteinPromptTemplateGenerationsInput();
 System.debug('Einstein Apex types are visible');
 ```
 
-**2. Create the prompt template.** Setup → Einstein → **Prompt Builder** → New
-Prompt Template. (Use the Setup tree or Quick Find — a direct link to
-`EinsteinGPTPromptTemplates` returns "Page not found".)
+**Install it,** entering the installation key you were given. Then open any HTML
+template in the Designer — **Generate with Agentforce** appears next to Copy AI
+Prompt. No permission set beyond **DocGen Admin**, and no settings to change.
 
-| Field                | Value                                             |
-| -------------------- | ------------------------------------------------- |
-| Prompt Template Type | **Flex**                                          |
-| Prompt Template Name | DocGen HTML Body                                  |
-| API Name             | `DocGen_HTML_Body`                                |
-| Input                | Type **Free Text**, name `Instructions`, required |
+> Why a second package? The provider references `ConnectApi.EinsteinLLM`, and the
+> prompt template requires the Generative AI Prompt Templates feature. A base
+> package containing either is **refused at install** for any org without
+> Einstein. Keeping them in a separate, optional package is what lets DocGen
+> itself stay installable everywhere.
 
-For the prompt body, type a line of framing and then insert the input using
-**Insert Resource → Inputs → Instructions** (typing `{{Input.Instructions}}` by
-hand does not bind it):
+#### Setup — bring your own provider (alternative)
 
-```
-You generate HTML document templates for Portwood DocGen, which renders HTML to
-PDF with Flying Saucer (CSS 2.1 only). Follow the instructions below exactly.
-Return only a complete, self-contained HTML document. Do not wrap it in markdown
-code fences and do not add commentary. Instructions: {{Input.Instructions}}
-```
-
-> **Choose the model deliberately — the default is a trap.** Prompt Builder
-> pre-selects **GPT 5 Mini**, and that single choice matters more than anything
-> else on the page. Measured on a four-part edit instruction, GPT 5.4 applied
-> 4/4 changes on every run with no refusals, while GPT 5 Mini applied them only
-> partially and more than once replied "I don't know." rather than returning a
-> document. Open **Model** in the right-hand panel and pick a frontier model —
-> GPT 5.x, Claude Sonnet/Opus and Gemini Pro are all available. Larger models
-> consume more Einstein credits per call.
-
-Then **Save**, and **Activate** — an inactive template returns no content.
-(Changing the model later needs **Save As → Save as a New Version**, then
-Activate; active versions are read-only.)
-
-**3. Deploy the provider class.** Take `DocGenEinsteinProvider.cls` from the
-[DocGen repository](https://github.com/Portwood-Global-Solutions/DocGen) and add
-it to your org (Setup → Apex Classes → New, or `sf project deploy start`). It
-cannot ship inside the package: it references `ConnectApi.EinsteinLLM`, which is
-not a visible Apex type in an org without Einstein, so a package containing it
-is refused at install for every customer who does not have the entitlement.
-
-Because DocGen is a managed package, add the namespace prefix in the two places
-marked with comments in the file:
+Skip the extension if you would rather use a different model, your own prompt
+template, or your own service. Implement the `global` interface, in your own org:
 
 ```apex
-public with sharing class DocGenEinsteinProvider implements portwoodglobal.DocGenAiProvider {
-...
-portwoodglobal__DocGen_Settings__c s = portwoodglobal__DocGen_Settings__c.getOrgDefaults();
-String configured = s == null ? null : s.portwoodglobal__AI_Prompt_Template__c;
+public with sharing class MyAiProvider implements portwoodglobal.DocGenAiProvider {
+    public Boolean isAvailable() {
+        return true;
+    }
+    public String getName() {
+        return 'My AI';
+    }
+    public String generateHtml(String prompt) {
+        // Return a complete HTML document. DocGen validates it against the PDF
+        // engine's constraints before anything is saved, so no need to sanitize.
+        return callMyModel(prompt);
+    }
+}
 ```
 
-Writing your own provider instead — for a different model or your own service —
-is supported: implement `portwoodglobal.DocGenAiProvider` (three methods) and
-name your class in the setting below. Do **not** make an HTTP callout from it;
-DocGen's native guarantee depends on that.
+Then point DocGen at it in **Setup → Custom Settings → DocGen Settings**:
 
-**4. Point DocGen at it (optional).** Setup → Custom Settings → **DocGen
-Settings** → Manage.
+| Setting            | Leave blank to use                         |
+| ------------------ | ------------------------------------------ |
+| AI Provider Class  | `DocGenEinsteinProvider` (the extension's) |
+| AI Prompt Template | `DocGen_HTML_Body` (the extension's)       |
 
-| Setting            | Leave blank to use       |
-| ------------------ | ------------------------ |
-| AI Provider Class  | `DocGenEinsteinProvider` |
-| AI Prompt Template | `DocGen_HTML_Body`       |
+The provider class is resolved in your own namespace first, then in
+`portwoodglobal` — so your class wins if both exist.
 
-Only fill these in if you named yours something else. The provider class is
-resolved in your own namespace first, then in `portwoodglobal`.
+**Do not make an HTTP callout from a provider.** DocGen's "no external services"
+guarantee depends on it, and Einstein is reached through `ConnectApi` precisely
+so that stays true.
 
-**Check it worked:** open any HTML template in the Designer — **Generate with
-Agentforce** should appear next to Copy AI Prompt.
+If you write your own prompt template rather than using the extension's, it needs
+to be a **Flex** template with a single required **Free Text** input named
+`Instructions`, Saved and **Activated** — an inactive template returns no
+content. Insert the input with **Insert Resource → Inputs → Instructions**;
+typing `{{Input.Instructions}}` by hand does not bind it. And choose the model
+deliberately: Prompt Builder defaults to **GPT 5 Mini**, which on a four-part
+edit instruction applied changes only partially and more than once replied
+"I don't know." instead of returning a document. GPT 5.4 applied 4/4 every run.
 
 #### Using it
 
@@ -1089,8 +1082,10 @@ the template was **not** changed.
 
 #### Troubleshooting
 
-- **The button does not appear** — the provider class is missing, misnamed, or
-  does not implement the interface. Check the `portwoodglobal.` prefix.
+- **The button does not appear** — the Agentforce Extension is not installed, or
+  a custom provider named in DocGen Settings is missing or does not implement
+  `portwoodglobal.DocGenAiProvider`. Note that a `public` class is invisible
+  across a package boundary: a provider in its own package must be `global`.
 - **"Failed to generate Einstein LLM generations response"** with no detail —
   the ConnectApi call is missing `additionalConfig.applicationName`. The shipped
   provider sets it; a hand-written one must too.

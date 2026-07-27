@@ -58,9 +58,11 @@ measured, asked for CSS 2.1 explicitly, and it still emitted `display:flex` thre
 
 ### Setup
 
-Full instructions are in the **UserGuide, section 5.7.11**. Four steps: enable
-Einstein, create a `DocGen_HTML_Body` Flex prompt template, deploy one Apex class,
-and optionally point DocGen at them via DocGen Settings.
+Install the separate **Portwood DocGen Agentforce Extension** package (requires
+DocGen 3.46+ and Einstein; Salesforce enforces both at install). It carries the
+provider and a ready-made prompt template — nothing to write or configure. Or
+implement `portwoodglobal.DocGenAiProvider` yourself to use a different model.
+Full instructions: **UserGuide section 5.7.11**.
 
 The provider class and the prompt template cannot ship inside the package, and
 both were measured rather than assumed. A package containing
