@@ -150,10 +150,42 @@ Install re-validates Apex in the SUBSCRIBER org. So shipping the class in the
 base package would lock out every customer without Einstein — a far worse
 outcome than an extra setup step.
 
+**3. Can the PROMPT TEMPLATE ride in the package instead? — Also no.**
+Tested separately (3.46.0.4 = `04tVx000000s7xNIAQ`), Apex class still fenced so
+only one variable changed. It builds. Installing into a non-Einstein org:
+
+```
+Generative AI Prompt Templates(genAiPromptTemplates/DocGen_HTML_Body.genAiPromptTemplate)
+Missing feature — Installing this package requires the following feature and its
+associated permissions: Generative AI Prompt Templates
+```
+
+Note this is a _stronger_ gate than the Apex one: including the template makes
+the WHOLE package declare a feature requirement, so it would be refused for
+every subscriber without Einstein, not merely fail to compile one class.
+
 **Buildable is not installable.** That is the finding, and it is why the
-`.forceignore` fence stays permanently. The subscriber-supplied-class design
-below is not a workaround for a missing entitlement; it is the only shape that
-works.
+`.forceignore` fence stays permanently. Anything Einstein-flavoured in the base
+package locks out every non-Einstein customer — Apex and metadata alike.
+
+### The shape this actually points at: an extension package
+
+Worth revisiting, because the reason it was dismissed earlier no longer holds.
+It was killed on the belief that our Dev Hub could not build an Einstein-capable
+org. It can — proven above with `Einstein1AIPlatform`. So:
+
+| Package                          | Contents                                                                      | Who installs            |
+| -------------------------------- | ----------------------------------------------------------------------------- | ----------------------- |
+| Base (`Portwood DocGen Managed`) | Everything except Einstein. No feature requirement.                           | Everyone, as today      |
+| Extension ("DocGen AI")          | `DocGenEinsteinProvider` + the `DocGen_HTML_Body` template, active on GPT 5.4 | Only orgs with Einstein |
+
+That gives the seamless install for Einstein customers — no hand-built template,
+no GPT 5 Mini default trap, no customer-deployed Apex — while the base package
+stays installable everywhere. `Type.forName` already resolves the provider from
+either namespace, so the base needs no change at all.
+
+Cost: a second package to create, version and maintain, and subscribers install
+two things. Not started; the base-package design below works today without it.
 
 (Test note: the first install attempt failed with `Cannot upgrade beta package`
 because the target already had 3.46.0.1. Betas cannot be upgraded in place —
