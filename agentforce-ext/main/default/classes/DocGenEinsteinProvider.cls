@@ -46,8 +46,9 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
      */
     private static final String APPLICATION_NAME = 'PromptBuilderPreview';
 
-    /** Fallback when the DocGen setting is blank and for unmanaged source. */
-    private static final String FALLBACK_TEMPLATE = 'DocGen_HTML_Body';
+    /** Fallback when the DocGen setting is blank. @TestVisible so tests assert on it rather than a duplicated literal. */
+    @TestVisible
+    private static final String TEMPLATE_FALLBACK = 'DocGen_HTML_Body';
 
     public String getName() {
         return 'Einstein';
@@ -135,7 +136,7 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
         } catch (Exception e) {
             // Older DocGen, or the setting is unreadable — the constant is fine.
         }
-        return FALLBACK_TEMPLATE;
+        return TEMPLATE_FALLBACK;
     }
 
     public class DocGenAiException extends Exception {
