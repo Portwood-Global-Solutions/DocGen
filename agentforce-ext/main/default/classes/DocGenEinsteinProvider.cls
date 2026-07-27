@@ -23,6 +23,16 @@
  * `portwoodglobal.DocGenAiProvider` and name the class in
  * DocGen Settings > AI Provider Class. See UserGuide section 5.7.11.
  *
+ * MUST BE `global`, NOT `public`. The base package instantiates this class by
+ * name via Type.forName + newInstance. A `public` class is invisible across a
+ * 2GP package boundary EVEN IN THE SAME NAMESPACE, so with `public` both
+ * Type.forName('DocGenEinsteinProvider') and
+ * Type.forName('portwoodglobal', 'DocGenEinsteinProvider') return null, the
+ * factory falls through to DocGenUnavailableProvider, and the Designer hides the
+ * button with everything correctly installed. Measured 2026-07-26 in a real
+ * two-package install (extension v1.0.0.1). The same rule bit the build in the
+ * other direction: the test could not call the base package's `public` factory.
+ *
  * MEASURED QUIRKS (2026-07-26)
  * ----------------------------
  *  - `additionalConfig.applicationName` is REQUIRED. Leave additionalConfig null
@@ -35,7 +45,7 @@
  *    keeps DocGen's "no external services" guarantee true.
  *  - Budget 10-25 seconds for a 5KB document.
  */
-public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
+global with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
 
     /** Free Text input on the Flex template. Both 'Input:X' and 'Input.X' work. */
     private static final String INPUT_KEY = 'Input:Instructions';
@@ -50,7 +60,7 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
     @TestVisible
     private static final String TEMPLATE_FALLBACK = 'DocGen_HTML_Body';
 
-    public String getName() {
+    global String getName() {
         return 'Einstein';
     }
 
@@ -62,11 +72,11 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
      * message. Must never throw: DocGen calls this to decide whether to show
      * the button.
      */
-    public Boolean isAvailable() {
+    global Boolean isAvailable() {
         return !Test.isRunningTest();
     }
 
-    public String generateHtml(String prompt) {
+    global String generateHtml(String prompt) {
         if (String.isBlank(prompt)) {
             throw new DocGenAiException('Nothing to send — the authoring prompt was empty.');
         }
@@ -139,6 +149,6 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
         return TEMPLATE_FALLBACK;
     }
 
-    public class DocGenAiException extends Exception {
+    global class DocGenAiException extends Exception {
     }
 }
