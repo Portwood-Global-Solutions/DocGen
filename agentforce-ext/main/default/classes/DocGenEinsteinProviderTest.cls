@@ -65,18 +65,45 @@ private class DocGenEinsteinProviderTest {
 
     @isTest
     static void theConfiguredTemplateNameIsResolved() {
-        // Falls back to the constant when the setting is blank, and honours it
-        // when set — an admin can rename the template without editing Apex.
-        System.assertEquals(
-            DocGenEinsteinProvider.TEMPLATE_FALLBACK,
-            DocGenAiProviderFactory.configuredPromptTemplate(),
-            'blank setting falls back to the documented default'
-        );
+        // An admin can rename the prompt template without editing Apex. Asserted
+        // through the failure message rather than by calling the factory: that
+        // class is `public`, and `public` is NOT visible across a 2GP package
+        // boundary even inside the same namespace. Calling it fails the PACKAGE
+        // BUILD with "Type is not visible: portwoodglobal.DocGenAiProviderFactory"
+        // — measured 2026-07-26, and the provider's own header warns about it.
+        // Reading the custom setting directly is the supported route, and it is
+        // what resolveTemplateName() does.
         DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
         s.AI_Prompt_Template__c = 'My_Own_Template';
         upsert s;
+
+        DocGenEinsteinProvider p = new DocGenEinsteinProvider();
         Test.startTest();
-        System.assertEquals('My_Own_Template', DocGenAiProviderFactory.configuredPromptTemplate());
+        try {
+            p.generateHtml('anything');
+            System.assert(false, 'ConnectApi cannot succeed in a test, so this must throw');
+        } catch (DocGenEinsteinProvider.DocGenAiException e) {
+            System.assert(
+                e.getMessage().contains('My_Own_Template'),
+                'the configured template name must be the one used: ' + e.getMessage()
+            );
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void aBlankSettingFallsBackToTheDefaultTemplate() {
+        DocGenEinsteinProvider p = new DocGenEinsteinProvider();
+        Test.startTest();
+        try {
+            p.generateHtml('anything');
+            System.assert(false, 'must throw');
+        } catch (DocGenEinsteinProvider.DocGenAiException e) {
+            System.assert(
+                e.getMessage().contains(DocGenEinsteinProvider.TEMPLATE_FALLBACK),
+                'blank setting falls back to ' + DocGenEinsteinProvider.TEMPLATE_FALLBACK + ': ' + e.getMessage()
+            );
+        }
         Test.stopTest();
     }
 
