@@ -1,0 +1,12 @@
+{
+    "orgName": "DocGen Agentforce Extension Build",
+    "features": ["Einstein1AIPlatform"],
+    "settings": {
+        "agentPlatformSettings": {
+            "enableAgentPlatform": true
+        },
+        "einsteinGptSettings": {
+            "enableEinsteinGptPlatform": true
+        }
+    }
+}

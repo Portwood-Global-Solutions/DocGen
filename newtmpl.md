@@ -1,0 +1,228 @@
+- generic:
+    - generic [ref=f18e2]:
+        - generic [ref=f18e3]:
+            - link [ref=f18e214] [cursor=pointer]:
+                - /url: javascript:void(0);
+                - text: Skip to Navigation
+            - link [ref=f18e215] [cursor=pointer]:
+                - /url: javascript:void(0);
+                - text: Skip to Main Content
+            - generic [ref=f18e9]:
+                - generic [ref=f18e13]:
+                    - button [ref=f18e216] [cursor=pointer]:
+                        - generic [ref=f18e24]: Menu
+                    - generic [ref=f18e25]: Sandbox (Dev)
+                - button [ref=f18e217] [cursor=pointer]:
+                    - generic [ref=f18e51]: Show menu
+            - generic [ref=f18e52]:
+                - generic [ref=f18e66]:
+                    - combobox [ref=f18e218]
+                    - generic [ref=f18e68]: Search Setup
+                - navigation [ref=f18e219]:
+                    - list [ref=f18e71]:
+                        - listitem [ref=f18e72]:
+                            - group [ref=f18e73]:
+                                - button [ref=f18e220] [cursor=pointer]
+                                - generic [ref=f18e83]:
+                                    - button [disabled]
+                        - listitem [ref=f18e84]:
+                            - button [ref=f18e718] [cursor=pointer]
+                        - listitem [ref=f18e726]:
+                            - button [ref=f18e728] [cursor=pointer]
+                        - listitem [ref=f18e93]:
+                            - button [ref=f18e222] [cursor=pointer]
+                        - listitem [ref=f18e104]:
+                            - button [ref=f18e223] [cursor=pointer]
+                        - listitem [ref=f18e118]:
+                            - button [ref=f18e224] [cursor=pointer]
+                        - listitem [ref=f18e131]:
+                            - button [ref=f18e225] [cursor=pointer]
+        - generic [ref=f18e139]:
+            - generic [ref=f18e140]:
+                - generic [ref=f18e143]:
+                    - navigation [ref=f18e226]:
+                        - button [ref=f18e227] [cursor=pointer]:
+                            - generic [ref=f18e147]: App Launcher
+                    - generic [ref=f18e158]: Setup
+                - navigation [ref=f18e229]:
+                    - tablist [ref=f18e230]:
+                        - generic [ref=f18e164]: Press Spacebar to reorder tabs.
+                        - tab [ref=f18e231] [cursor=pointer]:
+                            - generic [ref=f18e166]: Home
+                        - status [ref=f18e167]
+                        - tab [ref=f18e232] [cursor=pointer]:
+                            - generic [ref=f18e169]: Object Manager
+                        - button [ref=f18e233] [cursor=pointer]:
+                            - generic [ref=f18e175]: Object Manager List
+                        - status [ref=f18e182]
+                        - tab [selected] [ref=f18e234] [cursor=pointer]:
+                            - generic [ref=f18e184]: Loading...
+                        - button [ref=f18e235] [cursor=pointer]:
+                            - generic [ref=f18e191]: Close Tab
+                        - status [ref=f18e192] [cursor=pointer]
+            - generic [ref=f18e194]:
+                - button [ref=f18e236] [cursor=pointer]:
+                    - generic [ref=f18e203]: Split view mode
+                - main [ref=f18e204]:
+                    - tabpanel [ref=f18e205]:
+                        - tabpanel [ref=f18e208]:
+                            - generic [ref=f18e240]:
+                                - generic [ref=f18e241]:
+                                    - generic [ref=f18e244]:
+                                        - generic [ref=f18e245]: Back to list view
+                                        - heading [level=1] [ref=f18e266]: Prompt Builder
+                                        - button [ref=f18e271] [cursor=pointer]:
+                                            - generic [ref=f18e276]: $Label.PromptTemplateEditor.VersionDeactivatedToastMsg does not exist.
+                                        - button [ref=f18e289] [cursor=pointer]:
+                                            - text: Help
+                                            - generic [ref=f18e294]: Show Help Menu
+                                    - toolbar [ref=f18e297]:
+                                        - button [expanded] [pressed] [ref=f18e305] [cursor=pointer]
+                                        - group [ref=f18e310]:
+                                            - generic [ref=f18e312]:
+                                                - button [ref=f18e315] [cursor=pointer]
+                                                - button [ref=f18e322] [cursor=pointer]
+                                        - button [ref=f18e332] [cursor=pointer]: Preview
+                                        - generic [ref=f18e337]:
+                                            - generic [ref=f18e341]:
+                                                - generic:
+                                                    - button [disabled]: Save
+                                            - button [ref=f18e347] [cursor=pointer]: Activate
+                                            - button [ref=f18e353] [cursor=pointer]:
+                                                - generic [ref=f18e358]: More options
+                                    - generic [ref=f18e360]:
+                                        - generic [ref=f18e363]:
+                                            - generic [ref=f18e364]:
+                                                - heading [level=2] [ref=f18e365]: Template Details
+                                                - button [ref=f18e367] [cursor=pointer]:
+                                                    - generic [ref=f18e372]: Close
+                                            - generic [ref=f18e375]:
+                                                - tablist [ref=f18e377]:
+                                                    - tab [selected] [ref=f18e378] [cursor=pointer]: Properties
+                                                    - tab [ref=f18e379] [cursor=pointer]: Resources
+                                                - tabpanel [ref=f18e381]:
+                                                    - list [ref=f18e383]:
+                                                        - generic [ref=f18e385]:
+                                                            - listitem [ref=f18e386]:
+                                                                - heading [level=2] [ref=f18e390]:
+                                                                    - button [ref=f18e391] [cursor=pointer]:
+                                                                        - generic [ref=f18e396]: Overview
+                                                            - listitem [ref=f18e397]:
+                                                                - generic [ref=f18e399]:
+                                                                    - heading [level=2] [ref=f18e401]:
+                                                                        - button [expanded] [ref=f18e402] [cursor=pointer]:
+                                                                            - generic [ref=f18e407]: Model
+                                                                    - generic [ref=f18e410]:
+                                                                        - generic [ref=f18e411]:
+                                                                            - generic [ref=f18e413]:
+                                                                                - generic [ref=f18e414]: "\*Model Type"
+                                                                                - button [ref=f18e419] [cursor=pointer]:
+                                                                                    - generic [ref=f18e424]: Model Type Help Info
+                                                                                - combobox [ref=f18e429] [cursor=pointer]:
+                                                                                    - generic [ref=f18e430]: Select an Option
+                                                                            - generic [ref=f18e438]:
+                                                                                - generic [ref=f18e439]: "\*Models"
+                                                                                - button [ref=f18e444] [cursor=pointer]:
+                                                                                    - generic [ref=f18e449]: Models Help Info
+                                                                                - combobox [ref=f18e454] [cursor=pointer]:
+                                                                                    - generic [ref=f18e455]: Select an Option
+                                                                        - list [ref=f18e464]:
+                                                                            - listitem [ref=f18e467]:
+                                                                                - heading [level=2] [ref=f18e471]:
+                                                                                    - button [ref=f18e472] [cursor=pointer]:
+                                                                                        - generic [ref=f18e477]: Limits
+                                                            - listitem [ref=f18e478]:
+                                                                - heading [level=2] [ref=f18e482]:
+                                                                    - button [expanded] [ref=f18e483] [cursor=pointer]:
+                                                                        - generic [ref=f18e488]: Format
+                                                            - listitem [ref=f18e492]:
+                                                                - generic [ref=f18e494]:
+                                                                    - heading [level=2] [ref=f18e496]:
+                                                                        - button [expanded] [ref=f18e497] [cursor=pointer]:
+                                                                            - generic [ref=f18e502]: Response Language
+                                                                    - generic [ref=f18e505]:
+                                                                        - generic [ref=f18e508]:
+                                                                            - generic [ref=f18e509]:
+                                                                                - strong [ref=f18e511]: Automatic
+                                                                                - generic [ref=f18e513]:
+                                                                                    - text: The system determines the response language at runtime based on the allowed languages.
+                                                                                    - link [ref=f18e515] [cursor=pointer]:
+                                                                                        - /url: https://help.salesforce.com/s/articleView?id=ai.prompt_builder_single_template_languages.htm&type=5
+                                                                                        - text: Learn More
+                                                                            - generic [ref=f18e520]:
+                                                                                - generic [ref=f18e521]: Automatic
+                                                                                - switch [checked] [ref=f18e522]
+                                                                        - generic [ref=f18e528]:
+                                                                            - generic [ref=f18e529]: Allowed Languages
+                                                                            - button [ref=f18e533] [cursor=pointer]:
+                                                                                - generic [ref=f18e538]: Allowed Languages Help Info
+                                                                            - combobox [ref=f18e546]
+                                        - list [ref=f18e554]:
+                                            - generic [ref=f18e556]:
+                                                - listitem [ref=f18e557]:
+                                                    - generic [ref=f18e559]:
+                                                        - button [expanded] [ref=f18e560] [cursor=pointer]:
+                                                            - generic [ref=f18e561]: "1"
+                                                            - heading [level=3] [ref=f18e562]:
+                                                                - generic [ref=f18e563]: Prompt
+                                                            - generic [ref=f18e564]: Collapse
+                                                        - generic [ref=f18e576]:
+                                                            - button [ref=f18e581] [cursor=pointer]
+                                                            - textbox [ref=f18e591]:
+                                                                - text: "Construct your prompt here… Who is involved and how are they related? (Participants, relationships, data) What are you trying to accomplish? (Goal, instructions) What is the context? (Setting, voice & tone, language) What are the constraints? (Limits, instructions) Here’s an example: You're User.Name, an account executive from Ursa Major Solar. Persuade your contact (Input:Contact.Name, Input:Contact.Title at Input:Account.Name, customer since Input:Account.CreatedDate) to sign up for Input:Product.Name. Strictly follow the instructions below. Instructions:\"\"\"Include the business value of Input:Product.Name for organizations based in Input:Account.ShippingCity. The product is Input:Product.Description. The message must evoke enthusiasm. Limit the message to 500 words.\"\"\" Now generate the text."
+                                                                - paragraph [ref=f18e592]
+                                                - listitem [ref=f18e593]:
+                                                    - button [ref=f18e596] [cursor=pointer]:
+                                                        - generic [ref=f18e597]: "2"
+                                                        - heading [level=3] [ref=f18e598]:
+                                                            - generic [ref=f18e599]: Resolved Prompt
+                                                        - generic [ref=f18e600]: Expand
+                                                - listitem [ref=f18e608]:
+                                                    - button [ref=f18e611] [cursor=pointer]:
+                                                        - generic [ref=f18e612]: "3"
+                                                        - heading [level=3] [ref=f18e613]:
+                                                            - generic [ref=f18e614]: Generated Response
+                                                        - generic [ref=f18e615]: Expand
+                                - generic [ref=f18e623]: Loading
+    - dialog [ref=f18e628]:
+        - generic [ref=f18e630]:
+            - button "Cancel and close" [ref=f18e632] [cursor=pointer]
+            - generic [ref=f18e639]:
+                - heading "New Prompt Template" [active] [level=1] [ref=f18e642]
+                - generic [ref=f18e647]:
+                    - text: About
+                    - generic [ref=f18e648]:
+                        - text: Select a prompt template type. The template type determines which data sources you can use in your prompts.
+                        - link "Learn more in Help." [ref=f18e649] [cursor=pointer]:
+                            - /url: https://help.salesforce.com/s/articleView?id=ai.prompt_builder_build_template.htm&type=5
+                    - generic [ref=f18e653]:
+                        - generic [ref=f18e654]: "\*Prompt Template Type"
+                        - button "Prompt Template Type Help Info" [ref=f18e659] [cursor=pointer]
+                        - combobox "Prompt Template Type" [ref=f18e669] [cursor=pointer]:
+                            - generic [ref=f18e670]: Flex
+                        - status
+                    - generic [ref=f18e677]:
+                        - generic [ref=f18e681]:
+                            - generic [ref=f18e682]: "\*Prompt Template Name"
+                            - textbox "Prompt Template Name" [ref=f18e684]:
+                                - /placeholder: Enter a name...
+                        - generic [ref=f18e688]:
+                            - generic [ref=f18e689]: "\*API Name"
+                            - textbox "API Name" [ref=f18e691]
+                    - generic [ref=f18e693]:
+                        - generic [ref=f18e694]: Template Description
+                        - textbox "Template Description" [ref=f18e696]:
+                            - /placeholder: Enter a template description...
+                        - status
+                    - generic [ref=f18e697]:
+                        - generic:
+                            - generic:
+                                - list:
+                                    - listitem [ref=f18e698]:
+                                        - text: Inputs (Optional)
+                                        - generic [ref=f18e699]: Add up to 5 data sources to include with your prompt instructions.
+                                    - listitem [ref=f18e700]:
+                                        - button "Add" [ref=f18e703] [cursor=pointer]
+                - generic [ref=f18e707]:
+                    - button "Cancel" [ref=f18e710] [cursor=pointer]
+                    - button "Next" [ref=f18e713] [cursor=pointer]

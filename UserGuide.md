@@ -948,6 +948,152 @@ HTML templates work with every generation path: single-record, bulk (individual 
 - **Page numbers appearing without a configured header/footer** — your template's source HTML already has `@page { @bottom-center { content: counter(page) ... } }`. Google Docs' Web Page export sometimes includes this automatically. Either remove the `@page` block from the HTML body before upload, or accept it (many users actually want page numbers).
 - **Merge tag shows up literally in the PDF (e.g. the text "{Name}")** — the tag didn't resolve. Check the field name is correct and in your Query Config, and that the WYSIWYG editor didn't HTML-encode the braces (DocGen decodes `&#123;` and `&#125;` automatically, but non-standard editors could still trip this).
 
+### 5.7.11 Generate the template with Agentforce (v3.46+)
+
+DocGen can write and revise HTML templates by prompting Salesforce AI **inside
+your own org**, instead of copying the Designer's prompt out to ChatGPT and
+pasting the HTML back. It sends exactly the same prompt as **Copy AI Prompt** —
+your fields, the merge-tag syntax, the PDF engine's layout rules — through
+`ConnectApi`, not an HTTP callout, so nothing leaves the Salesforce platform.
+
+**This is optional.** It arrives with the separate **Portwood DocGen Agentforce
+Extension** package; without that installed, the Designer simply hides the
+Agentforce button and everything else works exactly as before.
+
+#### Setup — install the extension
+
+The quickest route is one package install. **Portwood DocGen Agentforce
+Extension** carries everything: the Apex provider that talks to Einstein, and a
+ready-made prompt template already set to a capable model. Nothing to write,
+nothing to configure.
+
+**Prerequisites**
+
+- Portwood DocGen **3.46 or later**
+- **Einstein Generative AI / Prompt Builder** enabled in your org
+
+Salesforce enforces both at install, so you cannot end up half-configured. Not
+sure whether Einstein is on? Run this in Developer Console → Anonymous Apex; if
+it fails to compile, Einstein is not enabled yet:
+
+```apex
+ConnectApi.EinsteinPromptTemplateGenerationsInput probe = new ConnectApi.EinsteinPromptTemplateGenerationsInput();
+System.debug('Einstein Apex types are visible');
+```
+
+**Install it,** entering the installation key you were given. Then open any HTML
+template in the Designer — **Generate with Agentforce** appears next to Copy AI
+Prompt. No permission set beyond **DocGen Admin**, and no settings to change.
+
+> Why a second package? The provider references `ConnectApi.EinsteinLLM`, and the
+> prompt template requires the Generative AI Prompt Templates feature. A base
+> package containing either is **refused at install** for any org without
+> Einstein. Keeping them in a separate, optional package is what lets DocGen
+> itself stay installable everywhere.
+
+#### Setup — bring your own provider (alternative)
+
+Skip the extension if you would rather use a different model, your own prompt
+template, or your own service. Implement the `global` interface, in your own org:
+
+```apex
+public with sharing class MyAiProvider implements portwoodglobal.DocGenAiProvider {
+    public Boolean isAvailable() {
+        return true;
+    }
+    public String getName() {
+        return 'My AI';
+    }
+    public String generateHtml(String prompt) {
+        // Return a complete HTML document. DocGen validates it against the PDF
+        // engine's constraints before anything is saved, so no need to sanitize.
+        return callMyModel(prompt);
+    }
+}
+```
+
+Then point DocGen at it in **Setup → Custom Settings → DocGen Settings**:
+
+| Setting            | Leave blank to use                         |
+| ------------------ | ------------------------------------------ |
+| AI Provider Class  | `DocGenEinsteinProvider` (the extension's) |
+| AI Prompt Template | `DocGen_HTML_Body` (the extension's)       |
+
+The provider class is resolved in your own namespace first, then in
+`portwoodglobal` — so your class wins if both exist.
+
+**Do not make an HTTP callout from a provider.** DocGen's "no external services"
+guarantee depends on it, and Einstein is reached through `ConnectApi` precisely
+so that stays true.
+
+If you write your own prompt template rather than using the extension's, it needs
+to be a **Flex** template with a single required **Free Text** input named
+`Instructions`, Saved and **Activated** — an inactive template returns no
+content. Insert the input with **Insert Resource → Inputs → Instructions**;
+typing `{{Input.Instructions}}` by hand does not bind it. And choose the model
+deliberately: Prompt Builder defaults to **GPT 5 Mini**, which on a four-part
+edit instruction applied changes only partially and more than once replied
+"I don't know." instead of returning a document. GPT 5.4 applied 4/4 every run.
+
+#### Using it
+
+**From the wizard.** Choose **Generate with AI**, describe your document, then
+**Generate it here with Agentforce**. The HTML is checked and dropped straight
+into the paste box; continue to Review & Create and the Designer opens on it.
+
+**From the Designer.** **Generate with Agentforce** offers two modes:
+
+- **Edit what is on the canvas** (the default) — your instruction is sent along
+  with the current template, unsaved edits included, so it revises rather than
+  starting over. Nothing is discarded.
+- **Start over from scratch** — writes a new document, replacing what is on the
+  canvas. It asks you to confirm first.
+
+Two habits that markedly improve results:
+
+1. **Name concrete values.** "Change the header band to `#184d47`" lands far more
+   reliably than "make it dark green".
+2. **Spell out each change.** Multi-part instructions are honoured, but say
+   "change X, add Y, and make Z bold" rather than implying them.
+
+#### What the report tells you
+
+Every generation is checked against the PDF engine's real capabilities _before_
+anything is saved, and you are told what changed:
+
+- **Repaired** — rewritten into something the engine understands. `rgba()` tints
+  become flat hex (they otherwise resolve to nothing and the panel renders
+  invisible), gradients become their first colour, `{!Field}` becomes `{Field}`,
+  and loop tags stranded between table rows are moved into the cells.
+- **Removed** — silently ignored by the engine, so leaving it in the source would
+  mislead you: `border-radius`, `box-shadow`, `opacity`, `@media`, `calc()`.
+- **Check this** — needs your judgement. Most importantly on an edit: **merge
+  tags that were in the template before and are not in the result.** A lost tag
+  renders as nothing, which is invisible on screen. If you did not ask for it,
+  click **Reload** to get the previous body back.
+
+Previous bodies are never destroyed — every save writes a new file version, so
+earlier ones stay in the template's file history.
+
+DocGen also refuses to save a response that is not a document. Models
+occasionally answer a perfectly good instruction with a refusal such as "I don't
+know."; rather than writing that over your template, DocGen stops and tells you
+the template was **not** changed.
+
+#### Troubleshooting
+
+- **The button does not appear** — the Agentforce Extension is not installed, or
+  a custom provider named in DocGen Settings is missing or does not implement
+  `portwoodglobal.DocGenAiProvider`. Note that a `public` class is invisible
+  across a package boundary: a provider in its own package must be `global`.
+- **"Failed to generate Einstein LLM generations response"** with no detail —
+  the ConnectApi call is missing `additionalConfig.applicationName`. The shipped
+  provider sets it; a hand-written one must too.
+- **"Einstein returned no content"** — the prompt template exists but has no
+  **active** version. Open it and Activate.
+- **Generation takes 10–25 seconds** — expected, and it consumes Einstein usage
+  against your org's entitlement.
+
 ### 5.8 Word template authoring tips
 
 Word templates are the most common DocGen authoring path, and 95% of issues come from one of three quirks below. Worth a five-minute read before debugging a "but it looks fine in Word" rendering bug.

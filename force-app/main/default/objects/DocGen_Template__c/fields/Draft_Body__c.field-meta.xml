@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Draft_Body__c</fullName>
+    <description
+    >Staging area for an AI-generated HTML body. Holds the model's RAW output, before the Flying Saucer validator strips what the PDF engine ignores. The validated body is what gets written to the docgen_html_body_ ContentVersion and opened in the Designer; this field is kept so the two can be compared.</description>
+    <label>Draft Body</label>
+    <length>131072</length>
+    <type>LongTextArea</type>
+    <visibleLines>10</visibleLines>
+</CustomField>

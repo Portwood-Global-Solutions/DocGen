@@ -1,0 +1,261 @@
+- generic:
+    - generic [ref=f18e2]:
+        - generic [ref=f18e3]:
+            - link "Skip to Navigation" [ref=f18e831] [cursor=pointer]:
+                - /url: javascript:void(0);
+            - link "Skip to Main Content" [ref=f18e832] [cursor=pointer]:
+                - /url: javascript:void(0);
+            - generic [ref=f18e9]:
+                - generic [ref=f18e13]:
+                    - button "Toggle Panel" [ref=f18e833] [cursor=pointer]:
+                        - generic [ref=f18e24]: Menu
+                    - generic [ref=f18e25]: Sandbox (Dev)
+                - button "Show menu" [ref=f18e834] [cursor=pointer]
+            - generic [ref=f18e52]:
+                - generic [ref=f18e66]:
+                    - combobox "Search Setup" [ref=f18e835]
+                    - generic: Search Setup
+                - navigation "Global Header" [ref=f18e836]:
+                    - list [ref=f18e71]:
+                        - listitem [ref=f18e72]:
+                            - group [ref=f18e73]:
+                                - button "This item doesn't support favorites" [ref=f18e837] [cursor=pointer]:
+                                    - generic [ref=f18e76]:
+                                        - tooltip "This item doesn't support favorites"
+                                - generic [ref=f18e83]:
+                                    - button "Favorites list" [disabled]:
+                                        - generic:
+                                            - tooltip "Favorites list"
+                        - listitem [ref=f18e84]:
+                            - button [ref=f18e838] [cursor=pointer]:
+                                - generic [ref=f18e719]:
+                                    - tooltip "Global Actions"
+                        - listitem [ref=f18e726]:
+                            - button [ref=f18e839] [cursor=pointer]:
+                                - generic [ref=f18e729]:
+                                    - tooltip "Guidance Center"
+                        - listitem [ref=f18e93]:
+                            - button [ref=f18e840] [cursor=pointer]:
+                                - generic [ref=f18e97]:
+                                    - tooltip "Salesforce Help"
+                        - listitem [ref=f18e104]:
+                            - button [ref=f18e841] [cursor=pointer]:
+                                - generic [ref=f18e111]:
+                                    - tooltip "Setup"
+                        - listitem [ref=f18e118]:
+                            - button [ref=f18e842] [cursor=pointer]:
+                                - generic [ref=f18e122]:
+                                    - tooltip "Notifications"
+                        - listitem [ref=f18e131]:
+                            - button "View profile" [ref=f18e843] [cursor=pointer]:
+                                - generic [ref=f18e135]:
+                                    - tooltip "View profile"
+        - generic [ref=f18e139]:
+            - generic:
+                - generic [ref=f18e140]:
+                    - generic [ref=f18e143]:
+                        - navigation "App" [ref=f18e844]:
+                            - button "App Launcher" [ref=f18e845] [cursor=pointer]
+                        - generic "Setup" [ref=f18e846]
+                    - navigation "Workspaces" [ref=f18e847]:
+                        - tablist "Workspace tabs for Setup" [ref=f18e848]:
+                            - generic [ref=f18e164]: Press Spacebar to reorder tabs.
+                            - tab "Home" [ref=f18e849] [cursor=pointer]
+                            - status [ref=f18e167]
+                            - tab "Object Manager" [ref=f18e850] [cursor=pointer]
+                            - button "Object Manager List" [ref=f18e851] [cursor=pointer]
+                            - status [ref=f18e182]
+                            - tab "Loading..." [selected] [ref=f18e852] [cursor=pointer]
+                            - button "Close Tab" [ref=f18e853] [cursor=pointer]
+                            - status [ref=f18e192] [cursor=pointer]
+                - generic [ref=f18e194]:
+                    - button "Split view mode" [ref=f18e854] [cursor=pointer]
+                    - main [ref=f18e204]:
+                        - tabpanel [ref=f18e205]:
+                            - tabpanel [ref=f18e208]:
+                                - generic [ref=f18e241]:
+                                    - generic [ref=f18e244]:
+                                        - generic [ref=f18e245]: Back to list view
+                                        - heading [level=1] [ref=f18e266]: Prompt Builder
+                                        - button "$Label.PromptTemplateEditor.VersionDeactivatedToastMsg does not exist." [ref=f18e855] [cursor=pointer]
+                                        - button "Help Show Help Menu" [ref=f18e856] [cursor=pointer]:
+                                            - text: Help
+                                            - generic [ref=f18e294]: Show Help Menu
+                                    - toolbar [ref=f18e297]:
+                                        - button "Template Settings" [expanded] [pressed] [ref=f18e857] [cursor=pointer]
+                                        - group [ref=f18e310]:
+                                            - generic [ref=f18e312]:
+                                                - button "Preview Settings" [ref=f18e858] [cursor=pointer]
+                                                - button "Performance Insights" [ref=f18e859] [cursor=pointer]
+                                        - button "Save & Preview" [ref=f18e860] [cursor=pointer]
+                                        - generic [ref=f18e337]:
+                                            - button "Save" [ref=f18e862] [cursor=pointer]
+                                            - generic [ref=f18e345]:
+                                                - generic:
+                                                    - button "Activate" [disabled]
+                                            - button "More options" [ref=f18e867] [cursor=pointer]
+                                    - generic [ref=f18e360]:
+                                        - generic [ref=f18e363]:
+                                            - generic [ref=f18e364]:
+                                                - heading "Template Details" [level=2] [ref=f18e868]
+                                                - button "Close" [ref=f18e869] [cursor=pointer]
+                                            - generic [ref=f18e375]:
+                                                - tablist "Tabs" [ref=f18e870]:
+                                                    - tab "Properties" [selected] [ref=f18e871] [cursor=pointer]
+                                                    - tab "Resources" [ref=f18e872] [cursor=pointer]
+                                                - tabpanel "Properties" [ref=f18e873]:
+                                                    - list [ref=f18e383]:
+                                                        - generic [ref=f18e385]:
+                                                            - listitem [ref=f18e386]:
+                                                                - heading [level=2] [ref=f18e874]:
+                                                                    - button "Overview" [ref=f18e875] [cursor=pointer]
+                                                            - listitem [ref=f18e397]:
+                                                                - generic [ref=f18e399]:
+                                                                    - heading [level=2] [ref=f18e877]:
+                                                                        - button "Model" [expanded] [ref=f18e878] [cursor=pointer]
+                                                                    - generic [ref=f18e410]:
+                                                                        - generic [ref=f18e411]:
+                                                                            - generic [ref=f18e413]:
+                                                                                - generic [ref=f18e414]: "\*Model Type"
+                                                                                - button "Model Type Help Info" [ref=f18e880] [cursor=pointer]
+                                                                                - combobox "Model Type" [ref=f18e881] [cursor=pointer]:
+                                                                                    - generic [ref=f18e430]: Standard
+                                                                                - status
+                                                                            - generic [ref=f18e438]:
+                                                                                - generic [ref=f18e439]: "\*Models"
+                                                                                - button "Models Help Info" [ref=f18e882] [cursor=pointer]
+                                                                                - combobox "Models" [ref=f18e883] [cursor=pointer]:
+                                                                                    - generic [ref=f18e455]: GPT 5 Mini
+                                                                                - status
+                                                                        - list [ref=f18e464]:
+                                                                            - listitem [ref=f18e467]:
+                                                                                - heading [level=2] [ref=f18e884]:
+                                                                                    - button "Limits" [ref=f18e885] [cursor=pointer]
+                                                                        - list [ref=f18e889]:
+                                                                            - listitem [ref=f18e892]:
+                                                                                - heading [level=2] [ref=f18e896]:
+                                                                                    - button "File Exclusion Priority" [ref=f18e897] [cursor=pointer]
+                                                            - listitem [ref=f18e478]:
+                                                                - generic [ref=f18e480]:
+                                                                    - heading [level=2] [ref=f18e903]:
+                                                                        - button "Format" [expanded] [ref=f18e904] [cursor=pointer]
+                                                                    - generic [ref=f18e909]:
+                                                                        - generic [ref=f18e910]: Response Format
+                                                                        - combobox "Response Format" [ref=f18e916] [cursor=pointer]:
+                                                                            - generic [ref=f18e917]: Default
+                                                                        - status
+                                                            - listitem [ref=f18e492]:
+                                                                - generic [ref=f18e494]:
+                                                                    - heading [level=2] [ref=f18e924]:
+                                                                        - button "Response Language" [expanded] [ref=f18e925] [cursor=pointer]
+                                                                    - generic [ref=f18e505]:
+                                                                        - generic [ref=f18e508]:
+                                                                            - generic [ref=f18e509]:
+                                                                                - strong [ref=f18e511]: Automatic
+                                                                                - generic [ref=f18e513]:
+                                                                                    - text: The system determines the response language at runtime based on the allowed languages.
+                                                                                    - link "Learn More" [ref=f18e927] [cursor=pointer]:
+                                                                                        - /url: https://help.salesforce.com/s/articleView?id=ai.prompt_builder_single_template_languages.htm&type=5
+                                                                            - generic [ref=f18e518]:
+                                                                                - generic [ref=f18e520]:
+                                                                                    - generic [ref=f18e521]: Automatic
+                                                                                    - switch "Automatic" [checked] [ref=f18e928]
+                                                                                - status
+                                                                        - generic [ref=f18e528]:
+                                                                            - generic [ref=f18e529]: Allowed Languages
+                                                                            - button "Allowed Languages Help Info" [ref=f18e929] [cursor=pointer]
+                                                                            - combobox "Allowed Languages" [ref=f18e930]
+                                                                            - status
+                                        - list [ref=f18e554]:
+                                            - generic [ref=f18e556]:
+                                                - listitem [ref=f18e557]:
+                                                    - generic [ref=f18e559]:
+                                                        - button "1 Prompt" [expanded] [ref=f18e931] [cursor=pointer]:
+                                                            - generic [ref=f18e561]: "1"
+                                                            - heading "Prompt" [level=3] [ref=f18e932]
+                                                            - generic "Collapse" [ref=f18e934]
+                                                        - generic [ref=f18e576]:
+                                                            - generic [ref=f18e578]:
+                                                                - button "Insert Resource Insert Resource" [ref=f18e936] [cursor=pointer]:
+                                                                    - generic [ref=f18e937]: Insert Resource
+                                                                    - generic [ref=f18e945]: Insert Resource
+                                                                - button [ref=f18e581] [cursor=pointer]
+                                                            - generic [ref=f18e588]:
+                                                                - generic "Resources" [ref=f18e969]:
+                                                                    - menu [ref=f18e970]:
+                                                                        - group "Inputs" [ref=f18e971]:
+                                                                            - separator [ref=f18e972]:
+                                                                                - generic [ref=f18e973]: Inputs
+                                                                            - menuitem [ref=f18e974]:
+                                                                                - listitem [ref=f18e975] [cursor=pointer]:
+                                                                                    - button "Instructions" [ref=f18e979]:
+                                                                                        - generic "Instructions" [ref=f18e987]
+                                                                        - group "Actions" [ref=f18e988]:
+                                                                            - separator [ref=f18e989]:
+                                                                                - separator [ref=f18e990]
+                                                                                - generic [ref=f18e991]: Actions
+                                                                            - menuitem [ref=f18e992]:
+                                                                                - listitem [ref=f18e993] [cursor=pointer]:
+                                                                                    - button "Apex" [ref=f18e997]:
+                                                                                        - generic "Apex" [ref=f18e1005]
+                                                                            - menuitem [ref=f18e1012]:
+                                                                                - listitem [ref=f18e1013] [cursor=pointer]:
+                                                                                    - button "Flows" [ref=f18e1017]:
+                                                                                        - generic "Flows" [ref=f18e1025]
+                                                                            - menuitem [ref=f18e1032]:
+                                                                                - listitem [ref=f18e1033] [cursor=pointer]:
+                                                                                    - button "Prompt Template" [ref=f18e1037]:
+                                                                                        - generic "Prompt Template" [ref=f18e1045]
+                                                                            - menuitem [ref=f18e1052]:
+                                                                                - listitem [ref=f18e1053] [cursor=pointer]:
+                                                                                    - button "Salesforce Data Action" [ref=f18e1057]:
+                                                                                        - generic "Salesforce Data Action" [ref=f18e1065]
+                                                                        - group "Global" [ref=f18e1072]:
+                                                                            - separator [ref=f18e1073]:
+                                                                                - separator [ref=f18e1074]
+                                                                                - generic [ref=f18e1075]: Global
+                                                                            - menuitem [ref=f18e1076]:
+                                                                                - listitem [ref=f18e1077] [cursor=pointer]:
+                                                                                    - button "Current Organization" [ref=f18e1081]:
+                                                                                        - generic "Current Organization" [ref=f18e1090]
+                                                                            - menuitem [ref=f18e1097]:
+                                                                                - listitem [ref=f18e1098] [cursor=pointer]:
+                                                                                    - button "Current User" [ref=f18e1102]:
+                                                                                        - generic "Current User" [ref=f18e1111]
+                                                                        - group "Configure" [ref=f18e1118]:
+                                                                            - separator [ref=f18e1119]:
+                                                                                - separator [ref=f18e1120]
+                                                                                - generic [ref=f18e1121]: Configure
+                                                                            - menuitem [ref=f18e1122]:
+                                                                                - listitem [ref=f18e1123] [cursor=pointer]:
+                                                                                    - button "Configure Action" [ref=f18e1127]:
+                                                                                        - generic "Configure Action" [ref=f18e1135]
+                                                                - generic [ref=f18e951]:
+                                                                    - combobox [expanded] [active] [ref=f18e1142]: "You generate HTML document templates for Portwood DocGen, which renders HTML to PDF with Flying Saucer (CSS 2.1 only). Follow the instructions below exactly. Return only a complete, self-contained HTML document. Do not wrap it in markdown code fences and do not add commentary. Instructions: @"
+                                                                    - generic [ref=f18e966]:
+                                                                        - generic:
+                                                                            - generic:
+                                                                                - generic:
+                                                                                    - generic:
+                                                                                        - textbox "Filter"
+                                                                                    - generic:
+                                                                                        - generic: If
+                                                                                        - generic: Else If
+                                                                                        - generic: Else
+                                                - listitem [ref=f18e593]:
+                                                    - button "2 Resolved Prompt" [ref=f18e958] [cursor=pointer]:
+                                                        - generic [ref=f18e597]: "2"
+                                                        - heading "Resolved Prompt" [level=3] [ref=f18e959]
+                                                        - generic "Expand" [ref=f18e961]
+                                                - listitem [ref=f18e608]:
+                                                    - button "3 Generated Response" [ref=f18e962] [cursor=pointer]:
+                                                        - generic [ref=f18e612]: "3"
+                                                        - heading "Generated Response" [level=3] [ref=f18e963]
+                                                        - generic "Expand" [ref=f18e965]
+    - generic:
+        - status
+    - generic:
+        - generic:
+            - generic:
+                - text: Click to tune
+                - generic: ⌘ + /

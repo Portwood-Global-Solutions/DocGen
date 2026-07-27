@@ -303,6 +303,17 @@
         <readable>true</readable>
     </fieldPermissions>
     <!-- DocGen Settings (hierarchy custom setting) fields -->
+    <!-- AI authoring: which provider class and prompt template to use -->
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Settings__c.AI_Prompt_Template__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Settings__c.AI_Provider_Class__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Settings__c.Company_Name__c</field>
@@ -472,6 +483,12 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>DocGen_Template__c.Document_Title_Format__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <!-- AI authoring: raw model output, staged before the validator runs -->
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>DocGen_Template__c.Draft_Body__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <!-- Signer verification template defaults (#verification) -->

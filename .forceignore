@@ -19,3 +19,12 @@ scripts/
 # Public-API reference example — ships in docs, not in the package
 force-app/main/default/classes/DocGenDataProviderExample.cls
 force-app/main/default/classes/DocGenDataProviderExample.cls-meta.xml
+
+# NOTE: DocGenEinsteinProvider and the DocGen_HTML_Body prompt template used to
+# be fenced off here. They now live in agentforce-ext/, their own 2GP package
+# directory, because neither can ship in the BASE package:
+#   - a package containing ConnectApi.EinsteinLLM builds, but is REFUSED at
+#     install in an org without Einstein ("Type is not visible")
+#   - a package containing a GenAiPromptTemplate makes the WHOLE package require
+#     the Generative AI Prompt Templates feature, gating install for everyone
+# Both measured 2026-07-26. Keep them out of force-app.

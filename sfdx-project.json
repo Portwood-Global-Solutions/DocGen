@@ -1,15 +1,30 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.45.0 — Visual Designer editing overhaul, running-header render fixes, silent-degradation logging, QA harness",
-      "versionNumber": "3.45.0.NEXT",
+      "versionName": "v3.46.0 — AI template authoring (Agentforce) + Flying Saucer validator",
+      "versionNumber": "3.46.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.45 is a large quality release for the template Designer: edit a merge tag straight from its menu, format a whole block of table cells at once, set table border thickness and colour, and see a preview of what you are dragging before you drop it. Table controls are easier to find and stay put long enough to click. Documents with a running header now keep it clear of the page content. Generation problems that used to pass silently — a logo that could not be loaded, a chart that came back empty — are now recorded in the DocGen Error Log so they can be found and fixed. 100% native Salesforce — no external services or callouts. Free for all users.",
-      "ancestorVersion": "3.44.0"
+      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.46 lets you build a template by describing it. Tell DocGen what you want — \"a one-page invoice with a branded header, a line-item table and a totals row\" — and it writes the template for you, right inside Salesforce. Already have a template? Ask for a change in plain English and it revises what is on the canvas instead of starting over. Everything it produces is checked against the PDF engine first, and you are told exactly what was adjusted and why, so a template never looks right on screen and wrong in the finished document. Requires Einstein/Prompt Builder in your org plus a short one-time setup; without it, everything else works exactly as before. 100% native Salesforce — no external services or callouts. Free for all users.",
+      "ancestorVersion": "3.45.0"
+    },
+    {
+      "versionName": "v1.0.0 — Agentforce template authoring",
+      "versionNumber": "1.0.0.NEXT",
+      "path": "agentforce-ext",
+      "default": false,
+      "package": "Portwood DocGen Agentforce Extension",
+      "versionDescription": "Adds AI template authoring to Portwood DocGen. Describe the document you want and it writes the template; ask for a change in plain English and it revises the one you already have. Everything it produces is checked against the PDF engine first, so a template never looks right on screen and wrong in the finished document. Includes a ready-made prompt template — no Prompt Builder setup required. Requires Portwood DocGen 3.46 or later and Einstein/Prompt Builder in your org. 100% native Salesforce — no external services or callouts.",
+      "definitionFile": "config/agentforce-ext-def.json",
+      "dependencies": [
+        {
+          "package": "Portwood DocGen Managed",
+          "versionNumber": "3.46.0.LATEST"
+        }
+      ]
     }
   ],
   "name": "Portwood DocGen",
@@ -211,6 +226,11 @@
     "Portwood DocGen Managed@3.43.0-1": "04tVx000000rkeDIAQ",
     "Portwood DocGen Managed@3.44.0-1": "04tVx000000rksjIAA",
     "Portwood DocGen Managed@3.44.0-2": "04tVx000000rlATIAY",
-    "Portwood DocGen Managed@3.45.0-1": "04tVx000000s7pJIAQ"
+    "Portwood DocGen Managed@3.45.0-1": "04tVx000000s7pJIAQ",
+    "Portwood DocGen Managed@3.46.0-1": "04tVx000000s7qvIAA",
+    "Portwood DocGen Managed@3.46.0-5": "04tVx000000s7yzIAA",
+    "Portwood DocGen Agentforce Extension": "0HoVx000000Egx3KAC",
+    "Portwood DocGen Agentforce Extension@1.0.0-1": "04tVx000000s80bIAA",
+    "Portwood DocGen Agentforce Extension@1.0.0-2": "04tVx000000s82DIAQ"
   }
 }

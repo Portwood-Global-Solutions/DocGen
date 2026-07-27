@@ -1,5 +1,87 @@
 # Changelog
 
+## v3.46.0 — AI template authoring (Agentforce) + Flying Saucer validator
+
+Requires a short one-time setup (`docs/AGENTFORCE_SETUP.md`). **Without it nothing
+changes**: the Designer hides the Agentforce button and the existing Copy AI Prompt
+workflow is untouched. Verified installing into an org with no Einstein entitlement.
+
+### Added
+
+- **Describe a document and DocGen writes it.** "Generate with Agentforce" in the
+  Designer toolbar and on the wizard's AI step. It sends the same prompt Copy AI Prompt
+  hands out — your fields, the merge-tag syntax, the PDF engine's constraints — to
+  Salesforce AI in your own org, so nothing leaves the platform. Reached through
+  `ConnectApi`, not an HTTP callout: `Limits.getCallouts()` stays at 0, and DocGen
+  remains 100% native.
+- **Ask for a change in plain English.** Editing is the default: the template currently
+  on the canvas, unsaved edits included, is sent with your instruction, so Agentforce
+  revises it rather than starting over. Starting from scratch now asks you to confirm,
+  because it is the only path that discards work.
+- **`DocGenAiProvider`** — a `global` interface you implement to plug in AI. The Einstein
+  reference implementation ships as source in the repo rather than in the package,
+  because a class referencing `ConnectApi.EinsteinLLM` cannot be compiled in a package
+  build org. `DocGen_Settings__c.AI_Provider_Class__c` and `AI_Prompt_Template__c` point
+  DocGen at yours without editing Apex.
+- **`DocGen_Template__c.Draft_Body__c`** stages the model's raw output so it can be
+  compared against what was saved.
+
+### Added — the validator, which is the point
+
+Generated HTML is checked against the PDF engine's **measured** capabilities before
+anything is saved, and you are told what changed and why. A general model returns
+flexbox, `border-radius` and `rgba()` tints however firmly the prompt says otherwise —
+measured, asked for CSS 2.1 explicitly, and it still emitted `display:flex` three times.
+
+- **Repaired** — `rgba()`/`hsla()` composited over white into a flat hex (it does _not_
+  fall back to a colour; it resolves to nothing and the panel renders invisible),
+  gradients collapsed to their first stop, `var()` substituted, numeric `font-weight`
+  mapped to normal/bold, Visualforce-style `{!Field}` rewritten to `{Field}`, markdown
+  fences stripped, and loop tags moved from between table rows into the first and last
+  cells — the #248 bug, which the model reproduced on its very first generation.
+- **Removed** — `border-radius` in every form, `box-shadow`, `text-shadow`, `outline`,
+  `opacity`, `transform`, `box-sizing`, `calc()`, CSS columns, `@media`, `<script>`,
+  `<svg>`, external stylesheets.
+- **Check this** — `display:flex`/`grid` (needs a real table rebuild), `position:absolute`,
+  ZapfDingbats/Symbol, `{PageNumber}` in the body, unbalanced braces.
+- Deliberately untouched because they are measured to work: `border: dashed`/`dotted`,
+  `:nth-child(even)`, `display: table-cell`, `@page`.
+
+### Added — edit safety
+
+- **`DocGenAiEditGuard`.** A bad generation is obviously bad; a bad _edit_ is invisible —
+  a dropped `{Amount:currency}` renders as nothing and the canvas looks fine. Every edit
+  is diffed against what went in, and lost merge tags are reported **by name**, along
+  with truncation, a dropped `@page`, and vanished tables. It never blocks or rewrites:
+  losing a tag can be exactly what was asked for. Previous bodies stay in the template's
+  file history.
+
+### Setup
+
+Install the separate **Portwood DocGen Agentforce Extension** package (requires
+DocGen 3.46+ and Einstein; Salesforce enforces both at install). It carries the
+provider and a ready-made prompt template — nothing to write or configure. Or
+implement `portwoodglobal.DocGenAiProvider` yourself to use a different model.
+Full instructions: **UserGuide section 5.7.11**.
+
+The provider class and the prompt template cannot ship inside the package, and
+both were measured rather than assumed. A package containing
+`ConnectApi.EinsteinLLM` builds, but is **refused at install** in an org without
+Einstein. A package containing a `GenAiPromptTemplate` is worse — it makes the
+whole package require the Generative AI Prompt Templates feature, gating install
+for every customer. Keeping them outside is what lets DocGen stay installable
+everywhere.
+
+### Notes
+
+- **Choose the model deliberately.** Prompt Builder defaults to GPT 5 Mini. On a
+  four-part edit instruction, GPT 5.4 applied 4/4 changes every run with no
+  refusals; GPT 5 Mini applied them partially and more than once replied
+  "I don't know." instead of returning a document.
+- Multi-part instructions are applied more reliably when you name concrete values —
+  "change the header band to `#184d47`" beats "make it dark green".
+- Generation takes 10–25 seconds and consumes Einstein usage against your org.
+
 ## v3.45.0 — Visual Designer editing overhaul, running-header render fixes, silent-degradation logging
 
 Promoted as `04tVx000000s7pJIAQ` (build 3.45.0-1) — 78% coverage, validation not skipped.

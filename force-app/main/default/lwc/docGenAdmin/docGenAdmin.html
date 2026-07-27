@@ -711,6 +711,64 @@
                                         images, description, and the PDF engine's layout rules.
                                     </p>
                                     <pre class="dg-ai-prompt">{aiAuthoringPrompt}</pre>
+
+                                    <template if:true={showWizardAgentforce}>
+                                        <div class="slds-box slds-var-m-top_small slds-var-m-bottom_small">
+                                            <div
+                                                class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center"
+                                            >
+                                                <div>
+                                                    <strong>Or skip the copy-paste</strong>
+                                                    <p class="slds-text-body_small slds-text-color_weak">
+                                                        Send that exact prompt to Salesforce AI in this org. The result
+                                                        is checked against the PDF engine's rules and dropped straight
+                                                        into the box below.
+                                                    </p>
+                                                </div>
+                                                <lightning-button
+                                                    label={wizardAgentforceBtnLabel}
+                                                    variant="brand"
+                                                    icon-name="utility:einstein"
+                                                    onclick={handleWizardAgentforceGenerate}
+                                                    disabled={isWizardAgentforceGenerating}
+                                                ></lightning-button>
+                                            </div>
+                                            <template if:true={isWizardAgentforceGenerating}>
+                                                <div
+                                                    class="slds-is-relative slds-var-m-top_medium"
+                                                    style="height: 44px"
+                                                >
+                                                    <lightning-spinner
+                                                        alternative-text="Generating..."
+                                                        size="small"
+                                                    ></lightning-spinner>
+                                                </div>
+                                            </template>
+                                            <template if:true={hasWizardAgentforceReport}>
+                                                <div class="slds-var-m-top_medium">
+                                                    <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">
+                                                        {wizardAgentforceSummary}
+                                                    </h3>
+                                                    <template for:each={wizardAgentforceFindings} for:item="f">
+                                                        <div key={f.key} class="slds-var-m-bottom_x-small">
+                                                            <lightning-badge
+                                                                label={f.badge}
+                                                                class={f.badgeClass}
+                                                            ></lightning-badge>
+                                                            <strong class="slds-var-m-left_x-small">{f.rule}</strong>
+                                                            <span class="slds-text-body_small slds-text-color_weak">
+                                                                &times;{f.occurrences}</span
+                                                            >
+                                                            <p class="slds-text-body_small slds-var-m-left_medium">
+                                                                {f.detail}
+                                                            </p>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+
                                     <div class="dg-ai-step-head slds-var-m-top_small">
                                         <span class="dg-ai-step-num">5</span>
                                         <strong>Paste the HTML it returns</strong>
@@ -1629,6 +1687,16 @@
                                     >
                                         Copy AI Prompt
                                     </button>
+                                    <template if:true={showAgentforceButton}>
+                                        <button
+                                            class="dg-fmt-btn dg-panel-btn dg-tb-chip"
+                                            onclick={handleOpenAgentforcePanel}
+                                            disabled={isAgentforceGenerating}
+                                            title="Send the same prompt to Salesforce AI in this org and load the result straight into the canvas — no copy-paste."
+                                        >
+                                            {agentforceBtnLabel}
+                                        </button>
+                                    </template>
                                     <button
                                         class="dg-fmt-btn dg-panel-btn dg-pdf-preview-btn dg-toolbar-pdf"
                                         onclick={handlePdfPreview}
@@ -5293,6 +5361,125 @@
                         variant="brand"
                         onclick={handleRestoreFromPreview}
                         disabled={isPreviewVersionActive}
+                    ></lightning-button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+
+    <!-- Generate with Agentforce -->
+    <template if:true={isAgentforcePanelOpen}>
+        <section
+            role="dialog"
+            tabindex="-1"
+            aria-modal="true"
+            aria-labelledby="agentforce-modal-title"
+            class="slds-modal slds-fade-in-open slds-modal_medium"
+        >
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <lightning-button-icon
+                        icon-name="utility:close"
+                        alternative-text="Close"
+                        title="Close"
+                        variant="bare"
+                        class="slds-button slds-button_icon slds-modal__close"
+                        onclick={handleCloseAgentforcePanel}
+                    ></lightning-button-icon>
+                    <h2 id="agentforce-modal-title" class="slds-text-heading_medium">Generate with Agentforce</h2>
+                </header>
+                <div class="slds-modal__content slds-var-p-around_large">
+                    <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_medium">
+                        Your fields, the DocGen tag syntax and the PDF engine's layout rules are sent automatically —
+                        the same prompt as <strong>Copy AI Prompt</strong>. Just describe what you want.
+                    </p>
+
+                    <template if:true={canEditWithAgentforce}>
+                        <lightning-radio-group
+                            name="agentforceMode"
+                            label="What should Agentforce do?"
+                            options={agentforceModeOptions}
+                            value={agentforceMode}
+                            onchange={handleAgentforceModeChange}
+                            type="radio"
+                            class="slds-var-m-bottom_medium"
+                        ></lightning-radio-group>
+                        <template if:true={isAgentforceEditMode}>
+                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_medium">
+                                The template currently on the canvas is sent along with your instruction, including any
+                                unsaved edits, so nothing is lost. Agentforce revises it rather than starting again.
+                            </p>
+                        </template>
+                    </template>
+
+                    <lightning-textarea
+                        label={agentforceDescriptionLabel}
+                        value={aiDocDescription}
+                        onchange={handleAiDocDescriptionChange}
+                        oninput={handleAiDocDescriptionChange}
+                        placeholder={agentforceDescriptionPlaceholder}
+                        class="dg-af-desc slds-var-m-bottom_medium"
+                    ></lightning-textarea>
+
+                    <template if:true={agentforceNeedsDiscardConfirm}>
+                        <div class="slds-box slds-theme_warning slds-var-m-bottom_medium">
+                            <lightning-input
+                                type="checkbox"
+                                label="Yes, replace the template currently on the canvas"
+                                checked={agentforceConfirmDiscard}
+                                onchange={handleAgentforceConfirmDiscardChange}
+                            ></lightning-input>
+                            <p class="slds-text-body_small slds-var-m-top_x-small">
+                                Starting over discards what is on the canvas, unsaved edits included. Previous saved
+                                bodies stay in the template's file history, but anything not yet applied is gone.
+                            </p>
+                        </div>
+                    </template>
+
+                    <template if:true={isAgentforceGenerating}>
+                        <div class="slds-is-relative slds-var-m-vertical_large" style="height: 60px">
+                            <lightning-spinner alternative-text="Generating..." size="small"></lightning-spinner>
+                            <p
+                                class="slds-text-align_center slds-text-body_small slds-text-color_weak"
+                                style="padding-top: 42px"
+                            >
+                                Working on the template — this usually takes 10&ndash;20 seconds.
+                            </p>
+                        </div>
+                    </template>
+
+                    <template if:true={hasAgentforceReport}>
+                        <div class="slds-box slds-var-m-top_medium">
+                            <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">{agentforceSummary}</h3>
+                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_small">
+                                The PDF engine is CSS 2.1. Anything it ignores was removed or rewritten before the
+                                template was saved &mdash; here is exactly what changed.
+                            </p>
+                            <template for:each={agentforceFindings} for:item="f">
+                                <div key={f.key} class="slds-var-m-bottom_x-small">
+                                    <lightning-badge label={f.badge} class={f.badgeClass}></lightning-badge>
+                                    <strong class="slds-var-m-left_x-small">{f.rule}</strong>
+                                    <span class="slds-text-body_small slds-text-color_weak">
+                                        &times;{f.occurrences}</span
+                                    >
+                                    <p class="slds-text-body_small slds-var-m-left_medium">{f.detail}</p>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+                <footer class="slds-modal__footer slds-theme_default">
+                    <lightning-button
+                        label="Close"
+                        onclick={handleCloseAgentforcePanel}
+                        class="slds-var-m-right_small"
+                    ></lightning-button>
+                    <lightning-button
+                        label={agentforceGenerateLabel}
+                        variant="brand"
+                        onclick={handleGenerateWithAgentforce}
+                        disabled={isAgentforceGenerating}
                     ></lightning-button>
                 </footer>
             </div>
