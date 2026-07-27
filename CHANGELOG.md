@@ -56,8 +56,26 @@ measured, asked for CSS 2.1 explicitly, and it still emitted `display:flex` thre
   losing a tag can be exactly what was asked for. Previous bodies stay in the template's
   file history.
 
+### Setup
+
+Full instructions are in the **UserGuide, section 5.7.11**. Four steps: enable
+Einstein, create a `DocGen_HTML_Body` Flex prompt template, deploy one Apex class,
+and optionally point DocGen at them via DocGen Settings.
+
+The provider class and the prompt template cannot ship inside the package, and
+both were measured rather than assumed. A package containing
+`ConnectApi.EinsteinLLM` builds, but is **refused at install** in an org without
+Einstein. A package containing a `GenAiPromptTemplate` is worse — it makes the
+whole package require the Generative AI Prompt Templates feature, gating install
+for every customer. Keeping them outside is what lets DocGen stay installable
+everywhere.
+
 ### Notes
 
+- **Choose the model deliberately.** Prompt Builder defaults to GPT 5 Mini. On a
+  four-part edit instruction, GPT 5.4 applied 4/4 changes every run with no
+  refusals; GPT 5 Mini applied them partially and more than once replied
+  "I don't know." instead of returning a document.
 - Multi-part instructions are applied more reliably when you name concrete values —
   "change the header band to `#184d47`" beats "make it dark green".
 - Generation takes 10–25 seconds and consumes Einstein usage against your org.

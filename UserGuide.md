@@ -948,6 +948,157 @@ HTML templates work with every generation path: single-record, bulk (individual 
 - **Page numbers appearing without a configured header/footer** — your template's source HTML already has `@page { @bottom-center { content: counter(page) ... } }`. Google Docs' Web Page export sometimes includes this automatically. Either remove the `@page` block from the HTML body before upload, or accept it (many users actually want page numbers).
 - **Merge tag shows up literally in the PDF (e.g. the text "{Name}")** — the tag didn't resolve. Check the field name is correct and in your Query Config, and that the WYSIWYG editor didn't HTML-encode the braces (DocGen decodes `&#123;` and `&#125;` automatically, but non-standard editors could still trip this).
 
+### 5.7.11 Generate the template with Agentforce (v3.46+)
+
+DocGen can write and revise HTML templates by prompting Salesforce AI **inside
+your own org**, instead of copying the Designer's prompt out to ChatGPT and
+pasting the HTML back. It sends exactly the same prompt as **Copy AI Prompt** —
+your fields, the merge-tag syntax, the PDF engine's layout rules — through
+`ConnectApi`, not an HTTP callout, so nothing leaves the Salesforce platform.
+
+**This is optional and off until you set it up.** Without it the Designer simply
+hides the Agentforce button and everything else works exactly as before.
+
+#### Setup — four steps, about ten minutes
+
+**1. Turn on Einstein.** You need Einstein Generative AI / Prompt Builder, plus
+the **Einstein GPT Prompt Template Manager** permission set for whoever creates
+the template. Not sure whether it is on? Run this in Developer Console →
+Anonymous Apex; if it fails to compile, Einstein is not enabled yet:
+
+```apex
+ConnectApi.EinsteinPromptTemplateGenerationsInput probe = new ConnectApi.EinsteinPromptTemplateGenerationsInput();
+System.debug('Einstein Apex types are visible');
+```
+
+**2. Create the prompt template.** Setup → Einstein → **Prompt Builder** → New
+Prompt Template. (Use the Setup tree or Quick Find — a direct link to
+`EinsteinGPTPromptTemplates` returns "Page not found".)
+
+| Field                | Value                                             |
+| -------------------- | ------------------------------------------------- |
+| Prompt Template Type | **Flex**                                          |
+| Prompt Template Name | DocGen HTML Body                                  |
+| API Name             | `DocGen_HTML_Body`                                |
+| Input                | Type **Free Text**, name `Instructions`, required |
+
+For the prompt body, type a line of framing and then insert the input using
+**Insert Resource → Inputs → Instructions** (typing `{{Input.Instructions}}` by
+hand does not bind it):
+
+```
+You generate HTML document templates for Portwood DocGen, which renders HTML to
+PDF with Flying Saucer (CSS 2.1 only). Follow the instructions below exactly.
+Return only a complete, self-contained HTML document. Do not wrap it in markdown
+code fences and do not add commentary. Instructions: {{Input.Instructions}}
+```
+
+> **Choose the model deliberately — the default is a trap.** Prompt Builder
+> pre-selects **GPT 5 Mini**, and that single choice matters more than anything
+> else on the page. Measured on a four-part edit instruction, GPT 5.4 applied
+> 4/4 changes on every run with no refusals, while GPT 5 Mini applied them only
+> partially and more than once replied "I don't know." rather than returning a
+> document. Open **Model** in the right-hand panel and pick a frontier model —
+> GPT 5.x, Claude Sonnet/Opus and Gemini Pro are all available. Larger models
+> consume more Einstein credits per call.
+
+Then **Save**, and **Activate** — an inactive template returns no content.
+(Changing the model later needs **Save As → Save as a New Version**, then
+Activate; active versions are read-only.)
+
+**3. Deploy the provider class.** Take `DocGenEinsteinProvider.cls` from the
+[DocGen repository](https://github.com/Portwood-Global-Solutions/DocGen) and add
+it to your org (Setup → Apex Classes → New, or `sf project deploy start`). It
+cannot ship inside the package: it references `ConnectApi.EinsteinLLM`, which is
+not a visible Apex type in an org without Einstein, so a package containing it
+is refused at install for every customer who does not have the entitlement.
+
+Because DocGen is a managed package, add the namespace prefix in the two places
+marked with comments in the file:
+
+```apex
+public with sharing class DocGenEinsteinProvider implements portwoodglobal.DocGenAiProvider {
+...
+portwoodglobal__DocGen_Settings__c s = portwoodglobal__DocGen_Settings__c.getOrgDefaults();
+String configured = s == null ? null : s.portwoodglobal__AI_Prompt_Template__c;
+```
+
+Writing your own provider instead — for a different model or your own service —
+is supported: implement `portwoodglobal.DocGenAiProvider` (three methods) and
+name your class in the setting below. Do **not** make an HTTP callout from it;
+DocGen's native guarantee depends on that.
+
+**4. Point DocGen at it (optional).** Setup → Custom Settings → **DocGen
+Settings** → Manage.
+
+| Setting            | Leave blank to use       |
+| ------------------ | ------------------------ |
+| AI Provider Class  | `DocGenEinsteinProvider` |
+| AI Prompt Template | `DocGen_HTML_Body`       |
+
+Only fill these in if you named yours something else. The provider class is
+resolved in your own namespace first, then in `portwoodglobal`.
+
+**Check it worked:** open any HTML template in the Designer — **Generate with
+Agentforce** should appear next to Copy AI Prompt.
+
+#### Using it
+
+**From the wizard.** Choose **Generate with AI**, describe your document, then
+**Generate it here with Agentforce**. The HTML is checked and dropped straight
+into the paste box; continue to Review & Create and the Designer opens on it.
+
+**From the Designer.** **Generate with Agentforce** offers two modes:
+
+- **Edit what is on the canvas** (the default) — your instruction is sent along
+  with the current template, unsaved edits included, so it revises rather than
+  starting over. Nothing is discarded.
+- **Start over from scratch** — writes a new document, replacing what is on the
+  canvas. It asks you to confirm first.
+
+Two habits that markedly improve results:
+
+1. **Name concrete values.** "Change the header band to `#184d47`" lands far more
+   reliably than "make it dark green".
+2. **Spell out each change.** Multi-part instructions are honoured, but say
+   "change X, add Y, and make Z bold" rather than implying them.
+
+#### What the report tells you
+
+Every generation is checked against the PDF engine's real capabilities _before_
+anything is saved, and you are told what changed:
+
+- **Repaired** — rewritten into something the engine understands. `rgba()` tints
+  become flat hex (they otherwise resolve to nothing and the panel renders
+  invisible), gradients become their first colour, `{!Field}` becomes `{Field}`,
+  and loop tags stranded between table rows are moved into the cells.
+- **Removed** — silently ignored by the engine, so leaving it in the source would
+  mislead you: `border-radius`, `box-shadow`, `opacity`, `@media`, `calc()`.
+- **Check this** — needs your judgement. Most importantly on an edit: **merge
+  tags that were in the template before and are not in the result.** A lost tag
+  renders as nothing, which is invisible on screen. If you did not ask for it,
+  click **Reload** to get the previous body back.
+
+Previous bodies are never destroyed — every save writes a new file version, so
+earlier ones stay in the template's file history.
+
+DocGen also refuses to save a response that is not a document. Models
+occasionally answer a perfectly good instruction with a refusal such as "I don't
+know."; rather than writing that over your template, DocGen stops and tells you
+the template was **not** changed.
+
+#### Troubleshooting
+
+- **The button does not appear** — the provider class is missing, misnamed, or
+  does not implement the interface. Check the `portwoodglobal.` prefix.
+- **"Failed to generate Einstein LLM generations response"** with no detail —
+  the ConnectApi call is missing `additionalConfig.applicationName`. The shipped
+  provider sets it; a hand-written one must too.
+- **"Einstein returned no content"** — the prompt template exists but has no
+  **active** version. Open it and Activate.
+- **Generation takes 10–25 seconds** — expected, and it consumes Einstein usage
+  against your org's entitlement.
+
 ### 5.8 Word template authoring tips
 
 Word templates are the most common DocGen authoring path, and 95% of issues come from one of three quirks below. Worth a five-minute read before debugging a "but it looks fine in Word" rendering bug.
