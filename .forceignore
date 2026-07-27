@@ -20,32 +20,11 @@ scripts/
 force-app/main/default/classes/DocGenDataProviderExample.cls
 force-app/main/default/classes/DocGenDataProviderExample.cls-meta.xml
 
-# Einstein-only. These reference ConnectApi.EinsteinLLM, which is NOT a visible
-# type in an org without the Einstein entitlement — deploying them there fails
-# with "Type is not visible: ConnectApi.EinsteinLLM", and because deploys are
-# atomic that takes the ENTIRE deploy down with it (measured 2026-07-26 against
-# Portwood Dev: 409/411, full rollback). Fenced off so no package build can pick
-# them up and break a subscriber who does not have Einstein.
-#
-# The rest of the feature is unaffected: DocGenAiProviderFactory resolves this
-# class by name via Type.forName and falls back to DocGenUnavailableProvider, so
-# the Designer simply hides the button. Deploy these two explicitly, by path, to
-# an Einstein-enabled org:
-#   sf project deploy start -o <einstein-org> \
-#     -d force-app/main/default/classes/DocGenEinsteinProvider.cls \
-#     -d force-app/main/default/classes/DocGenEinsteinProviderTest.cls
-# MEASURED 2026-07-26 — do not remove these lines. With the correct scratch-org
-# recipe (Einstein1AIPlatform + agentPlatformSettings + einsteinGptSettings) the
-# BUILD org can have Einstein, and a package containing this class builds fine:
-# 414/414 with translations, version 3.46.0.3 = 04tVx000000s7vlIAA, 78% coverage.
-# But INSTALL re-validates Apex in the SUBSCRIBER org, and installing that build
-# into an org without Einstein is refused outright:
-#   ApexClass Type is not visible: ConnectApi.EinsteinLLM
-#   Details: DocGenEinsteinProvider: Type is not visible: ConnectApi.EinsteinLLM
-# So shipping it in the base package would lock out every customer who does not
-# have Einstein. Buildable is not the same as installable — that distinction is
-# the whole reason this fence exists.
-force-app/main/default/classes/DocGenEinsteinProvider.cls
-force-app/main/default/classes/DocGenEinsteinProvider.cls-meta.xml
-force-app/main/default/classes/DocGenEinsteinProviderTest.cls
-force-app/main/default/classes/DocGenEinsteinProviderTest.cls-meta.xml
+# NOTE: DocGenEinsteinProvider and the DocGen_HTML_Body prompt template used to
+# be fenced off here. They now live in agentforce-ext/, their own 2GP package
+# directory, because neither can ship in the BASE package:
+#   - a package containing ConnectApi.EinsteinLLM builds, but is REFUSED at
+#     install in an org without Einstein ("Type is not visible")
+#   - a package containing a GenAiPromptTemplate makes the WHOLE package require
+#     the Generative AI Prompt Templates feature, gating install for everyone
+# Both measured 2026-07-26. Keep them out of force-app.

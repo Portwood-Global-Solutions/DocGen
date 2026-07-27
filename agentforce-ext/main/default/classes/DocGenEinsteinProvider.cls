@@ -1,28 +1,27 @@
 /**
- * REFERENCE IMPLEMENTATION — DEPLOY THIS INTO YOUR OWN ORG.
+ * Einstein / Prompt Builder implementation of DocGenAiProvider.
  *
- * This class is deliberately NOT part of the Portwood DocGen package, and cannot
- * be: it references `ConnectApi.EinsteinLLM`, which is not a visible Apex type in
- * an org without the Einstein entitlement — including the org Salesforce spins up
- * to build the package. A package version containing this file fails to compile
- * at BUILD time, long before anyone installs it. Measured, not assumed. It is in
- * `.forceignore` for exactly that reason; removing it from there will break the
- * next DocGen release build.
+ * Ships in the **Portwood DocGen Agentforce Extension** package, separately from
+ * DocGen itself, and that separation is not stylistic. This class references
+ * `ConnectApi.EinsteinLLM`, which is not a visible Apex type in an org without
+ * the Einstein entitlement. A base package containing it BUILDS fine but is
+ * REFUSED AT INSTALL for every customer who does not have Einstein:
  *
- * So it ships as source you deploy yourself:
+ *   ApexClass Type is not visible: ConnectApi.EinsteinLLM
  *
- *   sf project deploy start -o <your-org> \
- *     -d force-app/main/default/classes/DocGenEinsteinProvider.cls
+ * The prompt template alongside it is worse — a packaged `GenAiPromptTemplate`
+ * makes the whole package require the "Generative AI Prompt Templates" feature,
+ * gating install for everyone. Both measured 2026-07-26. Keeping them in this
+ * extension is what lets DocGen stay installable everywhere.
  *
- * Full instructions, including the prompt template you must create, are in
- * docs/AGENTFORCE_SETUP.md.
+ * The extension shares the `portwoodglobal` namespace with the base package, so
+ * `DocGenAiProviderFactory.get()` finds this class through its existing
+ * `Type.forName('portwoodglobal', className)` fallback — the base package needs
+ * no knowledge of the extension at all.
  *
- * NAMESPACE NOTE
- * --------------
- * When DocGen is installed as a managed package, its Apex lives under the
- * `portwoodglobal` namespace, so the interface is referenced with that prefix
- * below. If you are working against unmanaged DocGen source (the development
- * repo), drop the prefix — see the commented alternative on the class line.
+ * A subscriber can still supply their own provider instead: implement
+ * `portwoodglobal.DocGenAiProvider` and name the class in
+ * DocGen Settings > AI Provider Class. See UserGuide section 5.7.11.
  *
  * MEASURED QUIRKS (2026-07-26)
  * ----------------------------
@@ -37,8 +36,6 @@
  *  - Budget 10-25 seconds for a 5KB document.
  */
 public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
-    // Managed-package installs use:
-    //   implements portwoodglobal.DocGenAiProvider
 
     /** Free Text input on the Flex template. Both 'Input:X' and 'Input.X' work. */
     private static final String INPUT_KEY = 'Input:Instructions';
@@ -129,9 +126,7 @@ public with sharing class DocGenEinsteinProvider implements DocGenAiProvider {
      */
     private String resolveTemplateName() {
         try {
-            // Managed-package installs use the namespaced names:
-            //   portwoodglobal__DocGen_Settings__c s = portwoodglobal__DocGen_Settings__c.getOrgDefaults();
-            //   String configured = s == null ? null : s.portwoodglobal__AI_Prompt_Template__c;
+            // Same namespace as the base package, so no prefix is needed here.
             DocGen_Settings__c s = DocGen_Settings__c.getOrgDefaults();
             String configured = s == null ? null : s.AI_Prompt_Template__c;
             if (String.isNotBlank(configured)) {
