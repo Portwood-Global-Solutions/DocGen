@@ -10352,4 +10352,254 @@ private class DocGenMiscTests {
             'Footer keeps its authored position: ' + result
         );
     }
+
+    /**
+     * Builds a DrawingML slide table with a header row and one loop row whose
+     * {#Lines}…{/Lines} span crosses cell boundaries — the shape Portwood's
+     * Opportunity Products slide uses.
+     */
+    private static String pptTableXml(String loopRowCells) {
+        return '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+            'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+            '<p:cSld><p:spTree><p:graphicFrame><a:graphic>' +
+            '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl>' +
+            '<a:tblGrid><a:gridCol w="2032000"/><a:gridCol w="2032000"/></a:tblGrid>' +
+            '<a:tr h="370840">' +
+            '<a:tc><a:txBody><a:p><a:r><a:t>Product</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>' +
+            '<a:tc><a:txBody><a:p><a:r><a:t>Qty</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>' +
+            '<a:extLst><a:ext uri="{0D108BD9-81ED-4DB2-BD59-A6C34878D82A}">' +
+            '<a16:rowId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" val="1496546544"/>' +
+            '</a:ext></a:extLst>' +
+            '</a:tr>' +
+            '<a:tr h="370840">' +
+            loopRowCells +
+            '<a:extLst><a:ext uri="{0D108BD9-81ED-4DB2-BD59-A6C34878D82A}">' +
+            '<a16:rowId xmlns:a16="http://schemas.microsoft.com/office/drawing/2014/main" val="2064594304"/>' +
+            '</a:ext></a:extLst>' +
+            '</a:tr>' +
+            '</a:tbl></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>';
+    }
+
+    private static Map<String, Object> pptLoopData(List<Map<String, Object>> lines) {
+        return new Map<String, Object>{
+            'Name' => 'Acme Corp',
+            'Lines' => new Map<String, Object>{ 'records' => lines, 'totalSize' => lines.size() }
+        };
+    }
+
+    @IsTest
+    static void testPowerPointTableRowLoopClonesRow() {
+        // A child loop spanning cells in one DrawingML row ({#Lines}{Name} in cell 1,
+        // {Quantity}{/Lines} in cell 2) must clone the whole <a:tr> per record.
+        // Before the <a:tr> container candidate existed, the fallback repeated the raw
+        // span between the tags — including the intervening </a:tc><a:tc> markup — so
+        // N records produced ONE row holding 2N <a:tc> against 2 <a:gridCol>, and
+        // PowerPoint rendered only the first record.
+        String xml = pptTableXml(
+            '<a:tc><a:txBody><a:p><a:r><a:t>{#Lines}{Name}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>' +
+            '<a:tc><a:txBody><a:p><a:r><a:t>{Quantity}{/Lines}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>'
+        );
+        Map<String, Object> data = pptLoopData(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{ 'Name' => 'Widget', 'Quantity' => '2' },
+                new Map<String, Object>{ 'Name' => 'Gadget', 'Quantity' => '5' },
+                new Map<String, Object>{ 'Name' => 'Gizmo', 'Quantity' => '9' }
+            }
+        );
+
+        String result = DocGenService.processXmlForTest(xml, data, 'PowerPoint');
+
+        System.assertEquals(4, result.countMatches('<a:tr '), 'Header row + one row per line item: ' + result);
+        System.assertEquals(
+            8,
+            result.countMatches('<a:tc>'),
+            'Two cells per row — cells must not accumulate inside one row: ' + result
+        );
+        System.assert(result.contains('<a:t>Widget</a:t>'), 'First record rendered: ' + result);
+        System.assert(result.contains('<a:t>Gizmo</a:t>'), 'Last record rendered: ' + result);
+        System.assert(!result.contains('{#') && !result.contains('{/'), 'No leaked loop tags: ' + result);
+    }
+
+    @IsTest
+    static void testPowerPointTableRowLoopStripsDuplicateRowIds() {
+        // Cloned rows must not repeat the authored <a16:rowId> change-tracking id.
+        String xml = pptTableXml(
+            '<a:tc><a:txBody><a:p><a:r><a:t>{#Lines}{Name}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>' +
+            '<a:tc><a:txBody><a:p><a:r><a:t>{Quantity}{/Lines}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>'
+        );
+        Map<String, Object> data = pptLoopData(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{ 'Name' => 'Widget', 'Quantity' => '2' },
+                new Map<String, Object>{ 'Name' => 'Gadget', 'Quantity' => '5' }
+            }
+        );
+
+        String result = DocGenService.processXmlForTest(xml, data, 'PowerPoint');
+
+        System.assertEquals(
+            0,
+            result.countMatches('val="2064594304"'),
+            'Loop row rowId dropped from every clone: ' + result
+        );
+        System.assertEquals(
+            1,
+            result.countMatches('val="1496546544"'),
+            'Untouched header row keeps its authored rowId: ' + result
+        );
+    }
+
+    @IsTest
+    static void testPowerPointTableRowLoopEmptyListDropsRow() {
+        String xml = pptTableXml(
+            '<a:tc><a:txBody><a:p><a:r><a:t>{#Lines}{Name}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>' +
+            '<a:tc><a:txBody><a:p><a:r><a:t>{Quantity}{/Lines}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>'
+        );
+        Map<String, Object> data = pptLoopData(new List<Map<String, Object>>());
+
+        String result = DocGenService.processXmlForTest(xml, data, 'PowerPoint');
+
+        System.assertEquals(1, result.countMatches('<a:tr '), 'Only the header row survives: ' + result);
+        System.assert(result.contains('<a:t>Product</a:t>'), 'Header row preserved: ' + result);
+        System.assert(!result.contains('{#') && !result.contains('{/'), 'No leaked loop tags: ' + result);
+    }
+
+    @IsTest
+    static void testPowerPointTableRowLoopSiblingGuard() {
+        // Two sibling sections in one row: neither may grab the whole <a:tr>, or the
+        // first would swallow the second's content (the <w:tr> sibling-guard lesson).
+        String xml = pptTableXml(
+            '<a:tc><a:txBody><a:p><a:r><a:t>{#Lines}{Name}{/Lines}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>' +
+            '<a:tc><a:txBody><a:p><a:r><a:t>{#Lines}{Quantity}{/Lines}</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc>'
+        );
+        Map<String, Object> data = pptLoopData(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{ 'Name' => 'Widget', 'Quantity' => '2' },
+                new Map<String, Object>{ 'Name' => 'Gadget', 'Quantity' => '5' }
+            }
+        );
+
+        String result = DocGenService.processXmlForTest(xml, data, 'PowerPoint');
+
+        System.assertEquals(2, result.countMatches('<a:tr '), 'No row cloning when siblings share the row: ' + result);
+        System.assert(result.contains('WidgetGadget'), 'First section repeated in place: ' + result);
+        System.assert(result.contains('25'), 'Second section survived and repeated in place: ' + result);
+    }
+
+    @IsTest
+    static void testPowerPointLoopOutsideTableRepeatsBody() {
+        // Loops in a plain text shape have no row container — the body-repeat
+        // fallback must still work (and must not be disturbed by the <a:tr> candidate).
+        String xml =
+            '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+            'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">' +
+            '<p:sp><p:txBody><a:p><a:r><a:t>{#Lines}{Name} </a:t></a:r></a:p>' +
+            '<a:p><a:r><a:t>{Quantity}{/Lines}</a:t></a:r></a:p></p:txBody></p:sp></p:sld>';
+        Map<String, Object> data = pptLoopData(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{ 'Name' => 'Widget', 'Quantity' => '2' },
+                new Map<String, Object>{ 'Name' => 'Gadget', 'Quantity' => '5' }
+            }
+        );
+
+        String result = DocGenService.processXmlForTest(xml, data, 'PowerPoint');
+
+        System.assert(result.contains('Widget'), 'First record rendered: ' + result);
+        System.assert(result.contains('Gadget'), 'Second record rendered: ' + result);
+        System.assert(!result.contains('{#') && !result.contains('{/'), 'No leaked loop tags: ' + result);
+    }
+
+    @IsTest
+    static void testPowerPointRowIdStripLeavesUnrelatedExtLstAlone() {
+        // An extLst without a rowId (e.g. a cell-level extension) must survive.
+        String rowXml =
+            '<a:tr><a:tc><a:extLst><a:ext uri="{ABC}"><a16:other val="1"/></a:ext></a:extLst></a:tc>' +
+            '<a:extLst><a:ext uri="{DEF}"><a16:rowId val="99"/></a:ext></a:extLst></a:tr>';
+
+        String result = DocGenService.stripDrawingMlRowIds(rowXml);
+
+        System.assert(!result.contains('a16:rowId'), 'rowId extension removed: ' + result);
+        System.assert(result.contains('a16:other'), 'Unrelated extLst preserved: ' + result);
+    }
+
+    @IsTest
+    static void testOoxmlGuidTokensSurviveMerge() {
+        // OOXML GUIDs are brace-delimited and were being consumed as merge tags,
+        // blanking <a:ext uri="">, column/row ids, and creation ids on every render.
+        String xml =
+            '<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<a:ext uri="{0D108BD9-81ED-4DB2-BD59-A6C34878D82A}"/>' +
+            '<a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>' +
+            '<a16:colId val="332169544"/><a:t>{Name}</a:t></p:sld>';
+        Map<String, Object> data = new Map<String, Object>{ 'Name' => 'Acme Corp' };
+
+        String result = DocGenService.processXmlForTest(xml, data, 'PowerPoint');
+
+        System.assert(
+            result.contains('uri="{0D108BD9-81ED-4DB2-BD59-A6C34878D82A}"'),
+            'Extension uri GUID preserved verbatim: ' + result
+        );
+        System.assert(
+            result.contains('<a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>'),
+            'Authored table style GUID preserved — not swapped for the default: ' + result
+        );
+        System.assertEquals(0, result.countMatches('uri=""'), 'No blanked uri attributes: ' + result);
+        System.assert(result.contains('<a:t>Acme Corp</a:t>'), 'Real merge tags still resolve: ' + result);
+    }
+
+    @IsTest
+    static void testGuidGuardDoesNotShadowRealTags() {
+        // The guard is shape-based; it must not swallow anything a template
+        // legitimately uses, including hyphenated or GUID-length field values.
+        System.assert(
+            DocGenService.isOoxmlGuidToken('0D108BD9-81ED-4DB2-BD59-A6C34878D82A'),
+            'Canonical GUID recognised'
+        );
+        System.assert(
+            DocGenService.isOoxmlGuidToken('5c22544a-7ee6-4342-b048-85bdc9fd1c3a'),
+            'Lowercase GUID recognised'
+        );
+        System.assert(!DocGenService.isOoxmlGuidToken('Name'), 'Plain field is not a GUID');
+        System.assert(!DocGenService.isOoxmlGuidToken('Account.Owner.Email'), 'Relationship path is not a GUID');
+        System.assert(!DocGenService.isOoxmlGuidToken('#Contacts'), 'Section opener is not a GUID');
+        System.assert(!DocGenService.isOoxmlGuidToken('CloseDate:MM/dd/yyyy'), 'Format suffix is not a GUID');
+        System.assert(
+            !DocGenService.isOoxmlGuidToken('0D108BD9-81ED-4DB2-BD59-A6C34878D82AZ'),
+            'Over-length token rejected'
+        );
+        System.assert(
+            !DocGenService.isOoxmlGuidToken('ZZZZZZZZ-81ED-4DB2-BD59-A6C34878D82A'),
+            'Non-hex token rejected'
+        );
+        System.assert(!DocGenService.isOoxmlGuidToken(null), 'Null rejected');
+
+        // End-to-end: a 36-char non-GUID tag must still resolve normally.
+        String result = DocGenService.processXmlForTest(
+            '<a:t>{Name}</a:t>',
+            new Map<String, Object>{ 'Name' => 'Acme' },
+            'PowerPoint'
+        );
+        System.assert(result.contains('Acme'), 'Ordinary tag unaffected: ' + result);
+    }
+
+    @IsTest
+    static void testPowerPointSplitRunTagDefragments() {
+        // PowerPoint splits a run at any character-formatting boundary — a spell-check
+        // squiggle alone puts err="1" on the middle run — so {UnitPrice:currency} is
+        // commonly authored as three <a:r> elements. Without run-defragmentation the
+        // tag reaches processXml spanning markup and renders blank.
+        String xml =
+            '<a:p><a:r><a:rPr lang="en-US" dirty="0"/><a:t>{</a:t></a:r>' +
+            '<a:r><a:rPr lang="en-US" dirty="0" err="1"/><a:t>UnitPrice:currency</a:t></a:r>' +
+            '<a:r><a:rPr lang="en-US" dirty="0"/><a:t>}</a:t></a:r></a:p>';
+
+        String merged = DocGenService.mergeRunsInTagsForTest(xml);
+        System.assert(merged.contains('{UnitPrice:currency}'), 'Split tag rejoined into one run: ' + merged);
+
+        String result = DocGenService.processXmlForTest(
+            merged,
+            new Map<String, Object>{ 'UnitPrice' => 100 },
+            'PowerPoint'
+        );
+        System.assert(result.contains('$100.00'), 'Rejoined tag resolves with its format suffix: ' + result);
+    }
 }
