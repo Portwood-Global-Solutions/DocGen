@@ -1,5 +1,60 @@
 # Changelog
 
+## v3.47.0 — PowerPoint table loops, GUID preservation, split-run merge tags
+
+Three PowerPoint-only defects, all found while diagnosing a single "the table is not
+expanding" report on an Opportunity Products deck. All three predate any recent
+release — they went unnoticed because PowerPoint templates have no installed base yet.
+No Word, HTML, Excel, or PDF behavior changes.
+
+### Fixed
+
+- **`{#Loop}` now clones a slide table row.** The container auto-expansion in
+  `processXml` had candidates for Word `<w:tr>`, numbered `<w:p>`, HTML `<tr>`/`<li>`,
+  and Excel `<row>` — but none for PowerPoint's DrawingML `<a:tr>`. A loop spanning
+  cells fell through to repeating the raw span between the tags, which includes the
+  intervening `</a:tc><a:tc>` markup: N records produced **one** row holding 4N
+  `<a:tc>` against 4 `<a:gridCol>`, so PowerPoint rendered only the first record.
+  Adds an `<a:tr>` candidate mirroring the Excel `<row>` block (same sibling guard),
+  plus `stripDrawingMlRowIds` so cloned rows don't repeat the authored `<a16:rowId>`
+  change-tracking extension. That extension is optional — unlike Excel's `r` indices,
+  which are core spec and need `renumberExcelRows()`.
+- **OOXML GUIDs are no longer eaten as merge tags.** `<a:ext uri="{0D108BD9-…}">`,
+  `<a:tableStyleId>{5C22544A-…}</a:tableStyleId>`, and `<a16:creationId id="{…}">`
+  are brace-delimited and textually indistinguishable from a merge tag, so they
+  resolved to empty. Every generated PPTX shipped with blanked `uri=""` on its column
+  ids, row ids, and creation ids, and an authored custom table style was silently
+  swapped for the hardcoded default by `normalizePowerPointSlideXml`'s
+  empty-`tableStyleId` repair. `isOoxmlGuidToken` now emits canonical 8-4-4-4-12 hex
+  tokens verbatim. Measured on a real template: 46 GUID uris preserved, 0 blanked.
+- **Merge tags split across runs now de-fragment for PowerPoint.**
+  `mergeRunsInTagsCore` already matched both `<w:t>` and `<a:t>`, but its call site
+  was gated to `templateType == 'Word'`. PowerPoint takes that branch on every render
+  — `tryMergeFromPreDecomposed`, which does call it, is gated to Word→PDF. PowerPoint
+  splits a run at any character-formatting boundary (a spell-check squiggle alone
+  yields `err="1"` on the middle run), so `{UnitPrice:currency}` authored as three
+  `<a:r>` elements reached `processXml` as an unresolvable tag spanning markup and
+  rendered blank. Excel stays excluded by design: its text lives in `<t>`, which
+  `mergeRunsInTagsCore` does not match.
+
+### Docs
+
+- **UserGuide §4 — do not use select-all when assigning `DocGen_User`.** The permission
+  set carries read-only View All on DocGen Template (v3.29+). Chatter Free, Identity,
+  and Community licenses cannot hold View All Records on a custom object, so a
+  blanket assignment blocks the org's **next package upgrade** — Salesforce
+  re-validates every existing assignment against its user license when the permission
+  set changes. Documents the exact install error, a diagnostic SOQL query, and the
+  remediation. Same caveat noted for `DocGen_Admin`, which carries View All on more
+  objects.
+
+### Validation
+
+Real customer template rendered end-to-end against an Opportunity with 3 line items —
+4 rows, 16 cells, correct values, valid `.pptx` that opens and renders in LibreOffice.
+9 new tests. RunLocalTests 1786 / 100% / 78% org-wide, e2e-07-syntax1..4 PASS FAIL 0,
+`sf code-analyzer` 0 violations, prettier clean.
+
 ## v3.46.0 — AI template authoring (Agentforce) + Flying Saucer validator
 
 Requires a short one-time setup (`docs/AGENTFORCE_SETUP.md`). **Without it nothing

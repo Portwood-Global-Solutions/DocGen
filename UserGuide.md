@@ -187,6 +187,23 @@ Three permission sets ship with the package. Assign what each user needs.
 3. Click **Manage Assignments → Add Assignments**
 4. Check the box next to each user → **Next** → **Assign**
 
+> **Assign deliberately — do not use the select-all checkbox.** `DocGen_User` includes read-only _View All_ on DocGen Template (v3.29+, see §5.4). Some Salesforce user licenses — **Chatter Free**, **Identity**, and **Customer/Partner Community** among them — do not permit View All Records on a custom object. Assigning `DocGen_User` to those users is not just unnecessary (they cannot generate documents anyway); it will **block your next package upgrade**, because Salesforce re-validates every existing assignment against its user license when the permission set changes. The install fails with:
+>
+> ```
+> PermissionSet(DocGen_User) The user license doesn't allow the
+> permission: View All portwoodglobal__DocGen_Template__c
+> ```
+>
+> This most often bites orgs that ran "select all" on the assignment screen during first-time setup, then upgraded from a pre-v3.29 version. To find offending assignments before you upgrade:
+>
+> ```sql
+> SELECT Assignee.Name, Assignee.Profile.UserLicense.Name
+> FROM PermissionSetAssignment
+> WHERE PermissionSet.Name = 'DocGen_User'
+> ```
+>
+> Remove `DocGen_User` from any user whose license is not a full Salesforce license, then upgrade. The same applies to `DocGen_Admin`, which carries View All on more objects — keep it on genuine administrators only.
+
 ### Assigning DocGen_Guest_Signature to a Site guest user
 
 Salesforce hides guest users behind several clicks. Full path:

@@ -751,7 +751,17 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                     continue;
                 }
 
-                if (templateType == 'Word') {
+                // De-fragment merge tags split across runs. mergeRunsInTagsCore already
+                // matches both <w:t> and <a:t>, but this gate was Word-only, so PowerPoint
+                // never got the pass: PowerPoint splits a run on any character-formatting
+                // boundary (a spell-check squiggle alone yields err="1" on the middle run),
+                // so {UnitPrice:currency} authored as {|UnitPrice:currency|} across three
+                // <a:r> elements reached processXml as an unresolvable tag spanning markup
+                // and rendered blank. PowerPoint takes this branch for every render —
+                // tryMergeFromPreDecomposed (which does call mergeRunsInTags) is gated to
+                // Word→PDF. Excel is excluded by design: its text lives in <t>, which
+                // mergeRunsInTagsCore does not match, and shared strings are inlined later.
+                if (templateType == 'Word' || templateType == 'PowerPoint') {
                     xml = mergeRunsInTags(xml);
                 }
                 xml = processXml(xml, recordDataMap);
@@ -3702,6 +3712,21 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // so error enrichment can report the tag's location (issue #115).
             Integer tagStartPos = nextTag;
 
+            // OOXML writes GUIDs in brace syntax that is textually indistinguishable
+            // from a merge tag: <a:ext uri="{0D108BD9-…}">, <a:tableStyleId>{5C22544A-…}
+            // </a:tableStyleId>, <a16:creationId id="{…}">, <w15:docId val="{…}"/>.
+            // Resolving them as tags emitted '' and silently corrupted the markup —
+            // every generated PPTX shipped with blanked <a:ext uri=""> on its column
+            // ids, row ids, and creation ids, and an authored custom table style was
+            // swapped for the hardcoded default by normalizePowerPointSlideXml's
+            // empty-tableStyleId repair. Emit verbatim: no Salesforce field name or
+            // supported tag syntax has this shape, so nothing legitimate is shadowed.
+            if (isOoxmlGuidToken(tagContent)) {
+                output += xml.substring(cursor, tagClose + 1);
+                cursor = tagClose + 1;
+                continue;
+            }
+
             try {
                 // {@Signature_*} signing tags. During a signature send/finalize
                 // (preserveSignatureTags) keep them verbatim so the signature service
@@ -3959,10 +3984,56 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                             }
                         }
 
+                        // PowerPoint DrawingML <a:tr> container: mirror the DOCX <w:tr>
+                        // auto-expand for slide tables so a loop spanning cells in one row
+                        // ({#OpportunityLineItems}{Name} in cell 1, {TotalPrice}{/…} in cell 4)
+                        // clones the whole row per record. Gated on PowerPoint — <a:tr> only
+                        // exists in DrawingML tables. Without this the fallback repeats the raw
+                        // span between the tags, which includes the intervening </a:tc><a:tc>
+                        // markup: N records produce one row with 4N <a:tc> against 4
+                        // <a:gridCol>, so PowerPoint shows only the first record.
+                        if (currentTemplateType == 'PowerPoint' && !skipContainerExpand) {
+                            Integer pptRowStart = lastIndexOfTagStart(xml, 'a:tr', cursor);
+                            if (pptRowStart != -1) {
+                                Integer pptRowEnd = xml.indexOf('</a:tr>', pptRowStart);
+                                Boolean pptRowClosedBeforeCursor = xml.substring(pptRowStart, cursor)
+                                    .contains('</a:tr>');
+                                if (!pptRowClosedBeforeCursor && pptRowEnd != -1 && pptRowEnd > closeTagEnd) {
+                                    Integer pptRowFullEnd = pptRowEnd + 7; // </a:tr>
+                                    // Same sibling guard as <w:tr>: only expand when this section
+                                    // is the row's sole tagged region.
+                                    String pptBefore = xml.substring(pptRowStart, cursor);
+                                    String pptAfter = xml.substring(closeTagEnd + 1, pptRowFullEnd);
+                                    Boolean pptHasSibling =
+                                        pptBefore.contains('{#') ||
+                                        pptBefore.contains('{^') ||
+                                        pptBefore.contains('{/') ||
+                                        pptAfter.contains('{#') ||
+                                        pptAfter.contains('{^') ||
+                                        pptAfter.contains('{/');
+                                    if (!pptHasSibling) {
+                                        if (chosenContainerStart == -1 || pptRowStart > chosenContainerStart) {
+                                            chosenContainerStart = pptRowStart;
+                                            chosenContainerEnd = pptRowFullEnd;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         if (chosenContainerStart != -1 && chosenContainerEnd != -1) {
                             contentStart = chosenContainerStart;
                             contentEnd = chosenContainerEnd;
                             innerXml = xml.substring(contentStart, contentEnd);
+
+                            // Cloned DrawingML rows would repeat the row's <a16:rowId>
+                            // change-tracking extension. It is an optional Microsoft
+                            // extension (unlike Excel's r indices, which are core spec and
+                            // need renumberExcelRows()), so dropping it from every clone is
+                            // both sufficient and safe.
+                            if (currentTemplateType == 'PowerPoint') {
+                                innerXml = stripDrawingMlRowIds(innerXml);
+                            }
 
                             String startTagFull = '{' + rawTag + '}';
                             innerXml = innerXml.replace(startTagFull, '');
@@ -4961,6 +5032,56 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
 
         return false;
+    }
+
+    /**
+     * True when a brace token is an OOXML GUID rather than a merge tag —
+     * canonical 8-4-4-4-12 hex with hyphens, e.g. {0D108BD9-81ED-4DB2-BD59-A6C34878D82A}.
+     * Salesforce field names, relationship paths, and every supported tag prefix
+     * ({#, {/, {^, {%, {@, {:) are excluded by shape, so this never shadows a real tag.
+     */
+    @TestVisible
+    private static Boolean isOoxmlGuidToken(String tagContent) {
+        if (String.isBlank(tagContent) || tagContent.length() != 36) {
+            return false;
+        }
+        return Pattern.matches(
+            '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}',
+            tagContent
+        );
+    }
+
+    /**
+     * Removes every <a:extLst> block that carries an <a16:rowId> change-tracking
+     * extension. Used when a {#Loop} clones a DrawingML table row: the authored
+     * row's rowId would otherwise be duplicated across every clone. The extension
+     * is optional (Microsoft drawing/2014), so dropping it is safe — unlike Excel's
+     * <row r="…"> indices, which are core spec and must be renumbered instead.
+     *
+     * Scans for the enclosing extLst rather than regex-matching so a cell-level
+     * extLst without a rowId is left untouched.
+     */
+    @TestVisible
+    private static String stripDrawingMlRowIds(String rowXml) {
+        if (String.isBlank(rowXml) || !rowXml.contains('a16:rowId')) {
+            return rowXml;
+        }
+        String result = rowXml;
+        while (true) {
+            Integer rowIdAt = result.indexOf('a16:rowId');
+            if (rowIdAt == -1) {
+                break;
+            }
+            Integer blockStart = result.lastIndexOf('<a:extLst>', rowIdAt);
+            Integer blockEnd = result.indexOf('</a:extLst>', rowIdAt);
+            if (blockStart == -1 || blockEnd == -1) {
+                // Malformed or unexpected shape — leave the markup alone rather
+                // than risk cutting valid XML out of the row.
+                break;
+            }
+            result = result.substring(0, blockStart) + result.substring(blockEnd + 11); // </a:extLst>
+        }
+        return result;
     }
 
     private static Integer lastIndexOfTagStart(String xml, String tagName, Integer fromIndex) {
