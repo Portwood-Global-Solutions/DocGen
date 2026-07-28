@@ -1,15 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.46.0 — AI template authoring (Agentforce) + Flying Saucer validator",
-      "versionNumber": "3.46.0.NEXT",
+      "versionName": "v3.47.0 — PowerPoint table loops, GUID preservation, split-run merge tags",
+      "versionNumber": "3.47.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "versionDescription": "Portwood DocGen generates polished PDFs, Word documents, and Excel workbooks from any Salesforce record, with built-in e-signatures. v3.46 lets you build a template by describing it. Tell DocGen what you want — \"a one-page invoice with a branded header, a line-item table and a totals row\" — and it writes the template for you, right inside Salesforce. Already have a template? Ask for a change in plain English and it revises what is on the canvas instead of starting over. Everything it produces is checked against the PDF engine first, and you are told exactly what was adjusted and why, so a template never looks right on screen and wrong in the finished document. Requires Einstein/Prompt Builder in your org plus a short one-time setup; without it, everything else works exactly as before. 100% native Salesforce — no external services or callouts. Free for all users.",
-      "ancestorVersion": "3.45.0"
+      "ancestorVersion": "3.46.0"
     },
     {
       "versionName": "v1.0.0 — Agentforce template authoring",
