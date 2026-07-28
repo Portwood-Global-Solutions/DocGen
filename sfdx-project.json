@@ -1,7 +1,7 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.47.0 — PowerPoint table loops, GUID preservation, split-run merge tags",
+      "versionName": "v3.47.0 \u2014 PowerPoint table loops, GUID preservation, split-run merge tags",
       "versionNumber": "3.47.0.NEXT",
       "path": "force-app",
       "default": true,
@@ -11,12 +11,12 @@
       "ancestorVersion": "3.46.0"
     },
     {
-      "versionName": "v1.0.0 — Agentforce template authoring",
+      "versionName": "v1.0.0 \u2014 Agentforce template authoring",
       "versionNumber": "1.0.0.NEXT",
       "path": "agentforce-ext",
       "default": false,
       "package": "Portwood DocGen Agentforce Extension",
-      "versionDescription": "Adds AI template authoring to Portwood DocGen. Describe the document you want and it writes the template; ask for a change in plain English and it revises the one you already have. Everything it produces is checked against the PDF engine first, so a template never looks right on screen and wrong in the finished document. Includes a ready-made prompt template — no Prompt Builder setup required. Requires Portwood DocGen 3.46 or later and Einstein/Prompt Builder in your org. 100% native Salesforce — no external services or callouts.",
+      "versionDescription": "Adds AI template authoring to Portwood DocGen. Describe the document you want and it writes the template; ask for a change in plain English and it revises the one you already have. Everything it produces is checked against the PDF engine first, so a template never looks right on screen and wrong in the finished document. Includes a ready-made prompt template \u2014 no Prompt Builder setup required. Requires Portwood DocGen 3.46 or later and Einstein/Prompt Builder in your org. 100% native Salesforce \u2014 no external services or callouts.",
       "definitionFile": "config/agentforce-ext-def.json",
       "dependencies": [
         {
@@ -228,6 +228,7 @@
     "Portwood DocGen Managed@3.45.0-1": "04tVx000000s7pJIAQ",
     "Portwood DocGen Managed@3.46.0-1": "04tVx000000s7qvIAA",
     "Portwood DocGen Managed@3.46.0-5": "04tVx000000s7yzIAA",
+    "Portwood DocGen Managed@3.47.0-1": "04tVx000000zMTRIA2",
     "Portwood DocGen Agentforce Extension": "0HoVx000000Egx3KAC",
     "Portwood DocGen Agentforce Extension@1.0.0-1": "04tVx000000s80bIAA",
     "Portwood DocGen Agentforce Extension@1.0.0-2": "04tVx000000s82DIAQ"

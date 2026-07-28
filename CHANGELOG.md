@@ -2,6 +2,8 @@
 
 ## v3.47.0 — PowerPoint table loops, GUID preservation, split-run merge tags
 
+`04tVx000000zMTRIA2` (build 3.47.0-1, promoted 2026-07-28, ancestor 3.46.0.5).
+
 Three PowerPoint-only defects, all found while diagnosing a single "the table is not
 expanding" report on an Opportunity Products deck. All three predate any recent
 release — they went unnoticed because PowerPoint templates have no installed base yet.
