@@ -2172,7 +2172,7 @@ See [§10](#10-e-signatures-v3) for the full signature feature. Tag syntax:
 - **Role**: any string (Buyer, Seller, Witness, Loan_Officer, etc.). Underscores become spaces in the UI.
 - **Order**: sequence number per-role (optional, defaults to 1). Used for sequential signing and multi-placement per signer.
 - **Type**: `Full` | `Initials` | `Date` | `DatePick` (optional, defaults to `Full`).
-- **Style** (optional): add `:inline` as a final suffix (e.g. `{@Signature_Buyer:1:Full:inline}`, `{@Signature_Buyer:1:Date:inline}`) to render a **compact in-place mark** instead of the stamp card. See [§10.7.2](#1072-stamp-card-vs-inline-how-a-signature-renders).
+- **Style** (optional): add `:inline` as a final suffix (e.g. `{@Signature_Buyer:1:Full:inline}`, `{@Signature_Buyer:1:Date:inline}`) to render a **compact in-place mark** instead of the stamp card. See [§10.7.2](#1072-stamp-card-vs-inline--how-a-signature-renders).
 
 Pre-signing, tags are preserved in the output (not replaced). Post-signing, each tag position carries the signer's mark as a **stamp card** — drawn ink or typed name in a signature font, with a "Signed by X · date" caption (see §10.10). Date tags stamp the signed date as text.
 
@@ -2627,7 +2627,7 @@ Typed-name electronic signatures with PIN verification, audit trail, packets, an
 6. Pick signing order: **Parallel** (all get emails simultaneously), **Sequential** (each signer emailed only after the previous completes), or **Single** (an explicit one-signer document — behaves like Parallel for delivery).
 7. Click **Send**. Each signer receives a branded invitation email.
 
-> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern. If your layout is tight and you'd rather skip the card entirely, append `:inline` to the tag — see [§10.7.2](#1072-stamp-card-vs-inline-how-a-signature-renders).
+> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern. If your layout is tight and you'd rather skip the card entirely, append `:inline` to the tag — see [§10.7.2](#1072-stamp-card-vs-inline--how-a-signature-renders).
 
 > **Triggering from Flow.** The **DocGen: Create Signature Request** invocable action gives you the exact same guided signing experience as the Send-for-Signature UI — pass a Template Id, Related Record Id, and a collection of signers. As long as the template has `{@Signature_…}` tags, signers walk the guided field-to-field flow and the signed PDF is stamped and named from your template's **Document Title Format**.
 
@@ -2648,6 +2648,8 @@ Useful for contract bundles (MSA + SOW + NDA), onboarding packets, etc.
 - **Parallel**: everyone gets the invite right away. First to sign = first done. Good for lightweight approvals.
 - **Sequential**: signers are emailed in order (by `Sort_Order__c`). Next signer is automatically emailed when the previous signs. Good for hierarchical approvals (employee → manager → VP → CFO).
 - **Single**: an explicit one-signer document. Behaves like Parallel for delivery, but says clearly that only one person signs.
+
+> **Sequential + "Send Branded Emails = False"** _(clarified 2026-07-30)_. That Flow input suppresses only the **initial** invitations. On a Sequential request, DocGen still emails signers 2…N automatically as each one completes — that's how the chain advances. If your Flow also sends its own invitations, signers 2…N get two emails. Either let DocGen send everything, or use **Parallel** with `Send Branded Emails = False` and send every invitation yourself.
 
 > **Upgrading from an older version? Add the `Single` value to the picklist.** The **Single** option was added to the **Signing Order** picklist (`Signing_Order__c` on **DocGen Signature Request**) after the package's first release. Salesforce does **not** push new values into a managed package's **restricted** picklists on upgrade — only **fresh installs** receive them automatically. So if your Flow (or process) sets Signing Order to `Single` and you upgraded from an earlier version, the insert fails with:
 >
@@ -2718,7 +2720,7 @@ For templates that use `{@Signature_Role:Order:Type}` placement tags, the PDF-vi
 
 Created via `createGuidedPdfSignatureRequest` (HTML templates).
 
-> **Authoring tip — give signature fields room.** A mark stamps exactly where its tag sits, so place `{@Signature_Role:Order:Type}` tags **on their own line or in a right-hand cell** with whitespace around them — not inline mid-paragraph — or the mark will overlap nearby text. For initials, use a dedicated line like `Initials: {@Signature_Buyer:1:Initials}`. This mirrors how every e-sign tool reserves space for a signature block. If your layout is tight and you don't want a card at all, use the [`:inline` style](#1072-stamp-card-vs-inline-how-a-signature-renders).
+> **Authoring tip — give signature fields room.** A mark stamps exactly where its tag sits, so place `{@Signature_Role:Order:Type}` tags **on their own line or in a right-hand cell** with whitespace around them — not inline mid-paragraph — or the mark will overlap nearby text. For initials, use a dedicated line like `Initials: {@Signature_Buyer:1:Initials}`. This mirrors how every e-sign tool reserves space for a signature block. If your layout is tight and you don't want a card at all, use the [`:inline` style](#1072-stamp-card-vs-inline--how-a-signature-renders).
 
 ### 10.7.2 Stamp card vs. inline — how a signature renders
 
@@ -2761,6 +2763,14 @@ Every signature action creates an immutable `DocGen_Signature_Audit__c` record w
 - Action type (viewed, signed, declined, PIN_bypassed)
 
 Audit records are read-only and appear on the signature request related list.
+
+**What does _not_ create an audit record** _(clarified 2026-07-30)_ — audit data exists only for a mark drawn or typed through DocGen's own signing surface. These do not produce one, and do not appear on the Certificate of Completion:
+
+- A signature image you captured elsewhere and merged in with `{%Field__c}` ([§11.9.2](#1192-not-supported--injecting-a-captured-signature-image-into-a-v3-signer)).
+- A signature drawn in your own custom UI and passed to **Submit Signed Signature** / **Finalize Signature Image** against a v3 request — those actions don't accept v3 signer tokens at all ([§11.9.1](#1191-compatibility--which-tokens-these-actions-accept)).
+- A document produced by **Generate Document** rather than by a completed signature request.
+
+If the signature has to be legally defensible, the signer must go through their signing link — which can happen in-session, inside your own portal ([§11.6.1](#1161-sign-in-session--capture-the-signature-in-your-own-portal-or-screen-flow)).
 
 ### 10.10 Signed PDF
 
@@ -2977,6 +2987,45 @@ Only **`name`** and **`email`** are required. Add the populated record into your
 
 For multi-signer flows (parallel: legal + executive sign together; sequential: employee → manager → VP → CFO), add one Signer entry per person and pick **Parallel** or **Sequential** as the signing order.
 
+#### 11.6.1 Sign in-session — capture the signature in your own portal or screen Flow
+
+> **Added 2026-07-30 (guide revision, no package change).** This is the supported way to have someone sign **immediately, inside your own flow or portal** rather than waiting for an email. It replaces the pattern of capturing a signature yourself and trying to inject it — see [§11.9](#119-recipe--custom-signing-ui-advanced-legacy-requests-only) for why that doesn't work on a v3 request.
+
+Common shape: an Experience Cloud screen Flow collects information, one person (say the primary contact) signs at submit time, and the remaining people sign later by email. All of it is one signature request and one final document.
+
+**1 — Tag the template.** One tag per party, roles of your choosing:
+
+```
+{@Signature_Primary:1:Full}
+{@Signature_Member:2:Full}
+```
+
+**2 — At the end of your flow, call DocGen: Create Signature Request** exactly as in §11.6, with:
+
+| Input                      | Value                                                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Signers                    | the in-session signer **first** in the collection, then everyone else — `signerUrls` comes back in this same order                                            |
+| Signing Order              | `Sequential` — the in-session signer goes first, and each later signer is emailed only once the previous one finishes                                         |
+| Require Email Verification | `{!$GlobalConstant.False}` — the in-session signer is about to sign immediately; leaving PIN verification on forces them to go fetch an emailed code mid-flow |
+| Send Branded Emails        | leave blank / `True` — let DocGen send every invitation (see the caveat below before setting `False`)                                                         |
+
+**3 — Send the signer straight to their link.** Use the native **Navigate** action at the end of the screen Flow, with the in-session signer's URL as the target — the signer is taken to the signing page automatically, with no extra click and no custom component.
+
+Their URL is the **first element** of `signerUrls` (the output collection is in the same order as your Signers input). Flow can't index a collection directly, so capture the first element with a **Loop** over `signerUrls` plus an **Assignment** that only writes while your text variable is still blank:
+
+```
+Loop: signerUrls → currentUrl
+  Decision: firstUrl Is Null OR firstUrl = ""  →  Assignment: firstUrl = {!currentUrl}
+```
+
+Then pass `{!firstUrl}` to **Navigate**. (If you'd rather the signer choose when to start, a final screen with a **Display Text** hyperlink to `{!firstUrl}` works just as well.) Either way they sign in the same browser session, on DocGen's signing page, so it's a real audited signature: timestamp, IP, consent hash, and an entry on the Certificate of Completion.
+
+**4 — Stop there.** Do **not** add a **Generate Document** action after the signature request. The request produces the document itself once the last signer completes: signatures stamped at the tag positions, Certificate of Completion appended, PDF attached to the related record. Calling Generate Document as well leaves a second, unsigned, certificate-less file next to the real one.
+
+> **Email caveat with `Send Branded Emails = False`.** That input suppresses only the **initial** invitations. On a **Sequential** request, DocGen still emails signers 2…N automatically as each one completes ([§10.4](#104-sequential-vs-parallel)). So either let DocGen send everything (recommended), or use **Parallel** with `Send Branded Emails = False` and send every invitation yourself. Mixing the two produces duplicate emails.
+
+To reuse one person's signature as a **picture** on other documents instead of having them sign each one, see [§11.9.2](#1192-not-supported--injecting-a-captured-signature-image-into-a-v3-signer) — it renders, but it carries no audit trail.
+
 ### 11.7 Recipe — Send a document for signature on the PDF viewer page
 
 > **Deprecated (v3.21+).** "DocGen: Send Existing Document for Signature" still works — it now routes to the same guided PDF signing as everything else — but new Flows should use **DocGen: Create Signature Request** (§11.6), which covers this scenario with more options (email message/subject, verification settings, Template API Name). This recipe stays for existing Flows.
@@ -3052,7 +3101,9 @@ The **Generate Document** action accepts an optional **JSON Data** input. When p
 
 Wire this to a Flow Text Variable populated upstream — typically by an Apex action that calls an external API and returns a JSON string. The merge tags in your template (`{Name}`, `{Amount:currency}`, `{#Items}…{/Items}`) resolve against the JSON instead of a Salesforce record.
 
-### 11.9 Recipe — Custom signing UI (advanced)
+### 11.9 Recipe — Custom signing UI (advanced, legacy requests only)
+
+> **Corrected 2026-07-30 (guide revision, no package change).** Earlier revisions of this section did not state which kind of signature request these three actions work with. They work **only** against a **legacy single-signer** request — one whose signing token lives on the request record itself. They **cannot** submit a signature into a request created by **DocGen: Create Signature Request** ([§11.6](#116-recipe--send-a-contract-for-signature-on-opportunity-approval)) or **Send Existing Document for Signature** ([§11.7](#117-recipe--send-a-document-for-signature-on-the-pdf-viewer-page)) — the current v3 multi-signer path, and what almost every Flow built since v3.0 uses. If you want to capture a signature inside your own portal or screen Flow, use [§11.6.1](#1161-sign-in-session--capture-the-signature-in-your-own-portal-or-screen-flow) instead: it is the supported route, and it is the only one that produces an audit trail and a Certificate of Completion.
 
 Three helper actions exist for orgs that want to build their own signing experience instead of using the bundled Visualforce pages — for example, an embedded signature pad inside an existing customer portal. **These require package v2.6.0 or later** (earlier versions shipped them but they weren't exposed to subscriber Flows). In Flow Builder, search "DocGen" and pick the action by its label:
 
@@ -3060,14 +3111,38 @@ Three helper actions exist for orgs that want to build their own signing experie
 - **Submit Signed Signature** (`DocGenSignatureSubmitter`) — accepts the secure token plus the base64-encoded signature and submits it. A lighter-weight alternative to Finalize.
 - **Finalize Signature Image** (`DocGenSignatureFinalizer`) — accepts a base64-encoded PNG of the captured signature, stamps it onto the document, enqueues the PDF rendition, and writes the audit record. Call this when the user clicks "Sign and Submit".
 
-A typical custom-screen Flow:
+#### 11.9.1 Compatibility — which tokens these actions accept
+
+| Token you pass                                                  | Validate Signature Token    | Submit Signed Signature / Finalize Signature Image                                                                                 |
+| --------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| A **signer** token from the `signerUrls` output of a v3 request | ✅ returns `isValid = true` | ❌ **silently does nothing** — no error, no exception, no signature. The Flow reports success and nothing happens.                 |
+| The **request's own** `Secure_Token__c` on a v3 request         | ✅ returns `isValid = true` | ❌ falls into the legacy typed-name path with no per-signer placements → an error on the audit record and no document is produced. |
+| A **legacy single-signer** request token                        | ✅                          | ✅ works as documented                                                                                                             |
+
+**Why.** On a v3 request each signer's signing token lives on the **DocGen Signer** child record, and the request's own `Secure_Token__c` is the **certificate verification** token printed on the Certificate of Completion — not a signing token. Validate Signature Token resolves both shapes; Submit and Finalize resolve only the request-level token. That asymmetry is exactly why a Flow can validate cleanly and then produce nothing.
+
+#### 11.9.2 Not supported — injecting a captured signature image into a v3 signer
+
+There is **no** action that takes a base64 signature you captured yourself and records it as a v3 signer's signature. Audit data (timestamp, IP address, consent hash, document hash, certificate entry) is only created for a mark drawn or typed through DocGen's own signing surface — see [§10.9](#109-audit-trail).
+
+If you have already captured a signature image and only need it to **appear** in the document, that works — but it is a picture, not a signed signature:
+
+1. In your Flow, create a **ContentVersion** (`Title`, `PathOnClient` = `signature.png`, `VersionData` = your base64).
+2. Store the returned `068…` Id in a text field on the record.
+3. Reference it in the template with `{%Your_Field__c}` ([§7.7](#77-images)).
+
+That image renders wherever you place it, has **no** audit record, and does **not** appear on the Certificate of Completion. Use it for a pre-printed mark (e.g. an authorized signatory reproduced on many documents); do not use it where the signature has to be legally defensible.
+
+#### 11.9.3 Legacy custom-screen Flow
+
+For a legacy single-signer request:
 
 1. Pass `?token=…` into the screen Flow URL.
 2. **Action: Validate Signature Token** with `{!token}` — receive name/title/preview.
 3. Display the preview. Capture the signature in a Lightning component, base64-encode the PNG.
 4. **Action: Finalize Signature Image** with `{!token}` and `{!base64Png}` — done.
 
-Most customers don't need this. Use the bundled Visualforce signing pages unless you have a specific reason to embed.
+Most customers don't need this. Use the bundled signing pages ([§11.6.1](#1161-sign-in-session--capture-the-signature-in-your-own-portal-or-screen-flow) for the in-session variant) unless you have a specific reason to embed.
 
 ### 11.10 Polling an async job from a screen Flow
 
@@ -3181,8 +3256,13 @@ Usable from Flow Builder and from Apex via `Invocable.Action.createCustomAction(
 | Create Signature Request                                                             | `DocGenSignatureFlowAction`    | `templateId` or `templateApiName`, `relatedRecordId`, `signerRecords` (List<DocGenSigner>: `name`, `email`, `role`, `contactId`), `signingOrder`, `documentTitleFormat`, `emailMessage`, `emailSubject`, `sendEmails` ("Send Branded Emails"), `requireEmailVerification`, `prefillSignerEmail`, `expirationDays` ("Link Expiration (Days)", v3.31+) | `success`, `signatureRequestId`, `signerUrls`, `signerNames`, `signerEmails`, `signerRoles`, `errorMessage`       |
 | Send Existing Document for Signature (**deprecated** — use Create Signature Request) | `DocGenSignaturePdfFlowAction` | `templateId` (required; `contentVersionId` deprecated/ignored as of v3.18), `relatedRecordId`, `signerRecords` (List<DocGenSigner>: `name`, `email`, `role`, `contactId`), `signingOrder`, `documentTitleFormat`                                                                                                                                     | `success`, `signatureRequestId`, `signerUrls`, `signerNames`, `signerEmails`, `signerRoles`, `errorMessage`       |
 | Write Back Signer Form Fields                                                        | `DocGenFieldWritebackService`  | `requestId` (Signature Request Id)                                                                                                                                                                                                                                                                                                                   | — (re-runs the automatic §11.7.1 signer-input writeback for a completed request; use for retries or custom flows) |
+| Validate Signature Token (custom signing UI)                                         | `DocGenSignatureValidator`     | `token`                                                                                                                                                                                                                                                                                                                                              | `isValid`, `errorMessage`, `signerName`, `documentTitle`, `documentUrl`                                           |
+| Submit Signed Signature (**legacy requests only**)                                   | `DocGenSignatureSubmitter`     | `token`, `signatureData` (base64)                                                                                                                                                                                                                                                                                                                    | `isSuccess`, `errorMessage`                                                                                       |
+| Finalize Signature Image (**legacy requests only**)                                  | `DocGenSignatureFinalizer`     | `token`, `base64Image`                                                                                                                                                                                                                                                                                                                               | — (void)                                                                                                          |
 
 > The old `signers` (List<Signer>) input on Create Signature Request is a deprecated inner type that Flow can't populate — always use **`signerRecords` (List<DocGenSigner>)**.
+
+> **Submit Signed Signature / Finalize Signature Image resolve only a _request-level_ token** _(clarified 2026-07-30)_ — they cannot submit a signature for a signer on a request created by **Create Signature Request** or **Send Existing Document for Signature**. Passing a v3 signer token is a silent no-op. See [§11.9.1](#1191-compatibility--which-tokens-these-actions-accept).
 
 ### 12.5 `DocGenDataProvider` interface — custom data source
 
