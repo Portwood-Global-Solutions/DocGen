@@ -1,7 +1,7 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.48.0 \u2014 Bulk generation: conditionals, charts, sorting, permissions",
+      "versionName": "v3.48.0 — Bulk generation: conditionals, charts, sorting, permissions",
       "versionNumber": "3.48.0.NEXT",
       "path": "force-app",
       "default": true,
@@ -9,15 +9,15 @@
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
       "ancestorVersion": "3.47.0",
-      "versionDescription": "Portwood DocGen generates PDFs and Word documents from any Salesforce record. v3.48 is a bulk generation release: conditional sections and filtered loops now behave the same in bulk as they do for a single record, charts render in bulk jobs, and you can sort related lists by more than one column. Template cloning now brings every file with it, and the Template Designer opens correctly for users with the DocGen Admin permission set. 100% native Salesforce \u2014 no external services or callouts. Free for all users."
+      "versionDescription": "Portwood DocGen generates PDFs and Word documents from any Salesforce record. v3.48 is a bulk generation release: conditional sections and filtered loops now behave the same in bulk as they do for a single record, charts render in bulk jobs, and you can sort related lists by more than one column. Template cloning now brings every file with it, and the Template Designer opens correctly for users with the DocGen Admin permission set. 100% native Salesforce — no external services or callouts. Free for all users."
     },
     {
-      "versionName": "v1.0.0 \u2014 Agentforce template authoring",
+      "versionName": "v1.0.0 — Agentforce template authoring",
       "versionNumber": "1.0.0.NEXT",
       "path": "agentforce-ext",
       "default": false,
       "package": "Portwood DocGen Agentforce Extension",
-      "versionDescription": "Adds AI template authoring to Portwood DocGen. Describe the document you want and it writes the template; ask for a change in plain English and it revises the one you already have. Everything it produces is checked against the PDF engine first, so a template never looks right on screen and wrong in the finished document. Includes a ready-made prompt template \u2014 no Prompt Builder setup required. Requires Portwood DocGen 3.46 or later and Einstein/Prompt Builder in your org. 100% native Salesforce \u2014 no external services or callouts.",
+      "versionDescription": "Adds AI template authoring to Portwood DocGen. Describe the document you want and it writes the template; ask for a change in plain English and it revises the one you already have. Everything it produces is checked against the PDF engine first, so a template never looks right on screen and wrong in the finished document. Includes a ready-made prompt template — no Prompt Builder setup required. Requires Portwood DocGen 3.46 or later and Einstein/Prompt Builder in your org. 100% native Salesforce — no external services or callouts.",
       "definitionFile": "config/agentforce-ext-def.json",
       "dependencies": [
         {
@@ -232,6 +232,7 @@
     "Portwood DocGen Managed@3.47.0-1": "04tVx000000zMTRIA2",
     "Portwood DocGen Agentforce Extension": "0HoVx000000Egx3KAC",
     "Portwood DocGen Agentforce Extension@1.0.0-1": "04tVx000000s80bIAA",
-    "Portwood DocGen Agentforce Extension@1.0.0-2": "04tVx000000s82DIAQ"
+    "Portwood DocGen Agentforce Extension@1.0.0-2": "04tVx000000s82DIAQ",
+    "Portwood DocGen Managed@3.48.0-1": "04tVx000000zgS9IAI"
   }
 }
