@@ -1,0 +1,34 @@
+{
+    "orgName": "DocGen Einstein Demo",
+    "edition": "developer",
+    "description": "Demo org for AI template authoring. Einstein/Prompt Builder enabled so the Designer's Agentforce button is live and a prospect can describe a document and watch DocGen write the template. Created --no-namespace and fed by package INSTALL, not source deploy, so it is exactly what a customer gets.",
+    "features": ["EnableSetPasswordInApi", "Sites", "Einstein1AIPlatform"],
+    "settings": {
+        "agentPlatformSettings": {
+            "enableAgentPlatform": true
+        },
+        "einsteinGptSettings": {
+            "enableEinsteinGptPlatform": true
+        },
+        "languageSettings": {
+            "enableTranslationWorkbench": true,
+            "enableEndUserLanguages": true,
+            "enablePlatformLanguages": true
+        },
+        "lightningExperienceSettings": {
+            "enableS1DesktopEnabled": true
+        },
+        "securitySettings": {
+            "sessionSettings": {
+                "forceRelogin": false,
+                "enableCacheAndAutocomplete": false
+            },
+            "passwordPolicies": {
+                "complexity": "NoRestriction",
+                "expiration": "Never",
+                "minimumPasswordLength": 8
+            },
+            "enableAdminLoginAsAnyUser": true
+        }
+    }
+}
