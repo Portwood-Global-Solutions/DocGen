@@ -4230,6 +4230,142 @@ private class DocGenControllerTests {
         return u;
     }
 
+    // =======================================================================
+    // Blank-save guard
+    //
+    // The Designer seeds a placeholder scaffold whenever the stored body reads back
+    // blank. That is right for a new template and catastrophic when a READ failure
+    // made an existing body look blank — one Save wrote the placeholder over the
+    // author's work. This guard makes that failure mode non-destructive regardless of
+    // why the read came back empty.
+    // =======================================================================
+
+    private static DocGen_Template__c htmlTemplateWithBody(String bodyHtml) {
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Blank Guard Tpl ' + System.now().getTime(),
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+        ContentVersion cv = new ContentVersion(
+            Title = 'docgen_html_body_' + tpl.Id + '_' + System.now().getTime(),
+            PathOnClient = 'body.html',
+            VersionData = Blob.valueOf(bodyHtml),
+            FirstPublishLocationId = tpl.Id
+        );
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+        return tpl;
+    }
+
+    @IsTest
+    static void savingThePlaceholderOverARealBodyIsRefused() {
+        DocGen_Template__c tpl = htmlTemplateWithBody(
+            '<html><body><h1>Quarterly Report</h1><p>{Name}</p></body></html>'
+        );
+        // Byte-for-byte what the Designer seeds when it thinks the template is new.
+        String placeholder =
+            '<!DOCTYPE html><html><head><style>@page { size: Letter portrait; }</style></head>' +
+            '<body><p>Start typing your document here — or drag in blocks, tags, and images from the rail.</p></body></html>';
+
+        Test.startTest();
+        String message = null;
+        try {
+            DocGenController.saveHtmlTemplateBody(tpl.Id, 'body.html', placeholder);
+        } catch (Exception e) {
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assertNotEquals(null, message, 'Saving the seed placeholder over a real body must be refused');
+        System.assertEquals(
+            true,
+            message.contains('empty document'),
+            'Error should explain what was prevented: ' + message
+        );
+        // And the stored body must be untouched.
+        String stored = DocGenController.getHtmlTemplateBody(tpl.Id);
+        System.assertEquals(true, stored.contains('Quarterly Report'), 'The original body must survive the refusal');
+    }
+
+    @IsTest
+    static void savingAnEmptyDocumentOverARealBodyIsRefused() {
+        DocGen_Template__c tpl = htmlTemplateWithBody('<html><body><p>Real content {Name}</p></body></html>');
+
+        Test.startTest();
+        String message = null;
+        try {
+            DocGenController.saveHtmlTemplateBody(tpl.Id, 'body.html', '<html><body></body></html>');
+        } catch (Exception e) {
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assertNotEquals(null, message, 'An empty document must not overwrite a real body');
+    }
+
+    @IsTest
+    static void guardDoesNotBlockLegitimateEditsOrNewTemplates() {
+        // A real edit must still save.
+        DocGen_Template__c tpl = htmlTemplateWithBody('<html><body><p>Old {Name}</p></body></html>');
+        Map<String, Object> saved = DocGenController.saveHtmlTemplateBody(
+            tpl.Id,
+            'body.html',
+            '<html><body><p>New content {Name}</p></body></html>'
+        );
+        System.assertNotEquals(null, saved.get('contentVersionId'), 'A normal edit must save');
+
+        // A brand-new template has no body to protect — seeding the placeholder is
+        // exactly what should happen, and blocking it would break template creation.
+        DocGen_Template__c fresh = new DocGen_Template__c(
+            Name = 'Blank Guard Fresh ' + System.now().getTime(),
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(fresh, AccessLevel.SYSTEM_MODE);
+        Map<String, Object> seeded = DocGenController.saveHtmlTemplateBody(
+            fresh.Id,
+            'body.html',
+            '<html><body><p>Start typing your document here — or drag in blocks.</p></body></html>'
+        );
+        System.assertNotEquals(null, seeded.get('contentVersionId'), 'Seeding a brand-new template must be allowed');
+    }
+
+    @IsTest
+    static void hasSubstantiveHtmlCountsStructuralContent() {
+        // No visible text, but losing any of these would be a real loss — the guard
+        // must err toward "this is content".
+        System.assertEquals(true, DocGenController.hasSubstantiveHtml('<body><img src="x.png" /></body>'), 'image');
+        System.assertEquals(
+            true,
+            DocGenController.hasSubstantiveHtml('<body><table><tr><td></td></tr></table></body>'),
+            'table'
+        );
+        System.assertEquals(
+            true,
+            DocGenController.hasSubstantiveHtml('<body><p>{#Lines}{Name}{/Lines}</p></body>'),
+            'merge tags'
+        );
+
+        // And these are genuinely nothing.
+        System.assertEquals(false, DocGenController.hasSubstantiveHtml(null), 'null');
+        System.assertEquals(false, DocGenController.hasSubstantiveHtml('   '), 'whitespace');
+        System.assertEquals(false, DocGenController.hasSubstantiveHtml('<html><body></body></html>'), 'empty body');
+        System.assertEquals(
+            false,
+            DocGenController.hasSubstantiveHtml('<html><head><style>p{color:red}</style></head><body> </body></html>'),
+            'style-only is not author content'
+        );
+        System.assertEquals(
+            false,
+            DocGenController.hasSubstantiveHtml(
+                '<body><p>Start typing your document here — or drag in blocks.</p></body>'
+            ),
+            'the seed placeholder is not author content'
+        );
+    }
+
     @IsTest
     static void designerBodyLoadsForNonAdminWithDocGenAdmin() {
         User stdUser;

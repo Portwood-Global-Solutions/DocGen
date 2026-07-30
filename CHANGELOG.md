@@ -105,7 +105,21 @@ toast, no console error, just the "Start typing your document here" empty state.
 it looked like a permissions problem, the natural response was to grant more permission
 sets, which changed nothing.
 
-Both methods now go through the CDL-scoped loader
+**A blank canvas can no longer destroy a body.** The Designer seeds a placeholder
+scaffold ("Start typing your document here…") whenever the stored body reads back
+blank — correct for a new template, catastrophic when a _read failure_ made an existing
+body look blank, because one Save wrote the placeholder over the author's work.
+`saveHtmlTemplateBody` now refuses to replace a substantive stored body with an empty
+document or that seed placeholder, and says so. Deliberately server-side, so it holds
+for every caller: no future read bug, permission gap, or race can turn "I couldn't load
+it" into "I deleted it". Legitimate edits and brand-new templates are unaffected.
+
+`scripts/audit-blanked-template-bodies.apex` (read-only) finds any body already
+overwritten this way and names the exact prior ContentVersion to restore from — nothing
+was ever deleted, the old versions are still there. Run against Portwood Dev (69
+bodies), Production (11), and Demo (0): **all clean, no data was lost.**
+
+Both read methods now go through the CDL-scoped loader
 (`loadInternalContentVersionsForVersionByTitlePrefix` /
 `loadInternalContentVersionMetaForEntityByTitlePrefix`, the latter metadata-only so
 listing images doesn't pull every blob into heap). Covered by two `System.runAs` tests

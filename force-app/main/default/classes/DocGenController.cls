@@ -3267,6 +3267,44 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * Returns the same shape lightning-file-upload produces so the rest of
      * the LWC save flow (Save as New Version → saveTemplate) is unchanged.
      */
+    /**
+     * Does this HTML carry anything an author would be sorry to lose?
+     *
+     * Used only to decide whether a save is a legitimate edit or an accidental wipe,
+     * so it errs toward "yes" — anything structural (an image, a table, a merge tag)
+     * counts even with no visible text, and only a genuinely blank document or the
+     * Designer's own seed placeholder returns false. A false positive here costs
+     * nothing; a false negative would let a body get overwritten.
+     */
+    @TestVisible
+    private static Boolean hasSubstantiveHtml(String html) {
+        if (String.isBlank(html)) {
+            return false;
+        }
+        // Drop head/style/script FIRST. A CSS rule body (`p{color:red}`) is textually
+        // indistinguishable from a merge tag, so checking for tags before stripping
+        // made every styled-but-empty document look like it had content.
+        String cleaned = html.replaceAll('(?is)<(head|style|script)\\b[^>]*>.*?</\\1\\s*>', ' ');
+
+        // Structural content counts regardless of text.
+        String lower = cleaned.toLowerCase();
+        if (lower.contains('<img') || lower.contains('<table') || lower.contains('<svg')) {
+            return true;
+        }
+        // A merge tag is authored content even if the document is otherwise bare.
+        if (Pattern.compile('\\{[#^/%@]?[A-Za-z_][^}]*\\}').matcher(cleaned).find()) {
+            return true;
+        }
+        String text = cleaned.replaceAll('(?s)<[^>]*>', ' ');
+        text = text.replaceAll('&nbsp;|&#160;', ' ').replaceAll('\\s+', ' ').trim();
+        if (String.isBlank(text)) {
+            return false;
+        }
+        // The Designer's seed copy for a blank canvas is not authored content — if it
+        // is all that is being saved, the editor never loaded a real body.
+        return !text.startsWithIgnoreCase('Start typing your document here');
+    }
+
     @AuraEnabled
     public static Map<String, Object> saveHtmlTemplateBody(Id templateId, String fileName, String htmlContent) {
         if (templateId == null) {
@@ -3299,6 +3337,33 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         }
         if (tpls[0].Type__c != 'HTML') {
             throw new DocGenException('saveHtmlTemplateBody is for HTML-type templates only.');
+        }
+
+        // Refuse to overwrite a real body with an empty one.
+        //
+        // The Designer seeds a placeholder scaffold ("Start typing your document
+        // here…") whenever the stored body reads back blank. That is correct for a
+        // genuinely new template — but when a READ failure made an existing body look
+        // blank, hitting Save wrote the placeholder straight over the author's work.
+        // That is exactly what the non-admin file-access bug did: the canvas came up
+        // empty for everyone without View All Data, and one Save destroyed the body.
+        //
+        // The read is fixed, but this is the guard that makes the failure mode
+        // non-destructive for good: no future read bug, permission gap, or race can
+        // turn "I couldn't load it" into "I deleted it". Deliberately server-side so
+        // it holds for every caller, not just the Designer.
+        if (!hasSubstantiveHtml(htmlContent)) {
+            List<ContentVersion> existing = DocGenService.loadInternalContentVersionsForVersionByTitlePrefix(
+                templateId,
+                'docgen_html_body_'
+            );
+            if (!existing.isEmpty() && hasSubstantiveHtml(existing[0].VersionData.toString())) {
+                throw new DocGenException(
+                    'This would replace the saved template body with an empty document, so it was not saved. ' +
+                        'If the editor opened blank, close it and reopen the template — the body is still stored. ' +
+                        'To intentionally start over, add some content first, then save.'
+                );
+            }
         }
 
         String pathBase = String.isBlank(fileName) ? 'body' : fileName.substringBeforeLast('.');
