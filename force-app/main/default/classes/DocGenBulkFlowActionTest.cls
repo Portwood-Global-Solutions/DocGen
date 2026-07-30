@@ -69,6 +69,58 @@ private class DocGenBulkFlowActionTest {
         }
     }
 
+    // ─── Template API Name addressing ────────────────────────────────────
+    // Mirrors DocGenFlowAction so a Flow can reference a bulk template by its
+    // stable API Name instead of an environment-specific record Id.
+
+    @IsTest
+    static void testGenerateBulk_byTemplateApiName() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c temp = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+            temp.API_Name__c = 'Bulk_Template_Api_Key';
+            Database.update(temp, AccessLevel.SYSTEM_MODE);
+
+            DocGenBulkFlowAction.Request req = new DocGenBulkFlowAction.Request();
+            req.templateApiName = 'Bulk_Template_Api_Key';
+            req.queryCondition = 'Name = \'Test Account 1\'';
+
+            Test.startTest();
+            List<DocGenBulkFlowAction.Response> responses = DocGenBulkFlowAction.generateBulkDocuments(
+                new List<DocGenBulkFlowAction.Request>{ req }
+            );
+            Test.stopTest();
+
+            System.assertEquals(true, responses[0].success, 'API Name should resolve: ' + responses[0].errorMessage);
+            System.assertNotEquals(null, responses[0].jobId, 'Should have a jobId when addressed by API Name');
+
+            DocGen_Job__c job = [SELECT Template__c FROM DocGen_Job__c WHERE Id = :responses[0].jobId];
+            System.assertEquals(temp.Id, job.Template__c, 'Job should target the template matched by API Name');
+        }
+    }
+
+    @IsTest
+    static void testGenerateBulk_unknownTemplateApiNameReturnsError() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGenBulkFlowAction.Request req = new DocGenBulkFlowAction.Request();
+            req.templateApiName = 'No_Such_Template_Api_Name';
+
+            Test.startTest();
+            List<DocGenBulkFlowAction.Response> responses = DocGenBulkFlowAction.generateBulkDocuments(
+                new List<DocGenBulkFlowAction.Request>{ req }
+            );
+            Test.stopTest();
+
+            System.assertEquals(false, responses[0].success, 'Unknown API Name should fail the request');
+            System.assertEquals(null, responses[0].jobId, 'No job should be created for an unknown API Name');
+            System.assert(
+                responses[0].errorMessage.contains('No_Such_Template_Api_Name'),
+                'Error should name the API Name that failed to resolve: ' + responses[0].errorMessage
+            );
+        }
+    }
+
     // ─── Record-IDs collection input ─────────────────────────────────────
     // Lets a Flow that has already filtered records (e.g. via decision logic
     // or a Get Records collection) hand them directly to bulk generation

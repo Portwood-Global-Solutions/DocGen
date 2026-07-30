@@ -1,14 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.47.0 \u2014 PowerPoint table loops, GUID preservation, split-run merge tags",
-      "versionNumber": "3.47.0.NEXT",
+      "versionName": "v3.48.0 \u2014 Bulk generation: conditionals, charts, sorting, permissions",
+      "versionNumber": "3.48.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "ancestorVersion": "3.46.0"
+      "ancestorVersion": "3.47.0",
+      "versionDescription": "Portwood DocGen generates PDFs and Word documents from any Salesforce record. v3.48 is a bulk generation release: conditional sections and filtered loops now behave the same in bulk as they do for a single record, charts render in bulk jobs, and you can sort related lists by more than one column. Template cloning now brings every file with it, and the Template Designer opens correctly for users with the DocGen Admin permission set. 100% native Salesforce \u2014 no external services or callouts. Free for all users."
     },
     {
       "versionName": "v1.0.0 \u2014 Agentforce template authoring",

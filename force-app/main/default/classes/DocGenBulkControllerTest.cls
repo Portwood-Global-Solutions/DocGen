@@ -171,7 +171,17 @@ public with sharing class DocGenBulkControllerTest {
             }
         }
         System.assertEquals(true, hasSoqlError, 'High batch size should trigger SOQL error');
-        System.assertEquals(false, analysis.canProceed, 'Should not be able to proceed with limit exceeded');
+        // canProceed is reserved for HARD blockers (unsupported template/mode, >50k
+        // records). An over-limit SOQL ESTIMATE is surfaced as an error item but must
+        // NOT disable the Run button: the estimate assumes every record re-runs the
+        // full query tree, while DocGenBatch caches shared data, and the server-side
+        // submitJob path enforces none of it — so the Flow action would run the exact
+        // same job the UI was refusing.
+        System.assertEquals(
+            true,
+            analysis.canProceed,
+            'An over-limit estimate should warn, not block — only hard blockers set canProceed=false'
+        );
     }
 
     @IsTest

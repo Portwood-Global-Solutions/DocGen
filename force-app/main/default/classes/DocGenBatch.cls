@@ -38,6 +38,23 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
     // Merge mode: sequence counter for HTML snippet ordering
     public Integer htmlSequence = 0;
 
+    // Chart rasterization (Stateful — resolved once, reused across execute() chunks).
+    //
+    // {Chart:...} image charts need a chartCvMap, which the interactive runner builds
+    // by rasterizing SVG in a browser <canvas>. A batch has no DOM, so bulk rendered
+    // those tags as "[Chart: rel.field]" text placeholders. DocGenChartRasterizer is a
+    // pure-Apex PNG renderer built for exactly this; prepareChartImagesServerSide wraps
+    // it and returns the same map shape the merge pipeline already consumes.
+    //
+    // The has-charts probe is cached because prepareChartImagesServerSide loads the
+    // active template body to look for chart tags — a per-record SOQL that would be
+    // pure waste on the overwhelming majority of templates, which have no charts.
+    //
+    // {#ChartBucket:...} loops and HTML CSS-bar charts are NOT affected by any of this:
+    // they resolve server-side inside processXml and have always worked in bulk.
+    @TestVisible
+    private Boolean templateHasChartTags = null;
+
     /**
      * Constructs a batch job in default (non-merge) mode.
      * @param jobId The DocGen_Job__c record ID
@@ -372,11 +389,36 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             }
         }
 
+        // Resolve once per job, not per record — see templateHasChartTags.
+        if (templateHasChartTags == null) {
+            try {
+                templateHasChartTags = DocGenChartImageController.hasChartTags(templateId);
+            } catch (Exception e) {
+                // A failed probe must not sink the job; charts simply fall back to the
+                // text placeholder they produced before this path existed.
+                templateHasChartTags = false;
+            }
+        }
+
         for (SObject rec : scope) {
+            List<Id> chartCvIds = null;
             try {
                 Map<String, Object> recordData = null;
                 if (dataCache != null) {
                     recordData = (Map<String, Object>) dataCache.get(String.valueOf(rec.Id));
+                }
+
+                // Charts are per-record: each record's buckets differ, so the PNGs have
+                // to be rasterized inside this record's iteration, not once per job.
+                if (templateHasChartTags == true) {
+                    Map<String, String> chartCvMap = DocGenChartImageController.prepareChartImagesServerSide(
+                        templateId,
+                        rec.Id
+                    );
+                    if (!chartCvMap.isEmpty()) {
+                        chartCvIds = DocGenChartImageController.chartCvIdsFrom(chartCvMap);
+                        DocGenService.beginChartContext(chartCvMap);
+                    }
                 }
 
                 if (mergeOnly) {
@@ -392,6 +434,25 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             } catch (Exception e) {
                 failCount++;
                 recordFailure(rec.Id, e);
+            } finally {
+                // The chart CVs are transient render inputs and this batch owns them —
+                // deleteChartImages is caller-owned and there is no reaper watching a
+                // batch. Reap per record so a long job never accumulates: N records x
+                // M charts of orphaned ContentVersions is a storage complaint waiting
+                // to happen. In the finally so a failed record cleans up too.
+                DocGenService.endChartContext();
+                if (chartCvIds != null && !chartCvIds.isEmpty()) {
+                    try {
+                        DocGenChartImageController.deleteChartImages(chartCvIds);
+                    } catch (Exception cleanupEx) {
+                        // Cleanup is best-effort — DocGenChartCvReaper is the backstop.
+                        // Deliberately swallowed: never let a reap failure convert a
+                        // successful render into a failed record. (No control-flow
+                        // statement here — a continue/return inside finally would
+                        // discard the in-flight exception from the try block.)
+                        chartCvIds = null;
+                    }
+                }
             }
         }
 

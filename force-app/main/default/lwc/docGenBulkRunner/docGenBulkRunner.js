@@ -151,6 +151,19 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
         return this.selectedTemplateId && this.sampleRecordId;
     }
 
+    /**
+     * Single-item list used to key the sample-record picker by base object.
+     *
+     * lightning-record-picker reads object-api-name at construction. Because the
+     * picker lives inside an if:true={baseObject} that stays true across a template
+     * switch, LWC reused the same instance and it kept searching the PREVIOUS
+     * template's object. Iterating a list keyed on baseObject forces a real teardown
+     * and rebuild whenever the object changes.
+     */
+    get recordPickerKeys() {
+        return this.baseObject ? [{ key: this.baseObject, objectApiName: this.baseObject }] : [];
+    }
+
     handleSampleRecordChange(event) {
         this.sampleRecordId = event.detail.recordId;
     }
@@ -177,6 +190,10 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             this.recordCount = null;
             this.analysis = null;
             this.filterValidated = false;
+            // The sample record belongs to the PREVIOUS template's base object. Left in
+            // place it kept the Preview button enabled against a record of the wrong
+            // sObject type, and handed the record picker a value it cannot resolve.
+            this.sampleRecordId = '';
             this.loadSavedQueries();
             this.applyAutoFilter();
         }
@@ -324,6 +341,9 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             this.recordCount = null;
             this.analysis = null;
             this.filterValidated = false;
+            // See handleTemplateSelect — a stale sample record from the previous
+            // template's object must not survive the switch.
+            this.sampleRecordId = '';
             this.loadSavedQueries();
             this.applyAutoFilter();
         }

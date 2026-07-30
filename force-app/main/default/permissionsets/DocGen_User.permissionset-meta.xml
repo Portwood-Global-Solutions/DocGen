@@ -8,6 +8,27 @@
         <apexClass>BarcodeGenerator</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <!-- AI template authoring (DocGenAiTemplateController / DocGenAiHtmlValidator) is
+         deliberately NOT granted here. Only docGenAdmin imports it, and the Designer is
+         an admin surface — DocGen_User has no Template Manager tab and read-only access
+         to DocGen_Template__c. DocGenChartImageController IS needed: docGenRunner imports
+         it to rasterize charts, and a missing Apex import blanks the whole component. -->
+    <classAccesses>
+        <apexClass>DocGenChartImageController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>DocGenFlsGuard</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>DocGenFieldWritebackService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>DocGenSignaturePdfFlowAction</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <classAccesses>
         <apexClass>DocGenEmailTemplateController</apexClass>
         <enabled>true</enabled>

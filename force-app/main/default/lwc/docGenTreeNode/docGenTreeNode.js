@@ -13,6 +13,10 @@ export default class DocGenTreeNode extends LightningElement {
 
     @track _pickerOpen = false;
     @track _pickerSearch = '';
+    // Sort rows the user has added but not yet chosen a field for. These can't live
+    // in the ORDER BY clause string — an empty column serializes to nothing — so
+    // they're held as local UI state until a field is picked.
+    _blankSortRows = 0;
 
     // ── Field picker ────────────────────────────────────────────
     togglePicker() {
@@ -131,14 +135,96 @@ export default class DocGenTreeNode extends LightningElement {
             })
         );
     }
-    handleOrderByChange(event) {
+    // ── Multi-column sort ───────────────────────────────────────
+    // Storage stays a single SOQL ORDER BY clause string ("Amount DESC, Name ASC").
+    // Every Apex consumer already splits that on commas, so multi-column needs no
+    // schema change — only an editor that can express more than one column. These
+    // handlers parse the clause into rows, mutate one row, and re-serialize.
+
+    handleSortFieldChange(event) {
+        const rows = this._sortRowsRaw();
+        const i = parseInt(event.target.dataset.index, 10);
+        if (i >= rows.length) {
+            rows.push({ field: event.detail.value, direction: 'ASC' });
+            if (this._blankSortRows > 0) this._blankSortRows -= 1;
+        } else {
+            rows[i].field = event.detail.value;
+        }
+        this._emitOrderBy(this._serializeSortRows(rows));
+    }
+
+    handleSortDirectionChange(event) {
+        const rows = this._sortRowsRaw();
+        const i = parseInt(event.target.dataset.index, 10);
+        // Direction on a not-yet-chosen column has nothing to attach to; ignore it
+        // rather than emitting a clause the user didn't ask for.
+        if (i >= rows.length) return;
+        rows[i].direction = event.detail.value;
+        this._emitOrderBy(this._serializeSortRows(rows));
+    }
+
+    handleAddSort() {
+        this._blankSortRows += 1;
+    }
+
+    handleRemoveSort(event) {
+        const rows = this._sortRowsRaw();
+        const i = parseInt(event.target.dataset.index, 10);
+        if (i >= rows.length) {
+            if (this._blankSortRows > 0) this._blankSortRows -= 1;
+            return;
+        }
+        rows.splice(i, 1);
+        this._emitOrderBy(this._serializeSortRows(rows));
+    }
+
+    handleMoveSortUp(event) {
+        const rows = this._sortRowsRaw();
+        const i = parseInt(event.target.dataset.index, 10);
+        if (i > 0 && i < rows.length) {
+            [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]];
+            this._emitOrderBy(this._serializeSortRows(rows));
+        }
+    }
+
+    _emitOrderBy(value) {
         this.dispatchEvent(
             new CustomEvent('clausechange', {
                 bubbles: true,
                 composed: true, // NOPMD — composed required for recursive tree node events
-                detail: { path: this.nodeData.path, field: 'orderBy', value: event.target.value }
+                detail: { path: this.nodeData.path, field: 'orderBy', value }
             })
         );
+    }
+
+    /**
+     * Splits the stored clause into {field, direction} pairs.
+     *
+     * Anything after the field token is kept verbatim as the direction so clauses
+     * the picker can't model (e.g. "NULLS LAST") survive an edit to a sibling row
+     * instead of being silently dropped.
+     */
+    _sortRowsRaw() {
+        const clause = this.nodeData && this.nodeData.orderBy ? this.nodeData.orderBy : '';
+        if (!clause.trim()) return [];
+        return clause
+            .split(',')
+            .map((part) => part.trim())
+            .filter((part) => part)
+            .map((part) => {
+                const tokens = part.split(/\s+/);
+                return {
+                    field: tokens[0],
+                    direction: tokens.slice(1).join(' ').toUpperCase() || 'ASC'
+                };
+            });
+    }
+
+    _serializeSortRows(rows) {
+        return rows
+            .filter((r) => r.field)
+            .map((r) => `${r.field} ${r.direction || 'ASC'}`.trim())
+            .join(', ');
     }
     handleLimitChange(event) {
         this.dispatchEvent(
@@ -148,6 +234,64 @@ export default class DocGenTreeNode extends LightningElement {
                 detail: { path: this.nodeData.path, field: 'limitAmount', value: event.target.value }
             })
         );
+    }
+
+    // ── Multi-column sort getters ───────────────────────────────
+
+    get sortDirectionOptions() {
+        return [
+            { label: 'A → Z', value: 'ASC' },
+            { label: 'Z → A', value: 'DESC' },
+            { label: 'A → Z, blanks last', value: 'ASC NULLS LAST' },
+            { label: 'Z → A, blanks last', value: 'DESC NULLS LAST' }
+        ];
+    }
+
+    /**
+     * Every field on this node, whether or not it's selected for output — you can
+     * legitimately sort by a column you don't render.
+     */
+    get sortFieldOptions() {
+        if (!this.nodeData || !this.nodeData.fields) return [];
+        return this.nodeData.fields
+            .map((f) => ({ label: f.displayLabel || f.apiName, value: f.apiName }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }
+
+    get sortRows() {
+        const options = this.sortFieldOptions;
+        const known = new Set(options.map((o) => o.value));
+        const rows = this._sortRowsRaw();
+        for (let n = 0; n < this._blankSortRows; n++) {
+            rows.push({ field: '', direction: 'ASC' });
+        }
+        const directions = this.sortDirectionOptions.map((d) => d.value);
+        return rows.map((r, i) => {
+            // A hand-authored clause may reference a relationship field (Product2.Name)
+            // or a field not in this node's list. Surface it as its own option rather
+            // than letting the combobox render blank and lose it on the next save.
+            const fieldOptions =
+                known.has(r.field) || !r.field ? options : [{ label: r.field, value: r.field }, ...options];
+            const directionOptions = directions.includes(r.direction)
+                ? this.sortDirectionOptions
+                : [{ label: r.direction, value: r.direction }, ...this.sortDirectionOptions];
+            return {
+                key: `sort-${i}`,
+                index: i,
+                field: r.field,
+                direction: r.direction,
+                fieldOptions,
+                directionOptions,
+                isFirst: i === 0,
+                positionLabel: i === 0 ? 'Sort by' : 'then by',
+                removeLabel: `Remove sort column ${i + 1}`,
+                moveUpLabel: `Move sort column ${i + 1} earlier`
+            };
+        });
+    }
+
+    get hasSortRows() {
+        return this.sortRows.length > 0;
     }
 
     // ── Template getters ────────────────────────────────────────

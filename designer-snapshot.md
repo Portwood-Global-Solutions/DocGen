@@ -1,0 +1,209 @@
+- generic [active]:
+    - generic [ref=f22e2]:
+        - generic [ref=f22e3]:
+            - link "Skip to Navigation" [ref=f22e4] [cursor=pointer]:
+                - /url: javascript:void(0);
+            - link "Skip to Main Content" [ref=f22e5] [cursor=pointer]:
+                - /url: javascript:void(0);
+            - generic [ref=f22e155]:
+                - generic [ref=f22e162]: Logged in as DocGen AdminTester (dgadmin.docgenperm@example.com)
+                - link "Log out as DocGen AdminTester" [ref=f22e163] [cursor=pointer]:
+                    - /url: /secur/logout.jsp
+            - generic [ref=f22e6]:
+                - button "Search" [ref=f22e12]: Search...
+                - navigation "Global Header" [ref=f22e17]:
+                    - list [ref=f22e165]:
+                        - listitem [ref=f22e166]:
+                            - group [ref=f22e167]:
+                                - button "Add favorite" [ref=f22e169] [cursor=pointer]:
+                                    - generic [ref=f22e170]:
+                                        - tooltip "Add favorite"
+                                - button [ref=f22e178] [cursor=pointer]:
+                                    - generic [ref=f22e179]:
+                                        - tooltip "Favorites list"
+                        - listitem [ref=f22e186]:
+                            - button [ref=f22e280] [cursor=pointer]:
+                                - generic [ref=f22e281]:
+                                    - tooltip "Global Actions"
+                        - listitem [ref=f22e288]:
+                            - button [ref=f22e290] [cursor=pointer]:
+                                - generic [ref=f22e291]:
+                                    - tooltip "Guidance Center"
+                        - listitem [ref=f22e195]:
+                            - button [ref=f22e198] [cursor=pointer]:
+                                - generic [ref=f22e199]:
+                                    - tooltip "Salesforce Help"
+                        - listitem [ref=f22e206]:
+                            - button [ref=f22e212] [cursor=pointer]:
+                                - generic [ref=f22e213]:
+                                    - tooltip "Setup"
+                        - listitem [ref=f22e220]:
+                            - button [ref=f22e223] [cursor=pointer]:
+                                - generic [ref=f22e224]:
+                                    - tooltip "Notifications"
+                        - listitem [ref=f22e233]:
+                            - button "View profile" [ref=f22e236] [cursor=pointer]:
+                                - generic [ref=f22e237]:
+                                    - tooltip "View profile"
+        - generic [ref=f22e23]:
+            - generic [ref=f22e26]:
+                - generic [ref=f22e28]:
+                    - navigation "App" [ref=f22e29]:
+                        - button "App Launcher" [ref=f22e31] [cursor=pointer]
+                    - heading "DocGen" [level=1] [ref=f22e43]
+                - navigation "Global" [ref=f22e47]:
+                    - list [ref=f22e48]:
+                        - listitem [ref=f22e49]:
+                            - link "DocGen" [ref=f22e50] [cursor=pointer]:
+                                - /url: /lightning/n/portwoodglobal\_\_DocGen_Command_Hub
+                        - listitem [ref=f22e52]:
+                            - link "DocGen Templates" [ref=f22e53] [cursor=pointer]:
+                                - /url: /lightning/o/portwoodglobal**DocGen_Template**c/home
+                            - button "DocGen Templates List" [ref=f22e58] [cursor=pointer]
+                        - listitem [ref=f22e66]:
+                            - link "DocGen Jobs" [ref=f22e67] [cursor=pointer]:
+                                - /url: /lightning/o/portwoodglobal**DocGen_Job**c/home
+                            - button "DocGen Jobs List" [ref=f22e72] [cursor=pointer]
+                        - listitem [ref=f22e80]:
+                            - link "DocGen Signature Requests" [ref=f22e81] [cursor=pointer]:
+                                - /url: /lightning/o/portwoodglobal**DocGen_Signature_Request**c/home
+                            - button "DocGen Signature Requests List" [ref=f22e86] [cursor=pointer]
+                        - listitem [ref=f22e94]:
+                            - link "DocGen Signers" [ref=f22e95] [cursor=pointer]:
+                                - /url: /lightning/o/portwoodglobal**DocGen_Signer**c/home
+                            - button "DocGen Signers List" [ref=f22e100] [cursor=pointer]
+                        - listitem [ref=f22e241] [cursor=pointer]:
+                            - link "\* DocGen Template Manager" [ref=f22e242]:
+                                - /url: /lightning/n/portwoodglobal\_\_DocGen_Template_Manager
+                                - generic "Not added to nav bar" [ref=f22e243]: "\*"
+                                - generic [ref=f22e244]: DocGen Template Manager
+                            - button "DocGen Template Manager List" [ref=f22e248]
+                            - button "Close tab" [ref=f22e256]
+                        - listitem [ref=f22e264]:
+                            - button "Show more navigation items" [ref=f22e266] [cursor=pointer]:
+                                - generic [ref=f22e267]: More
+                        - listitem [ref=f22e136]:
+                            - button "Edit nav items" [ref=f22e138] [cursor=pointer]
+            - main [ref=f22e145]:
+                - generic [ref=f22e302]:
+                    - tablist "Tabs" [ref=f22e304]:
+                        - tab "Create New" [selected] [ref=f22e305] [cursor=pointer]
+                        - tab "Your Templates" [ref=f22e306] [cursor=pointer]
+                        - tab "Designer (Beta)" [ref=f22e307] [cursor=pointer]
+                    - tabpanel "Create New" [ref=f22e309]:
+                        - generic [ref=f22e311]:
+                            - generic [ref=f22e314]:
+                                - list [ref=f22e315]:
+                                    - generic [ref=f22e316]:
+                                        - listitem [ref=f22e317]:
+                                            - generic [ref=f22e318]: Name Your Template - Current Stage
+                                        - listitem [ref=f22e320]:
+                                            - generic [ref=f22e321]: Pick Your Data - Stage Not Started
+                                        - listitem [ref=f22e323]:
+                                            - generic [ref=f22e324]: Review & Create - Stage Not Started
+                                - progressbar "Progress Bar" [ref=f22e326]:
+                                    - generic: Progress 0%
+                            - generic [ref=f22e328]:
+                                - radiogroup "How do you want to build this template?" [ref=f22e329]:
+                                    - radio "Start from a Design Recommended Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Creates an HTML template, the most reliable path to pixel-perfect PDFs." [ref=f22e330] [cursor=pointer]:
+                                        - generic [ref=f22e331]:
+                                            - generic [ref=f22e338]: Start from a Design
+                                            - generic [ref=f22e339]: Recommended
+                                        - paragraph [ref=f22e340]: Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Creates an HTML template, the most reliable path to pixel-perfect PDFs.
+                                    - radio "Generate with AI We assemble a ready-to-paste prompt with your fields and DocGen's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor." [ref=f22e341] [cursor=pointer]:
+                                        - generic [ref=f22e342]: Generate with AI
+                                        - paragraph [ref=f22e352]: We assemble a ready-to-paste prompt with your fields and DocGen's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor.
+                                    - 'radio "Start From Scratch A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way." [ref=f22e353] [cursor=pointer]':
+                                        - generic [ref=f22e354]: Start From Scratch
+                                        - paragraph [ref=f22e362]: "A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way."
+                                    - radio "I Have an Existing File Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. Word documents are converted to HTML for PDF output — complex layouts may not convert exactly." [checked] [ref=f22e363] [cursor=pointer]:
+                                        - generic [ref=f22e364]: I Have an Existing File
+                                        - paragraph [ref=f22e372]: Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. Word documents are converted to HTML for PDF output — complex layouts may not convert exactly.
+                                - generic [ref=f22e373]:
+                                    - generic [ref=f22e374]:
+                                        - generic [ref=f22e377]:
+                                            - generic [ref=f22e378]: "\*Template Name"
+                                            - textbox "Template Name" [ref=f22e380]
+                                        - generic [ref=f22e383]:
+                                            - generic [ref=f22e384]: API Name
+                                            - button "API Name Help Info" [ref=f22e388] [cursor=pointer]
+                                            - textbox "API Name" [ref=f22e395]
+                                        - generic [ref=f22e398]:
+                                            - generic [ref=f22e399]: Category
+                                            - textbox "Category" [ref=f22e401]
+                                        - radiogroup "\*Data Source" [ref=f22e403]:
+                                            - generic [ref=f22e405]:
+                                                - generic [ref=f22e406]:
+                                                    - radio "Salesforce Record (SOQL)" [checked] [ref=f22e407]
+                                                    - generic [ref=f22e408] [cursor=pointer]: Salesforce Record (SOQL)
+                                                - generic [ref=f22e410]:
+                                                    - radio "Apex Class (Data Provider)" [ref=f22e411]
+                                                    - generic [ref=f22e412] [cursor=pointer]: Apex Class (Data Provider)
+                                                - generic [ref=f22e414]:
+                                                    - radio "JSON Data (from Flow)" [ref=f22e415]
+                                                    - generic [ref=f22e416] [cursor=pointer]: JSON Data (from Flow)
+                                            - status
+                                        - generic [ref=f22e421]:
+                                            - generic [ref=f22e422]: "\*Base Object"
+                                            - textbox "Base Object" [ref=f22e424]:
+                                                - /placeholder: Account, Opportunity, Contact...
+                                                - text: Account
+                                    - generic [ref=f22e425]:
+                                        - generic [ref=f22e427]:
+                                            - generic [ref=f22e428]: "\*Type"
+                                            - button "Type Help Info" [ref=f22e433] [cursor=pointer]
+                                            - combobox "Type" [ref=f22e443] [cursor=pointer]:
+                                                - generic [ref=f22e444]: Word
+                                            - status
+                                        - note [ref=f22e451]:
+                                            - paragraph [ref=f22e452]:
+                                                - text: Word templates are converted to HTML for PDF output — complex layouts (text boxes, floating images, unusual tables) may not convert exactly. Keep Output Format
+                                                - strong [ref=f22e459]: Native (.docx)
+                                                - text: for full fidelity, upload an
+                                                - strong [ref=f22e460]: HTML
+                                                - text: file for a pixel-perfect PDF, or use
+                                                - strong [ref=f22e461]: Start from a Design
+                                                - text: /
+                                                - strong [ref=f22e462]: Generate with AI
+                                                - text: /
+                                                - strong [ref=f22e463]: Start From Scratch
+                                                - text: .
+                                                - strong [ref=f22e464]: Excel
+                                                - text: and
+                                                - strong [ref=f22e465]: PowerPoint
+                                                - text: templates always generate in their native format — no conversion involved.
+                                        - generic [ref=f22e467]:
+                                            - generic [ref=f22e468]: "\*Output Format"
+                                            - combobox "Output Format" [ref=f22e474] [cursor=pointer]:
+                                                - generic [ref=f22e475]: PDF
+                                            - status
+                                        - generic [ref=f22e483]:
+                                            - generic [ref=f22e484]: Page Orientation
+                                            - button "Page Orientation Help Info" [ref=f22e489] [cursor=pointer]
+                                            - combobox "Page Orientation" [ref=f22e499] [cursor=pointer]:
+                                                - generic [ref=f22e500]: Portrait
+                                            - status
+                                        - generic [ref=f22e508]:
+                                            - generic [ref=f22e509]: Page Size
+                                            - button "Page Size Help Info" [ref=f22e514] [cursor=pointer]
+                                            - combobox "Page Size" [ref=f22e524] [cursor=pointer]:
+                                                - generic [ref=f22e525]: Letter (8.5 x 11 in)
+                                            - status
+                                        - generic [ref=f22e533]:
+                                            - generic [ref=f22e534]: Page Margins
+                                            - button "Page Margins Help Info" [ref=f22e539] [cursor=pointer]
+                                            - combobox "Page Margins" [ref=f22e549] [cursor=pointer]:
+                                                - generic [ref=f22e550]: Default for size
+                                            - status
+                                        - generic [ref=f22e557]:
+                                            - generic [ref=f22e561]:
+                                                - generic [ref=f22e562]: Sample Record (optional)
+                                                - combobox "Sample Record (optional)" [ref=f22e570]
+                                                - status
+                                            - paragraph [ref=f22e577]: See real data from this record while building your query.
+                            - generic [ref=f22e579]:
+                                - generic:
+                                    - button "Back" [disabled]
+                                - button "Next" [ref=f22e581] [cursor=pointer]
+    - generic:
+        - status

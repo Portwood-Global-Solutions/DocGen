@@ -5,6 +5,345 @@ private class DocGenBulkTests {
         TestDataFactory.createStandardTestData();
     }
 
+    // ─── Combined-PDF format guard ───────────────────────────────────────
+    // PowerPoint and Excel have no DOCX→HTML conversion, so there is nothing for the
+    // merge path to combine. Before the guard they fell through to the Word branch,
+    // produced empty HTML, and shipped a PDF of blank pages reporting success.
+
+    private static DocGen_Template__c makeTypedTemplate(String type) {
+        DocGen_Template__c t = new DocGen_Template__c(
+            Name = 'Bulk ' + type + ' Template',
+            Base_Object_API__c = 'Account',
+            Type__c = type,
+            Query_Config__c = 'Name'
+        );
+        Database.insert(t, AccessLevel.SYSTEM_MODE);
+        return t;
+    }
+
+    @IsTest
+    static void combinedPdfIsRejectedForPowerPointAndExcel() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            for (String type : new List<String>{ 'PowerPoint', 'Excel' }) {
+                DocGen_Template__c t = makeTypedTemplate(type);
+                String message = null;
+                try {
+                    DocGenBulkController.submitJobInternal(t.Id, null, 'Merge ' + type, true, 1, true);
+                } catch (Exception e) {
+                    message = e.getMessage();
+                }
+                System.assertNotEquals(null, message, type + ' must not be accepted for a combined-PDF job');
+                System.assertEquals(
+                    true,
+                    message.contains(type),
+                    'Error should name the offending template type: ' + message
+                );
+            }
+        }
+    }
+
+    @IsTest
+    static void individualFilesIsStillAllowedForPowerPointAndExcel() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c t = makeTypedTemplate('PowerPoint');
+
+            Test.startTest();
+            // mergePdf=false, mergeOnly=false — native one-file-per-record, which IS
+            // supported: DocGenService.assembleZip builds the OOXML package in Apex.
+            // The guard must not over-reach and block the mode that works.
+            Id jobId = DocGenBulkController.submitJobInternal(t.Id, null, 'Individual PPTX', false, 1, false);
+            Test.stopTest();
+
+            System.assertNotEquals(null, jobId, 'Individual-file bulk must remain available for PowerPoint');
+        }
+    }
+
+    @IsTest
+    static void analyzeJobFlagsUnmergeableTypesAsHardBlockers() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c t = makeTypedTemplate('Excel');
+
+            Test.startTest();
+            DocGenBulkController.JobAnalysis merged = DocGenBulkController.analyzeJob(t.Id, 10, 1, true);
+            DocGenBulkController.JobAnalysis individual = DocGenBulkController.analyzeJob(t.Id, 10, 1, false);
+            Test.stopTest();
+
+            System.assertEquals(false, merged.canProceed, 'Excel + combined PDF is a genuine hard blocker');
+            System.assertEquals(
+                true,
+                individual.canProceed,
+                'Excel as individual files must stay runnable — the guard is merge-only'
+            );
+        }
+    }
+
+    // ─── Server-side chart rasterization in bulk ─────────────────────────
+
+    /**
+     * Minimum surface prepareChartImagesServerSide reads: a Word template, an active
+     * version, and a pre-decomposed word__document.xml CV whose body carries a
+     * {Chart:...} tag. Mirrors the fixture in DocGenChartImageControllerTest.
+     */
+    private static DocGen_Template__c makeWordChartTemplate() {
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Bulk Chart Word Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'Word',
+            Query_Config__c = 'Name'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+        ContentVersion xmlCv = new ContentVersion(
+            Title = 'docgen_tmpl_xml_' + ver.Id + '_word__document.xml',
+            PathOnClient = 'document.xml',
+            VersionData = Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8"?>' +
+                    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' +
+                    '<w:p><w:r><w:t>{Chart:Contacts:LastName:bar:title=Demo}</w:t></w:r></w:p>' +
+                    '</w:body></w:document>'
+            )
+        );
+        Database.insert(xmlCv, AccessLevel.SYSTEM_MODE);
+        return tpl;
+    }
+
+    @IsTest
+    static void hasChartTagsDetectsAWordTemplateWithCharts() {
+        DocGen_Template__c tpl = makeWordChartTemplate();
+
+        Test.startTest();
+        Boolean result = DocGenChartImageController.hasChartTags(tpl.Id);
+        Test.stopTest();
+
+        // This probe is the gate DocGenBatch checks once per job. If it returns false
+        // for a template that DOES have charts, bulk silently keeps emitting the old
+        // "[Chart: rel.field]" text placeholders and the feature looks unshipped.
+        System.assertEquals(true, result, 'A Word template containing {Chart:} must be detected');
+    }
+
+    @IsTest
+    static void bulkBatchRendersChartTemplateWithoutLeakingChartCvs() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c tpl = makeWordChartTemplate();
+            DocGen_Job__c job = new DocGen_Job__c(
+                Template__c = tpl.Id,
+                Status__c = 'Queued',
+                Query_Condition__c = 'Name = \'DocGen Test Account\''
+            );
+            Database.insert(job, AccessLevel.SYSTEM_MODE);
+
+            Integer chartCvsBefore = [SELECT COUNT() FROM ContentVersion WHERE Title LIKE 'docgen_chart_%'];
+
+            Test.startTest();
+            Database.executeBatch(new DocGenBatch(job.Id), 1);
+            Test.stopTest();
+
+            // The batch owns the transient chart CVs it creates — deleteChartImages is
+            // caller-owned and no reaper watches a running batch. If the finally-block
+            // cleanup regresses, a long job accumulates N records x M charts of orphans.
+            System.assertEquals(
+                chartCvsBefore,
+                [SELECT COUNT() FROM ContentVersion WHERE Title LIKE 'docgen_chart_%'],
+                'Batch must reap every transient chart CV it created'
+            );
+        }
+    }
+
+    @IsTest
+    static void hasChartTagsIsFalseForTemplatesWithoutCharts() {
+        DocGen_Template__c t = TestDataFactory.getTestTemplate();
+
+        Test.startTest();
+        Boolean result = DocGenChartImageController.hasChartTags(t.Id);
+        Test.stopTest();
+
+        // The probe is what keeps DocGenBatch from spending a per-record SOQL proving
+        // a negative on the overwhelming majority of templates, which have no charts.
+        System.assertEquals(false, result, 'A template with no {Chart:} tags must report false');
+    }
+
+    @IsTest
+    static void chartCvIdsFromParsesTheCvIdOutOfTheDimensionSuffix() {
+        Id cvA = '068000000000001AAA';
+        Id cvB = '068000000000002AAA';
+
+        // chartCvMap values are `cvId|WxH` — the dimensions belong to the image markup,
+        // not the ContentVersion, and must not end up in a delete list.
+        List<Id> ids = DocGenChartImageController.chartCvIdsFrom(
+            new Map<String, String>{ 'sigA' => cvA + '|500x280', 'sigB' => String.valueOf(cvB) }
+        );
+
+        System.assertEquals(2, ids.size(), 'Both entries should yield a CV Id');
+        System.assertEquals(true, ids.contains(cvA), 'Should parse the Id ahead of the | separator');
+        System.assertEquals(true, ids.contains(cvB), 'Should accept a bare Id with no dimensions');
+    }
+
+    @IsTest
+    static void chartCvIdsFromToleratesMalformedEntries() {
+        // A malformed entry must not abort cleanup of the well-formed ones alongside it —
+        // otherwise one bad value leaks every chart CV in the record.
+        List<Id> ids = DocGenChartImageController.chartCvIdsFrom(
+            new Map<String, String>{ 'bad' => 'not-an-id', 'blank' => '', 'good' => '068000000000003AAA|100x100' }
+        );
+
+        System.assertEquals(1, ids.size(), 'Only the well-formed entry should be returned');
+        System.assertEquals(0, DocGenChartImageController.chartCvIdsFrom(null).size(), 'Null map returns empty');
+    }
+
+    // ─── Bulk vs single-record data-map parity ───────────────────────────
+    // The bulk retriever is a hand-written twin of getRecordDataV3, so anything
+    // the single path reads off a node has to be read here too. Divergences show
+    // up as conditionals that silently render nothing in bulk while working fine
+    // for one record — no error, just wrong output.
+
+    private static Map<String, Object> aliasedContactsConfig(String aliasValue, String limitValue) {
+        Map<String, Object> rootNode = new Map<String, Object>{
+            'id' => 'n0',
+            'object' => 'Account',
+            'parentNode' => null,
+            'fields' => new List<Object>{ 'Id', 'Name' },
+            'parentFields' => new List<Object>()
+        };
+        Map<String, Object> childNode = new Map<String, Object>{
+            'id' => 'n1',
+            'object' => 'Contact',
+            'parentNode' => 'n0',
+            'relationshipName' => 'Contacts',
+            'lookupField' => 'AccountId',
+            'fields' => new List<Object>{ 'Id', 'LastName' },
+            'parentFields' => new List<Object>()
+        };
+        if (aliasValue != null) {
+            childNode.put('alias', aliasValue);
+        }
+        if (limitValue != null) {
+            childNode.put('limit', limitValue);
+        }
+        return new Map<String, Object>{
+            'v' => 3,
+            'root' => 'Account',
+            'nodes' => new List<Object>{ rootNode, childNode }
+        };
+    }
+
+    /**
+     * Runs the bulk retriever and hands back one record's data map.
+     *
+     * The nested-generic return type lives here rather than in the test methods on
+     * purpose: the Apex compiler rejects a `Map<Id, Map<String, Object>>` LOCAL
+     * declaration in any method that also contains a brace collection initializer
+     * (`new Set<Id>{ ... }`) — it parses the `Map` as a variable and reports
+     * "Unexpected token 'Map'". Keeping the type in a signature sidesteps it.
+     */
+    private static Map<String, Object> bulkDataFor(Set<Id> recordIds, Map<String, Object> config, Id target) {
+        return DocGenDataRetriever.getRecordDataV3Bulk(recordIds, config).get(target);
+    }
+
+    @IsTest
+    static void testBulkRetrieverHonorsNodeAlias() {
+        Account acc = [SELECT Id FROM Account WHERE Name = 'DocGen Test Account' LIMIT 1];
+        Set<Id> ids = new Set<Id>{ acc.Id };
+
+        Test.startTest();
+        Map<String, Object> data = bulkDataFor(ids, aliasedContactsConfig('AllContacts', null), acc.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, data, 'Bulk retriever should return data for the account');
+        // The alias is what {#AllContacts}…{/AllContacts} resolves against. Dropping it
+        // filed the collection under 'Contacts', so the loop tag resolved null and
+        // rendered nothing — and {^AllContacts} fired its inverse branch — in bulk only.
+        System.assertEquals(
+            true,
+            data.containsKey('AllContacts'),
+            'Child collection must be keyed by the node alias, matching getRecordDataV3'
+        );
+        System.assertEquals(
+            false,
+            data.containsKey('Contacts'),
+            'Aliased node must NOT also be filed under the raw relationship name'
+        );
+        Map<String, Object> block = (Map<String, Object>) data.get('AllContacts');
+        System.assertEquals(3, (Integer) block.get('totalSize'), 'All three contacts should be present');
+    }
+
+    @IsTest
+    static void testBulkRetrieverAppliesLimitPerRecordNotPerJob() {
+        Account first = [SELECT Id FROM Account WHERE Name = 'DocGen Test Account' LIMIT 1];
+        Account second = new Account(Name = 'DocGen Test Account 2');
+        insert second;
+        List<Contact> extra = new List<Contact>();
+        for (Integer i = 1; i <= 3; i++) {
+            extra.add(new Contact(FirstName = 'Second', LastName = 'Contact ' + i, AccountId = second.Id));
+        }
+        insert extra;
+
+        Set<Id> ids = new Set<Id>{ first.Id, second.Id };
+        Map<String, Object> config = aliasedContactsConfig('AllContacts', '2');
+
+        Test.startTest();
+        Map<String, Object> firstData = bulkDataFor(ids, config, first.Id);
+        Map<String, Object> secondData = bulkDataFor(ids, config, second.Id);
+        Test.stopTest();
+
+        // The authored LIMIT is per record. A bare `LIMIT 2` on the batch-wide query
+        // returned 2 rows for the WHOLE job, so the first account consumed them and the
+        // second got an empty collection — {#AllContacts} rendered nothing there and
+        // {^AllContacts} fired its inverse branch. Both records must now see their own 2.
+        Map<String, Object> firstBlock = (Map<String, Object>) firstData.get('AllContacts');
+        Map<String, Object> secondBlock = (Map<String, Object>) secondData.get('AllContacts');
+        System.assertEquals(
+            2,
+            (Integer) firstBlock.get('totalSize'),
+            'First record should get its own LIMIT 2, not share one across the job'
+        );
+        System.assertEquals(
+            2,
+            (Integer) secondBlock.get('totalSize'),
+            'Second record must not be starved by the first consuming the whole LIMIT'
+        );
+    }
+
+    @IsTest
+    static void testBulkRetrieverRejectsDuplicateSiblingKeys() {
+        Account acc = [SELECT Id FROM Account WHERE Name = 'DocGen Test Account' LIMIT 1];
+        Map<String, Object> config = aliasedContactsConfig(null, null);
+        // A second, differently-filtered node over the same relationship with no alias —
+        // both would write to the 'Contacts' key and the second would silently win.
+        List<Object> nodes = (List<Object>) config.get('nodes');
+        nodes.add(
+            new Map<String, Object>{
+                'id' => 'n2',
+                'object' => 'Contact',
+                'parentNode' => 'n0',
+                'relationshipName' => 'Contacts',
+                'lookupField' => 'AccountId',
+                'fields' => new List<Object>{ 'Id' },
+                'parentFields' => new List<Object>()
+            }
+        );
+
+        Test.startTest();
+        String message = null;
+        try {
+            DocGenDataRetriever.getRecordDataV3Bulk(new Set<Id>{ acc.Id }, config);
+        } catch (DocGenException e) {
+            message = e.getMessage();
+        }
+        Test.stopTest();
+
+        System.assertNotEquals(null, message, 'Bulk should raise the same duplicate-key guard as single-record');
+        System.assertEquals(
+            true,
+            message.contains('Duplicate loop key'),
+            'Guard message should match getRecordDataV3: ' + message
+        );
+    }
+
     @IsTest
     static void testGetBulkTemplates() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];

@@ -1,5 +1,214 @@
 # Changelog
 
+## v3.48.0 — Bulk generation: conditionals, charts, sorting, permissions
+
+A bulk-generation release. Most of what follows is silent-wrong-output — bulk jobs that
+reported success while producing documents that were subtly or completely wrong.
+
+### Fixed — bulk merge-tag resolution
+
+The bulk retriever `getRecordDataV3Bulk` is a hand-written twin of `getRecordDataV3`.
+Four things it did differently, none of which raised an error:
+
+- **Aliased loops resolved to nothing.** The bulk node parser never read `alias`.
+  `TreeNode.dataMapKey()` is `alias ?? relationshipName` and is the key the child block
+  is stitched under, so a template using a Tag name (`{#OpenCases}` over a Cases node)
+  filed its collection under `Cases` and the loop tag resolved null — `{#…}` rendered
+  nothing, `{^…}` fired its inverse branch, `{#IF …}` was false. **V3 query configs
+  only**; V1 falls through to the identical single-record path, which is why it looked
+  intermittent. Also adds the sibling duplicate-key guard the single path already had.
+- **Per-record `LIMIT` was applied per job.** The bulk child query spans every record in
+  the batch, so a bare `LIMIT 10` returned 10 rows for the whole job — the first parents
+  consumed them and every other record got an empty collection. No flat SOQL LIMIT can
+  express "n per parent" (scaling by parent count still starves a skewed set: one parent
+  with more than n children eats the surplus), so the clause is dropped from the query
+  and re-applied per parent after grouping. Fetches no more rows than a child node with
+  no limit clause already fetched on this path.
+- **`{Field:label}` threw in bulk only.** `resolvePicklistLabels` cast to
+  `Map<String,String>`, but `DocGenBatch` serializes the data map to JSON for its cache
+  and rehydrates with `JSON.deserializeUntyped`, which yields `Map<String,Object>`.
+  Read as `Map<String,Object>`, which accepts both shapes.
+- **`{#Approvals}` was never populated.** `generateDocumentData` injects it;
+  `generateDocumentDataFromCache` did not. Still opt-in, cached per template.
+
+### Added — charts in bulk
+
+`{Chart:…}` image charts rendered as `[Chart: rel.field]` text placeholders in bulk,
+because building a `chartCvMap` meant rasterizing SVG in a browser `<canvas>`.
+`DocGenChartRasterizer` — a pure-Apex PNG renderer — and
+`prepareChartImagesServerSide` were both built for DOM-less callers and documented for
+"batch jobs and bulk runners", but nothing ever called them.
+
+`DocGenBatch` now rasterizes per record (buckets differ per record, so it cannot be
+hoisted), seeds the chart context, and reaps the transient CVs in a `finally`. A
+`hasChartTags` probe resolves once per job so templates without charts — the
+overwhelming majority — never pay a per-record SOQL to prove a negative.
+
+`DocGenChartCvReaper` is the backstop: the previous docblock claimed an orphan reaper
+existed, and it did not. Chart CVs are caller-owned, and a caller that dies mid-flow
+left them behind. Tolerable when the only producer was a human clicking Generate;
+not once bulk creates them per record. Reaps `docgen_chart_*` older than 60 minutes,
+capped at 500 per run. Schedule with
+`System.schedule('DocGen Chart CV Reaper', '0 0 * * * ?', new DocGenChartCvReaper());`
+
+**Unaffected either way:** `{#ChartBucket:…}` loops and HTML CSS-bar charts resolve
+server-side inside `processXml` and have always worked in bulk.
+
+### Fixed — bulk output format
+
+- **PowerPoint and Excel in Combined PDF produced blank pages.**
+  `generateHtmlForRecord` branched on fillable-PDF and HTML, then let everything else
+  fall into the Word DOCX→HTML branch. A PPTX/XLSX template has no `word/document.xml`,
+  so it yielded empty HTML and a merged PDF of blank pages, reporting success.
+  `generateDocument` catches this via `validateOutputFormatOverride`, but the merge path
+  calls `mergeTemplate` with a hardcoded `'PDF'` and never passes through it. Now
+  rejected in `analyzeJob`, `submitJobInternal`, and `generateHtmlForRecord`.
+  **Individual Files remains fully supported** for both — `assembleZip` builds the OOXML
+  package in Apex, no browser required.
+
+### Fixed — bulk screen refused to start jobs
+
+The Run button was gated on `analyzeJob().canProceed`, which the server enforces
+nowhere — the Flow action ran the identical job the UI was refusing. The estimates are
+also systematically pessimistic about the async job they describe: measured in a 6MB
+synchronous Aura request but judged against the 12MB async ceiling, multiplying
+`DocGenBatch`'s once-per-`execute()` fixed costs by batch size, and ignoring both the
+shared data cache and `DocGenBulkGiantFallbackJob`, which already retries heap-failed
+records one at a time. At `batchSize=1` a heavy template emitted "reduce batch size to
+1" — an unactionable dead end.
+
+`canProceed` is now reserved for hard blockers (unsupported template/mode, >50,000
+records). Over-limit estimates stay visible as errors but no longer disable the button.
+
+### Fixed — Template Designer blank for non-admins (two separate causes)
+
+**Cause 2: the canvas was empty for anyone who didn't own the template's files.**
+
+`getHtmlTemplateBody` and `listHtmlTemplateImages` found their ContentVersions with a
+bare `WHERE Title LIKE 'docgen_html_body_<templateId>%'`. **File access is not governed
+by Apex sharing keywords or `WITH SYSTEM_MODE`.** Measured on a Standard User holding
+`DocGen_Admin`:
+
+```
+template=1  cdl=1  cvUserMode=0  cvSystemMode=0  cvViaWithoutSharingLoader=0
+                   cvScopedByContentDocumentId=1
+```
+
+The user could read the template record and its `ContentDocumentLink`, but a title-only
+`ContentVersion` query returned **zero rows in user mode, in `SYSTEM_MODE`, and from a
+`without sharing` class alike**. Resolving `ContentDocumentId`s from the link first
+returns the row.
+
+A System Administrator has View All Data and never hit it — so the Designer populated
+for whoever built the template and came up blank for everyone else, **silently**: no
+toast, no console error, just the "Start typing your document here" empty state. Because
+it looked like a permissions problem, the natural response was to grant more permission
+sets, which changed nothing.
+
+**A blank canvas can no longer destroy a body.** The Designer seeds a placeholder
+scaffold ("Start typing your document here…") whenever the stored body reads back
+blank — correct for a new template, catastrophic when a _read failure_ made an existing
+body look blank, because one Save wrote the placeholder over the author's work.
+`saveHtmlTemplateBody` now refuses to replace a substantive stored body with an empty
+document or that seed placeholder, and says so. Deliberately server-side, so it holds
+for every caller: no future read bug, permission gap, or race can turn "I couldn't load
+it" into "I deleted it". Legitimate edits and brand-new templates are unaffected.
+
+`scripts/audit-blanked-template-bodies.apex` (read-only) finds any body already
+overwritten this way and names the exact prior ContentVersion to restore from — nothing
+was ever deleted, the old versions are still there. Run against Portwood Dev (69
+bodies), Production (11), and Demo (0): **all clean, no data was lost.**
+
+Both read methods now go through the CDL-scoped loader
+(`loadInternalContentVersionsForVersionByTitlePrefix` /
+`loadInternalContentVersionMetaForEntityByTitlePrefix`, the latter metadata-only so
+listing images doesn't pull every blob into heap). Covered by two `System.runAs` tests
+against a real Standard User — the only way to reproduce this, since an admin never sees
+it.
+
+**Cause 1: missing Apex class access.**
+
+`docGenAdmin` imports `DocGenChartImageController` and `DocGenAiTemplateController`,
+neither of which had a `classAccesses` entry. An LWC's Apex imports resolve at module
+load, so one missing class blanks the entire component — and the `try/catch` around
+`isAiAvailable()` cannot help, because the failure is at import time, not call time.
+System Administrators have implicit access to every class and never saw it.
+
+Six entries added to both `DocGen_Admin` and `DocGen_User`:
+`DocGenAiTemplateController`, `DocGenAiHtmlValidator`, `DocGenChartImageController`,
+`DocGenFlsGuard`, `DocGenFieldWritebackService`, `DocGenSignaturePdfFlowAction`.
+
+### Fixed — template cloning dropped HTML files
+
+Clone is `exportTemplate` → `importTemplate`, so every export gap is a clone gap.
+
+- **Cloned HTML templates opened with a blank Designer canvas.** The body CV was titled
+  after the template name, but `getHtmlTemplateBody` finds it by the
+  `docgen_html_body_<templateId>_` prefix. The clone rendered correctly and was
+  uneditable — and the first Save wrote the blank canvas back over the real body.
+- **Designer images went to the wrong template.** Copied assets kept the source
+  template Id in their titles, and `listHtmlTemplateImages` matches on that prefix with
+  no parent scoping — so the clone's picker was empty and the **source** template's
+  picker gained duplicates.
+- Export now sweeps every `docgen_html_img_*` linked to the template, not only images
+  the current body references via a shepherd URL.
+- Export CV reads moved to the FLS-guard + `SYSTEM_MODE` hybrid. Under `USER_MODE` these
+  `Visibility=InternalUsers` links read empty (the #114 quirk), so a clone could be
+  created with no body at all, silently.
+- The imported version now carries `Output_Format__c`, `Header_Html__c`,
+  `Footer_Html__c`, and `Document_Title_Format__c` — using the shepherd-rewritten
+  header/footer, not the raw bundle values that still point at the source org's CVs.
+  This matters twice: the renderer prefers version values over template values, and
+  `activateVersion` pushes version fields back onto the template, so re-activating an
+  imported version blanked all four.
+
+### Added — multi-column sorting
+
+`ORDER BY` was already a free-text clause and the sanitizer already split on commas, so
+`Amount DESC, Name ASC` was expressible but had no editor and two broken consumers:
+
+- The child-relationship "Sort by" text box is now a repeatable field + direction picker
+  with reorder and remove. Storage stays a single clause string — no schema change.
+- `scoutChildCounts`' V3 branch dropped `orderBy`/`where`/`limit` entirely (the V1
+  branch emitted all three), and `docGenRunner` reads `serverChildNode.orderBy` to drive
+  the client-side giant DOCX cursor — so V3-config templates rendered child rows
+  unsorted while an identical V1 config sorted correctly.
+- `getSortedChildIds`' validator lacked the standard-relationship fallback that
+  `DocGenDataRetriever.sanitizeClause` has, so `Product2.Name` (resolved via
+  `Product2Id`) passed everywhere except the client giant path.
+
+### Added — bulk Flow action Template API Name (#256)
+
+"Generate Bulk Documents" accepts `Template API Name`, matching the single-record
+action. `Template ID` is no longer required. Resolution happens inside the existing try
+block so a bad API name lands on `Error Message` rather than faulting the interview.
+
+### Fixed — bulk sample record
+
+Switching templates left the previous template's sample record in place, keeping the
+Preview button enabled against a record of the wrong sObject type. The record picker
+also survived the switch and kept searching the old object, because it sits inside an
+`if:true` that stays true — it is now keyed on the base object so it rebuilds.
+
+### Internal
+
+- `e2e-01-permissions.apex` bulkified. It ran `SELECT Name FROM ApexClass` inside a loop,
+  one query per granted class; the six new permission-set entries pushed it past the
+  100-SOQL limit, which prints no summary line at all. It would have broken on the next
+  permission-set addition regardless.
+- `config/permission-test-scratch-def.json` + `scripts/setup-permission-test-org.sh`
+  spin up a namespaced scratch org with two non-admin users (Standard User +
+  `DocGen_Admin`, Standard Platform User + `DocGen_User`), passwords, and sample data in
+  one command. A System Administrator cannot reproduce permission-set gaps.
+- `docGenAdmin` cell-wrap emptiness check moved off `innerHTML` to a `childNodes`
+  predicate — same semantics (`textContent` is not equivalent: a cell holding only an
+  `<img>` has empty text but is not empty), and clears the last `sf code-analyzer` High.
+
+### Validation
+
+RunLocalTests, e2e-01..08 + 07-syntax1..4, `sf code-analyzer` 0 violations, prettier
+clean.
+
 ## v3.47.0 — PowerPoint table loops, GUID preservation, split-run merge tags
 
 `04tVx000000zMTRIA2` (build 3.47.0-1, promoted 2026-07-28, ancestor 3.46.0.5).
