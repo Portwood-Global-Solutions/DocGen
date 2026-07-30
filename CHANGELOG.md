@@ -2,6 +2,8 @@
 
 ## v3.48.0 — Bulk generation: conditionals, charts, sorting, permissions
 
+`04tVx000000zgS9IAI` (build 3.48.0-1, promoted 2026-07-30, ancestor 3.47.0).
+
 A bulk-generation release. Most of what follows is silent-wrong-output — bulk jobs that
 reported success while producing documents that were subtly or completely wrong.
 
