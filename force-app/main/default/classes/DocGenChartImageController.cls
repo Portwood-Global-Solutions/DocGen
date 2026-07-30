@@ -139,6 +139,66 @@ public with sharing class DocGenChartImageController {
      * `prepareChartImages`.
      */
     @AuraEnabled
+    /**
+     * Cheap "is it even worth calling prepareChartImagesServerSide?" probe.
+     *
+     * Exists for batch callers. prepareChartImagesServerSide has to load the active
+     * template body to find chart tags, and in a bulk job that is a per-record SOQL
+     * spent proving a negative on the overwhelming majority of templates, which have
+     * no charts at all. A batch resolves this ONCE and skips the whole path when false.
+     *
+     * Same template-type and tag-presence rules as the real call, so a true here means
+     * the real call will actually do work.
+     */
+    public static Boolean hasChartTags(Id templateId) {
+        if (templateId == null) {
+            return false;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> templates = [
+            SELECT Id, Type__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (templates.isEmpty()) {
+            return false;
+        }
+        String t = templates[0].Type__c;
+        if (t != 'Word' && t != 'HTML' && t != 'PowerPoint') {
+            return false;
+        }
+        String body = loadActiveBody(t, templateId);
+        return String.isNotBlank(body) && body.contains(CHART_OPEN_PREFIX);
+    }
+
+    /**
+     * Extracts the ContentVersion Ids from a chartCvMap so a caller can reap them.
+     * Values are `cvId|WxH`; the dimensions are for the image markup, not the CV.
+     */
+    public static List<Id> chartCvIdsFrom(Map<String, String> chartCvMap) {
+        List<Id> ids = new List<Id>();
+        if (chartCvMap == null) {
+            return ids;
+        }
+        for (String v : chartCvMap.values()) {
+            if (String.isBlank(v)) {
+                continue;
+            }
+            String rawId = v.contains('|') ? v.substringBefore('|') : v;
+            try {
+                ids.add(Id.valueOf(rawId));
+            } catch (Exception ignored) {
+                // Malformed entry — nothing to reap, and a bad Id must not abort cleanup
+                // of the well-formed ones alongside it.
+                continue;
+            }
+        }
+        return ids;
+    }
+
     public static Map<String, String> prepareChartImagesServerSide(Id templateId, Id recordId) {
         if (templateId == null || recordId == null) {
             throw DocGenService.ahe('Template and record IDs are required.');

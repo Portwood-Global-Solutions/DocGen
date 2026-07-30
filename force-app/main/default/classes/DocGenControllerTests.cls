@@ -4200,6 +4200,354 @@ private class DocGenControllerTests {
     }
 
     // =======================================================================
+    // Designer body load as a NON-ADMIN
+    //
+    // A System Administrator has View All Data and sees every file regardless of how
+    // it is linked, so the Designer canvas always populated for whoever built it. Every
+    // other user — including one holding DocGen_Admin — got an empty body and a blank
+    // canvas. Reproducing it requires System.runAs against a real Standard User.
+    // =======================================================================
+
+    private static User createStandardUserWithDocGenAdmin() {
+        Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
+        User u = new User(
+            Username = 'dgdesigner' + System.now().getTime() + '@docgen.test',
+            Email = 'dgdesigner@example.com',
+            FirstName = 'DocGen',
+            LastName = 'DesignerTester',
+            Alias = 'dgdes',
+            ProfileId = p.Id,
+            TimeZoneSidKey = 'America/New_York',
+            LocaleSidKey = 'en_US',
+            EmailEncodingKey = 'UTF-8',
+            LanguageLocaleKey = 'en_US'
+        );
+        insert u;
+        List<PermissionSet> ps = [SELECT Id FROM PermissionSet WHERE Name = 'DocGen_Admin' LIMIT 1];
+        if (!ps.isEmpty()) {
+            insert new PermissionSetAssignment(AssigneeId = u.Id, PermissionSetId = ps[0].Id);
+        }
+        return u;
+    }
+
+    @IsTest
+    static void designerBodyLoadsForNonAdminWithDocGenAdmin() {
+        User stdUser;
+        // User DML is a setup object — isolate it from the template/CV DML below.
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            stdUser = createStandardUserWithDocGenAdmin();
+        }
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Designer NonAdmin Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+        ContentVersion cv = new ContentVersion(
+            Title = 'docgen_html_body_' + tpl.Id + '_' + System.now().getTime(),
+            PathOnClient = 'body.html',
+            VersionData = Blob.valueOf('<html><body><p>SENTINEL_BODY {Name}</p></body></html>'),
+            FirstPublishLocationId = tpl.Id
+        );
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+
+        String body;
+        Test.startTest();
+        System.runAs(stdUser) {
+            body = DocGenController.getHtmlTemplateBody(tpl.Id);
+        }
+        Test.stopTest();
+
+        // The Designer's whole canvas is this string. Null here IS the blank canvas —
+        // it fails silently, with no toast and no console error, so the only symptom a
+        // user reports is "the template is blank".
+        System.assertNotEquals(null, body, 'A non-admin with DocGen_Admin must be able to read the template body');
+        System.assertEquals(true, body.contains('SENTINEL_BODY'), 'Body should be the stored HTML, got: ' + body);
+    }
+
+    @IsTest
+    static void designerImagePickerListsForNonAdminWithDocGenAdmin() {
+        User stdUser;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            stdUser = createStandardUserWithDocGenAdmin();
+        }
+
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Designer NonAdmin Images',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+        ContentVersion img = new ContentVersion(
+            Title = 'docgen_html_img_' + tpl.Id + '_' + System.now().getTime() + '_logo.png',
+            PathOnClient = 'logo.png',
+            VersionData = Blob.valueOf('PNGBYTES'),
+            FirstPublishLocationId = tpl.Id
+        );
+        Database.insert(img, AccessLevel.SYSTEM_MODE);
+
+        List<Map<String, Object>> images;
+        Test.startTest();
+        System.runAs(stdUser) {
+            images = DocGenController.listHtmlTemplateImages(tpl.Id);
+        }
+        Test.stopTest();
+
+        // Same failure mode one surface over: an empty image picker rather than a blank
+        // canvas. Both read package-internal CVs the running user does not own.
+        System.assertEquals(1, images.size(), 'A non-admin with DocGen_Admin must see the template images');
+    }
+
+    // =======================================================================
+    // Multi-column sorting
+    //
+    // ORDER BY is stored as a raw clause, so "Amount DESC, Name ASC" is already
+    // expressible — but two consumers mishandled it: the giant-path validator
+    // rejected standard relationship fields that the sync path accepted, and the
+    // V3 branch of scoutChildCounts dropped orderBy entirely.
+    // =======================================================================
+
+    @IsTest
+    static void getSortedChildIdsAcceptsMultiColumnOrderBy() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Opportunity opp = [SELECT Id FROM Opportunity WHERE Name = 'DocGen Test Opp' LIMIT 1];
+
+            Test.startTest();
+            // Product2.Name is a STANDARD relationship traversal — resolved via
+            // Product2Id. The validator here only had the custom __r → __c fallback,
+            // so this threw "Invalid field in ORDER BY" on the client giant path while
+            // the identical clause worked everywhere else.
+            List<Id> ids = DocGenController.getSortedChildIds(
+                'OpportunityLineItem',
+                'OpportunityId',
+                opp.Id,
+                'Product2.Name ASC, Quantity DESC',
+                null
+            );
+            Test.stopTest();
+
+            System.assertNotEquals(null, ids, 'Multi-column ORDER BY with a standard lookup must be accepted');
+        }
+    }
+
+    @IsTest
+    static void getSortedChildIdsStillRejectsUnknownSortFields() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Opportunity opp = [SELECT Id FROM Opportunity WHERE Name = 'DocGen Test Opp' LIMIT 1];
+
+            Test.startTest();
+            String message = null;
+            try {
+                DocGenController.getSortedChildIds(
+                    'OpportunityLineItem',
+                    'OpportunityId',
+                    opp.Id,
+                    'Quantity DESC, NotARealField__c ASC',
+                    null
+                );
+            } catch (Exception e) {
+                message = e.getMessage();
+            }
+            Test.stopTest();
+
+            // Loosening the lookup fallbacks must not loosen the allowlist itself —
+            // every column is still validated, including ones after the first.
+            System.assertNotEquals(null, message, 'An unknown sort column must still be rejected');
+            System.assertEquals(
+                true,
+                message.toLowerCase().contains('order by'),
+                'Rejection should name the ORDER BY clause: ' + message
+            );
+        }
+    }
+
+    @IsTest
+    static void scoutChildCountsExposesV3SortToTheClient() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = TestDataFactory.getTestAccount();
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+            tpl.Base_Object_API__c = 'Account';
+            tpl.Query_Config__c =
+                '{"v":3,"root":"Account","nodes":[' +
+                '{"id":"n0","object":"Account","parentNode":null,"fields":["Id","Name"],"parentFields":[]},' +
+                '{"id":"n1","object":"Contact","parentNode":"n0","relationshipName":"Contacts",' +
+                '"lookupField":"AccountId","fields":["Id","LastName"],"parentFields":[],' +
+                '"orderBy":"LastName ASC, CreatedDate DESC","limit":"25"}]}';
+            Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+            Test.startTest();
+            Map<String, Object> scout = DocGenController.scoutChildCounts(acc.Id, tpl.Id);
+            Test.stopTest();
+
+            Map<String, Object> nodes = (Map<String, Object>) scout.get('childNodes');
+            Map<String, Object> contacts = (Map<String, Object>) nodes.get('Contacts');
+            System.assertNotEquals(null, contacts, 'Scout should describe the Contacts child node');
+            // docGenRunner reads serverChildNode.orderBy to drive the client-side giant
+            // DOCX cursor. The V3 branch omitted it (the V1 branch did not), so V3
+            // templates silently rendered child rows unsorted.
+            System.assertEquals(
+                'LastName ASC, CreatedDate DESC',
+                (String) contacts.get('orderBy'),
+                'V3 scout must pass the multi-column sort through to the client'
+            );
+            System.assertEquals('25', (String) contacts.get('limit'), 'V3 scout must pass the limit through');
+        }
+    }
+
+    // =======================================================================
+    // Clone / import of HTML templates — the associated-files contract
+    //
+    // An HTML template's body and its Designer images live in ContentVersions
+    // whose TITLES encode the owning template Id. getHtmlTemplateBody and
+    // listHtmlTemplateImages find them by that title prefix alone — there is no
+    // ContentDocumentLink scoping — so a copy that keeps the source titles is
+    // invisible to the new template and leaks into the old one.
+    // =======================================================================
+
+    private static DocGen_Template__c createHtmlTemplateWithBodyAndImage() {
+        DocGen_Template__c src = new DocGen_Template__c(
+            Name = 'HTML Clone Source',
+            Base_Object_API__c = 'Account',
+            Type__c = 'HTML',
+            Output_Format__c = 'PDF',
+            Document_Title_Format__c = 'Doc-{Name}',
+            Header_Html__c = '<div>hdr</div>',
+            Footer_Html__c = '<div>ftr</div>'
+        );
+        Database.insert(src, AccessLevel.SYSTEM_MODE);
+
+        DocGenController.saveHtmlTemplateImage(src.Id, 'logo.png', EncodingUtil.base64Encode(Blob.valueOf('PNGBYTES')));
+        Map<String, Object> saved = DocGenController.saveHtmlTemplateBody(
+            src.Id,
+            'body.html',
+            '<html><body><p>Hello {Name}</p></body></html>'
+        );
+
+        DocGen_Template_Version__c v = new DocGen_Template_Version__c(
+            Template__c = src.Id,
+            Is_Active__c = true,
+            Type__c = 'HTML',
+            Base_Object_API__c = 'Account',
+            Query_Config__c = 'Name',
+            Content_Version_Id__c = (Id) saved.get('contentVersionId')
+        );
+        Database.insert(v, AccessLevel.SYSTEM_MODE);
+        return src;
+    }
+
+    @IsTest
+    static void clonedHtmlTemplateOpensInDesignerWithItsBody() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c src = createHtmlTemplateWithBodyAndImage();
+
+            Test.startTest();
+            Id cloneId = DocGenController.cloneTemplate(src.Id, 'HTML Clone Copy');
+            Test.stopTest();
+
+            // The whole bug: the clone rendered fine but the Designer canvas was blank,
+            // because the body CV was titled after the template name instead of
+            // docgen_html_body_<templateId>_<ts>. The first Save then wrote the blank back.
+            String body = DocGenController.getHtmlTemplateBody(cloneId);
+            System.assertNotEquals(null, body, 'Cloned HTML template must expose its body to the Designer');
+            System.assertEquals(
+                true,
+                body.contains('Hello {Name}'),
+                'Cloned body should be the source body, got: ' + body
+            );
+        }
+    }
+
+    @IsTest
+    static void clonedHtmlTemplateCarriesItsImagesAndLeavesTheSourceAlone() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c src = createHtmlTemplateWithBodyAndImage();
+            Integer sourceImagesBefore = DocGenController.listHtmlTemplateImages(src.Id).size();
+            System.assertEquals(1, sourceImagesBefore, 'Source should start with exactly one Designer image');
+
+            Test.startTest();
+            Id cloneId = DocGenController.cloneTemplate(src.Id, 'HTML Clone Copy');
+            Test.stopTest();
+
+            System.assertEquals(
+                1,
+                DocGenController.listHtmlTemplateImages(cloneId).size(),
+                'Clone must own a copy of the Designer image'
+            );
+            // The second half of the bug: because the copied asset kept the source
+            // template Id in its title, it also showed up under the SOURCE template.
+            System.assertEquals(
+                sourceImagesBefore,
+                DocGenController.listHtmlTemplateImages(src.Id).size(),
+                'Cloning must not pollute the source template image picker with duplicates'
+            );
+        }
+    }
+
+    @IsTest
+    static void importedVersionCarriesTheFullRenderSnapshot() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c src = createHtmlTemplateWithBodyAndImage();
+
+            Test.startTest();
+            Id cloneId = DocGenController.cloneTemplate(src.Id, 'HTML Clone Snapshot');
+            Test.stopTest();
+
+            DocGen_Template_Version__c v = [
+                SELECT Output_Format__c, Header_Html__c, Footer_Html__c, Document_Title_Format__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :cloneId AND Is_Active__c = TRUE
+                LIMIT 1
+            ];
+            // The renderer prefers version values over template values, and
+            // activateVersion pushes version fields BACK onto the template — so these
+            // being null made the imported version an incomplete snapshot that could
+            // blank the template on re-activation.
+            System.assertEquals('PDF', v.Output_Format__c, 'Version must snapshot Output_Format__c');
+            System.assertEquals('Doc-{Name}', v.Document_Title_Format__c, 'Version must snapshot the title format');
+            System.assertNotEquals(null, v.Header_Html__c, 'Version must snapshot Header_Html__c');
+            System.assertNotEquals(null, v.Footer_Html__c, 'Version must snapshot Footer_Html__c');
+        }
+    }
+
+    @IsTest
+    static void retitleHtmlImageAssetRekeysOnlyConventionalTitles() {
+        Id newTemplateId = TestDataFactory.getTestTemplate().Id;
+        String oldId = 'a00000000000001AAA';
+
+        String rekeyed = DocGenController.retitleHtmlImageAsset(
+            'docgen_html_img_' + oldId + '_1700000000000_logo.png',
+            newTemplateId,
+            '068000000000001AAA'
+        );
+        System.assertEquals(
+            'docgen_html_img_' + newTemplateId + '_1700000000000_logo.png',
+            rekeyed,
+            'Conventional titles should be re-keyed to the new template, preserving the trailing name'
+        );
+
+        // A watermark or header image is not a Designer picker asset — leave it be.
+        System.assertEquals(
+            'company-logo.png',
+            DocGenController.retitleHtmlImageAsset('company-logo.png', newTemplateId, '068000000000001AAA'),
+            'Non-conventional titles must pass through untouched'
+        );
+        System.assertEquals(
+            'asset_068000000000001AAA',
+            DocGenController.retitleHtmlImageAsset(null, newTemplateId, '068000000000001AAA'),
+            'Blank titles keep the existing asset_<cvId> fallback'
+        );
+    }
+
+    // =======================================================================
     // NEW COVERAGE TESTS — exportTemplate
     // =======================================================================
 

@@ -10907,7 +10907,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         }
                         only.remove();
                     }
-                } else if (cell.innerHTML.trim()) {
+                    // "Does this cell hold anything?" via childNodes rather than
+                    // innerHTML — same predicate as the allWrapped check above, and it
+                    // keeps @lwc/lwc/no-inner-html quiet. textContent is NOT equivalent:
+                    // a cell holding only an <img> has empty text but is not empty.
+                } else if (Array.from(cell.childNodes).some((n) => n.nodeType !== 3 || n.nodeValue.trim())) {
                     const el = (cell.ownerDocument || document).createElement(tag);
                     while (cell.firstChild) {
                         el.appendChild(cell.firstChild);

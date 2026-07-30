@@ -47,12 +47,18 @@ try {
 
         // Apex class accesses
         Set<String> cls = new Set<String>();
+        Set<Id> clsIds = new Set<Id>();
         for (SetupEntityAccess s : [
             SELECT SetupEntityId
             FROM SetupEntityAccess
             WHERE ParentId = :psId AND SetupEntityType = 'ApexClass'
         ]) {
-            cls.add([SELECT Name FROM ApexClass WHERE Id = :s.SetupEntityId LIMIT 1].Name);
+            clsIds.add(s.SetupEntityId);
+        }
+        // Bulk name lookup — a SOQL-in-loop here scaled with the number of
+        // granted entries and blew the 100-query limit as the permsets grew.
+        for (ApexClass a : [SELECT Name FROM ApexClass WHERE Id IN :clsIds]) {
+            cls.add(a.Name);
         }
 
         // Core classes
@@ -135,12 +141,17 @@ try {
 
         // VF page accesses
         Set<String> apgs = new Set<String>();
+        Set<Id> apgIds = new Set<Id>();
         for (SetupEntityAccess s : [
             SELECT SetupEntityId
             FROM SetupEntityAccess
             WHERE ParentId = :psId AND SetupEntityType = 'ApexPage'
         ]) {
-            apgs.add([SELECT Name FROM ApexPage WHERE Id = :s.SetupEntityId LIMIT 1].Name);
+            apgIds.add(s.SetupEntityId);
+        }
+        // Bulk name lookup — see the ApexClass note above.
+        for (ApexPage a : [SELECT Name FROM ApexPage WHERE Id IN :apgIds]) {
+            apgs.add(a.Name);
         }
         Boolean guideOk = apgs.contains('DocGenGuide');
         if (guideOk) {
@@ -299,12 +310,17 @@ try {
 
         // User class accesses
         Set<String> ucls = new Set<String>();
+        Set<Id> uclsIds = new Set<Id>();
         for (SetupEntityAccess s : [
             SELECT SetupEntityId
             FROM SetupEntityAccess
             WHERE ParentId = :upsId AND SetupEntityType = 'ApexClass'
         ]) {
-            ucls.add([SELECT Name FROM ApexClass WHERE Id = :s.SetupEntityId LIMIT 1].Name);
+            uclsIds.add(s.SetupEntityId);
+        }
+        // Bulk name lookup.
+        for (ApexClass a : [SELECT Name FROM ApexClass WHERE Id IN :uclsIds]) {
+            ucls.add(a.Name);
         }
         Boolean uClsOk = ucls.contains('DocGenController');
         if (uClsOk) {
@@ -358,12 +374,17 @@ try {
         }
 
         Set<String> upgs = new Set<String>();
+        Set<Id> upgIds = new Set<Id>();
         for (SetupEntityAccess s : [
             SELECT SetupEntityId
             FROM SetupEntityAccess
             WHERE ParentId = :upsId AND SetupEntityType = 'ApexPage'
         ]) {
-            upgs.add([SELECT Name FROM ApexPage WHERE Id = :s.SetupEntityId LIMIT 1].Name);
+            upgIds.add(s.SetupEntityId);
+        }
+        // Bulk name lookup.
+        for (ApexPage a : [SELECT Name FROM ApexPage WHERE Id IN :upgIds]) {
+            upgs.add(a.Name);
         }
         Boolean uVerifyOk = upgs.contains('DocGenVerify');
         if (uVerifyOk) {
@@ -415,17 +436,26 @@ try {
 
         Set<String> gc = new Set<String>();
         Set<String> gp = new Set<String>();
+        Set<Id> gcIds = new Set<Id>();
+        Set<Id> gpIds = new Set<Id>();
         for (SetupEntityAccess s : [
             SELECT SetupEntityId, SetupEntityType
             FROM SetupEntityAccess
             WHERE ParentId = :gId
         ]) {
             if (s.SetupEntityType == 'ApexClass') {
-                gc.add([SELECT Name FROM ApexClass WHERE Id = :s.SetupEntityId LIMIT 1].Name);
+                gcIds.add(s.SetupEntityId);
             }
             if (s.SetupEntityType == 'ApexPage') {
-                gp.add([SELECT Name FROM ApexPage WHERE Id = :s.SetupEntityId LIMIT 1].Name);
+                gpIds.add(s.SetupEntityId);
             }
+        }
+        // Bulk name lookup.
+        for (ApexClass a : [SELECT Name FROM ApexClass WHERE Id IN :gcIds]) {
+            gc.add(a.Name);
+        }
+        for (ApexPage a : [SELECT Name FROM ApexPage WHERE Id IN :gpIds]) {
+            gp.add(a.Name);
         }
 
         // VF pages

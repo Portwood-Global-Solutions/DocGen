@@ -1,6 +1,10 @@
 public with sharing class DocGenController { // NOPMD ExcessivePublicCount — controller requires public methods for AuraEnabled endpoints
     private static Id cachedTemplateId;
     private static Map<String, Object> cachedTemplateEnvelope;
+    // Whether the cached template opts into Classic Approval history. Cached
+    // alongside the envelope so the per-record injection below doesn't re-read
+    // Query_Config__c for every record in a bulk batch.
+    private static Boolean cachedNeedsApprovals = false;
 
     // v1.97 — Render-time snapshot lookup. The active version snapshots the
     // render-affecting fields at save time (Output_Format, Header_Html,
@@ -291,11 +295,25 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     ? snap.Custom_Margins__c
                     : template.Custom_Margins__c
             };
+            cachedNeedsApprovals = DocGenApprovalHistory.queryConfigMentionsApprovals(template.Query_Config__c);
             cachedTemplateId = templateId;
         }
 
         // Clone envelope and inject this record's data
         Map<String, Object> result = cachedTemplateEnvelope.clone();
+
+        // Issue #66 parity — generateDocumentData injects Approvals, this cached
+        // twin did not, so {#Approvals}…{/Approvals} resolved null and rendered
+        // empty in bulk only (and {^Approvals} fired its inverse branch). The
+        // approval history is per-record and can't come from the batch data cache,
+        // so it is loaded here; still opt-in, so templates that don't ask for it
+        // pay nothing.
+        if (cachedNeedsApprovals == true && cachedRecordData != null) {
+            Object recId = cachedRecordData.get('Id');
+            if (recId != null) {
+                cachedRecordData.put('Approvals', DocGenApprovalHistory.load((Id) String.valueOf(recId)));
+            }
+        }
         result.put('data', cachedRecordData);
         return result;
     }
@@ -1533,7 +1551,17 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                                 'object' => n.get('object'),
                                 'lookupField' => n.get('lookupField'),
                                 'fields' => n.get('fields'),
-                                'parentFields' => n.get('parentFields')
+                                'parentFields' => n.get('parentFields'),
+                                // The V1 branch below emits where/orderBy/limit; this one did
+                                // not, and docGenRunner reads `serverChildNode.orderBy` to drive
+                                // the client-side giant DOCX cursor. Omitting it silently fell
+                                // back to unsorted, so a V3-config template rendered its child
+                                // rows in arbitrary order while the identical V1 config sorted
+                                // correctly. Also the reason a multi-column ORDER BY appeared
+                                // to be ignored on that path.
+                                'where' => n.get('where'),
+                                'orderBy' => n.get('orderBy'),
+                                'limit' => n.get('limit')
                             }
                         );
                     }
@@ -1733,20 +1761,32 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 throw new DocGenException('Invalid ORDER BY clause: disallowed keyword.');
             }
         }
-        // Parse ORDER BY fields and validate each against Schema field describe
+        // Parse ORDER BY fields and validate each against Schema field describe.
+        // Splitting on ',' means a multi-column clause ("Amount DESC, Name ASC") is
+        // validated column by column. Kept deliberately in step with
+        // DocGenDataRetriever.sanitizeClause — the two ran different rules, and this
+        // one lacked the standard-relationship fallback, so a clause mixing a standard
+        // lookup ("Product2.Name, Name") passed in the sync path and threw only here,
+        // on the client-side giant DOCX path.
         for (String part : orderByClause.split(',')) {
             String fieldName = part.trim().split('\\s+')[0].toLowerCase();
             // Handle relationship fields like Product2.Name — validate the relationship prefix
             String baseField = fieldName.contains('.') ? fieldName.split('\\.')[0] : fieldName;
-            if (!fieldMap.containsKey(baseField)) {
-                // Try with __r → __c conversion for custom relationship fields
-                String asLookup = baseField.endsWith('__r')
-                    ? baseField.substring(0, baseField.length() - 3) + '__c'
-                    : baseField;
-                if (!fieldMap.containsKey(asLookup)) {
-                    throw new DocGenException('Invalid field in ORDER BY: ' + fieldName);
-                }
+            if (fieldMap.containsKey(baseField)) {
+                continue;
             }
+            // Custom relationship: My_Lookup__r → My_Lookup__c
+            String asCustomLookup = baseField.endsWith('__r')
+                ? baseField.substring(0, baseField.length() - 3) + '__c'
+                : null;
+            if (asCustomLookup != null && fieldMap.containsKey(asCustomLookup)) {
+                continue;
+            }
+            // Standard relationship: Account → AccountId, Product2 → Product2Id, Owner → OwnerId
+            if (fieldMap.containsKey(baseField + 'id')) {
+                continue;
+            }
+            throw new DocGenException('Invalid field in ORDER BY: ' + fieldName);
         }
 
         // Sanitize WHERE clause if provided
@@ -3194,20 +3234,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe('Template not found or access denied.');
         }
 
-        String titlePrefix = 'docgen_html_img_' + templateId + '%';
-        DocGenFlsGuard.assertAccessible(
-            ContentVersion.sObjectType,
-            new Set<String>{ 'Title', 'PathOnClient', 'IsLatest' }
+        // CDL-scoped for the same reason as getHtmlTemplateBody — a title-only query
+        // returns nothing for any user who doesn't own the files, so this rendered an
+        // empty image picker for everyone except a System Administrator. Metadata-only
+        // variant: pulling VersionData would load every image blob into heap just to
+        // render a list.
+        List<ContentVersion> cvs = DocGenService.loadInternalContentVersionMetaForEntityByTitlePrefix(
+            templateId,
+            'docgen_html_img_'
         );
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<ContentVersion> cvs = [
-            SELECT Id, PathOnClient
-            FROM ContentVersion
-            WHERE Title LIKE :titlePrefix AND IsLatest = TRUE
-            WITH SYSTEM_MODE
-            ORDER BY CreatedDate DESC
-            LIMIT 50
-        ];
         List<Map<String, Object>> results = new List<Map<String, Object>>();
         for (ContentVersion cv : cvs) {
             results.add(
@@ -3333,16 +3368,23 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw new DocGenException('getHtmlTemplateBody is for HTML-type templates only.');
         }
 
-        String titlePrefix = 'docgen_html_body_' + templateId + '%';
-        /* code-analyzer-suppress ApexFlsViolation */
-        List<ContentVersion> cvs = [
-            SELECT VersionData
-            FROM ContentVersion
-            WHERE Title LIKE :titlePrefix AND IsLatest = TRUE
-            WITH SYSTEM_MODE
-            ORDER BY CreatedDate DESC, Id DESC
-            LIMIT 1
-        ];
+        // Scope the read by the template's linked documents, NOT by a bare Title LIKE.
+        //
+        // File access is not governed by Apex sharing keywords or WITH SYSTEM_MODE.
+        // Measured on a Standard User holding DocGen_Admin: they could read the
+        // template (1 row) and its ContentDocumentLink (1 row), but a title-only
+        // ContentVersion query returned ZERO in user mode, in SYSTEM_MODE, and from a
+        // `without sharing` class alike. Resolving ContentDocumentIds from the link
+        // first returns the row.
+        //
+        // A System Administrator has View All Data and never hit this, so the Designer
+        // canvas always populated for whoever built the template and came up BLANK for
+        // every other user — silently, with no toast and no console error, regardless
+        // of which permission set they held.
+        List<ContentVersion> cvs = DocGenService.loadInternalContentVersionsForVersionByTitlePrefix(
+            templateId,
+            'docgen_html_body_'
+        );
         if (cvs.isEmpty()) {
             return null;
         }
@@ -7077,11 +7119,22 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             if (!tmpl.Versions__r.isEmpty()) {
                 ver = tmpl.Versions__r[0];
                 if (String.isNotBlank(ver.Content_Version_Id__c)) {
+                    // FLS-guard + SYSTEM_MODE, NOT USER_MODE. Template-internal CVs
+                    // (docgen_html_body_*, the uploaded template file) carry
+                    // ContentDocumentLinks that default to Visibility=InternalUsers,
+                    // which USER_MODE reads silently drop — the #114 quirk. Under
+                    // USER_MODE this returned empty and the export produced a bundle
+                    // with NO body at all, so the clone was created blank with no error.
+                    DocGenFlsGuard.assertAccessible(
+                        ContentVersion.sObjectType,
+                        new Set<String>{ 'VersionData', 'FileExtension', 'Title' }
+                    );
+                    /* code-analyzer-suppress ApexFlsViolation */
                     List<ContentVersion> cvs = [
                         SELECT VersionData, FileExtension, Title
                         FROM ContentVersion
                         WHERE Id = :ver.Content_Version_Id__c
-                        WITH USER_MODE
+                        WITH SYSTEM_MODE
                         LIMIT 1 // NOPMD — internal template file read
                     ];
                     if (!cvs.isEmpty()) {
@@ -7110,6 +7163,26 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             assetCvIds.addAll(extractShepherdCvIds(tmpl.Header_Html__c));
             assetCvIds.addAll(extractShepherdCvIds(tmpl.Footer_Html__c));
             assetCvIds.addAll(extractShepherdCvIds(htmlBodyText));
+
+            // Also sweep in every image the Designer's picker knows about, whether or
+            // not the current body happens to reference it. Scanning only for shepherd
+            // URLs missed images that were uploaded but not (yet) placed, or placed via
+            // a URL form the regex doesn't match — so a clone silently lost them and the
+            // author had to re-upload. Same title convention listHtmlTemplateImages uses.
+            if (tmpl.Type__c == 'HTML') {
+                String imgPrefix = 'docgen_html_img_' + templateId + '%';
+                DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'IsLatest' });
+                /* code-analyzer-suppress ApexFlsViolation */
+                for (ContentVersion imgCv : [
+                    SELECT Id
+                    FROM ContentVersion
+                    WHERE Title LIKE :imgPrefix AND IsLatest = TRUE
+                    WITH SYSTEM_MODE
+                    LIMIT 200
+                ]) {
+                    assetCvIds.add(imgCv.Id);
+                }
+            }
             Id watermarkCvId = null;
             if (ver != null && String.isNotBlank(ver.Watermark_Image_CV_Id__c)) {
                 try {
@@ -7120,12 +7193,18 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 }
             }
             if (!assetCvIds.isEmpty()) {
+                // SYSTEM_MODE for the same #114 reason as the template-file read above —
+                // these CVs are linked to the template with Visibility=InternalUsers.
+                DocGenFlsGuard.assertAccessible(
+                    ContentVersion.sObjectType,
+                    new Set<String>{ 'Title', 'FileExtension', 'VersionData' }
+                );
                 /* code-analyzer-suppress ApexFlsViolation */
                 List<ContentVersion> assetCvs = [
                     SELECT Id, Title, FileExtension, VersionData
                     FROM ContentVersion
                     WHERE Id IN :assetCvIds
-                    WITH USER_MODE
+                    WITH SYSTEM_MODE
                 ]; // NOPMD ApexCRUDViolation — referenced by template content; gated by template access
                 List<Map<String, Object>> assets = new List<Map<String, Object>>();
                 for (ContentVersion cv : assetCvs) {
@@ -7167,6 +7246,32 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * version, and triggers image extraction / pre-decomposition.
      * @return The new template record ID
      */
+    /**
+     * Rewrites a Designer image asset's title so it points at the importing org's
+     * template instead of the source template.
+     *
+     * `listHtmlTemplateImages` finds a template's images purely by the
+     * `docgen_html_img_<templateId>_` title prefix — there is no ContentDocumentLink
+     * scoping — so a copied asset that keeps its original title is invisible to the
+     * new template and simultaneously shows up (duplicated) under the old one.
+     * Titles that don't follow the convention are left alone.
+     */
+    @TestVisible
+    private static String retitleHtmlImageAsset(String originalTitle, Id newTemplateId, String originalCvId) {
+        if (String.isBlank(originalTitle)) {
+            return 'asset_' + originalCvId;
+        }
+        if (!originalTitle.startsWith('docgen_html_img_')) {
+            return originalTitle;
+        }
+        // docgen_html_img_<15-or-18-char templateId>_<remainder>
+        Matcher m = Pattern.compile('^docgen_html_img_[a-zA-Z0-9]{15,18}_').matcher(originalTitle);
+        if (!m.find()) {
+            return originalTitle;
+        }
+        return 'docgen_html_img_' + newTemplateId + '_' + originalTitle.substring(m.end());
+    }
+
     @AuraEnabled
     public static Id importTemplate(String jsonData) {
         try {
@@ -7247,7 +7352,12 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     String fileName = (String) asset.get('fileName');
                     String ext = (String) asset.get('fileExtension');
                     ContentVersion acv = new ContentVersion();
-                    acv.Title = String.isNotBlank(fileName) ? fileName : ('asset_' + origId);
+                    // Re-key Designer image assets to the NEW template. Their titles encode
+                    // the source template Id (docgen_html_img_<templateId>_<ts>_<name>) and
+                    // listHtmlTemplateImages matches on that prefix alone, with no parent
+                    // scoping — so copying the title verbatim left the clone's image picker
+                    // empty AND polluted the SOURCE template's picker with the duplicates.
+                    acv.Title = retitleHtmlImageAsset(fileName, tmpl.Id, origId);
                     acv.PathOnClient = acv.Title + (String.isNotBlank(ext) ? ('.' + ext) : '');
                     acv.VersionData = EncodingUtil.base64Decode(b64);
                     acv.FirstPublishLocationId = tmpl.Id;
@@ -7283,7 +7393,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             String cvId = null;
             if (fileData != null && String.isNotBlank((String) fileData.get('base64'))) {
                 ContentVersion cv = new ContentVersion();
-                cv.Title = tmpl.Name;
+                // HTML bodies MUST keep the docgen_html_body_<templateId>_<ts> convention:
+                // getHtmlTemplateBody finds the body by that title prefix, so titling it
+                // tmpl.Name meant an imported/cloned HTML template rendered fine but opened
+                // with a BLANK Designer canvas — and the first Save wrote that blank back
+                // over the real body.
+                cv.Title = tmpl.Type__c == 'HTML'
+                    ? 'docgen_html_body_' + tmpl.Id + '_' + Datetime.now().getTime()
+                    : tmpl.Name;
                 cv.PathOnClient = tmpl.Name + '.' + (String) fileData.get('fileExtension');
                 Blob bodyBytes = EncodingUtil.base64Decode((String) fileData.get('base64'));
                 // For HTML templates, rewrite embedded shepherd URLs in the body
@@ -7319,6 +7436,19 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ver.Description__c = (String) tmplData.get('Description__c');
             ver.Type__c = (String) tmplData.get('Type__c');
             ver.Base_Object_API__c = (String) tmplData.get('Base_Object_API__c');
+            // saveTemplate snapshots these four onto every version it creates; import
+            // did not, so the imported version was an incomplete render snapshot. It
+            // matters twice over: the renderer prefers version values over template
+            // values, and activateVersion pushes version fields BACK onto the template —
+            // so re-activating an imported version blanked the template's output format,
+            // header, footer, and title format.
+            ver.Output_Format__c = (String) tmplData.get('Output_Format__c');
+            // Read header/footer off tmpl, NOT tmplData — step 1.6 already rewrote their
+            // shepherd URLs to the newly-inserted CV Ids. The raw bundle values still
+            // point at the SOURCE org's CVs and would render broken images.
+            ver.Header_Html__c = tmpl.Header_Html__c;
+            ver.Footer_Html__c = tmpl.Footer_Html__c;
+            ver.Document_Title_Format__c = (String) tmplData.get('Document_Title_Format__c');
             // Snapshot page-setup onto the version so the renderer reads the imported
             // settings instead of the org-default field values (the A4 → Letter bug).
             ver.Page_Orientation__c = (String) tmplData.get('Page_Orientation__c');
@@ -7347,7 +7477,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                     'Page_Size__c',
                     'Page_Margins__c',
                     'Custom_Margins__c',
-                    'Watermark_Image_CV_Id__c'
+                    'Watermark_Image_CV_Id__c',
+                    'Output_Format__c',
+                    'Header_Html__c',
+                    'Footer_Html__c',
+                    'Document_Title_Format__c'
                 }
             );
             /* code-analyzer-suppress ApexFlsViolation */

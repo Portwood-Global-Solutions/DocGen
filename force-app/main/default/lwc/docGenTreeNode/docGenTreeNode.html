@@ -346,15 +346,6 @@
                     >
                     </lightning-input>
                     <lightning-input
-                        label="Sort by"
-                        variant="label-inline"
-                        placeholder="e.g. CreatedDate DESC"
-                        value={nodeOrderBy}
-                        onchange={handleOrderByChange}
-                        style="flex: 1; min-width: 120px"
-                    >
-                    </lightning-input>
-                    <lightning-input
                         label="Limit"
                         variant="label-inline"
                         type="number"
@@ -364,6 +355,71 @@
                         style="flex: 0 0 70px"
                     >
                     </lightning-input>
+                </div>
+
+                <!-- ═══ Sort — one row per column, applied in order ═══ -->
+                <div style="margin-top: 8px">
+                    <template for:each={sortRows} for:item="sr">
+                        <div
+                            key={sr.key}
+                            style="display: flex; gap: 8px; align-items: end; margin-bottom: 4px; flex-wrap: wrap"
+                        >
+                            <lightning-combobox
+                                label={sr.positionLabel}
+                                variant="label-inline"
+                                placeholder="Choose a field"
+                                data-index={sr.index}
+                                value={sr.field}
+                                options={sr.fieldOptions}
+                                onchange={handleSortFieldChange}
+                                style="flex: 2; min-width: 170px"
+                            >
+                            </lightning-combobox>
+                            <lightning-combobox
+                                label="Order"
+                                variant="label-hidden"
+                                data-index={sr.index}
+                                value={sr.direction}
+                                options={sr.directionOptions}
+                                onchange={handleSortDirectionChange}
+                                style="flex: 1; min-width: 150px"
+                            >
+                            </lightning-combobox>
+                            <lightning-button-icon
+                                icon-name="utility:up"
+                                variant="bare"
+                                size="small"
+                                data-index={sr.index}
+                                alternative-text={sr.moveUpLabel}
+                                title={sr.moveUpLabel}
+                                disabled={sr.isFirst}
+                                onclick={handleMoveSortUp}
+                            >
+                            </lightning-button-icon>
+                            <lightning-button-icon
+                                icon-name="utility:delete"
+                                variant="bare"
+                                size="small"
+                                data-index={sr.index}
+                                alternative-text={sr.removeLabel}
+                                title={sr.removeLabel}
+                                onclick={handleRemoveSort}
+                            >
+                            </lightning-button-icon>
+                        </div>
+                    </template>
+                    <lightning-button
+                        variant="base"
+                        icon-name="utility:add"
+                        label="Add sort column"
+                        onclick={handleAddSort}
+                    >
+                    </lightning-button>
+                    <template lwc:if={hasSortRows}>
+                        <p class="slds-text-body_small slds-text-color_weak" style="margin-top: 2px">
+                            Rows are sorted by the first column; later columns break ties.
+                        </p>
+                    </template>
                 </div>
             </template>
         </div>

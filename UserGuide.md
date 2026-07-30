@@ -2526,7 +2526,7 @@ Mass-generate documents for many records in one batch.
 5. Adjust batch size if needed (1–200; default 1 — one record per batch execution is the safest for heap-heavy templates; raise it for small, simple templates).
 6. Submit.
 
-**Preview one record first.** Before launching a big job, use **Generate Sample** — pick a sample record and the bulk runner produces one real PDF from it so you can sanity-check the output.
+**Preview one record first.** Before launching a big job, pick a record under **Preview Sample Record** and hit **Preview Sample PDF** — the bulk runner produces one real PDF from it so you can sanity-check the output. The sample record clears when you switch templates, since it belongs to the previous template's object.
 
 ### 9.2 Saved queries
 
@@ -2544,19 +2544,56 @@ Command Hub → **Job History** tab. Every bulk job shows:
 - Start + end time
 - Error messages (for failed jobs)
 
-### 9.4 Governor-limit analysis
+### 9.4 What bulk supports, by template type
 
-Before a big bulk job submits, the runner calls `analyzeJob()` which estimates:
+Bulk runs two different pipelines depending on the output mode, and that decides what works:
+
+- **Individual Files** → the full generation pipeline, including server-side OOXML packaging. No browser involved.
+- **Combined PDF** → each record is rendered to HTML, then all of them are merged into one PDF.
+
+| Template type          | Individual Files       | Combined PDF                                 |
+| ---------------------- | ---------------------- | -------------------------------------------- |
+| **HTML**               | Yes — PDF              | Yes                                          |
+| **Word → PDF**         | Yes                    | Yes                                          |
+| **Word → Native DOCX** | Yes                    | n/a — a combined bundle is always a PDF      |
+| **PowerPoint**         | Yes — one `.pptx` each | **No** — blocked with an explanatory message |
+| **Excel**              | Yes — one `.xlsx` each | **No** — blocked with an explanatory message |
+| **PDF (fillable)**     | Yes                    | **No** — blocked with an explanatory message |
+
+PowerPoint and Excel have no HTML conversion, so there is nothing for the merge step to combine. Run those as **Individual Files** and you get one native file per record. (Before v3.48 the combined job ran anyway and produced a PDF of blank pages while reporting success.)
+
+**Charts in bulk (v3.48+).** All chart types now render in bulk jobs:
+
+- `{#ChartBucket:…}` loops and HTML CSS-bar charts resolve server-side and have always worked.
+- `{Chart:…}` image charts are rasterized in Apex per record — no browser needed. Supported for Word, HTML, and PowerPoint templates; Excel does not embed chart images.
+
+Two things to know about chart-heavy bulk jobs:
+
+- Rasterizing is CPU-intensive. Keep **batch size at 1** (the default) for templates with charts. A handful of charts per record is comfortable; a dozen may exceed the per-batch CPU limit.
+- In **HTML → PDF** output, use the CSS-bar chart styles (`bar`, `pivot`, `clustered`, `stacked`). `column`, `pie`, and `donut` require `htmlRender=svg`, and the PDF engine drops inline SVG — those render in a browser preview but come out blank in the PDF. This applies to all HTML → PDF output, not just bulk.
+
+Schedule the chart cleanup job once per org so transient chart files from interrupted jobs don't accumulate:
+
+```apex
+System.schedule('DocGen Chart CV Reaper', '0 0 * * * ?', new DocGenChartCvReaper());
+```
+
+### 9.5 Governor-limit analysis
+
+Before a job submits, the runner calls `analyzeJob()`, which reports:
 
 - SOQL query count
 - DML operation count
-- Peak heap usage
+- Peak heap usage (per batch, and for the combined-PDF merge)
 
-If any projection exceeds governor limits, the runner **blocks submission** and suggests mitigations (reduce batch size, split the filter into multiple jobs, switch to async).
+**These are estimates, and they are advisory.** They are measured in a synchronous request but describe an asynchronous batch that gets a larger heap ceiling, a shared data cache, and an automatic retry path for records that do run out of memory — so they tend to overstate the real cost. An item shown in red is a risk worth reading, not a veto: the Run button stays enabled and the job may well succeed.
 
-### 9.5 Heap estimation for merge mode
+Submission is blocked only for conditions no setting can work around:
 
-Combined-PDF mode is memory-heavy. `estimateHeapUsage()` flags risky jobs ahead of time and suggests individual-files mode for large datasets.
+- An unsupported template type + output mode combination (see 9.4)
+- More than 50,000 records — the platform's batch query-locator ceiling
+
+If a job does fail on heap, reduce the batch size and re-run; records that individually exceed the limit are automatically retried one at a time through the giant-query path.
 
 ### 9.6 Oversized records — automatic giant-query recovery
 

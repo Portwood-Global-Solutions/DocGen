@@ -93,11 +93,12 @@
                                     Pick a record to preview what your document will look like before running the bulk
                                     job.
                                 </p>
-                                <template if:true={baseObject}>
+                                <template for:each={recordPickerKeys} for:item="rp">
                                     <lightning-record-picker
+                                        key={rp.key}
                                         label="Sample Record"
                                         variant="label-hidden"
-                                        object-api-name={baseObject}
+                                        object-api-name={rp.objectApiName}
                                         value={sampleRecordId}
                                         onchange={handleSampleRecordChange}
                                         placeholder="Search for a record..."

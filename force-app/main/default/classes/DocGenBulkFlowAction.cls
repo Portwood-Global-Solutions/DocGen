@@ -5,8 +5,17 @@
  */
 global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier — global required for @InvocableMethod visibility in subscriber orgs
     global class Request {
-        @InvocableVariable(label='Template ID' required=true description='The DocGen Template record ID')
+        @InvocableVariable(
+            label='Template ID'
+            description='The DocGen Template record ID. Provide this OR Template API Name.'
+        )
         global Id templateId;
+
+        @InvocableVariable(
+            label='Template API Name'
+            description='The template\'s API Name field — a stable key that survives sandbox-to-production deploys, unlike a record Id. Provide this OR Template ID.'
+        )
+        global String templateApiName;
 
         @InvocableVariable(
             label='WHERE Condition'
@@ -65,6 +74,17 @@ global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier �
             Response res = new Response();
             String effectiveCondition;
             try {
+                // Allow addressing the template by its stable API Name, matching
+                // DocGenFlowAction. Resolution happens inside the try so a bad API
+                // name surfaces on the Error Message output instead of faulting
+                // the interview.
+                if (req.templateId == null) {
+                    req.templateId = DocGenService.templateIdByApiName(req.templateApiName);
+                }
+                if (req.templateId == null) {
+                    throw new DocGenException('Provide Template ID or Template API Name.');
+                }
+
                 // Default: combined PDF only (most efficient)
                 Boolean mergeOnly = (req.combinedPdfOnly != false && req.keepIndividualFiles != true);
                 Boolean mergePdf = mergeOnly || (req.keepIndividualFiles == true);

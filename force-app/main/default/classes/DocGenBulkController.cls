@@ -235,6 +235,20 @@ public with sharing class DocGenBulkController {
      */
     @AuraEnabled
     public static JobAnalysis analyzeJob(Id templateId, Integer recordCount, Integer batchSize, Boolean mergePdf) {
+        // canProceed gates the Run button and is reserved for HARD blockers only —
+        // conditions no batch size or record set can work around (unsupported
+        // template/mode combination, or the platform's own QueryLocator ceiling).
+        //
+        // The SOQL / DML / heap items below are ESTIMATES computed in this
+        // synchronous Aura request and are systematically pessimistic about the
+        // async job they describe: they measure a 6MB-ceiling transaction against
+        // the 12MB async ceiling, multiply DocGenBatch's once-per-execute() fixed
+        // costs by batch size, and ignore both the shared dataCache (which drops
+        // per-record SOQL to ~0) and DocGenBulkGiantFallbackJob (which already
+        // re-runs heap-failed records one per Queueable). They stay visible as
+        // 'error' items so the panel keeps its diagnostic value, but they must not
+        // disable the button — the server enforces none of them, so the Flow
+        // action happily runs the exact same job the UI was refusing.
         JobAnalysis analysis = new JobAnalysis();
         analysis.recordCount = recordCount;
         analysis.items = new List<AnalysisItem>();
@@ -275,6 +289,20 @@ public with sharing class DocGenBulkController {
                 analysis.canProceed = false;
             }
 
+            // PowerPoint / Excel have no DOCX→HTML conversion, so there is nothing to
+            // merge into a combined PDF. A genuine hard blocker, not an estimate.
+            if (isMerge && (temp.Type__c == 'PowerPoint' || temp.Type__c == 'Excel')) {
+                AnalysisItem mergeItem = new AnalysisItem();
+                mergeItem.label = 'Template Format';
+                mergeItem.status = 'error';
+                mergeItem.message =
+                    temp.Type__c +
+                    ' templates cannot be combined into a single PDF. ' +
+                    'Switch to Individual Files to get one file per record.';
+                analysis.items.add(mergeItem);
+                analysis.canProceed = false;
+            }
+
             // --- 1. SOQL Queries per batch execution ---
             Integer queriesPerRecord = countQueriesPerRecord(temp.Query_Config__c);
             // Overhead: template load (~3 queries first batch, cached after), job update (1)
@@ -286,16 +314,17 @@ public with sharing class DocGenBulkController {
             soqlItem.label = 'SOQL Queries';
             soqlItem.estimated = soqlPerBatch;
             soqlItem.limitVal = soqlLimit;
-            if (soqlPerBatch >= soqlLimit) {
+            if (soqlPerBatch > soqlLimit) {
                 soqlItem.status = 'error';
                 soqlItem.message =
                     soqlPerBatch +
                     ' / ' +
                     soqlLimit +
-                    ' per batch — will exceed limit. Reduce batch size to ' +
+                    ' per batch — worst case exceeds the limit. This estimate assumes every record ' +
+                    're-runs the full query tree; the batch job caches shared data and usually issues ' +
+                    'far fewer. Reduce batch size to ' +
                     Math.max(1, Math.floor((soqlLimit - overhead) / queriesPerRecord)) +
-                    ' or lower.';
-                analysis.canProceed = false;
+                    ' or lower if the job fails.';
             } else if (soqlPerBatch >= 80) {
                 soqlItem.status = 'warning';
                 soqlItem.message =
@@ -319,10 +348,9 @@ public with sharing class DocGenBulkController {
             dmlItem.label = 'DML Statements';
             dmlItem.estimated = dmlPerBatch;
             dmlItem.limitVal = dmlLimit;
-            if (dmlPerBatch >= dmlLimit) {
+            if (dmlPerBatch > dmlLimit) {
                 dmlItem.status = 'error';
-                dmlItem.message = dmlPerBatch + ' / ' + dmlLimit + ' per batch — will exceed limit. Reduce batch size.';
-                analysis.canProceed = false;
+                dmlItem.message = dmlPerBatch + ' / ' + dmlLimit + ' per batch — exceeds the limit. Reduce batch size.';
             } else if (dmlPerBatch >= 120) {
                 dmlItem.status = 'warning';
                 dmlItem.message = dmlPerBatch + ' / ' + dmlLimit + ' per batch — approaching limit.';
@@ -382,8 +410,9 @@ public with sharing class DocGenBulkController {
                             heapItem.status = 'error';
                             heapItem.message =
                                 totalMb.setScale(1) +
-                                'MB / 12MB — high risk of heap failure. Reduce record count or switch to Individual Files.';
-                            analysis.canProceed = false;
+                                'MB / 12MB — high risk of heap failure. Records that run out of heap are ' +
+                                'automatically retried one at a time, so the job can still finish. To lower the ' +
+                                'risk, reduce record count or switch to Individual Files.';
                         } else if (totalMb >= 7.0) {
                             heapItem.status = 'warning';
                             heapItem.message = totalMb.setScale(1) + 'MB / 12MB — moderate usage, monitor job.';
@@ -403,12 +432,21 @@ public with sharing class DocGenBulkController {
 
                     if (batchMb >= 10.0) {
                         batchHeapItem.status = 'error';
+                        // Suggesting a batch size the user is already at is a dead end —
+                        // it reads as "do something" while offering nothing to do. When a
+                        // single record alone trips the estimate, say so instead.
+                        Integer suggestedBatch = Math.max(
+                            1,
+                            Integer.valueOf(Math.floor(9.0 / (batchMb / safeBatchSize)))
+                        );
                         batchHeapItem.message =
                             batchMb.setScale(1) +
-                            'MB / 12MB per batch — reduce batch size to ' +
-                            Math.max(1, Math.floor(9.0 / (batchMb / safeBatchSize))) +
-                            ' or lower.';
-                        analysis.canProceed = false;
+                            'MB / 12MB per batch — ' +
+                            (suggestedBatch < safeBatchSize
+                                ? 'reduce batch size to ' + suggestedBatch + ' or lower.'
+                                : 'one record alone approaches the async heap ceiling. This figure is measured ' +
+                                  'in a 6MB synchronous request and overstates the batch job, which gets a fresh ' +
+                                  '12MB per execution; records that do run out of heap are retried individually.');
                     } else if (batchMb >= 7.0) {
                         batchHeapItem.status = 'warning';
                         batchHeapItem.message =
@@ -443,8 +481,15 @@ public with sharing class DocGenBulkController {
                     warnings++;
                 }
             }
-            if (errors > 0) {
-                analysis.summary = 'Cannot proceed — ' + errors + ' limit(s) will be exceeded.';
+            // "Cannot proceed" is now driven by canProceed (hard blockers only), not by
+            // the error count — an over-limit ESTIMATE is a risk to flag, not a veto.
+            if (!analysis.canProceed) {
+                analysis.summary = 'Cannot proceed — see the blocking item(s) below.';
+            } else if (errors > 0) {
+                analysis.summary =
+                    'You can run this, but ' +
+                    errors +
+                    ' estimate(s) exceed a limit — the job may need a smaller batch size to finish cleanly.';
             } else if (warnings > 0) {
                 analysis.summary = 'Should work, but ' + warnings + ' item(s) need attention.';
             } else {
@@ -610,6 +655,17 @@ public with sharing class DocGenBulkController {
                     'Turn off Merged PDF and Merge Only for this template.'
                 );
             }
+            // Fail up front rather than per-record. generateHtmlForRecord throws for
+            // these too, but only once the batch is already running — which surfaces
+            // as N failed records on a job that should never have started.
+            String unmergeable = isMergeMode ? unmergeableTemplateType(templateId) : null;
+            if (unmergeable != null) {
+                throw new DocGenException(
+                    unmergeable +
+                        ' templates cannot be combined into a single PDF. ' +
+                        'Turn off Merged PDF and Merge Only to get one file per record.'
+                );
+            }
 
             // 1. Create Job Record
             DocGen_Job__c job = new DocGen_Job__c(
@@ -661,6 +717,36 @@ public with sharing class DocGenBulkController {
             LIMIT 1
         ];
         return !templates.isEmpty() && templates[0].Type__c == 'PDF';
+    }
+
+    /**
+     * Template types that cannot be combined into a single PDF, because they have no
+     * DOCX→HTML conversion and the merge path is HTML-based. Returns the type name so
+     * callers can name it in the error, or null when the template is mergeable.
+     *
+     * Without this, a PPTX/XLSX combined-PDF job produced a PDF of blank pages and
+     * reported success — the merge path never ran the output-format validation that
+     * the individual-file path does.
+     */
+    @TestVisible
+    private static String unmergeableTemplateType(Id templateId) {
+        if (templateId == null) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> templates = [
+            SELECT Type__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (templates.isEmpty()) {
+            return null;
+        }
+        String t = templates[0].Type__c;
+        return (t == 'PowerPoint' || t == 'Excel') ? t : null;
     }
 
     /**

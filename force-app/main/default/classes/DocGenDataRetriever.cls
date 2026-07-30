@@ -737,6 +737,12 @@ public with sharing class DocGenDataRetriever {
             tn.parentNodeId = (String) n.get('parentNode');
             tn.lookupField = (String) n.get('lookupField');
             tn.relationshipName = (String) n.get('relationshipName');
+            // Must mirror getRecordDataV3. dataMapKey() is alias ?? relationshipName,
+            // and it is the key the child block is stitched under. Dropping alias here
+            // filed the collection under the relationship name, so an aliased loop tag
+            // ({#OpenCases} over a Cases node) resolved null in bulk only — rendering
+            // nothing for {#…}, and firing the inverse branch for {^…}, with no error.
+            tn.alias = (String) n.get('alias');
             tn.whereClause = (String) n.get('where');
             tn.orderByClause = (String) n.get('orderBy');
             tn.limitClause = (String) n.get('limit');
@@ -785,6 +791,24 @@ public with sharing class DocGenDataRetriever {
         }
         if (root == null) {
             throw new DocGenException('No root node found in query tree.');
+        }
+        // Same sibling-uniqueness guard as getRecordDataV3. Without it, two aliased
+        // filtered subsets of one relationship collapse to the same data-map key and
+        // the second silently overwrites the first — in bulk only.
+        Set<String> seenKeysPerParent = new Set<String>();
+        for (TreeNode tn : allNodes) {
+            if (tn.parentNodeId == null) {
+                continue;
+            }
+            String key = tn.parentNodeId + '::' + tn.dataMapKey();
+            if (seenKeysPerParent.contains(key)) {
+                throw new DocGenException(
+                    'Duplicate loop key under same parent: ' +
+                        tn.dataMapKey() +
+                        '. Set a unique alias on each filtered subset.'
+                );
+            }
+            seenKeysPerParent.add(key);
         }
 
         // Bulk root query: SELECT fields FROM object WHERE Id IN :recordIds
@@ -1081,6 +1105,10 @@ public with sharing class DocGenDataRetriever {
                 child.objectApiName == 'ProcessInstanceWorkitem';
 
             List<SObject> childResults;
+            // Set only on the flat-query branch below, where the authored per-record
+            // LIMIT has to be re-applied in memory after grouping. The ProcessInstance
+            // branch uses a correlated subquery, whose LIMIT is already per-parent.
+            Integer perParentLimit = null;
             if (isProcessInstanceChild) {
                 String piQuery =
                     'SELECT Id, (SELECT ' +
@@ -1131,7 +1159,32 @@ public with sharing class DocGenDataRetriever {
                         childQuery += ' ORDER BY ' + sanitizeClause(child.orderByClause, 'ORDER BY', bulkChildFieldMap);
                     }
                     if (String.isNotBlank(child.limitClause)) {
-                        childQuery += ' LIMIT ' + sanitizeClause(child.limitClause, 'LIMIT');
+                        String safeLimit = sanitizeClause(child.limitClause, 'LIMIT');
+                        Integer authored = null;
+                        try {
+                            authored = Integer.valueOf(safeLimit.trim());
+                        } catch (Exception parseIgnored) {
+                            authored = null;
+                        }
+                        if (authored != null && authored > 0) {
+                            // The authored LIMIT is PER RECORD. Unlike the single-record path
+                            // — where parentIds holds exactly one Id, so LIMIT n is naturally
+                            // per record — this query spans every record in the batch. A bare
+                            // LIMIT n returned n rows for the WHOLE job: the first parents
+                            // consumed them all and every other record got an empty collection,
+                            // so {#Children} rendered nothing and {^Children} fired its inverse
+                            // branch.
+                            //
+                            // No flat SOQL LIMIT can express "n per parent" — scaling it to
+                            // n × parentCount still starves a skewed set, because one parent
+                            // with more than n children eats the surplus. So the clause is
+                            // dropped from the query and re-applied per parent after grouping.
+                            // This fetches no more rows than a child node with NO limit clause
+                            // already fetches on this same path, so it adds no new ceiling risk.
+                            perParentLimit = authored;
+                        } else {
+                            childQuery += ' LIMIT ' + safeLimit;
+                        }
                     }
 
                     childResults = Database.query(childQuery, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — all dynamic elements allowlist-validated against Schema.describeSObjects() field map; USER_MODE enforced
@@ -1147,6 +1200,13 @@ public with sharing class DocGenDataRetriever {
                 Id parentRecId = (Id) rec.get(child.lookupField);
                 if (!grouped.containsKey(parentRecId)) {
                     grouped.put(parentRecId, new List<Map<String, Object>>());
+                }
+                // Re-apply the authored per-record LIMIT. The query's ORDER BY survives
+                // grouping — a global sort keeps the correct relative order inside each
+                // parent's bucket — so taking the first n per parent yields the same rows
+                // the single-record path would have returned.
+                if (perParentLimit != null && grouped.get(parentRecId).size() >= perParentLimit) {
+                    continue;
                 }
                 grouped.get(parentRecId).add(mapSObject(rec));
             }

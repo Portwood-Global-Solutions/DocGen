@@ -163,7 +163,50 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return new PreDecompXmlLoader().loadForLinkedEntityByTitlePrefix(versionId, titlePrefix);
     }
 
+    /**
+     * Metadata-only, CDL-scoped file listing — no VersionData.
+     *
+     * For listing a template's files (the Designer's image picker) rather than reading
+     * one. Pulling VersionData for every image would load every blob into heap just to
+     * render a list of links.
+     *
+     * MUST be scoped by ContentDocumentId, not by a bare Title LIKE. Measured on a
+     * Standard User holding DocGen_Admin: the user could read the template (1 row) and
+     * its ContentDocumentLink (1 row), but a title-only ContentVersion query returned
+     * ZERO in user mode, in SYSTEM_MODE, and from a `without sharing` class alike —
+     * file access is not governed by Apex sharing keywords. Resolving the document Ids
+     * from the link first returns the rows. See loadForLinkedEntityByTitlePrefix.
+     */
+    public static List<ContentVersion> loadInternalContentVersionMetaForEntityByTitlePrefix(
+        Id linkedEntityId,
+        String titlePrefix
+    ) {
+        return new PreDecompXmlLoader().loadMetaForLinkedEntityByTitlePrefix(linkedEntityId, titlePrefix);
+    }
+
     private without sharing class PreDecompXmlLoader {
+        /** Id / Title / PathOnClient only, scoped to one record's linked documents. */
+        public List<ContentVersion> loadMetaForLinkedEntityByTitlePrefix(Id linkedEntityId, String titlePrefix) {
+            Set<Id> docIds = getLinkedContentDocumentIds(linkedEntityId);
+            if (docIds.isEmpty()) {
+                return new List<ContentVersion>();
+            }
+            String likePattern = titlePrefix + '%';
+            DocGenFlsGuard.assertAccessible(
+                ContentVersion.sObjectType,
+                new Set<String>{ 'ContentDocumentId', 'Title', 'PathOnClient', 'IsLatest' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            return [
+                SELECT Id, Title, PathOnClient
+                FROM ContentVersion
+                WHERE ContentDocumentId IN :docIds AND Title LIKE :likePattern AND IsLatest = TRUE
+                WITH SYSTEM_MODE // NOPMD — package-internal template assets
+                ORDER BY CreatedDate DESC
+                LIMIT 50
+            ];
+        }
+
         public List<ContentVersion> loadByTitlePrefix(String titlePrefix) {
             String likePattern = titlePrefix + '%';
             DocGenFlsGuard.assertAccessible(
@@ -3429,6 +3472,22 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             );
         }
 
+        // PowerPoint and Excel have no DOCX→HTML conversion. Before this guard they
+        // fell through to the Word branch below, which looks for word/document.xml,
+        // found nothing, and returned empty HTML — so a combined-PDF bulk job over a
+        // PPTX or XLSX template produced a PDF of blank pages with no error at all.
+        // (generateDocument catches this via validateOutputFormatOverride, but that
+        // runs on the individual-file path only; this method calls mergeTemplate with
+        // a hardcoded 'PDF' and never passes through it.)
+        if (mr.templateType == 'PowerPoint' || mr.templateType == 'Excel') {
+            throw new DocGenException(
+                mr.templateType +
+                    ' templates cannot be combined into a single PDF. Run the bulk job as Individual Files to get one ' +
+                    (mr.templateType == 'Excel' ? '.xlsx' : '.pptx') +
+                    ' per record.'
+            );
+        }
+
         // HTML template type: mr.documentXml is already a ready-to-render HTML
         // document — skip the DOCX→HTML conversion (which would return empty
         // since there are no DOCX processedXmlEntries for HTML templates).
@@ -5219,14 +5278,24 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (parent == null || !parent.containsKey('__docgenPicklistLabels')) {
             return fallback;
         }
-        Map<String, String> labels = (Map<String, String>) parent.get('__docgenPicklistLabels');
+        // Read as Map<String,Object>, NOT Map<String,String>. The bulk path serializes
+        // the whole data map to JSON for the batch data cache (DocGenBatch.buildDataCache)
+        // and re-hydrates it with JSON.deserializeUntyped, which reconstitutes every
+        // nested map as Map<String,Object>. The stricter cast threw
+        // "Invalid conversion from runtime type Map<String,ANY> to Map<String,String>"
+        // for any template using {Field:label} — a hard failure in bulk only.
+        // Map<String,Object> accepts both the live and the round-tripped shape.
+        Map<String, Object> labels = (Map<String, Object>) parent.get('__docgenPicklistLabels');
+        if (labels == null) {
+            return fallback;
+        }
         String leaf = path.contains('.') ? path.substringAfterLast('.') : path;
         if (labels.containsKey(leaf)) {
-            return labels.get(leaf);
+            return labels.get(leaf) == null ? fallback : String.valueOf(labels.get(leaf));
         }
         for (String key : labels.keySet()) {
             if (key.equalsIgnoreCase(leaf)) {
-                return labels.get(key);
+                return labels.get(key) == null ? fallback : String.valueOf(labels.get(key));
             }
         }
         return fallback;
