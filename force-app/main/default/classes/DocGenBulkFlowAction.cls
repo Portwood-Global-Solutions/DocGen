@@ -26,9 +26,16 @@ global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier â€
         @InvocableVariable(
             label='Record IDs'
             required=false
-            description='Optional collection of record IDs to generate documents for. When supplied, the bulk job runs against just these records (Id IN clause). Combine with WHERE Condition to filter the set further. Skips the need to save a Query Filter when the calling Flow has already determined which records to target.'
+            description='Optional collection of record IDs to generate documents for. When supplied, the bulk job runs against just these records (Id IN clause). Combine with WHERE Condition to filter the set further. Skips the need to save a Query Filter when the calling Flow has already determined which records to target. Note: SOQL does not preserve the order of this collection â€” use Sort Order to control document order.'
         )
         global List<String> recordIds;
+
+        @InvocableVariable(
+            label='Sort Order'
+            required=false
+            description='Optional SOQL ORDER BY clause controlling the order records are processed â€” and therefore the page order of the combined PDF. Field API names only, ASC/DESC and NULLS FIRST/LAST supported, up to 3 fields. Relationship fields work (e.g. Account.Name DESC). Leave blank to keep the previous behaviour (record creation order).'
+        )
+        global String sortOrder;
 
         @InvocableVariable(label='Job Label' description='A friendly label for this job (shown in Job History)')
         global String jobLabel;
@@ -65,7 +72,7 @@ global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier â€
 
     @InvocableMethod(
         label='Generate Bulk Documents'
-        description='Starts a batch job to generate documents for multiple records. Supports combined PDF, individual files, batch sizing, and WHERE filters.'
+        description='Starts a batch job to generate documents for multiple records. Supports combined PDF, individual files, batch sizing, WHERE filters, and sort order.'
     )
     global static List<Response> generateBulkDocuments(List<Request> requests) {
         List<Response> responses = new List<Response>();
@@ -108,7 +115,8 @@ global with sharing class DocGenBulkFlowAction { // NOPMD AvoidGlobalModifier â€
                     req.jobLabel,
                     mergePdf,
                     batchSize,
-                    mergeOnly
+                    mergeOnly,
+                    req.sortOrder
                 );
                 res.jobId = jobId;
                 res.success = true;

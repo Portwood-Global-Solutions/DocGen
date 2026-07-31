@@ -379,7 +379,8 @@ private class DocGenBulkTests {
                 'Test Job',
                 false,
                 1,
-                false
+                false,
+                null
             );
             Test.stopTest();
 
@@ -403,7 +404,8 @@ private class DocGenBulkTests {
                 'AcroForm Bulk Individual',
                 false,
                 1,
-                false
+                false,
+                null
             );
             Test.stopTest();
 
@@ -465,7 +467,8 @@ private class DocGenBulkTests {
                     'AcroForm Bulk Merge',
                     true,
                     1,
-                    false
+                    false,
+                    null
                 );
                 System.assert(false, 'Merged AcroForm bulk jobs should be rejected before the batch queues.');
             } catch (AuraHandledException e) {
@@ -1231,7 +1234,15 @@ private class DocGenBulkTests {
 
             // Submit via controller with mergePdf=true
             Test.startTest();
-            Id jobId = DocGenBulkController.submitJob(t.Id, 'Name = \'ChainTestAcct\'', 'Chain Job', true, 1, false);
+            Id jobId = DocGenBulkController.submitJob(
+                t.Id,
+                'Name = \'ChainTestAcct\'',
+                'Chain Job',
+                true,
+                1,
+                false,
+                null
+            );
             Test.stopTest();
 
             DocGen_Job__c updated = [SELECT Status__c FROM DocGen_Job__c WHERE Id = :jobId];
@@ -1370,7 +1381,8 @@ private class DocGenBulkTests {
                 'Merge PDF Job',
                 true,
                 1,
-                false
+                false,
+                null
             );
             Test.stopTest();
 
@@ -1411,7 +1423,8 @@ private class DocGenBulkTests {
                 'MergeOnly Job',
                 false,
                 1,
-                true
+                true,
+                null
             );
             Test.stopTest();
 
@@ -1436,7 +1449,15 @@ private class DocGenBulkTests {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             Test.startTest();
-            Id jobId = DocGenBulkController.submitJob(t.Id, 'Name = \'DocGen Test Account\'', null, false, 50, false);
+            Id jobId = DocGenBulkController.submitJob(
+                t.Id,
+                'Name = \'DocGen Test Account\'',
+                null,
+                false,
+                50,
+                false,
+                null
+            );
             Test.stopTest();
 
             DocGen_Job__c job = [SELECT Id, Status__c, Label__c FROM DocGen_Job__c WHERE Id = :jobId];
@@ -1458,7 +1479,7 @@ private class DocGenBulkTests {
 
             Test.startTest();
             // null batchSize should default to 1
-            Id jobId = DocGenBulkController.submitJob(t.Id, null, null, false, null, false);
+            Id jobId = DocGenBulkController.submitJob(t.Id, null, null, false, null, false, null);
             Test.stopTest();
 
             DocGen_Job__c job = [SELECT Id, Status__c FROM DocGen_Job__c WHERE Id = :jobId];
@@ -1718,7 +1739,8 @@ private class DocGenBulkTests {
                 'MergeOnly Job',
                 false,
                 1,
-                true
+                true,
+                null
             );
             Test.stopTest();
 
@@ -1739,7 +1761,7 @@ private class DocGenBulkTests {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             Test.startTest();
-            Id jobId = DocGenBulkController.submitJob(t.Id, null, null, false, null, false);
+            Id jobId = DocGenBulkController.submitJob(t.Id, null, null, false, null, false, null);
             Test.stopTest();
 
             DocGen_Job__c job = [SELECT Id, Status__c FROM DocGen_Job__c WHERE Id = :jobId];
@@ -1961,7 +1983,7 @@ private class DocGenBulkTests {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             Test.startTest();
-            Id jobId = DocGenBulkController.submitJob(t.Id, null, 'My Custom Label', false, 5, false);
+            Id jobId = DocGenBulkController.submitJob(t.Id, null, 'My Custom Label', false, 5, false, null);
             Test.stopTest();
 
             DocGen_Job__c job = [SELECT Label__c FROM DocGen_Job__c WHERE Id = :jobId];
@@ -1980,11 +2002,269 @@ private class DocGenBulkTests {
             DocGen_Template__c t = TestDataFactory.getTestTemplate();
 
             Test.startTest();
-            Id jobId = DocGenBulkController.submitJob(t.Id, null, '', false, 1, false);
+            Id jobId = DocGenBulkController.submitJob(t.Id, null, '', false, 1, false, null);
             Test.stopTest();
 
             DocGen_Job__c job = [SELECT Label__c FROM DocGen_Job__c WHERE Id = :jobId];
             System.assertEquals(null, job.Label__c, 'Blank label should be stored as null');
+        }
+    }
+
+    // =========================================================================
+    // Sort order — parent-level ORDER BY for the bulk query.
+    //
+    // The bulk query had no ORDER BY, so merged PDFs came out in record-creation
+    // order with no way to change it from the runner or the Flow action. These
+    // cover the clause validator, the picker that feeds it, and the fact that the
+    // validated clause survives all the way onto the job record.
+    // =========================================================================
+
+    @IsTest
+    static void testNormalizeSortOrderCanonicalizesFieldAndDirection() {
+        // Lower-case field, lower-case direction — authors type both.
+        String clause = DocGenBulkController.normalizeSortOrder('Account', 'name desc');
+        System.assertEquals(
+            'Name DESC NULLS LAST',
+            clause,
+            'Field casing, direction and NULLS handling should all be canonicalized.'
+        );
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderAppendsNameTieBreak() {
+        String clause = DocGenBulkController.normalizeSortOrder('Account', 'AnnualRevenue DESC');
+        System.assertEquals(
+            'AnnualRevenue DESC NULLS LAST, Name ASC NULLS LAST',
+            clause,
+            'A single sort field should gain the name field as a tie-break so repeat runs produce the same packet order.'
+        );
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderDoesNotDuplicateTieBreak() {
+        String clause = DocGenBulkController.normalizeSortOrder('Account', 'Name ASC');
+        System.assertEquals(
+            'Name ASC NULLS LAST',
+            clause,
+            'The tie-break must not repeat the field already sorted on.'
+        );
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderTraversesRelationship() {
+        // The headline case: order child records by a PARENT field.
+        String clause = DocGenBulkController.normalizeSortOrder('Account', 'owner.name');
+        System.assert(
+            clause.startsWith('Owner.Name ASC'),
+            'Relationship traversal should resolve and canonicalize, got: ' + clause
+        );
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderStripsLeadingOrderBy() {
+        String clause = DocGenBulkController.normalizeSortOrder('Account', 'ORDER BY Name');
+        System.assert(clause.startsWith('Name ASC'), 'A pasted "ORDER BY" prefix should be tolerated, got: ' + clause);
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderHonorsExplicitNulls() {
+        String clause = DocGenBulkController.normalizeSortOrder('Account', 'AnnualRevenue ASC NULLS FIRST');
+        System.assert(
+            clause.startsWith('AnnualRevenue ASC NULLS FIRST'),
+            'An explicit NULLS FIRST must survive, got: ' + clause
+        );
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderBlankReturnsNull() {
+        System.assertEquals(null, DocGenBulkController.normalizeSortOrder('Account', null), 'Null in, null out.');
+        System.assertEquals(null, DocGenBulkController.normalizeSortOrder('Account', '   '), 'Blank in, null out.');
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderRejectsInjection() {
+        // Character allowlist: none of these belong in an ORDER BY clause.
+        List<String> attacks = new List<String>{
+            'Name ASC; DELETE FROM Account',
+            'Name) OR (1=1',
+            'Name /* comment */',
+            'Name -- comment',
+            'Name ASC, (SELECT Id FROM Contacts)'
+        };
+        for (String attack : attacks) {
+            Boolean caught = false;
+            try {
+                DocGenBulkController.normalizeSortOrder('Account', attack);
+            } catch (Exception e) {
+                caught = true;
+            }
+            System.assert(caught, 'Sort order should have been rejected: ' + attack);
+        }
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderRejectsUnknownField() {
+        Boolean caught = false;
+        try {
+            DocGenBulkController.normalizeSortOrder('Account', 'NotAField__c ASC');
+        } catch (Exception e) {
+            caught = true;
+            System.assert(
+                e.getMessage().contains('Unknown sort field'),
+                'The error should name the problem, got: ' + e.getMessage()
+            );
+        }
+        System.assert(caught, 'An unknown field must be rejected at submit time, not at batch start.');
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderRejectsUnknownRelationship() {
+        Boolean caught = false;
+        try {
+            DocGenBulkController.normalizeSortOrder('Account', 'Nope__r.Name ASC');
+        } catch (Exception e) {
+            caught = true;
+        }
+        System.assert(caught, 'An unknown relationship must be rejected.');
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderRejectsBadModifier() {
+        Boolean caught = false;
+        try {
+            DocGenBulkController.normalizeSortOrder('Account', 'Name SIDEWAYS');
+        } catch (Exception e) {
+            caught = true;
+        }
+        System.assert(caught, 'Only ASC/DESC/NULLS FIRST/NULLS LAST may follow the field.');
+
+        caught = false;
+        try {
+            DocGenBulkController.normalizeSortOrder('Account', 'Name ASC NULLS');
+        } catch (Exception e) {
+            caught = true;
+        }
+        System.assert(caught, 'A dangling NULLS must be rejected.');
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderRejectsDuplicateAndOverlongClauses() {
+        Boolean caught = false;
+        try {
+            DocGenBulkController.normalizeSortOrder('Account', 'Name ASC, Name DESC');
+        } catch (Exception e) {
+            caught = true;
+        }
+        System.assert(caught, 'The same field twice is a mistake, not an order.');
+
+        caught = false;
+        try {
+            DocGenBulkController.normalizeSortOrder('Account', 'Name, AnnualRevenue, Type, Industry');
+        } catch (Exception e) {
+            caught = true;
+        }
+        System.assert(caught, 'More than 3 sort fields should be rejected — the clause has to fit Sort_Order__c.');
+    }
+
+    @IsTest
+    static void testNormalizeSortOrderRejectsInvalidObject() {
+        Boolean caught = false;
+        try {
+            DocGenBulkController.normalizeSortOrder('NoSuchObject__c', 'Name');
+        } catch (Exception e) {
+            caught = true;
+        }
+        System.assert(caught, 'An unresolvable base object must be rejected.');
+    }
+
+    @IsTest
+    static void testGetSortableFieldsOffersOwnFieldsAndParentNames() {
+        List<DocGenBulkController.SortFieldOption> options = DocGenBulkController.getSortableFields('Account');
+        System.assert(!options.isEmpty(), 'Account should expose sortable fields.');
+
+        Boolean hasOwnField = false;
+        Boolean hasTraversal = false;
+        String previousLabel = null;
+        for (DocGenBulkController.SortFieldOption o : options) {
+            if (o.value == 'Name') {
+                hasOwnField = true;
+            }
+            if (o.value.contains('.')) {
+                hasTraversal = true;
+                // Every offered traversal must survive the validator, or the picker
+                // is handing the user a value the submit path rejects.
+                DocGenBulkController.normalizeSortOrder('Account', o.value);
+            }
+            if (previousLabel != null) {
+                System.assert(previousLabel.compareTo(o.label) <= 0, 'Options should be label-ordered for the picker.');
+            }
+            previousLabel = o.label;
+        }
+        System.assert(hasOwnField, 'The object\'s own Name field should be offered.');
+        System.assert(hasTraversal, 'Parent name fields (e.g. Owner > Full Name) should be offered.');
+
+        System.assert(
+            DocGenBulkController.getSortableFields('NoSuchObject__c').isEmpty(),
+            'An unknown object should yield no options rather than an error.'
+        );
+    }
+
+    @IsTest
+    static void testSubmitJobStoresValidatedSortOrder() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c t = TestDataFactory.getTestTemplate();
+
+            Test.startTest();
+            // startTest/stopTest runs the batch, so this also proves DocGenBatch
+            // .start() builds a QueryLocator the platform accepts with the clause on it.
+            Id jobId = DocGenBulkController.submitJob(t.Id, null, 'Sorted Job', false, 1, false, 'name desc');
+            Test.stopTest();
+
+            DocGen_Job__c job = [SELECT Sort_Order__c, Status__c FROM DocGen_Job__c WHERE Id = :jobId];
+            System.assertEquals(
+                'Name DESC NULLS LAST',
+                job.Sort_Order__c,
+                'The canonical clause should be stored on the job, not the raw input.'
+            );
+            System.assertNotEquals('Queued', job.Status__c, 'The sorted job should have run.');
+        }
+    }
+
+    @IsTest
+    static void testSubmitJobRejectsInvalidSortOrder() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c t = TestDataFactory.getTestTemplate();
+            Boolean caught = false;
+            Test.startTest();
+            try {
+                DocGenBulkController.submitJob(t.Id, null, 'Bad Sort', false, 1, false, 'Bogus__c ASC');
+            } catch (AuraHandledException e) {
+                caught = true;
+            }
+            Test.stopTest();
+            System.assert(caught, 'A bad sort field must fail at submit time.');
+            System.assertEquals(
+                0,
+                [SELECT COUNT() FROM DocGen_Job__c WHERE Label__c = 'Bad Sort'],
+                'No job record should be left behind by a rejected sort order.'
+            );
+        }
+    }
+
+    @IsTest
+    static void testSubmitJobWithoutSortOrderStaysUnordered() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c t = TestDataFactory.getTestTemplate();
+
+            Test.startTest();
+            Id jobId = DocGenBulkController.submitJob(t.Id, null, 'Unsorted Job', false, 1, false, null);
+            Test.stopTest();
+
+            DocGen_Job__c job = [SELECT Sort_Order__c FROM DocGen_Job__c WHERE Id = :jobId];
+            System.assertEquals(null, job.Sort_Order__c, 'Omitting a sort order must remain the default behaviour.');
         }
     }
 }

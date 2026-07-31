@@ -6,6 +6,7 @@ import getContentVersionBase64 from '@salesforce/apex/DocGenController.getConten
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import saveGeneratedDocument from '@salesforce/apex/DocGenController.saveGeneratedDocument';
 import generatePdfAsync from '@salesforce/apex/DocGenController.generatePdfAsync';
+import getPdfSampleGenerationStatus from '@salesforce/apex/DocGenController.getPdfSampleGenerationStatus';
 import scoutAttachedImageSize from '@salesforce/apex/DocGenController.scoutAttachedImageSize';
 import getChildRelationships from '@salesforce/apex/DocGenController.getChildRelationships';
 import getChildRecordPdfs from '@salesforce/apex/DocGenController.getChildRecordPdfs';
@@ -48,6 +49,7 @@ import LBL_CREATE_PACKET from '@salesforce/label/c.DocGenRunner_CreatePacket';
 import LBL_COMBINE_PDFS_ACTION from '@salesforce/label/c.DocGenRunner_CombinePdfsAction';
 import LBL_DOWNLOAD from '@salesforce/label/c.DocGenRunner_Download';
 import LBL_SAVE_TO_RECORD from '@salesforce/label/c.DocGenRunner_SaveToRecord';
+import LBL_SAVE_AND_DOWNLOAD from '@salesforce/label/c.DocGenRunner_SaveAndDownload';
 
 export default class DocGenRunner extends NavigationMixin(LightningElement) {
     // Exposed to the template as {label.X}. Custom Labels resolve to the
@@ -59,7 +61,8 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         chooseTemplate: LBL_CHOOSE_TEMPLATE,
         outputDestination: LBL_OUTPUT_DESTINATION,
         download: LBL_DOWNLOAD,
-        saveToRecord: LBL_SAVE_TO_RECORD
+        saveToRecord: LBL_SAVE_TO_RECORD,
+        saveAndDownload: LBL_SAVE_AND_DOWNLOAD
     };
 
     @api recordId;
@@ -202,6 +205,12 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         if (this.canSaveToRecord) {
             modes.push('save');
         }
+        // Save & Download is offered only when the admin left BOTH destinations
+        // enabled — it is the combination of the two, not a third destination, so
+        // it must not reintroduce one the admin deliberately turned off.
+        if (this.canDownload && this.canSaveToRecord) {
+            modes.push('both');
+        }
         return modes;
     }
 
@@ -225,11 +234,28 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 class: resolvedMode === 'save' ? 'pill-btn active' : 'pill-btn'
             });
         }
+        if (allowedModes.includes('both')) {
+            options.push({
+                label: LBL_SAVE_AND_DOWNLOAD,
+                value: 'both',
+                icon: '⬇️☁️',
+                class: resolvedMode === 'both' ? 'pill-btn active' : 'pill-btn'
+            });
+        }
         return options;
     }
 
     get showOutputDestinationSelector() {
-        return this.modernOutputOptions.length > 0;
+        // Only when there is an actual choice to make. One surviving option — the
+        // admin unchecked the other in App Builder, or the app mode allows only
+        // one (mergeOnly/packet are download-only, mobile is save-only) — used to
+        // render a lone pill that looked interactive and did nothing.
+        //
+        // Safe to hide because generation never reads this.outputMode directly:
+        // all 13 call sites go through resolvedOutputMode, which falls back to
+        // whichever mode IS allowed. Hiding the control cannot strand the user on
+        // a mode the runner won't honour.
+        return this.modernOutputOptions.length > 1;
     }
 
     get resolvedOutputMode() {
@@ -244,6 +270,147 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             return 'save';
         }
         return 'download';
+    }
+
+    /**
+     * Waits for the Save-to-Record Queueable to land its ContentVersion.
+     *
+     * Reuses getPdfSampleGenerationStatus, which already reports job status and,
+     * on completion, the ContentVersion created on the record since `requestedAt`.
+     *
+     * The ceiling is generous on purpose: this path exists FOR the documents too
+     * big to render synchronously, and those are exactly the ones that take
+     * minutes. A too-short wait would fail the download half on precisely the
+     * files the async route was chosen to support.
+     */
+    async _waitForAsyncSavedPdf(jobId, requestedAt) {
+        const MAX_ATTEMPTS = 150;
+        const INTERVAL_MS = 2000;
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await getPdfSampleGenerationStatus({
+                jobId,
+                recordId: this.recordId,
+                requestedAt
+            });
+            if (result && result.jobStatus === 'Failed') {
+                throw new Error(result.extendedStatus || 'Server-side PDF generation failed.');
+            }
+            if (result && result.jobStatus === 'Aborted') {
+                throw new Error(result.extendedStatus || 'Server-side PDF generation was aborted.');
+            }
+            if (result && result.contentVersionId) {
+                return result;
+            }
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((resolve) => setTimeout(resolve, INTERVAL_MS));
+        }
+        // The save itself may still succeed — only the download half timed out,
+        // so say that rather than implying the document was lost.
+        throw new Error(
+            'The document is still generating. It will appear on the record when it finishes — ' +
+                'download it from there.'
+        );
+    }
+
+    /**
+     * Hands the browser the saved file by URL rather than by bytes.
+     *
+     * NavigationMixin (not a hand-built anchor) because the runner also lives on
+     * Experience Cloud pages, where a bare '/sfc/...' path misses the site prefix;
+     * standard__webPage resolves it for the current context. Nothing passes
+     * through the Aura response, so file size is irrelevant here.
+     */
+    _downloadSavedContentVersion(contentVersionId) {
+        if (!contentVersionId) {
+            return;
+        }
+        this[NavigationMixin.Navigate]({
+            type: 'standard__webPage',
+            attributes: {
+                url: `/sfc/servlet.shepherd/version/download/${contentVersionId}`
+            }
+        });
+    }
+
+    /** True when the resolved mode attaches the document to the record. */
+    get wantsSaveToRecord() {
+        const mode = this.resolvedOutputMode;
+        return mode === 'save' || mode === 'both';
+    }
+
+    /** True when the resolved mode also hands the file to the browser. */
+    get wantsDownload() {
+        const mode = this.resolvedOutputMode;
+        return mode === 'download' || mode === 'both';
+    }
+
+    /**
+     * Single exit point for generated bytes: downloads, saves, or both, according
+     * to the resolved output mode.
+     *
+     * Every generation path already held the base64 and chose one of the two —
+     * "Save & Download" is just not choosing. That is why this needs no second
+     * generate call and no extra Apex: the bytes are in the browser either way,
+     * and saveGeneratedDocument is the same call the save-only path already made.
+     *
+     * Downloads BEFORE saving on purpose. If the ContentVersion insert fails, the
+     * user still has the file in hand and gets an error they can act on; the
+     * reverse order would lose both.
+     *
+     * @param {object} opts
+     * @param {string} opts.base64 Generated file content
+     * @param {string} opts.fileName File name WITHOUT extension
+     * @param {string} opts.extension File extension, no dot (pdf, docx, …)
+     * @param {string} opts.mimeType MIME type for the browser download
+     * @param {number} [opts.byteLength] Decoded size, for the 5 MB save ceiling
+     * @param {string} [opts.label] Noun used in the success toast ("PDF", "Document packet")
+     */
+    async _deliverGeneratedDocument({ base64, fileName, extension, mimeType, byteLength, label }) {
+        const fullName = `${fileName}.${extension}`;
+        const noun = label || 'Document';
+        const wantsSave = this.wantsSaveToRecord;
+        const wantsDownload = this.wantsDownload;
+
+        // Above the 5 MB single-CV stitch ceiling the save cannot succeed, so the
+        // runner downloads and offers the drag-to-attach box instead. That path is
+        // already a download, so a 'both' request is fully satisfied by it.
+        const OVERSIZE_LIMIT = 5 * 1024 * 1024;
+        if (wantsSave && byteLength && byteLength > OVERSIZE_LIMIT) {
+            this.downloadBase64(base64, fullName, mimeType);
+            this._oversizedSaveToRecord = {
+                fileName: fullName,
+                sizeMb: (byteLength / 1024 / 1024).toFixed(1)
+            };
+            this.showToast(
+                'Document downloaded',
+                `File is ${this._oversizedSaveToRecord.sizeMb} MB — too large to save automatically. ` +
+                    'Drag the just-downloaded file into the upload box that appeared below to attach it to this record.',
+                'info'
+            );
+            return;
+        }
+
+        if (wantsDownload) {
+            this.downloadBase64(base64, fullName, mimeType);
+        }
+        if (wantsSave) {
+            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
+            await saveGeneratedDocument({
+                recordId: this.recordId,
+                fileName: fileName,
+                base64Data: base64,
+                extension: extension
+            });
+        }
+
+        if (wantsSave && wantsDownload) {
+            this.showToast('Success', `${noun} saved to record and downloaded.`, 'success');
+        } else if (wantsSave) {
+            this.showToast('Success', `${noun} saved to record.`, 'success');
+        } else {
+            this.showToast('Success', `${noun} downloaded.`, 'success');
+        }
     }
 
     get isGenerateMode() {
@@ -631,16 +798,19 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             const isPPT = templateType === 'PowerPoint';
             const isExcel = templateType === 'Excel';
             const isPDF = this.effectiveOutputFormat === 'PDF' && !isPPT && !isExcel;
-            const saveToRecord = this.resolvedOutputMode === 'save';
+            const saveToRecord = this.wantsSaveToRecord;
             const shouldMerge = isPDF && this.mergeEnabled && this.selectedPdfCvIds.length > 0;
 
             if (isPDF) {
-                if (shouldMerge) {
-                    await this._generateMergedPdf(saveToRecord);
-                } else if (saveToRecord) {
-                    // Pre-flight size check: attached images >30MB will fail the
-                    // Save-to-Record ContentVersion insert. Warn up front instead
-                    // of letting the Queueable fail silently.
+                // Pre-flight size check: attached images >30MB will fail the
+                // Save-to-Record ContentVersion insert. Warn up front instead
+                // of letting the Queueable fail silently.
+                //
+                // Gated on wantsSaveToRecord, NOT the save-only flag: Save &
+                // Download ends in the same ContentVersion insert, so it needs the
+                // same guard. Scoped to the non-merge branch because that is the
+                // only one that reaches the insert from here.
+                if (!shouldMerge && this.wantsSaveToRecord) {
                     const imgBytes = await scoutAttachedImageSize({ recordId: this.recordId });
                     const LIMIT_BYTES = 30 * 1024 * 1024;
                     if (imgBytes > LIMIT_BYTES) {
@@ -653,20 +823,43 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                         );
                         return;
                     }
+                }
+                if (shouldMerge) {
+                    await this._generateMergedPdf();
+                } else if (saveToRecord) {
                     // Save-to-record runs fully server-side via a Queueable so the full
                     // render + big-file DML never holds the Aura request open long enough
                     // to trip Salesforce's CSRF timeout (which returns an "Illegal Request"
                     // HTML page instead of the expected JSON). LWC gets back immediately.
+                    //
+                    // Save & Download keeps this async render — deliberately. Doing it
+                    // synchronously to get the bytes back would reintroduce exactly the
+                    // timeout this path exists to avoid, and on the biggest documents
+                    // (the ones most likely to be worth both copies) it would also have
+                    // to squeeze the file through the Aura response. Instead we let the
+                    // Queueable finish, then point the BROWSER at the saved
+                    // ContentVersion — the file streams from Salesforce's own file
+                    // endpoint, so there is no size ceiling on either half.
+                    const requestedAt = new Date().toISOString();
                     this.showToast('Info', 'Generating and saving PDF in the background...', 'info');
-                    await generatePdfAsync({
+                    const jobId = await generatePdfAsync({
                         templateId: this.selectedTemplateId,
                         recordId: this.recordId
                     });
-                    this.showToast(
-                        'Success',
-                        'PDF is being generated. It will appear on the record in a moment — refresh the page to see it.',
-                        'success'
-                    );
+
+                    if (!this.wantsDownload) {
+                        this.showToast(
+                            'Success',
+                            'PDF is being generated. It will appear on the record in a moment — refresh the page to see it.',
+                            'success'
+                        );
+                        return;
+                    }
+
+                    this.loadingMessage = 'Saving to the record, then downloading...';
+                    const saved = await this._waitForAsyncSavedPdf(jobId, requestedAt);
+                    this._downloadSavedContentVersion(saved.contentVersionId);
+                    this.showToast('Success', `${saved.title || 'PDF'} saved to record and downloaded.`, 'success');
                 } else {
                     this.showToast('Info', 'Generating PDF...', 'info');
                     const chartContext = await this._prepareCharts();
@@ -685,7 +878,15 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                         return;
                     }
                     if (result.base64) {
-                        this.downloadBase64(result.base64, (result.title || 'Document') + '.pdf', 'application/pdf');
+                        // Download-only. Anything that saves — including Save &
+                        // Download — took the async Queueable branch above.
+                        await this._deliverGeneratedDocument({
+                            base64: result.base64,
+                            fileName: result.title || 'Document',
+                            extension: 'pdf',
+                            mimeType: 'application/pdf',
+                            label: 'PDF'
+                        });
                     }
                 }
             } else {
@@ -694,7 +895,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 // packages avoid Apex Compression.ZipWriter container quirks.
                 const ext = isPPT ? 'pptx' : isExcel ? 'xlsx' : 'docx';
                 this.showToast('Info', 'Generating document...', 'info');
-                await this._generateOfficeClientSide(saveToRecord, ext, 'application/octet-stream');
+                await this._generateOfficeClientSide(ext, 'application/octet-stream');
             }
         } catch (e) {
             this.error = 'Generation Error: ' + (e.body ? e.body.message : e.message || 'Unknown error');
@@ -870,21 +1071,13 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                     'success'
                 );
             } else if (result.base64) {
-                const saveToRecord = this.resolvedOutputMode === 'save';
-                const docTitle = result.title || 'Document';
-                if (saveToRecord) {
-                    // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-                    await saveGeneratedDocument({
-                        recordId: this.recordId,
-                        fileName: docTitle,
-                        base64Data: result.base64,
-                        extension: 'pdf'
-                    });
-                    this.showToast('Success', 'PDF saved to record.', 'success');
-                } else {
-                    this.downloadBase64(result.base64, docTitle + '.pdf', 'application/pdf');
-                    this.showToast('Success', 'Document downloaded.', 'success');
-                }
+                await this._deliverGeneratedDocument({
+                    base64: result.base64,
+                    fileName: result.title || 'Document',
+                    extension: 'pdf',
+                    mimeType: 'application/pdf',
+                    label: 'PDF'
+                });
             }
         } catch (e) {
             this.error = 'Giant Query Error: ' + (e.body ? e.body.message : e.message || 'Unknown error');
@@ -893,7 +1086,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         }
     }
 
-    async _generateMergedPdf(saveToRecord) {
+    async _generateMergedPdf() {
         const totalPdfs = this.selectedPdfCvIds.length + 1;
         this.showToast('Info', `Generating and merging ${totalPdfs} PDFs...`, 'info');
         const result = await generatePdf({
@@ -914,19 +1107,14 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         }
         const mergedBytes = mergePdfs(pdfBytesArray);
         const mergedBase64 = this._uint8ArrayToBase64(mergedBytes);
-        if (saveToRecord) {
-            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-            await saveGeneratedDocument({
-                recordId: this.recordId,
-                fileName: docTitle,
-                base64Data: mergedBase64,
-                extension: 'pdf'
-            });
-            this.showToast('Success', 'Merged PDF saved to record.', 'success');
-        } else {
-            this.downloadBase64(mergedBase64, docTitle + '.pdf', 'application/pdf');
-            this.showToast('Success', 'Merged PDF downloaded.', 'success');
-        }
+        await this._deliverGeneratedDocument({
+            base64: mergedBase64,
+            fileName: docTitle,
+            extension: 'pdf',
+            mimeType: 'application/pdf',
+            byteLength: mergedBytes.length,
+            label: 'Merged PDF'
+        });
     }
 
     async generatePacket() {
@@ -960,20 +1148,13 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             } else {
                 finalBase64 = this._uint8ArrayToBase64(mergePdfs(pdfBytesArray));
             }
-            const saveToRecord = this.resolvedOutputMode === 'save';
-            if (saveToRecord) {
-                // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-                await saveGeneratedDocument({
-                    recordId: this.recordId,
-                    fileName: 'Document Packet',
-                    base64Data: finalBase64,
-                    extension: 'pdf'
-                });
-                this.showToast('Success', 'Document packet saved to record.', 'success');
-            } else {
-                this.downloadBase64(finalBase64, 'Document Packet.pdf', 'application/pdf');
-                this.showToast('Success', 'Document packet downloaded.', 'success');
-            }
+            await this._deliverGeneratedDocument({
+                base64: finalBase64,
+                fileName: 'Document Packet',
+                extension: 'pdf',
+                mimeType: 'application/pdf',
+                label: 'Document packet'
+            });
         } catch (e) {
             this.error = 'Packet Error: ' + (e.body ? e.body.message : e.message || 'Unknown error');
         } finally {
@@ -999,20 +1180,14 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             }
             const mergedBytes = mergePdfs(pdfBytesArray);
             const mergedBase64 = this._uint8ArrayToBase64(mergedBytes);
-            const saveToRecord = this.resolvedOutputMode === 'save';
-            if (saveToRecord) {
-                // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-                await saveGeneratedDocument({
-                    recordId: this.recordId,
-                    fileName: 'Merged Document',
-                    base64Data: mergedBase64,
-                    extension: 'pdf'
-                });
-                this.showToast('Success', 'Merged PDF saved to record.', 'success');
-            } else {
-                this.downloadBase64(mergedBase64, 'Merged Document.pdf', 'application/pdf');
-                this.showToast('Success', 'Merged PDF downloaded.', 'success');
-            }
+            await this._deliverGeneratedDocument({
+                base64: mergedBase64,
+                fileName: 'Merged Document',
+                extension: 'pdf',
+                mimeType: 'application/pdf',
+                byteLength: mergedBytes.length,
+                label: 'Merged PDF'
+            });
         } catch (e) {
             this.error = 'Merge Error: ' + (e.body ? e.body.message : e.message || 'Unknown error');
         } finally {
@@ -1043,20 +1218,14 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 finalBytes = mergePdfs(pdfBytesArray);
             }
             const finalBase64 = this._uint8ArrayToBase64(finalBytes);
-            const saveToRecord = this.resolvedOutputMode === 'save';
-            if (saveToRecord) {
-                // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-                await saveGeneratedDocument({
-                    recordId: this.recordId,
-                    fileName: 'Merged Child PDFs',
-                    base64Data: finalBase64,
-                    extension: 'pdf'
-                });
-                this.showToast('Success', 'Merged PDF saved to record.', 'success');
-            } else {
-                this.downloadBase64(finalBase64, 'Merged Child PDFs.pdf', 'application/pdf');
-                this.showToast('Success', 'Merged PDF downloaded.', 'success');
-            }
+            await this._deliverGeneratedDocument({
+                base64: finalBase64,
+                fileName: 'Merged Child PDFs',
+                extension: 'pdf',
+                mimeType: 'application/pdf',
+                byteLength: finalBytes.length,
+                label: 'Merged PDF'
+            });
         } catch (e) {
             this.error = 'Merge Error: ' + (e.body ? e.body.message : e.message || 'Unknown error');
         } finally {
@@ -1081,7 +1250,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
      * Note: Rich text images from rtaImage servlet URLs render in PDF only.
      * For DOCX images, use {%FieldName} tags with ContentVersion IDs.
      */
-    async _generateOfficeClientSide(saveToRecord, extension, mimeType) {
+    async _generateOfficeClientSide(extension, mimeType) {
         // #117 chart pipeline: rasterize any {Chart:...} tags in the template
         // body to PNGs (uploaded as transient CVs) before kicking off the
         // server-side merge. The merge sees the signature → CV Id map and
@@ -1096,13 +1265,13 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         // whole flow and reap only after the document is fully assembled.
         const chartContext = await this._prepareCharts();
         try {
-            await this._generateOfficeClientSideInner(saveToRecord, extension, mimeType, chartContext);
+            await this._generateOfficeClientSideInner(extension, mimeType, chartContext);
         } finally {
             await this._cleanupCharts(chartContext.cvIds);
         }
     }
 
-    async _generateOfficeClientSideInner(saveToRecord, extension, mimeType, chartContext) {
+    async _generateOfficeClientSideInner(extension, mimeType, chartContext) {
         const parts = await generateDocumentParts({
             templateId: this.selectedTemplateId,
             recordId: this.recordId,
@@ -1167,35 +1336,16 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         // affordance instead — lightning-file-upload chunks internally up to
         // 2 GB, so the user does the upload themselves with platform-native
         // progress feedback. No new chunked Apex required.
-        const SAVE_TO_RECORD_BINARY_LIMIT = 5 * 1024 * 1024;
-        if (saveToRecord && fileBytes.length > SAVE_TO_RECORD_BINARY_LIMIT) {
-            this.downloadBase64(fileBase64, docTitle + '.' + extension, mimeType);
-            this._oversizedSaveToRecord = {
-                fileName: docTitle + '.' + extension,
-                sizeMb: (fileBytes.length / 1024 / 1024).toFixed(1)
-            };
-            this.showToast(
-                'Document downloaded',
-                'File is ' +
-                    this._oversizedSaveToRecord.sizeMb +
-                    ' MB — too large to save automatically. Drag the just-downloaded file into the upload box that appeared below to attach it to this record.',
-                'info'
-            );
-            return;
-        }
-        if (saveToRecord) {
-            // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-            await saveGeneratedDocument({
-                recordId: this.recordId,
-                fileName: docTitle,
-                base64Data: fileBase64,
-                extension
-            });
-            this.showToast('Success', extension.toUpperCase() + ' saved to record.', 'success');
-        } else {
-            this.downloadBase64(fileBase64, docTitle + '.' + extension, mimeType);
-            this.showToast('Success', extension.toUpperCase() + ' downloaded.', 'success');
-        }
+        // The 5 MB ceiling and its drag-to-attach fallback now live in
+        // _deliverGeneratedDocument, which every generation path shares.
+        await this._deliverGeneratedDocument({
+            base64: fileBase64,
+            fileName: docTitle,
+            extension: extension,
+            mimeType: mimeType,
+            byteLength: fileBytes.length,
+            label: extension.toUpperCase()
+        });
     }
 
     @track _oversizedSaveToRecord = null;
@@ -1351,34 +1501,14 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             const fileBase64 = this._uint8ArrayToBase64(fileBytes);
 
             // 8. Download or save (5 MB single-CV stitch ceiling — see _generateOfficeClientSide)
-            const saveToRecord = this.resolvedOutputMode === 'save';
-            const SAVE_TO_RECORD_BINARY_LIMIT = 5 * 1024 * 1024;
-            if (saveToRecord && fileBytes.length > SAVE_TO_RECORD_BINARY_LIMIT) {
-                this.downloadBase64(fileBase64, docTitle + '.docx', 'application/octet-stream');
-                this._oversizedSaveToRecord = {
-                    fileName: docTitle + '.docx',
-                    sizeMb: (fileBytes.length / 1024 / 1024).toFixed(1)
-                };
-                this.showToast(
-                    'Document downloaded',
-                    'File is ' +
-                        this._oversizedSaveToRecord.sizeMb +
-                        ' MB — too large to save automatically. Drag the just-downloaded file into the upload box that appeared below to attach it to this record.',
-                    'info'
-                );
-            } else if (saveToRecord) {
-                // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
-                await saveGeneratedDocument({
-                    recordId: this.recordId,
-                    fileName: docTitle,
-                    base64Data: fileBase64,
-                    extension: 'docx'
-                });
-                this.showToast('Success', 'DOCX saved to record.', 'success');
-            } else {
-                this.downloadBase64(fileBase64, docTitle + '.docx', 'application/octet-stream');
-                this.showToast('Success', 'DOCX downloaded.', 'success');
-            }
+            await this._deliverGeneratedDocument({
+                base64: fileBase64,
+                fileName: docTitle,
+                extension: 'docx',
+                mimeType: 'application/octet-stream',
+                byteLength: fileBytes.length,
+                label: 'DOCX'
+            });
 
             // 9. Clean up fragment CVs server-side
             try {

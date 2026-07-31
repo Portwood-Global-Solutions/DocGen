@@ -1,5 +1,150 @@
 # Changelog
 
+## v3.49.0 — Bulk sort order, `{RowNumber}`, Save & Download (unreleased)
+
+Not yet built or promoted — no package version id.
+
+### Fixed — Designer could load an OLD template body (silent)
+
+Found by `RunLocalTests` during release validation for this version, not by the features
+in it — `DocGenHtmlTemplateTest.getHtmlTemplateBodyReturnsLatestBody` saved two bodies and
+read back the **first** one.
+
+`PreDecompXmlLoader` picks the newest internal ContentVersion with
+`ORDER BY CreatedDate DESC` and takes row 0. `CreatedDate` has **one-second granularity**,
+so two versions written in the same second — an edit saved twice in quick succession, or
+both writes inside one transaction — tie, and SOQL breaks a tie arbitrarily. "Newest wins"
+then returned whichever row the optimizer preferred.
+
+The visible symptom is an editor that silently shows **stale content**: open the Designer,
+get the previous body, save, and the newer one is overwritten. No error, nothing in the
+log. Fixed with `ORDER BY CreatedDate DESC, Id DESC` on both loader queries — Ids are
+assigned in insert order, so the higher Id is the later write.
+
+### Added — "Save & Download" output option (#260)
+
+Customer request via support: the runner made you choose between attaching the document to
+the record and downloading it. There is now a third pill, **Save & Download**, offered
+whenever the placement leaves both destinations enabled — it is the combination of the
+two, not a new destination, so unticking either in App Builder removes it.
+
+It costs nothing extra. Five of the six generation paths already held the base64 in the
+browser and simply picked one of two things to do with it:
+
+```js
+if (saveToRecord) { await saveGeneratedDocument({...}); }
+else { this.downloadBase64(result.base64, ...); }
+```
+
+"Both" is just not choosing. All six now route through one `_deliverGeneratedDocument`
+helper that downloads, saves, or does both from a **single generation** — which also
+collapses six copies of that if/else, and moves the 5 MB ceiling and its drag-to-attach
+fallback into one place instead of two divergent copies. Above the ceiling a Save &
+Download behaves exactly as Save to Record does today: the file downloads and the
+drag-to-attach box appears, which already satisfies both halves.
+
+**PDF keeps the asynchronous route, and gains no size ceiling.** Save to Record hands the
+whole render to a Queueable deliberately — it keeps a long render from tripping
+Salesforce's CSRF timeout — and returns before the file exists, so there are initially no
+bytes to download. Rather than forcing that render synchronous to obtain them (which would
+reintroduce the exact timeout the Queueable exists to avoid, on the largest documents),
+Save & Download waits for the job via the existing `getPdfSampleGenerationStatus` poll and
+then points the **browser** at the saved ContentVersion. The file streams from Salesforce's
+own file endpoint, so neither half passes through the Aura response and neither has a size
+limit. `NavigationMixin` builds that URL rather than a hand-written `/sfc/...` anchor,
+because the runner also runs on Experience Cloud pages where a bare path misses the site
+prefix.
+
+The poll allows 5 minutes — this path exists FOR documents too big to render synchronously,
+and those are the ones that take minutes. On timeout the message says the save is still
+running and to collect the file from the record, rather than implying it was lost.
+
+The 30 MB attached-image pre-flight guard now fires for Save & Download too; it was
+previously gated on the save-only flag, so routing "both" past it would have skipped the
+check and failed at the ContentVersion insert with no useful message.
+
+New `DocGenRunner_SaveAndDownload` Custom Label, translated into all 10 shipped languages.
+
+### Fixed — lone output-destination button
+
+When a placement left only one destination enabled, the runner still rendered a single
+pill that looked interactive and did nothing. `showOutputDestinationSelector` now requires
+more than one option. Safe because generation never reads `outputMode` directly — every
+call site goes through `resolvedOutputMode`, which falls back to whichever mode is allowed.
+
+### Added — `{RowNumber}` loop counter
+
+Inside any loop, `{RowNumber}` renders the row's 1-based position. There was no way to
+number table rows before this: the only index token anywhere was `{index}` inside
+`{#ChartBucket}` buckets, and a `{#Child}` loop handed each iteration nothing but the
+record's own data map.
+
+The number counts **rendered** rows, so it follows whatever the Query Config's
+`WHERE`/`ORDER BY`/`LIMIT` produced. Nested loops each count their own rows and the outer
+number is intact after the inner loop closes — the counter goes into a per-row **copy** of
+the data map, never the record map itself, so it cannot leak into the record's fields or
+be seen as a stale value by a nested loop.
+
+Both resolution paths carry it, per the three-paths rule:
+
+- **In-memory loops** — `processXml`'s two section-loop branches (bare list and the
+  `{records: […]}` relationship shape).
+- **Giant-query** — `renderLoopBodyForRecords` gains a `rowNumberOffset` parameter, and
+  `DocGenGiantQueryBatch` accumulates it across `execute()` calls. Without that, every
+  fragment restarts at 1 and a 30,000-row table counts 1..50 over and over — right on
+  page one, wrong everywhere after.
+
+Whether the body uses the tag is probed once per loop (same shape as
+`loopBodyHasImageTag`), because supplying the number means copying each row's map. A
+template that doesn't ask for it pays nothing.
+
+New `scripts/e2e-07-syntax5.apex` covers the syntax: basic numbering, 1-based, the
+`records` shape, nesting, field shadowing, absence, and use outside a loop. It is a new
+file because syntax1–4 are each within a few hundred characters of the Anonymous Apex
+size ceiling.
+
+### Added — parent-level sort for bulk jobs
+
+The bulk query had no `ORDER BY`. Records were processed in whatever order the
+QueryLocator returned them, which is effectively record-Id (creation) order, and nothing
+in the runner or the Flow action could change it. That is invisible for Individual Files
+but it decides **page order in a Combined PDF**: `DocGenBatch` stamps a zero-padded
+sequence on each HTML snippet as it processes records and `DocGenMergeJob` assembles by
+that title. 200 Opportunities merged into one packet came out in creation order with no
+way to group them by Account.
+
+Sorting the QueryLocator is therefore the whole fix — the merge pipeline is unchanged.
+
+- **Bulk runner**: a **Sort By** picker listing every sortable field on the base object
+  plus each lookup's parent name field (`Account > Account Name`), with a direction
+  toggle. Backed by the new `getSortableFields`.
+- **`DocGen: Generate Bulk Documents` Flow action**: a **Sort Order** text input taking
+  the same clause. A bad field fails the action on `Error Message` rather than faulting
+  the interview. The `Record IDs` input's description now says what was previously a
+  silent trap — SOQL does not preserve that collection's order, so sorting it in the
+  Flow does nothing.
+- **`DocGen_Job__c.Sort_Order__c`** stores the validated clause, so `DocGenBatch` (which
+  is constructed from a job Id) can read it in `start()`.
+
+`DocGenBulkController.normalizeSortOrder` validates and canonicalizes the clause against
+the base object's schema. Injection defense is a **character allowlist**, not a keyword
+blocklist: an `ORDER BY` clause needs only field paths, commas, spaces and
+`ASC`/`DESC`/`NULLS FIRST`/`NULLS LAST`, so quotes, parens, semicolons and comment
+markers are rejected outright. Every field path is then resolved through describe — up to
+two relationship hops, each verified to be sortable — so an unknown field is an error at
+submit time rather than a batch that dies in `start()` leaving a job stuck at Processing.
+
+Two behaviours worth knowing:
+
+- **Blanks sort last.** SOQL puts them first on an ascending sort, which would open a
+  packet with the records that have nothing in the sort field.
+- **A single sort field gains the object's name field as a tie-break.** Sorting
+  Opportunities by `Account.Name` leaves each same-account group in arbitrary order, so
+  two runs of the same job could produce two different packets.
+
+Validated at submit time _and_ re-validated in `DocGenBatch.start()` — `Sort_Order__c` is
+writable metadata and that string is what reaches the query.
+
 ## v3.48.0 — Bulk generation: conditionals, charts, sorting, permissions
 
 `04tVx000000zgS9IAI` (build 3.48.0-1, promoted 2026-07-30, ancestor 3.47.0).

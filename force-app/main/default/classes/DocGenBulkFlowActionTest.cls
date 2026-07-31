@@ -204,6 +204,61 @@ private class DocGenBulkFlowActionTest {
     }
 
     @IsTest
+    static void testGenerateBulk_sortOrderReachesTheJob() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c temp = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            DocGenBulkFlowAction.Request req = new DocGenBulkFlowAction.Request();
+            req.templateId = temp.Id;
+            // Scoped to one record: an unfiltered set spans more than one batch
+            // execution, and a test method may only trigger executeBatch once.
+            req.queryCondition = 'Name = \'Test Account 1\'';
+            req.sortOrder = 'name desc';
+
+            Test.startTest();
+            List<DocGenBulkFlowAction.Response> responses = DocGenBulkFlowAction.generateBulkDocuments(
+                new List<DocGenBulkFlowAction.Request>{ req }
+            );
+            Test.stopTest();
+
+            System.assertEquals(
+                true,
+                responses[0].success,
+                'Sorted Flow job should start: ' + responses[0].errorMessage
+            );
+            DocGen_Job__c job = [SELECT Sort_Order__c FROM DocGen_Job__c WHERE Id = :responses[0].jobId];
+            System.assertEquals(
+                'Name DESC NULLS LAST',
+                job.Sort_Order__c,
+                'The Flow input should be validated and canonicalized like the runner\'s.'
+            );
+        }
+    }
+
+    @IsTest
+    static void testGenerateBulk_badSortOrderFailsTheActionNotTheInterview() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            DocGen_Template__c temp = [SELECT Id FROM DocGen_Template__c LIMIT 1];
+
+            DocGenBulkFlowAction.Request req = new DocGenBulkFlowAction.Request();
+            req.templateId = temp.Id;
+            req.sortOrder = 'Bogus__c ASC';
+
+            Test.startTest();
+            List<DocGenBulkFlowAction.Response> responses = DocGenBulkFlowAction.generateBulkDocuments(
+                new List<DocGenBulkFlowAction.Request>{ req }
+            );
+            Test.stopTest();
+
+            // Reported on the outputs — a fault would take the whole Flow down.
+            System.assertEquals(false, responses[0].success, 'A bad sort field should fail the action.');
+            System.assertNotEquals(null, responses[0].errorMessage, 'The Flow author needs to be told why.');
+        }
+    }
+
+    @IsTest
     static void testBulkFlowActionResponseCoverage() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
         System.runAs(u) {

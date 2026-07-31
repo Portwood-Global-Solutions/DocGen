@@ -6,6 +6,7 @@ import { downloadBase64, extractWhereClause } from 'c/docGenUtils';
 import getBulkTemplates from '@salesforce/apex/DocGenBulkController.getBulkTemplates';
 import validateFilter from '@salesforce/apex/DocGenBulkController.validateFilter';
 import submitJob from '@salesforce/apex/DocGenBulkController.submitJob';
+import getSortableFields from '@salesforce/apex/DocGenBulkController.getSortableFields';
 import getJobStatus from '@salesforce/apex/DocGenBulkController.getJobStatus';
 import getSavedQueries from '@salesforce/apex/DocGenBulkController.getSavedQueries';
 import saveQuery from '@salesforce/apex/DocGenBulkController.saveQuery';
@@ -34,6 +35,12 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
     @track condition = '';
     @track recordCount = null;
     @track isValidating = false;
+
+    // Sort order — decides the page order of a combined PDF, because the batch
+    // processes records in query order and the merge assembles in that sequence.
+    @track sortFieldOptions = [];
+    @track sortField = '';
+    @track sortDirection = 'ASC';
 
     @track jobId;
     @track jobStatus;
@@ -194,6 +201,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             // place it kept the Preview button enabled against a record of the wrong
             // sObject type, and handed the record picker a value it cannot resolve.
             this.sampleRecordId = '';
+            this.resetSortForNewObject();
             this.loadSavedQueries();
             this.applyAutoFilter();
         }
@@ -344,6 +352,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
             // See handleTemplateSelect — a stale sample record from the previous
             // template's object must not survive the switch.
             this.sampleRecordId = '';
+            this.resetSortForNewObject();
             this.loadSavedQueries();
             this.applyAutoFilter();
         }
@@ -477,6 +486,66 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
         this.filterValidated = false;
     }
 
+    // --- Sort order ---
+
+    /**
+     * Clears the sort selection and reloads the picker for the newly selected
+     * template's base object. The old field list belongs to the old object, and a
+     * stale selection would be rejected at submit time.
+     */
+    resetSortForNewObject() {
+        this.sortField = '';
+        this.sortDirection = 'ASC';
+        this.sortFieldOptions = [];
+        this.loadSortableFields();
+    }
+
+    async loadSortableFields() {
+        if (!this.baseObject) return;
+        try {
+            const fields = await getSortableFields({ objectName: this.baseObject });
+            this.sortFieldOptions = fields.map((f) => ({ label: f.label, value: f.value }));
+        } catch (error) {
+            // Non-fatal — the job still runs, just in the previous unordered way.
+            // A toast here would fire on every template click for an object whose
+            // describe the running user cannot read.
+            this.sortFieldOptions = [];
+        }
+    }
+
+    get sortDirectionOptions() {
+        return [
+            { label: 'Ascending (A→Z, oldest first)', value: 'ASC' },
+            { label: 'Descending (Z→A, newest first)', value: 'DESC' }
+        ];
+    }
+
+    get hasSortFields() {
+        return this.sortFieldOptions.length > 0;
+    }
+
+    get isSortSelected() {
+        return !!this.sortField;
+    }
+
+    /** The ORDER BY clause sent to Apex; empty keeps the historical record order. */
+    get sortOrderClause() {
+        return this.sortField ? `${this.sortField} ${this.sortDirection}` : '';
+    }
+
+    handleSortFieldChange(event) {
+        this.sortField = event.detail.value;
+    }
+
+    handleSortDirectionChange(event) {
+        this.sortDirection = event.detail.value;
+    }
+
+    handleClearSort() {
+        this.sortField = '';
+        this.sortDirection = 'ASC';
+    }
+
     async handleValidate() {
         if (!this.baseObject) return;
         this.isValidating = true;
@@ -515,7 +584,8 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
                 jobLabel: this.jobLabel,
                 mergePdf: this.mergePdf || false,
                 batchSize: this.batchSize || 1,
-                mergeOnly: this.mergeOnly || false
+                mergeOnly: this.mergeOnly || false,
+                sortOrder: this.sortOrderClause
             });
             this.showToast('Success', 'Job started. Status will auto-refresh every 5 seconds.', 'success');
             this.startPolling();

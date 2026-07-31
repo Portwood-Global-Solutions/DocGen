@@ -1548,6 +1548,21 @@ Nested loops are supported:
 
 Empty loops (null or empty child list) render nothing — no error.
 
+**Numbering the rows — `{RowNumber}`.** Inside any loop, `{RowNumber}` is the row's position, starting at **1**:
+
+```
+| # | Product | Qty |
+| {#OpportunityLineItems}{RowNumber} | {Product2.Name} | {Quantity}{/OpportunityLineItems} |
+```
+
+- **Counts rendered rows**, so it reflects whatever the Query Config's `WHERE`/`ORDER BY`/`LIMIT` actually returned — not the record's position in the database.
+- **Nested loops each count their own rows.** An inner `{RowNumber}` restarts at 1 for every parent row, and the outer number is intact again after the inner loop closes.
+- **Counts continuously through very large tables.** A 30,000-row giant-query table numbers 1…30,000 straight through, not per page or per batch.
+- **Restarts per group** inside a `{#GroupBy}` block — each group's table numbers from 1.
+- Verified in Word and HTML templates across single, bulk and giant-query generation. PowerPoint and Excel loops run through the same engine and should behave identically, but that combination hasn't been exercised end-to-end.
+- Outside a loop it isn't a tag and resolves to nothing.
+- If a record happens to have a field literally named `RowNumber`, the counter wins inside the loop body.
+
 **Group into a table (or block) per value — `{#GroupBy}` (v3.42+).** When you want one table per _type_ / _category_ / _status_ — and you don't want to hand-write a separate loop for every value — group a child relationship by a field and repeat the block once per distinct value:
 
 ```
@@ -2444,13 +2459,21 @@ Comments: {Comments}
 1. Open any record (Account, Opportunity, Case, etc.).
 2. The **DocGen Runner** LWC appears (placed via Lightning App Builder or via the Command Hub's "Generate from Record" flow).
 3. Pick a template.
-4. Choose **Save to Record** (attaches as ContentDocumentLink) or **Download** (sent to your browser).
+4. Choose **Save to Record** (attaches as ContentDocumentLink), **Download** (sent to your browser), or **Save & Download** (both, from a single generation).
 5. Optional: override output format if the template isn't locked (§5.4).
 6. Click **Generate**.
 
 **Picker order & grouping.** Templates are grouped by their **Category** field, the object's **Default** template (★) floats to the top, and **Sort Order** (lower = higher) breaks ties — blank Sort Order falls back to Default-first, then name. A category dropdown filters the list when you have many templates. All three are plain fields on the template (Settings tab).
 
 **Where the runner can live.** Record pages, App Builder pages, the Command Hub, Experience Cloud pages, Flow screens, and the utility bar. In App Builder, per-placement toggles let you hide **Download**, **Save to Record**, **Document Packet**, **Combine PDFs**, or **Combine with existing PDFs** for that page. On mobile, the runner is save-to-record only (mobile browsers can't take the download hand-off); packets and combines are download-only, so they're desktop features.
+
+**Save & Download (v3.49+).** Offered whenever the placement leaves _both_ Download and Save to Record enabled — it's the combination of the two, so turning either off removes it. The document is generated **once**, and both copies come from that single render.
+
+For **PDF**, it keeps the same background generation that Save to Record uses, waits for the file to land on the record, then hands your browser the saved file. That means **no size ceiling on either half** — the document never has to squeeze through the page's own response, so very large PDFs work exactly as they do with Save to Record. Expect it to take about as long as a Save to Record; the download starts when the file is ready. If it is still generating after a few minutes, the runner says so and points you at the record — the save itself still finishes.
+
+For **Word, Excel and PowerPoint**, the file is assembled in your browser, so both copies are immediate. Above the ~5 MB attachment ceiling these behave exactly as Save to Record does today: the file downloads and a drag-to-attach box appears, which already satisfies both halves.
+
+**Hiding the choice entirely (v3.49+).** When a placement leaves only one destination enabled, the selector no longer renders at all — previously a single, pointless button remained. Untick the destinations you don't want in App Builder and users simply click **Generate**.
 
 ### 8.2 What happens behind the scenes
 
@@ -2523,10 +2546,26 @@ Mass-generate documents for many records in one batch.
     - **Combined PDF** — all records merged into one PDF (memory-efficient, compliance bundles).
     - **Individual files** — one PDF per record saved to that record.
     - **Both** — individual files + a combined bundle.
-5. Adjust batch size if needed (1–200; default 1 — one record per batch execution is the safest for heap-heavy templates; raise it for small, simple templates).
-6. Submit.
+5. Optionally set a **Sort By** field and direction (see §9.1.1).
+6. Adjust batch size if needed (1–200; default 1 — one record per batch execution is the safest for heap-heavy templates; raise it for small, simple templates).
+7. Submit.
 
 **Preview one record first.** Before launching a big job, pick a record under **Preview Sample Record** and hit **Preview Sample PDF** — the bulk runner produces one real PDF from it so you can sanity-check the output. The sample record clears when you switch templates, since it belongs to the previous template's object.
+
+### 9.1.1 Sort order — controlling document order
+
+**Sort By** decides the order records are processed, and therefore **the page order of a Combined PDF**. Without it, records come out in the order Salesforce returns them — effectively creation order — which is rarely the order you want to hand someone.
+
+- The picker lists every sortable field on the template's base object, plus each lookup's parent name field, shown as `Account > Account Name`. So 200 Opportunities can be ordered by their Account name in one click, with no SOQL to write.
+- Pick a **Direction**: ascending (A→Z, oldest first) or descending.
+- Blank values always sort to the **end**, so records missing the sort field don't open the packet.
+- Records tied on the sort field fall back to name order, so re-running the same job produces the same packet rather than a reshuffle.
+
+Sorting applies to Individual Files too — it decides the order records are processed and the order they appear in Job History.
+
+**In Flows**, the `DocGen: Generate Bulk Documents` action takes the same thing as a **Sort Order** text input, written as a SOQL `ORDER BY` clause without the keywords: `Account.Name ASC`, `CloseDate DESC`, or up to three comma-separated fields (`Account.Name ASC, Amount DESC`). Field API names only; `ASC`/`DESC` and `NULLS FIRST`/`NULLS LAST` are supported. An unknown or unsortable field fails the action with a message on **Error Message** rather than faulting the interview.
+
+> **If your Flow passes a Record IDs collection:** SOQL does not preserve the order of that collection, so sorting the collection in the Flow has no effect on the document. Use **Sort Order**.
 
 ### 9.2 Saved queries
 

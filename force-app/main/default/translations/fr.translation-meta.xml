@@ -48,4 +48,8 @@
         <label>Enregistrer dans l'enregistrement</label>
         <name>DocGenRunner_SaveToRecord</name>
     </customLabels>
+    <customLabels>
+        <label>Enregistrer et télécharger</label>
+        <name>DocGenRunner_SaveAndDownload</name>
+    </customLabels>
 </Translations>

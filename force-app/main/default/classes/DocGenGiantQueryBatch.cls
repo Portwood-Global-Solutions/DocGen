@@ -27,6 +27,9 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
     private String lastCursorId;
     private Integer batchSize;
     private Integer fragmentSequence;
+    // Rows rendered by previous fragments, so {RowNumber} keeps counting across
+    // execute() calls instead of restarting at 1 in every chunk. Stateful.
+    private Integer rowNumberOffset;
     private String outputFormat;
     private String giantRelationshipName;
     private String orderByClause;
@@ -51,6 +54,7 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
         this.innerXml = innerXml;
         this.outputFormat = outputFormat;
         this.fragmentSequence = 0;
+        this.rowNumberOffset = 0;
         this.batchSize = 50;
         // DOCX loop bodies contain <w:tr>/<w:t>; HTML loop bodies don't. One
         // indexOf is cheap and avoids an extra SOQL for Type__c on every execute.
@@ -281,8 +285,10 @@ public with sharing class DocGenGiantQueryBatch implements Database.Batchable<St
                 innerXml,
                 relationshipName,
                 records,
-                allFields
+                allFields,
+                rowNumberOffset
             );
+            rowNumberOffset += records.size();
 
             String seq = String.valueOf(fragmentSequence++).leftPad(5, '0');
             Blob fragmentData;

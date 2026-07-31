@@ -103,10 +103,11 @@ sf apex run --target-org <org> -f scripts/e2e-07-syntax1.apex
 sf apex run --target-org <org> -f scripts/e2e-07-syntax2.apex
 sf apex run --target-org <org> -f scripts/e2e-07-syntax3.apex
 sf apex run --target-org <org> -f scripts/e2e-07-syntax4.apex
+sf apex run --target-org <org> -f scripts/e2e-07-syntax5.apex
 sf apex run --target-org <org> -f scripts/e2e-08-cleanup.apex
 ```
 
-Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03/03b–06b depend on 02, 07-syntax1/2/3/4 standalone (use `processXmlForTest`), 08 cleans up. **03b is split out of 03** because each full `generateDocument` costs ~10 SOQL and the combined generations exceeded the 100-SOQL synchronous limit in one anonymous transaction — a governor-limit throw prints NO summary line, so watch for a script that emits no `PASS: N` at all, not just a non-zero FAIL. Note for new scripts: anonymous Apex cannot catch a thrown `AuraHandledException` (uncatchable LimitException) — negative-path assertions on `@AuraEnabled` guard methods belong in unit tests, not e2e.
+Each script must print `PASS: N  FAIL: 0  ALL TESTS PASSED`. Sequence: 01 standalone, 02 creates test data, 03/03b–06b depend on 02, 07-syntax1/2/3/4/5 standalone (use `processXmlForTest`), 08 cleans up. **syntax1–4 are all within a few hundred characters of the Anonymous Apex ceiling** — put new parser assertions in syntax5 (or a new syntax6) rather than growing them. **03b is split out of 03** because each full `generateDocument` costs ~10 SOQL and the combined generations exceeded the 100-SOQL synchronous limit in one anonymous transaction — a governor-limit throw prints NO summary line, so watch for a script that emits no `PASS: N` at all, not just a non-zero FAIL. Note for new scripts: anonymous Apex cannot catch a thrown `AuraHandledException` (uncatchable LimitException) — negative-path assertions on `@AuraEnabled` guard methods belong in unit tests, not e2e.
 
 When fixing a parser-level bug, add a regression assertion in `e2e-07-syntax1` or `e2e-07-syntax2` that exercises the offending pattern via `processXmlForTest`. Each script must stay under 18,000 chars (Anonymous Apex limit is 20,000).
 

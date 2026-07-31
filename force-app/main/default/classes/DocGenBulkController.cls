@@ -224,6 +224,304 @@ public with sharing class DocGenBulkController {
         return condition;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Sort order (parent-level ORDER BY for the bulk query)
+    //
+    // The bulk query had no ORDER BY at all, so records were processed in
+    // whatever order the QueryLocator returned them — effectively record Id, i.e.
+    // creation order. That is invisible for individual files but decides page
+    // order in a merged PDF: DocGenBatch stamps a zero-padded counter on each
+    // HTML snippet as it processes records, and DocGenMergeJob assembles by that
+    // title. Sorting the locator therefore sorts the packet, with no change to
+    // the merge pipeline itself.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Relationship hops permitted in one sort field path (Account.Owner.Name = 2). */
+    private static final Integer MAX_SORT_HOPS = 2;
+
+    /** Sort terms permitted in one clause — bounded so the result fits Sort_Order__c (255). */
+    private static final Integer MAX_SORT_TERMS = 3;
+
+    /**
+     * Validates a SOQL ORDER BY clause against the base object's schema and returns
+     * it in canonical form (correct field casing, explicit direction and NULLS
+     * handling on every term).
+     *
+     * Deliberately NOT DocGenDataRetriever.sanitizeClause(…, 'ORDER BY', …), which
+     * validates the CHILD-relationship sort clauses stored in a Query Config. That
+     * one keeps a free-text clause intact for an author editing raw SOQL; this one
+     * backs a field picker, so it can canonicalize, verify the field is actually
+     * sortable, and check what follows a relationship hop rather than only the
+     * token before the dot.
+     *
+     * Injection defense is an ALLOWLIST OF CHARACTERS, not a keyword blocklist like
+     * sanitizeCondition(). An ORDER BY clause needs only field paths, commas,
+     * spaces and the ASC/DESC/NULLS/FIRST/LAST keywords — quotes, parentheses,
+     * semicolons and comment markers have no legitimate use here, so rejecting
+     * every character outside that alphabet leaves nothing to keep ahead of. Every
+     * field path is then resolved through Schema describe, so an unknown field is
+     * an error at submit time rather than a batch that dies in start().
+     *
+     * @param objectName The base SObject the bulk query runs against
+     * @param sortOrder Author-supplied clause, with or without a leading "ORDER BY"
+     * @return The canonical clause, or null when nothing was supplied
+     */
+    public static String normalizeSortOrder(String objectName, String sortOrder) {
+        if (String.isBlank(sortOrder)) {
+            return null;
+        }
+        SObjectType objType = String.isBlank(objectName) ? null : Schema.getGlobalDescribe().get(objectName);
+        if (objType == null) {
+            throw new DocGenException('Invalid or inaccessible object: ' + objectName);
+        }
+        String clause = sortOrder.trim();
+        // Authors paste the whole clause as readily as just the field list.
+        if (clause.length() > 9 && clause.substring(0, 9).equalsIgnoreCase('ORDER BY ')) {
+            clause = clause.substring(9).trim();
+        }
+        if (!Pattern.matches('[A-Za-z0-9_., ]+', clause)) {
+            throw new DocGenException('Invalid characters in sort order: ' + sortOrder);
+        }
+
+        List<String> terms = new List<String>();
+        Set<String> seenPaths = new Set<String>();
+        for (String rawTerm : clause.split(',')) {
+            String term = rawTerm.trim();
+            if (String.isBlank(term)) {
+                continue;
+            }
+            if (terms.size() >= MAX_SORT_TERMS) {
+                throw new DocGenException('A sort order may combine at most ' + MAX_SORT_TERMS + ' fields.');
+            }
+            terms.add(normalizeSortTerm(objType, term, seenPaths));
+        }
+        if (terms.isEmpty()) {
+            return null;
+        }
+
+        // Deterministic tie-break. Sorting 200 Opportunities by Account.Name leaves
+        // every same-account group in arbitrary order, so two runs of the same job
+        // can produce two different packets. Appending the base object's own name
+        // field makes the order reproducible; skipped when the author already
+        // supplied more than one term, or when that field is already in the clause.
+        if (terms.size() == 1) {
+            String tieBreak = nameFieldPath(objType);
+            if (tieBreak != null && !seenPaths.contains(tieBreak.toLowerCase())) {
+                terms.add(tieBreak + ' ASC NULLS LAST');
+            }
+        }
+
+        String result = String.join(terms, ', ');
+        if (result.length() > 255) {
+            throw new DocGenException('Sort order is too long — use fewer or shorter fields.');
+        }
+        return result;
+    }
+
+    /**
+     * Canonicalizes one `Field [ASC|DESC] [NULLS FIRST|LAST]` term.
+     */
+    private static String normalizeSortTerm(SObjectType objType, String term, Set<String> seenPaths) {
+        List<String> tokens = term.split(' +');
+        String path = validateSortFieldPath(objType, tokens[0]);
+        if (!seenPaths.add(path.toLowerCase())) {
+            throw new DocGenException('Duplicate sort field: ' + tokens[0]);
+        }
+
+        String direction = 'ASC';
+        String nullsClause = null;
+        Integer i = 1;
+        if (i < tokens.size() && (tokens[i].equalsIgnoreCase('ASC') || tokens[i].equalsIgnoreCase('DESC'))) {
+            direction = tokens[i].toUpperCase();
+            i++;
+        }
+        if (i < tokens.size() && tokens[i].equalsIgnoreCase('NULLS')) {
+            i++;
+            if (i >= tokens.size() || !(tokens[i].equalsIgnoreCase('FIRST') || tokens[i].equalsIgnoreCase('LAST'))) {
+                throw new DocGenException('NULLS must be followed by FIRST or LAST: ' + term);
+            }
+            nullsClause = ' NULLS ' + tokens[i].toUpperCase();
+            i++;
+        }
+        if (i < tokens.size()) {
+            throw new DocGenException('Unrecognized sort option: ' + tokens[i]);
+        }
+        // SOQL sorts blanks first on an ascending sort, which would open a merged
+        // packet with the records that have nothing in the sort field. Default the
+        // empties to the back unless the author asked for the opposite.
+        if (nullsClause == null) {
+            nullsClause = ' NULLS LAST';
+        }
+        return path + ' ' + direction + nullsClause;
+    }
+
+    /**
+     * Resolves a (possibly relationship-traversing) sort field path against Schema
+     * and returns it with the API's own casing. Throws for anything unknown,
+     * unsortable, or beyond MAX_SORT_HOPS.
+     *
+     * Polymorphic lookups (OwnerId on Case, WhatId on Task) are carried as a LIST
+     * of candidate types: SOQL only permits traversing one when the field being
+     * reached exists on every type the lookup can point at, so that is exactly the
+     * condition checked at each hop.
+     */
+    @TestVisible
+    private static String validateSortFieldPath(SObjectType objType, String path) {
+        List<String> parts = path.split('\\.');
+        if (parts.size() > MAX_SORT_HOPS + 1) {
+            throw new DocGenException('A sort field may traverse at most ' + MAX_SORT_HOPS + ' relationships: ' + path);
+        }
+        List<SObjectType> currentTypes = new List<SObjectType>{ objType };
+        List<String> canonical = new List<String>();
+
+        for (Integer i = 0; i < parts.size(); i++) {
+            String part = parts[i];
+            if (String.isBlank(part)) {
+                throw new DocGenException('Invalid sort field: ' + path);
+            }
+            Boolean isLast = (i == parts.size() - 1);
+
+            if (isLast) {
+                String resolvedName = null;
+                for (SObjectType t : currentTypes) {
+                    Schema.SObjectField f = t.getDescribe().fields.getMap().get(part.toLowerCase());
+                    if (f == null) {
+                        throw new DocGenException('Unknown sort field: ' + path);
+                    }
+                    Schema.DescribeFieldResult dfr = f.getDescribe();
+                    if (!dfr.isSortable()) {
+                        throw new DocGenException('This field cannot be sorted on: ' + path);
+                    }
+                    resolvedName = dfr.getName();
+                }
+                canonical.add(resolvedName);
+            } else {
+                List<SObjectType> nextTypes = new List<SObjectType>();
+                String relationshipName = null;
+                for (SObjectType t : currentTypes) {
+                    Schema.DescribeFieldResult rel = findRelationshipField(t, part);
+                    if (rel == null) {
+                        throw new DocGenException('Unknown relationship in sort field: ' + part);
+                    }
+                    relationshipName = rel.getRelationshipName();
+                    nextTypes.addAll(rel.getReferenceTo());
+                }
+                canonical.add(relationshipName);
+                currentTypes = nextTypes;
+            }
+        }
+        return String.join(canonical, '.');
+    }
+
+    /**
+     * Finds the lookup field on objType whose relationship name matches relName
+     * (`Account` -> AccountId, `Custom__r` -> Custom__c). Null when there is none.
+     */
+    private static Schema.DescribeFieldResult findRelationshipField(SObjectType objType, String relName) {
+        for (Schema.SObjectField f : objType.getDescribe().fields.getMap().values()) {
+            Schema.DescribeFieldResult dfr = f.getDescribe();
+            if (dfr.getType() != Schema.DisplayType.REFERENCE || dfr.getReferenceTo().isEmpty()) {
+                continue;
+            }
+            if (relName.equalsIgnoreCase(dfr.getRelationshipName())) {
+                return dfr;
+            }
+        }
+        return null;
+    }
+
+    /** The object's sortable name field (`Name`, `CaseNumber`, …), or null when it has none. */
+    private static String nameFieldPath(SObjectType objType) {
+        for (Schema.SObjectField f : objType.getDescribe().fields.getMap().values()) {
+            Schema.DescribeFieldResult dfr = f.getDescribe();
+            if (dfr.isNameField() && dfr.isSortable()) {
+                return dfr.getName();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Field options for the bulk runner's Sort By picker: every sortable field on
+     * the base object, plus the name field of each lookup's parent so the common
+     * "order these Opportunities by Account name" case is one click rather than a
+     * hand-typed relationship path.
+     *
+     * @param objectName The base SObject the bulk query runs against
+     * @return Picklist-shaped options, ordered by label
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<SortFieldOption> getSortableFields(String objectName) {
+        try {
+            SObjectType objType = String.isBlank(objectName) ? null : Schema.getGlobalDescribe().get(objectName);
+            if (objType == null) {
+                return new List<SortFieldOption>();
+            }
+            List<SortFieldOption> options = new List<SortFieldOption>();
+            List<Schema.DescribeFieldResult> lookups = new List<Schema.DescribeFieldResult>();
+
+            for (Schema.SObjectField f : objType.getDescribe().fields.getMap().values()) {
+                Schema.DescribeFieldResult dfr = f.getDescribe();
+                if (!dfr.isSortable() || !dfr.isAccessible()) {
+                    continue;
+                }
+                options.add(new SortFieldOption(dfr.getLabel(), dfr.getName()));
+                // Single-target lookups only: a polymorphic one needs the reached
+                // field to exist on every candidate type, which is more than a
+                // picker entry can promise.
+                if (dfr.getType() == Schema.DisplayType.REFERENCE && dfr.getReferenceTo().size() == 1) {
+                    lookups.add(dfr);
+                }
+            }
+
+            for (Schema.DescribeFieldResult lookup : lookups) {
+                if (String.isBlank(lookup.getRelationshipName())) {
+                    continue;
+                }
+                SObjectType parent = lookup.getReferenceTo()[0];
+                for (Schema.SObjectField pf : parent.getDescribe().fields.getMap().values()) {
+                    Schema.DescribeFieldResult pdfr = pf.getDescribe();
+                    if (!pdfr.isNameField() || !pdfr.isSortable() || !pdfr.isAccessible()) {
+                        continue;
+                    }
+                    options.add(
+                        new SortFieldOption(
+                            lookup.getLabel() + ' > ' + pdfr.getLabel(),
+                            lookup.getRelationshipName() + '.' + pdfr.getName()
+                        )
+                    );
+                    break;
+                }
+            }
+
+            options.sort();
+            return options;
+        } catch (Exception e) {
+            throw DocGenService.ahe(e, 'Error loading sortable fields.');
+        }
+    }
+
+    /** One entry in the bulk runner's Sort By picker. */
+    public class SortFieldOption implements Comparable {
+        @AuraEnabled
+        public String label { get; set; }
+        @AuraEnabled
+        public String value { get; set; }
+
+        public SortFieldOption(String label, String value) {
+            this.label = label;
+            this.value = value;
+        }
+
+        public Integer compareTo(Object other) {
+            SortFieldOption o = (SortFieldOption) other;
+            Integer byLabel = this.label.compareTo(o.label);
+            // Labels are not unique on a Salesforce object; fall back to the API
+            // name so the picker order is stable rather than describe-order.
+            return byLabel != 0 ? byLabel : this.value.compareTo(o.value);
+        }
+    }
+
     /**
      * Analyzes a bulk job for governor limit risks before execution.
      * Checks SOQL queries, DML statements, heap (merge mode), and record count.
@@ -600,6 +898,7 @@ public with sharing class DocGenBulkController {
      * @param mergePdf Whether to merge all outputs into a single PDF
      * @param batchSize Number of records per batch execution (1-200)
      * @param mergeOnly Whether to only generate merged PDF without individual files
+     * @param sortOrder Optional SOQL ORDER BY clause controlling processing (and merged page) order
      * @return The DocGen_Job__c record ID
      */
     @AuraEnabled
@@ -609,11 +908,12 @@ public with sharing class DocGenBulkController {
         String jobLabel,
         Boolean mergePdf,
         Integer batchSize,
-        Boolean mergeOnly
+        Boolean mergeOnly,
+        String sortOrder
     ) {
         // The LWC boundary, and the ONLY place AuraHandledException may be raised.
         try {
-            return submitJobInternal(templateId, condition, jobLabel, mergePdf, batchSize, mergeOnly);
+            return submitJobInternal(templateId, condition, jobLabel, mergePdf, batchSize, mergeOnly, sortOrder);
         } catch (Exception e) {
             throw DocGenService.ahe(e, 'Error starting bulk generation job.');
         }
@@ -646,6 +946,22 @@ public with sharing class DocGenBulkController {
         Integer batchSize,
         Boolean mergeOnly
     ) {
+        return submitJobInternal(templateId, condition, jobLabel, mergePdf, batchSize, mergeOnly, null);
+    }
+
+    /**
+     * As above, with an ORDER BY clause for the bulk query. Plain-Apex overload —
+     * NOT @AuraEnabled, which permits only one method of a given name.
+     */
+    public static Id submitJobInternal(
+        Id templateId,
+        String condition,
+        String jobLabel,
+        Boolean mergePdf,
+        Integer batchSize,
+        Boolean mergeOnly,
+        String sortOrder
+    ) {
         try {
             Boolean isMergeOnly = (mergeOnly == true);
             Boolean isMergeMode = (mergePdf == true) || isMergeOnly;
@@ -667,12 +983,21 @@ public with sharing class DocGenBulkController {
                 );
             }
 
+            // Validate the sort clause HERE, where the caller still has somewhere to
+            // put the error. DocGenBatch.start() re-validates it, but a throw there
+            // aborts the batch after the job record already exists — the author sees
+            // a job that never leaves Processing instead of "Unknown sort field".
+            String safeSortOrder = String.isBlank(sortOrder)
+                ? null
+                : normalizeSortOrder(templateBaseObject(templateId), sortOrder);
+
             // 1. Create Job Record
             DocGen_Job__c job = new DocGen_Job__c(
                 Template__c = templateId,
                 Query_Condition__c = condition,
                 Status__c = 'Queued',
-                Merge_Only__c = isMergeOnly
+                Merge_Only__c = isMergeOnly,
+                Sort_Order__c = safeSortOrder
             );
             if (String.isNotBlank(jobLabel)) {
                 job.Label__c = jobLabel;
@@ -686,7 +1011,14 @@ public with sharing class DocGenBulkController {
             // documented in DocGenFlsGuard.cls.
             DocGenFlsGuard.assertCreateable(
                 job,
-                new Set<String>{ 'Template__c', 'Query_Condition__c', 'Status__c', 'Merge_Only__c', 'Label__c' }
+                new Set<String>{
+                    'Template__c',
+                    'Query_Condition__c',
+                    'Status__c',
+                    'Merge_Only__c',
+                    'Label__c',
+                    'Sort_Order__c'
+                }
             );
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(job, AccessLevel.SYSTEM_MODE);
@@ -701,6 +1033,30 @@ public with sharing class DocGenBulkController {
             // Catchable by design — see the note above.
             throw new DocGenException('Error starting bulk generation job. (' + e.getMessage() + ')');
         }
+    }
+
+    /**
+     * The SObject a template runs against — the schema a sort clause is validated
+     * against. Queried only when a sort order was actually supplied, so the common
+     * unsorted job pays nothing for it.
+     */
+    private static String templateBaseObject(Id templateId) {
+        if (templateId == null) {
+            return null;
+        }
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Base_Object_API__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> templates = [
+            SELECT Base_Object_API__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (templates.isEmpty()) {
+            throw new DocGenException('Template not found.');
+        }
+        return templates[0].Base_Object_API__c;
     }
 
     private static Boolean isFillablePdfTemplate(Id templateId) {

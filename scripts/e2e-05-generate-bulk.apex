@@ -61,7 +61,15 @@ try {
 
 // ===== Submit Bulk Job =====
 try {
-    jobId = DocGenBulkController.submitJob(tmplId, 'Name = \'E2E Test Corp\'', 'E2E Bulk Test Job', false, 1, false);
+    jobId = DocGenBulkController.submitJob(
+        tmplId,
+        'Name = \'E2E Test Corp\'',
+        'E2E Bulk Test Job',
+        false,
+        1,
+        false,
+        null
+    );
     if (jobId != null) {
         pass++;
         System.debug('SUBMIT JOB: PASS — jobId: ' + jobId);
@@ -72,6 +80,73 @@ try {
 } catch (Exception e) {
     fail++;
     System.debug('SUBMIT JOB: FAIL — ' + e.getMessage());
+}
+
+// ===== Sort Order — parent-level ORDER BY on the bulk query =====
+// The bulk query had no ORDER BY, so a merged PDF came out in record-creation
+// order with no way to change it. Merge order follows query order, so these
+// assertions cover the clause that reaches the QueryLocator.
+try {
+    String canonical = DocGenBulkController.normalizeSortOrder('Account', 'name desc');
+    if (canonical == 'Name DESC NULLS LAST') {
+        pass++;
+        System.debug('SORT CANONICALIZE: PASS — ' + canonical);
+    } else {
+        fail++;
+        System.debug('SORT CANONICALIZE: FAIL — ' + canonical);
+    }
+
+    // Single sort field gains the name field as a tie-break so repeat runs of the
+    // same job produce the same packet.
+    String tie = DocGenBulkController.normalizeSortOrder('Account', 'AnnualRevenue DESC');
+    if (tie == 'AnnualRevenue DESC NULLS LAST, Name ASC NULLS LAST') {
+        pass++;
+        System.debug('SORT TIE-BREAK: PASS — ' + tie);
+    } else {
+        fail++;
+        System.debug('SORT TIE-BREAK: FAIL — ' + tie);
+    }
+
+    // The headline case: order child records by a parent field.
+    String rel = DocGenBulkController.normalizeSortOrder('Account', 'owner.name');
+    if (rel != null && rel.startsWith('Owner.Name ASC')) {
+        pass++;
+        System.debug('SORT TRAVERSAL: PASS — ' + rel);
+    } else {
+        fail++;
+        System.debug('SORT TRAVERSAL: FAIL — ' + rel);
+    }
+
+    Boolean rejected = false;
+    try {
+        DocGenBulkController.normalizeSortOrder('Account', 'Name ASC; DELETE FROM Account');
+    } catch (Exception rejectEx) {
+        rejected = true;
+    }
+    if (rejected) {
+        pass++;
+        System.debug('SORT INJECTION REJECTED: PASS');
+    } else {
+        fail++;
+        System.debug('SORT INJECTION REJECTED: FAIL — clause was accepted');
+    }
+
+    Boolean unknownRejected = false;
+    try {
+        DocGenBulkController.normalizeSortOrder('Account', 'NotAField__c');
+    } catch (Exception rejectEx) {
+        unknownRejected = true;
+    }
+    if (unknownRejected) {
+        pass++;
+        System.debug('SORT UNKNOWN FIELD REJECTED: PASS');
+    } else {
+        fail++;
+        System.debug('SORT UNKNOWN FIELD REJECTED: FAIL — clause was accepted');
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('SORT ORDER: FAIL — ' + e.getMessage());
 }
 
 // ===== Get Job Status =====

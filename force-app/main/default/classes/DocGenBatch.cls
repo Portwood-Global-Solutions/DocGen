@@ -4,6 +4,9 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
     public String baseObject;
     public String condition;
     public String queryConfig;
+    // Validated ORDER BY clause for the bulk query (see DocGenBulkController
+    // .normalizeSortOrder). Null for the historical unordered behaviour.
+    public String sortOrder;
     public Boolean mergeMode;
     public Boolean mergeOnly;
 
@@ -91,11 +94,16 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         // DocGenFlsGuard.cls.
         DocGenFlsGuard.assertAccessible(
             DocGen_Job__c.sObjectType,
-            new Set<String>{ 'Template__c', 'Query_Condition__c' }
+            new Set<String>{ 'Template__c', 'Query_Condition__c', 'Sort_Order__c' }
         );
         /* code-analyzer-suppress ApexFlsViolation */
         DocGen_Job__c job = [
-            SELECT Template__c, Template__r.Base_Object_API__c, Template__r.Query_Config__c, Query_Condition__c
+            SELECT
+                Template__c,
+                Template__r.Base_Object_API__c,
+                Template__r.Query_Config__c,
+                Query_Condition__c,
+                Sort_Order__c
             FROM DocGen_Job__c
             WHERE Id = :jobId
             WITH SYSTEM_MODE
@@ -104,6 +112,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
         this.baseObject = job.Template__r.Base_Object_API__c;
         this.condition = job.Query_Condition__c;
         this.queryConfig = job.Template__r.Query_Config__c;
+        this.sortOrder = job.Sort_Order__c;
     }
 
     /**
@@ -193,6 +202,18 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             query += ' WHERE ' + sanitizedCondition;
         }
         query += ' WITH USER_MODE';
+
+        // ORDER BY the parent records. Batch chunks are handed to execute() in
+        // QueryLocator order, and merge mode stamps its sequence counter as it goes
+        // (see buildMergeSnippet), so ordering the locator is the whole fix: the
+        // merged PDF comes out in this order with no change to the merge pipeline.
+        //
+        // Re-validated here rather than trusted from the field: Sort_Order__c is
+        // writable metadata, and this is the string that reaches the query.
+        String safeSortOrder = DocGenBulkController.normalizeSortOrder(baseObject, sortOrder);
+        if (String.isNotBlank(safeSortOrder)) {
+            query += ' ORDER BY ' + safeSortOrder;
+        }
 
         // Count total records for progress tracking
         String countQuery = 'SELECT Count() FROM ' + baseObject;

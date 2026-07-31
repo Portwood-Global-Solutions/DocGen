@@ -418,6 +418,18 @@ try {
             fail++;
             System.debug('USER FLD DocGen_Job__c.Merge_Only__c edit: FAIL');
         }
+
+        // v3.49 — submitJobInternal writes Sort_Order__c on every bulk job, so a
+        // missing grant here breaks bulk generation for standard users while an
+        // admin sees nothing wrong. Every new writable DocGen_Job__c field belongs
+        // in this list; the suite passed a release without it once already.
+        Boolean userJobSortOrderOk = containsNs(editableJobFields, 'DocGen_Job__c.Sort_Order__c');
+        if (userJobSortOrderOk) {
+            pass++;
+        } else {
+            fail++;
+            System.debug('USER FLD DocGen_Job__c.Sort_Order__c edit: FAIL');
+        }
     }
 } catch (Exception e) {
     fail++;

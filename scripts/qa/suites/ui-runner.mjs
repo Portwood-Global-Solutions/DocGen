@@ -1263,6 +1263,71 @@ export async function run({ org, headed }) {
                         area: runnerArea
                     });
                 }
+
+                /* --- 2e-2. Save & Download must do BOTH -------------- */
+                // The whole point of the mode: one press, one generation, two
+                // outcomes. Asserted as both halves, because the failure modes are
+                // opposite — a download that quietly skipped the save, or a save
+                // whose bytes never reached the browser.
+                const bothPill = await locate(page, '.pill-btn[data-value="both"]');
+                if (!bothPill.found || bothPill.hit !== 'ok') {
+                    add(
+                        skip(
+                            'pressing Create Document in Save & Download mode both saves and downloads',
+                            `the Save & Download output choice was not reachable (${bothPill.hit})`,
+                            SEVERITY.MAJOR
+                        )
+                    );
+                } else {
+                    await clickAt(page, bothPill, 1000);
+                    const afterBoth = await runnerControls(page);
+                    const bothPillNow = (afterBoth.pills || []).find((p) => p.v === 'both');
+                    add({
+                        ...check(
+                            'choosing Save & Download is honoured by the UI',
+                            !!bothPillNow && bothPillNow.active === true,
+                            `output pills after the click: ${(afterBoth.pills || [])
+                                .map((p) => `${p.v}${p.active ? '(active)' : ''}`)
+                                .join(', ')}`,
+                            SEVERITY.MAJOR
+                        ),
+                        area: runnerArea
+                    });
+
+                    const filesBeforeBoth = await recordFileCount(org, acctId);
+                    const bothDownloadName = page
+                        .waitForEvent('download', { timeout: 210000 })
+                        .then((d) => d.suggestedFilename())
+                        .catch(() => null);
+                    const genPos3 = await locate(page, '.cool-brand-btn');
+                    if (genPos3.found && genPos3.hit === 'ok') {
+                        await clickAt(page, genPos3, 1500);
+                    }
+                    const bothName = await bothDownloadName;
+                    add({
+                        ...check(
+                            'Save & Download hands the file to the browser',
+                            !!bothName,
+                            bothName
+                                ? `the browser received "${bothName}"`
+                                : 'no download event fired within 210s — the save half may have run alone',
+                            SEVERITY.MAJOR
+                        ),
+                        area: runnerArea
+                    });
+                    await page.waitForTimeout(8000);
+                    const filesAfterBoth = await recordFileCount(org, acctId);
+                    add({
+                        ...check(
+                            'Save & Download also attaches the document to the record',
+                            filesAfterBoth > filesBeforeBoth,
+                            `files linked to the record: ${filesBeforeBoth} before the run, ${filesAfterBoth} after. ` +
+                                `A download alone would leave this unchanged — which is exactly the bug this mode exists to avoid.`,
+                            SEVERITY.MAJOR
+                        ),
+                        area: runnerArea
+                    });
+                }
             }
 
             /* --- 2f. A locked output format has no runtime control -- */
@@ -1284,7 +1349,11 @@ export async function run({ org, headed }) {
                         (s, i) => i !== lIdx.category && i !== lIdx.template
                     );
                     const pillValues = (lockedControls.pills || []).map((p) => p.v).sort();
-                    const onlyDestination = pillValues.every((v) => v === 'download' || v === 'save');
+                    // 'both' (Save & Download) is a DESTINATION choice like the other
+                    // two — it is the combination of them, not an output format.
+                    const onlyDestination = pillValues.every(
+                        (v) => v === 'download' || v === 'save' || v === 'both'
+                    );
                     add({
                         ...check(
                             'a template with Lock_Output_Format__c exposes no runtime file-format control',

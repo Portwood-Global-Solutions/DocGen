@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Sort_Order__c</fullName>
+    <description
+    >SOQL ORDER BY clause applied to the bulk query. Controls the order records are processed, and therefore the page order of a merged PDF. Validated against the base object's schema before use. Example: Account.Name ASC NULLS LAST, Name ASC</description>
+    <label>Sort Order</label>
+    <length>255</length>
+    <type>Text</type>
+</CustomField>

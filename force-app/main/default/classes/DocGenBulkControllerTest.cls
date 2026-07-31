@@ -200,7 +200,7 @@ public with sharing class DocGenBulkControllerTest {
         DocGen_Template__c temp = [SELECT Id FROM DocGen_Template__c LIMIT 1];
 
         Test.startTest();
-        Id jobId = DocGenBulkController.submitJob(temp.Id, 'Name != null', 'Test Job', true, 10, false);
+        Id jobId = DocGenBulkController.submitJob(temp.Id, 'Name != null', 'Test Job', true, 10, false, null);
         Test.stopTest();
 
         System.assertNotEquals(null, jobId, 'Job ID should be returned');
