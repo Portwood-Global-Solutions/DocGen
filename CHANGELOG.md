@@ -1,5 +1,72 @@
 # Changelog
 
+## v3.50.0 — Renamed to Portwood
+
+`04t…` (build 3.50.0-N, promoted YYYY-MM-DD, ancestor 3.49.0). Build coverage 78%.
+
+**No functional change. No action required.** This release renames what you see in
+Setup and in the app. Nothing about how the package works changed, and nothing you
+have built on top of it needs updating.
+
+### Changed — the product is now called Portwood
+
+"DocGen" is gone from the interface. The app, its tabs, its objects, and its
+permission sets now read **Portwood**:
+
+| Before                                           | After                                              |
+| ------------------------------------------------ | -------------------------------------------------- |
+| DocGen Template / Templates                      | Portwood Template / Templates                      |
+| DocGen Job, DocGen Error Log, DocGen Asset       | Portwood Job, Portwood Error Log, Portwood Asset   |
+| DocGen Signature Request / Signer / Audit        | Portwood Signature Request / Signer / Audit        |
+| DocGen Settings, DocGen Setup, DocGen Runner     | Portwood Settings, Portwood Setup, Portwood Runner |
+| DocGen Template Manager, DocGen Admin Guide      | Portwood Template Manager, Portwood Admin Guide    |
+| Portwood DocGen Admin / User (permission sets)   | Portwood Admin / Portwood User                     |
+| Portwood DocGen Button Manager / Guest Signature | Portwood Button Manager / Portwood Guest Signature |
+
+Documents your signers receive changed too: the signing certificate appended to a
+signed PDF and the footer of signature invitation and reminder emails now say
+Portwood. If you set a **Company Name** in settings, your own name is used and this
+does not apply to you — it only affects orgs that left that field blank.
+
+### Unchanged — every API name stays `DocGen_*`
+
+This is deliberate and permanent, not an unfinished rename. In a released managed
+package, API names are frozen forever: renaming one would break every org that has
+the package installed, and Salesforce will not let a global Apex member be renamed
+or removed after release.
+
+So the following are exactly as they were, and will not change in any future
+release:
+
+- objects and fields — `DocGen_Template__c`, `DocGen_Job__c`, `DocGen_Button__mdt`,
+  and every field on them
+- Apex — `DocGenService`, `DocGenController`, `DocGenAiProvider`, and the rest
+- permission set API names — `DocGen_Admin`, `DocGen_User` (only the **labels**
+  changed, so existing assignments are untouched)
+- the `portwoodglobal` namespace
+
+**What this means in practice:** your Flows, reports, list views, integrations,
+custom Apex, and permission set assignments all keep working with no edits. You
+will still see `DocGen_Template__c` in the API, in Workbench, in report type names,
+and in Apex. That is the frozen API name sitting underneath the new label.
+
+Two scheduled job names also stay as they were, because they are matched by name in
+orgs that already have them scheduled — renaming them would leave your existing job
+orphaned and running alongside a duplicate:
+
+- `DocGen Signature Reminders`
+- `DocGen Chart CV Reaper`
+
+If you schedule either for the first time, keep using those exact strings; the
+documentation still shows them.
+
+### Note on your own documentation
+
+If you maintain internal runbooks or onboarding material that tells admins to
+"assign the Portwood DocGen Admin permission set" or "open DocGen Settings", those
+labels have changed. The permission sets themselves are the same records with the
+same API names — only the display names moved.
+
 ## v3.49.0 — Bulk sort order, `{RowNumber}`, Save & Download
 
 `04tVx000000zvz3IAA` (build 3.49.0-1, promoted 2026-07-31, ancestor 3.48.0). Build
