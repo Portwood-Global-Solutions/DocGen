@@ -1,14 +1,14 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.49.0 — Bulk sort order, {RowNumber}, Save & Download",
-      "versionNumber": "3.49.0.NEXT",
+      "versionName": "v3.50.0 — Renamed to Portwood",
+      "versionNumber": "3.50.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood",
-      "ancestorVersion": "3.48.0",
+      "ancestorVersion": "3.49.0",
       "versionDescription": "Portwood DocGen generates PDFs and Word documents from any Salesforce record. v3.49 puts you in control of document order. Bulk jobs can now be sorted by any field — including a field on a related record, like the Account name — so a combined PDF comes out in the order you expect instead of the order records happened to be created. Table rows can number themselves with a new {RowNumber} tag. And when you generate a document you no longer have to choose between keeping a copy and filing it: a new Save & Download option does both from one generation, with no size limit. 100% native Salesforce — no external services or callouts. Free for all users."
     },
     {
