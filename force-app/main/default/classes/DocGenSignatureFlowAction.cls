@@ -1,17 +1,17 @@
 /**
- * Flow-invocable action to create a DocGen signature request and return signing links.
+ * Flow-invocable action to create a Portwood signature request and return signing links.
  *
  * Uses the full v3 signature pipeline — guided signing, placement creation,
  * OWA-based emails, signing order, email status tracking.
  *
  * PREREQUISITES:
- * 1. A DocGen template with {@Signature_Role} tags in the active version
- * 2. An Org-Wide Email Address configured in DocGen > Signatures settings
+ * 1. A Portwood template with {@Signature_Role} tags in the active version
+ * 2. An Org-Wide Email Address configured in Portwood > Signatures settings
  * 3. A Salesforce Site configured for the signing page
  *
  * QUICK START:
- * 1. In your Flow, use Assignment elements to build a collection of DocGen Signers
- * 2. Drag "DocGen: Create Signature Request" into your Flow
+ * 1. In your Flow, use Assignment elements to build a collection of Portwood Signers
+ * 2. Drag "Portwood: Create Signature Request" into your Flow
  * 3. Set Template Id, Related Record Id, and the Signers collection
  * 4. The action returns signing URLs and a request ID for downstream automation
  */
@@ -72,7 +72,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
     global class Request {
         @InvocableVariable(
             label='Template Id'
-            description='The Id of the DocGen Template to use. Provide this OR Template API Name. The template must have an active version with {@Signature_Role} tags.'
+            description='The Id of the Portwood Template to use. Provide this OR Template API Name. The template must have an active version with {@Signature_Role} tags.'
         )
         global Id templateId;
 
@@ -102,7 +102,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         @InvocableVariable(
             label='Signers'
-            description='A collection of DocGen Signers. Create an Apex-Defined variable of type DocGenSigner (Name + Email required; Role and Contact Id optional), add each to a collection with an Assignment element, and pass it here. Recommended input.'
+            description='A collection of Portwood Signers. Create an Apex-Defined variable of type DocGenSigner (Name + Email required; Role and Contact Id optional), add each to a collection with an Assignment element, and pass it here. Recommended input.'
         )
         global List<DocGenSigner> signerRecords;
 
@@ -130,7 +130,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         @InvocableVariable(
             label='Send Branded Emails'
-            description='Set to FALSE if your Flow sends its own emails using the Signer URLs output — DocGen will create the request and URLs without emailing signers. Leave blank or TRUE (default) to have DocGen send branded invitation emails automatically (requires an Org-Wide Email Address in DocGen settings).'
+            description='Set to FALSE if your Flow sends its own emails using the Signer URLs output — Portwood will create the request and URLs without emailing signers. Leave blank or TRUE (default) to have Portwood send branded invitation emails automatically (requires an Org-Wide Email Address in Portwood settings).'
         )
         global Boolean sendEmails;
 
@@ -166,7 +166,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
 
         @InvocableVariable(
             label='Link Expiration (Days)'
-            description='Optional. Signing links for this request expire this many days after send (1-365). Leave blank to use the org default from DocGen Settings.'
+            description='Optional. Signing links for this request expire this many days after send (1-365). Leave blank to use the org default from Portwood Settings.'
         )
         global Integer expirationDays;
     }
@@ -174,7 +174,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
     global class Result {
         @InvocableVariable(
             label='Signature Request Id'
-            description='The Id of the created DocGen Signature Request record. Use this to track status, create related records, or link in downstream Flow elements.'
+            description='The Id of the created Portwood Signature Request record. Use this to track status, create related records, or link in downstream Flow elements.'
         )
         global Id signatureRequestId;
 
@@ -219,7 +219,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
     }
 
     @InvocableMethod(
-        label='DocGen: Create Signature Request'
+        label='Portwood: Create Signature Request'
         description='Creates a signature request with guided signing. Pass a collection of Signers (Name + Email + Role). Returns signing URLs. Supports sequential signing, initials, dates, and all v3 tag types.'
         category='Document Generation'
     )
@@ -251,7 +251,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
         }
         if (req.templateId == null) {
             throw new DocGenException(
-                'Template Id is required — pass the Id of a DocGen Template record or its Template API Name.'
+                'Template Id is required — pass the Id of a Portwood Template record or its Template API Name.'
             );
         }
         if (req.relatedRecordId == null) {
@@ -324,7 +324,7 @@ global with sharing class DocGenSignatureFlowAction { // NOPMD AvoidGlobalModifi
                 req.emailSubject, // #193 — optional send-time custom subject
                 req.requireEmailVerification, // #verification — null = inherit template/org
                 req.prefillSignerEmail,
-                req.sendEmails, // #195 — false suppresses DocGen's invites (Flow sends its own)
+                req.sendEmails, // #195 — false suppresses Portwood's invites (Flow sends its own)
                 req.expirationDays // null = org-default signing window
             );
 

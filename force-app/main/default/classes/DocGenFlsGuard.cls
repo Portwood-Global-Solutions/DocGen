@@ -60,7 +60,7 @@ public with sharing class DocGenFlsGuard {
         Schema.DescribeSObjectResult sor = sot.getDescribe();
         if (!sor.isCreateable()) {
             throw new DocGenException(
-                'Insufficient access to create ' + sor.getName() + '. Verify DocGen permission set assignment.'
+                'Insufficient access to create ' + sor.getName() + '. Verify Portwood permission set assignment.'
             );
         }
         if (allowedFields == null || allowedFields.isEmpty()) {
@@ -102,7 +102,7 @@ public with sharing class DocGenFlsGuard {
                         sor.getName() +
                         '.' +
                         fieldName +
-                        '. Verify DocGen permission set assignment.'
+                        '. Verify Portwood permission set assignment.'
                 );
             }
         }
@@ -125,7 +125,7 @@ public with sharing class DocGenFlsGuard {
         Schema.DescribeSObjectResult sor = sot.getDescribe();
         if (!sor.isUpdateable()) {
             throw new DocGenException(
-                'Insufficient access to update ' + sor.getName() + '. Verify DocGen permission set assignment.'
+                'Insufficient access to update ' + sor.getName() + '. Verify Portwood permission set assignment.'
             );
         }
         if (allowedFields == null || allowedFields.isEmpty()) {
@@ -150,7 +150,7 @@ public with sharing class DocGenFlsGuard {
                         sor.getName() +
                         '.' +
                         fieldName +
-                        '. Verify DocGen permission set assignment.'
+                        '. Verify Portwood permission set assignment.'
                 );
             }
         }
@@ -181,7 +181,7 @@ public with sharing class DocGenFlsGuard {
      * Required because v2.1.0's admin guards (above) throw on object-level
      * isCreateable/isUpdateable/isAccessible=false — which is exactly the
      * verdict the platform returns for guest users on package-namespaced
-     * DocGen objects. The guest signature flow intentionally grants
+     * Portwood objects. The guest signature flow intentionally grants
      * allowRead-only on DocGen_Signer__c / DocGen_Signature_Request__c /
      * DocGen_Signature_Placement__c / DocGen_Signature_Audit__c in the
      * DocGen_Guest_Signature perm set; the write capability is the
@@ -239,7 +239,7 @@ public with sharing class DocGenFlsGuard {
         Boolean isGuest = (UserInfo.getUserType() == 'Guest');
         if (!isGuest && !sor.isAccessible()) {
             throw new DocGenException(
-                'Insufficient access to read ' + sor.getName() + '. Verify DocGen permission set assignment.'
+                'Insufficient access to read ' + sor.getName() + '. Verify Portwood permission set assignment.'
             );
         }
         if (readFields == null || readFields.isEmpty()) {
@@ -266,7 +266,7 @@ public with sharing class DocGenFlsGuard {
                         sor.getName() +
                         '.' +
                         fieldName +
-                        '. Verify DocGen permission set assignment.'
+                        '. Verify Portwood permission set assignment.'
                 );
             }
         }
@@ -285,7 +285,7 @@ public with sharing class DocGenFlsGuard {
                 'Insufficient access to ' +
                     (isUpdate ? 'update ' : 'create ') +
                     sor.getName() +
-                    '. Verify DocGen permission set assignment.'
+                    '. Verify Portwood permission set assignment.'
             );
         }
         if (allowedFields == null || allowedFields.isEmpty()) {
@@ -314,7 +314,7 @@ public with sharing class DocGenFlsGuard {
                         sor.getName() +
                         '.' +
                         fieldName +
-                        '. Verify DocGen permission set assignment.'
+                        '. Verify Portwood permission set assignment.'
                 );
             }
         }
@@ -380,7 +380,7 @@ public with sharing class DocGenFlsGuard {
         Schema.DescribeSObjectResult sor = sot.getDescribe();
         if (!sor.isAccessible()) {
             throw new DocGenException(
-                'Insufficient access to read ' + sor.getName() + '. Verify DocGen permission set assignment.'
+                'Insufficient access to read ' + sor.getName() + '. Verify Portwood permission set assignment.'
             );
         }
         if (readFields == null || readFields.isEmpty()) {
@@ -405,7 +405,7 @@ public with sharing class DocGenFlsGuard {
                         sor.getName() +
                         '.' +
                         fieldName +
-                        '. Verify DocGen permission set assignment.'
+                        '. Verify Portwood permission set assignment.'
                 );
             }
         }

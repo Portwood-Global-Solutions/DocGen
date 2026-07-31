@@ -37,7 +37,7 @@
         <enabled>true</enabled>
     </classAccesses>
     <description
-    >Grants Site Guest User permission to execute the DocGen Signature Visualforce page and related Apex controllers.</description>
+    >Grants Site Guest User permission to execute the Portwood Signature Visualforce page and related Apex controllers.</description>
     <!-- Email Template fields (#193) — the guest-context PIN (T3) and completion
          (T5/T7) emails render from these templates. Read-only; Type__c is required
          so its FLS is auto-granted and intentionally not declared here. -->
@@ -411,7 +411,7 @@
         <apexPage>DocGenVerify</apexPage>
         <enabled>true</enabled>
     </pageAccesses>
-    <label>Portwood DocGen Guest Signature</label>
+    <label>Portwood Guest Signature</label>
     <objectPermissions>
         <allowCreate>false</allowCreate>
         <allowDelete>false</allowDelete>

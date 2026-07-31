@@ -6051,7 +6051,7 @@ private class DocGenControllerTests {
 
         String message = DocGenController.resolveTemplatePickerLoadError(tmpVarFailure);
         System.assert(
-            message.contains('DocGen Template is shared'),
+            message.contains('Portwood Template is shared'),
             'tmpVar bind errors should become actionable template sharing guidance'
         );
         System.assert(!message.contains('tmpVar1'), 'Raw platform implementation detail must not reach the runner');
@@ -6269,12 +6269,12 @@ private class DocGenControllerTests {
     // verify the caller can actually see that record before reading or
     // mutating it. These tests pair an "authorized" path (caller owns/has
     // access — operation succeeds) with an "unauthorized" path (caller is a
-    // standard user with no sharing access AND no DocGen permission set —
+    // standard user with no sharing access AND no Portwood permission set —
     // operation throws AuraHandledException).
     // =========================================================================
 
     /**
-     * Builds a Standard-User-profile user with NO DocGen permission sets so
+     * Builds a Standard-User-profile user with NO Portwood permission sets so
      * runAs() blocks them from seeing managed records. Reused across the
      * deny-path tests below.
      */
@@ -6493,7 +6493,7 @@ private class DocGenControllerTests {
                 threw = true;
             }
             Test.stopTest();
-            System.assert(threw, 'Standard user without DocGen access must be denied');
+            System.assert(threw, 'Standard user without Portwood access must be denied');
         }
     }
 

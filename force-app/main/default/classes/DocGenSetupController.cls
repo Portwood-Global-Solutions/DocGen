@@ -54,7 +54,7 @@ public with sharing class DocGenSetupController {
     }
 
     /**
-     * Saves the Experience Site URL to DocGen settings.
+     * Saves the Experience Site URL to Portwood settings.
      * @param experienceSiteUrl The Experience Site base URL to store
      */
     @AuraEnabled
@@ -64,11 +64,11 @@ public with sharing class DocGenSetupController {
             !FeatureManagement.checkPermission('DocGen_Admin_Access') &&
             !Schema.sObjectType.DocGen_Settings__c.isUpdateable()
         ) {
-            throw DocGenService.ahe('Insufficient privileges to modify DocGen settings.');
+            throw DocGenService.ahe('Insufficient privileges to modify Portwood settings.');
         }
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Experience_Site_Url__c = experienceSiteUrl;
-        // Package-internal object — CRUD controlled by DocGen permission sets
+        // Package-internal object — CRUD controlled by Portwood permission sets
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Create"/"FLS Update").
         // upsert is checked against both create + update FLS because the
         // operation can do either depending on whether the hierarchy
@@ -221,8 +221,8 @@ public with sharing class DocGenSetupController {
                 'Guest Permission Set Assigned',
                 guestPermOk,
                 guestPermOk
-                    ? 'DocGen Guest Signature permission set is assigned.'
-                    : 'The DocGen Guest Signature permission set is not assigned to any user. Assign it to the Site guest user via Site > Public Access Settings.',
+                    ? 'Portwood Guest Signature permission set is assigned.'
+                    : 'The Portwood Guest Signature permission set is not assigned to any user. Assign it to the Site guest user via Site > Public Access Settings.',
                 null
             )
         );
@@ -247,7 +247,7 @@ public with sharing class DocGenSetupController {
                 vfPagesOk,
                 vfPagesOk
                     ? 'DocGenSign, DocGenSignature, and DocGenVerify pages are deployed.'
-                    : 'Required Visualforce pages are missing. Ensure the DocGen package is fully deployed.',
+                    : 'Required Visualforce pages are missing. Ensure the Portwood package is fully deployed.',
                 null
             )
         );
@@ -302,7 +302,7 @@ public with sharing class DocGenSetupController {
             !FeatureManagement.checkPermission('DocGen_Admin_Access') &&
             !Schema.sObjectType.DocGen_Settings__c.isUpdateable()
         ) {
-            throw DocGenService.ahe('Insufficient privileges to modify DocGen settings.');
+            throw DocGenService.ahe('Insufficient privileges to modify Portwood settings.');
         }
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         settings.Signature_Email_Brand_Color__c = brandColor;
@@ -352,7 +352,7 @@ public with sharing class DocGenSetupController {
             !FeatureManagement.checkPermission('DocGen_Admin_Access') &&
             !Schema.sObjectType.DocGen_Settings__c.isUpdateable()
         ) {
-            throw DocGenService.ahe('Insufficient privileges to modify DocGen settings.');
+            throw DocGenService.ahe('Insufficient privileges to modify Portwood settings.');
         }
         String normalizedSchedule = normalizeReminderSchedule(schedule);
         if (expirationDays != null && (expirationDays < 1 || expirationDays > 365)) {
@@ -402,7 +402,7 @@ public with sharing class DocGenSetupController {
                 System.schedule(jobName, '0 0 * * * ?', new DocGenSignatureReminderSchedulable());
             }
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Failed to schedule/abort reminder job: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: Failed to schedule/abort reminder job: ' + e.getMessage());
         }
     }
 
@@ -446,7 +446,7 @@ public with sharing class DocGenSetupController {
             !FeatureManagement.checkPermission('DocGen_Admin_Access') &&
             !Schema.sObjectType.DocGen_Settings__c.isUpdateable()
         ) {
-            throw DocGenService.ahe('Insufficient privileges to modify DocGen settings.');
+            throw DocGenService.ahe('Insufficient privileges to modify Portwood settings.');
         }
         DocGen_Settings__c settings = DocGen_Settings__c.getOrgDefaults();
         // Stored inverted: require=false → skip=true. Default (require true) → skip false.

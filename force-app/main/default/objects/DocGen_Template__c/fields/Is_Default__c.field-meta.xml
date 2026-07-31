@@ -3,7 +3,7 @@
     <fullName>Is_Default__c</fullName>
     <defaultValue>false</defaultValue>
     <description
-    >When checked, this template will be automatically selected when a user opens DocGen Runner on a record of the matching Base Object type. If multiple templates are marked as default for the same object, the first one (alphabetically) is used.</description>
+    >When checked, this template will be automatically selected when a user opens Portwood Runner on a record of the matching Base Object type. If multiple templates are marked as default for the same object, the first one (alphabetically) is used.</description>
     <label>Default Template</label>
     <type>Checkbox</type>
 </CustomField>

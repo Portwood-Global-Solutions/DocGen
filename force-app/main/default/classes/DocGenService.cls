@@ -1791,7 +1791,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         // to the package-internal pre-decomposed XML ContentVersions. USER_MODE silently
         // returned empty in that context, which is why the signed PDF path lost table-style
         // borders for guest-triggered signatures (#28). Template access is already gated by
-        // DocGen permission sets; reading the pre-decomposed artifacts in system mode is safe.
+        // Portwood permission sets; reading the pre-decomposed artifacts in system mode is safe.
         List<ContentVersion> xmlCvs = new PreDecompXmlLoader()
             .loadForLinkedEntityByTitlePrefix(activeVersions[0].Id, xmlPrefix);
 
@@ -2019,7 +2019,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         } catch (Exception cleanupErr) {
             System.debug(
                 LoggingLevel.WARN,
-                'DocGen: snapshot cleanup before re-decompose failed (continuing): ' + cleanupErr.getMessage()
+                'Portwood: snapshot cleanup before re-decompose failed (continuing): ' + cleanupErr.getMessage()
             );
         }
     }
@@ -2438,7 +2438,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
     /**
      * Blob.toPdf() fetches relative shepherd image URLs as the running user. Template
-     * asset images can be linked only to DocGen's internal version records, so a
+     * asset images can be linked only to Portwood's internal version records, so a
      * non-owner/non-admin user who can read the shared template may still see broken
      * images in the rendered PDF. Before calling Blob.toPdf(), link only referenced
      * template-owned image files to the source record so the running user can fetch
@@ -3004,7 +3004,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * cross-object aggregations) and render them straight into a template without persisting
      * to records first or implementing the DocGenDataProvider interface.
      *
-     * The dataMap follows the same shape DocGen merge expects:
+     * The dataMap follows the same shape Portwood merge expects:
      *   - Simple fields: 'Name' => 'Acme'
      *   - Parent lookups: 'Account' => Map<String,Object>{ 'Name' => 'Acme' }
      *   - Child loops: 'Items' => Map<String,Object>{ 'records' => List<Object>{ ... } }
@@ -3371,7 +3371,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                         Decimal imgInches = (Decimal.valueOf(cx) / 914400).setScale(2);
                         System.debug(
                             LoggingLevel.WARN,
-                            'DocGen image-overflow: template version ' +
+                            'Portwood image-overflow: template version ' +
                                 versionId +
                                 ' part ' +
                                 partName +
@@ -3389,7 +3389,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         if (overflowCount > 0) {
             System.debug(
                 LoggingLevel.WARN,
-                'DocGen image-overflow summary: ' +
+                'Portwood image-overflow summary: ' +
                     overflowCount +
                     ' oversized image(s) detected in template version ' +
                     versionId +
@@ -8136,7 +8136,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             // Missing or inactive asset, or an asset with no uploaded version yet.
             System.debug(
                 LoggingLevel.ERROR,
-                'DocGen: {%asset:' + assetKey + '} did not resolve (missing, inactive, or no version).'
+                'Portwood: {%asset:' + assetKey + '} did not resolve (missing, inactive, or no version).'
             );
             return assetPlaceholder(assetKey);
         }
@@ -9041,7 +9041,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     // Old orgs may still have DocGenSignatureSenderController and
     // DocGenSignatureService which reference these methods. The stubs
     // exist solely so those old classes compile during package upgrade.
-    // They do nothing — signatures have been removed from DocGen.
+    // They do nothing — signatures have been removed from Portwood.
     // =========================================================================
 
     /**
@@ -9070,7 +9070,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         ];
         if (tpls.isEmpty()) {
             throw new DocGenException(
-                'No DocGen Template found with API Name \'' +
+                'No Portwood Template found with API Name \'' +
                     apiName +
                     '\'. Set the API Name field on the template, or pass Template ID instead.'
             );
@@ -9663,7 +9663,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             Id = versionId,
             Content_Version_Id__c = htmlCvId
         );
-        update upd; // NOPMD ApexCRUDViolation — package-internal custom object; CRUD via DocGen permsets
+        update upd; // NOPMD ApexCRUDViolation — package-internal custom object; CRUD via Portwood permsets
     }
 
     // =====================================================================

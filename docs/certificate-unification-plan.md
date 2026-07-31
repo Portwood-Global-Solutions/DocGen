@@ -8,7 +8,7 @@
 
 ## 1. Context — why we're doing this
 
-DocGen produces the completion certificate in **two independent places**, using **two different rendering engines**, and they have drifted apart:
+Portwood produces the completion certificate in **two independent places**, using **two different rendering engines**, and they have drifted apart:
 
 |                         | Renderer                          | Where                                                                                             | Title                              | ESIGN/UETA line      | Verify link              |
 | ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------- | ------------------------ |
@@ -44,7 +44,7 @@ This supersedes an earlier draft that recommended Option B. A is strictly better
 
 **End-state on every completed document:** the PDF ends with one Certificate of Completion page containing the signer roster + ESIGN/UETA attestation + the document-content hash + a link to the verify page. The recipient clicks the link → the verify page recomputes/looks up that same document-content hash → shows "matches, signed by X on Y." Printed hash and verified hash are identical by construction.
 
-> Honest ceiling: the most widely accepted _tamper-evidence_ in this category is a cryptographic seal on the file itself (PAdES/PKI), which DocGen can't apply (no PKI in Apex/pdf-lib). The stored-hash + verify-portal model is the legitimate substitute smaller vendors use — the certificate is the readable audit, the portal is the integrity check.
+> Honest ceiling: the most widely accepted _tamper-evidence_ in this category is a cryptographic seal on the file itself (PAdES/PKI), which Portwood can't apply (no PKI in Apex/pdf-lib). The stored-hash + verify-portal model is the legitimate substitute smaller vendors use — the certificate is the readable audit, the portal is the integrity check.
 
 ## 3. Locked design decisions (proposed)
 

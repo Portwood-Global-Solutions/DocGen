@@ -14,13 +14,13 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>Private</externalSharingModel>
-    <label>DocGen Job</label>
+    <label>Portwood Job</label>
     <nameField>
         <displayFormat>JOB-{0000}</displayFormat>
         <label>Job Number</label>
         <type>AutoNumber</type>
     </nameField>
-    <pluralLabel>DocGen Jobs</pluralLabel>
+    <pluralLabel>Portwood Jobs</pluralLabel>
     <searchLayouts />
     <sharingModel>ReadWrite</sharingModel>
     <visibility>Public</visibility>

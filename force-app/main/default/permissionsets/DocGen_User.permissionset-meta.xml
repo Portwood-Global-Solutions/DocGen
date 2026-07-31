@@ -849,7 +849,7 @@
         <readable>true</readable>
     </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>Portwood DocGen User</label>
+    <label>Portwood User</label>
     <pageAccesses>
         <apexPage>DocGenGuide</apexPage>
         <enabled>true</enabled>

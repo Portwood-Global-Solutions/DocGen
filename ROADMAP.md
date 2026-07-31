@@ -1,8 +1,8 @@
 # Roadmap
 
-DocGen is free, native, and community-driven. There are no paid tiers and no feature gates, so this roadmap isn't a sales sheet. It's an honest view of what's queued and what we're still thinking about. Priorities come from real customer reports and community requests, triaged in the open on GitHub — the issue board is the source of truth for what's in flight.
+Portwood is free, native, and community-driven. There are no paid tiers and no feature gates, so this roadmap isn't a sales sheet. It's an honest view of what's queued and what we're still thinking about. Priorities come from real customer reports and community requests, triaged in the open on GitHub — the issue board is the source of truth for what's in flight.
 
-DocGen is [listed on the AppExchange](https://appexchange.salesforce.com/appxListingDetail?listingId=5a580bd8-2745-41e5-b62c-c495957857d3) and ships on a fast release cadence — currently v3.30. Recent releases brought guest e-signing with drawn signatures, a shared image-asset manager, brandable email templates, quick-action generation, and template management upgrades. For the full record, see the [changelog](/changelog).
+Portwood is [listed on the AppExchange](https://appexchange.salesforce.com/appxListingDetail?listingId=5a580bd8-2745-41e5-b62c-c495957857d3) and ships on a fast release cadence — currently v3.30. Recent releases brought guest e-signing with drawn signatures, a shared image-asset manager, brandable email templates, quick-action generation, and template management upgrades. For the full record, see the [changelog](/changelog).
 
 **Want to shape it?** Open a request on [GitHub Issues](https://github.com/Portwood-Global-Solutions/DocGen/issues) or post in [Slack](/community). Every request gets read, labeled, and tracked. Bugs that silently corrupt output jump the queue.
 
@@ -28,7 +28,7 @@ Larger items on the list, paced by community demand.
 
 ### Images in signature and notification emails ([#198](https://github.com/Portwood-Global-Solutions/DocGen/issues/198))
 
-Logos and branding images in the emails DocGen sends around signing and delivery. Weighing two designs — routing through the shared asset system versus a public-URL hook — before committing.
+Logos and branding images in the emails Portwood sends around signing and delivery. Weighing two designs — routing through the shared asset system versus a public-URL hook — before committing.
 
 ### Bulk runner and admin in every language
 
@@ -52,7 +52,7 @@ A visual, no-Word path to authoring templates. Iceboxed — Word and HTML templa
 
 ### Native, editable Office charts
 
-DocGen charts render as crisp images today — they look right in every format, but you can't click into them in Word or PowerPoint to change the underlying numbers. A future direction is emitting native Office chart objects so recipients can open **Edit Data** and adjust the chart directly. Image charts would stay the default; this would be an opt-in for Office-native output.
+Portwood charts render as crisp images today — they look right in every format, but you can't click into them in Word or PowerPoint to change the underlying numbers. A future direction is emitting native Office chart objects so recipients can open **Edit Data** and adjust the chart directly. Image charts would stay the default; this would be an opt-in for Office-native output.
 
 ### PDF export from Excel and PowerPoint
 

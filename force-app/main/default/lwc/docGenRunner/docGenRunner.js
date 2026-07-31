@@ -493,8 +493,8 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         const rawMessage = message || '';
         if (rawMessage.includes('Variable does not exist: tmpVar')) {
             return (
-                'Unable to load DocGen templates. Ask an admin to verify that at least one active DocGen Template is shared with you for this object. ' +
-                'If DocGen Template sharing is Private, share the template record directly or set Setup > Sharing Settings > Portwood DocGen Template > Default Internal Access to Public Read.'
+                'Unable to load Portwood templates. Ask an admin to verify that at least one active Portwood Template is shared with you for this object. ' +
+                'If Portwood Template sharing is Private, share the template record directly or set Setup > Sharing Settings > Portwood Template > Default Internal Access to Public Read.'
             );
         }
         return rawMessage || 'Unknown error';
@@ -579,7 +579,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         return (
             'No templates available for this record. Ask an admin to verify that an active template exists for ' +
             (this.objectApiName || 'this object') +
-            ", that the template's Specific Record Ids and Required Permission Sets match this record and user, and that the template record is shared with you. If DocGen Template sharing is Private, use standard Salesforce sharing or set Default Internal Access to Public Read."
+            ", that the template's Specific Record Ids and Required Permission Sets match this record and user, and that the template record is shared with you. If Portwood Template sharing is Private, use standard Salesforce sharing or set Default Internal Access to Public Read."
         );
     }
 
@@ -779,7 +779,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
             this._scoutCache = { counts, childNodes };
         } catch (e) {
             // Scout failed — fall through to normal generation
-            console.error('DocGen: SCOUT FAILED:', e.body ? e.body.message : e.message, e);
+            console.error('Portwood: SCOUT FAILED:', e.body ? e.body.message : e.message, e);
         } finally {
             this.isLoading = false;
             this.loadingMessage = '';
@@ -1031,12 +1031,15 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                     // tag will fall back to its text-placeholder branch.
                     const errMsg =
                         (chartErr && (chartErr.body ? chartErr.body.message : chartErr.message)) || String(chartErr);
-                    console.warn('DocGen: chart prep failed for signature ' + req.signature + ' — ' + errMsg, chartErr);
+                    console.warn(
+                        'Portwood: chart prep failed for signature ' + req.signature + ' — ' + errMsg,
+                        chartErr
+                    );
                 }
             }
             return { map, cvIds };
         } catch (e) {
-            console.warn('DocGen: prepareChartImages failed; charts will render as text placeholders', e);
+            console.warn('Portwood: prepareChartImages failed; charts will render as text placeholders', e);
             return { map: {}, cvIds: [] };
         }
     }
@@ -1050,7 +1053,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         } catch (cleanupErr) {
             // Cleanup failure is non-fatal — the cleanup schedulable (or
             // Salesforce's own CV recycle bin sweep) will catch these later.
-            console.warn('DocGen: chart CV cleanup failed', cleanupErr);
+            console.warn('Portwood: chart CV cleanup failed', cleanupErr);
         }
     }
 
@@ -1300,7 +1303,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                         }
                     }
                 } catch (imgErr) {
-                    console.warn('DocGen: Failed to fetch image CV ' + cvId, imgErr);
+                    console.warn('Portwood: Failed to fetch image CV ' + cvId, imgErr);
                 }
             }
         }
@@ -1323,7 +1326,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                         }
                     }
                 } catch (urlErr) {
-                    console.warn('DocGen: rich text image extract failed for ' + url, urlErr);
+                    console.warn('Portwood: rich text image extract failed for ' + url, urlErr);
                 }
             }
         }
@@ -1468,7 +1471,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                             }
                         }
                     } catch (imgErr) {
-                        console.warn('DocGen: Failed to fetch image CV ' + cvId, imgErr);
+                        console.warn('Portwood: Failed to fetch image CV ' + cvId, imgErr);
                     }
                 }
             }
@@ -1490,7 +1493,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                             // }
                         }
                     } catch (urlErr) {
-                        console.warn('DocGen: rich text image extract failed for ' + url, urlErr);
+                        console.warn('Portwood: rich text image extract failed for ' + url, urlErr);
                     }
                 }
             }
@@ -1515,7 +1518,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 // CxSAST: CSRF protection handled by Salesforce Aura/LWC framework
                 await cleanupGiantQueryFragments({ jobId });
             } catch (cleanupErr) {
-                console.warn('DocGen: Fragment cleanup failed (non-fatal)', cleanupErr);
+                console.warn('Portwood: Fragment cleanup failed (non-fatal)', cleanupErr);
             }
         } catch (e) {
             this.error = 'Giant Query DOCX Error: ' + (e.body ? e.body.message : e.message || 'Unknown error');
@@ -1664,7 +1667,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                             }
                         }
                     } catch (imgErr) {
-                        console.warn('DocGen: Failed to fetch image CV ' + cvId, imgErr);
+                        console.warn('Portwood: Failed to fetch image CV ' + cvId, imgErr);
                     }
                 }
             }
@@ -1686,7 +1689,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                             // }
                         }
                     } catch (urlErr) {
-                        console.warn('DocGen: rich text image extract failed for ' + url, urlErr);
+                        console.warn('Portwood: rich text image extract failed for ' + url, urlErr);
                     }
                 }
             }
@@ -1843,7 +1846,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 } catch (dlErr) {
                     // Download failure is non-fatal — the PDF is still on the
                     // record's Files tab so the user can retrieve it manually.
-                    console.warn('DocGen: giant PDF download fetch failed', dlErr);
+                    console.warn('Portwood: giant PDF download fetch failed', dlErr);
                 }
                 this.showToast(
                     'Success',

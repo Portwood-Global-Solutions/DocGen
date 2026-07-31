@@ -3,5 +3,5 @@
     <apiVersion>66.0</apiVersion>
     <availableInTouch>true</availableInTouch>
     <confirmationTokenRequired>false</confirmationTokenRequired>
-    <label>DocGen Verify</label>
+    <label>Portwood Verify</label>
 </ApexPage>

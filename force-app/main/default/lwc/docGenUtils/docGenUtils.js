@@ -1,5 +1,5 @@
 /**
- * Shared utility functions for DocGen LWC components.
+ * Shared utility functions for Portwood LWC components.
  * Consolidates duplicated logic (download, filter parsing) into one module.
  */
 
@@ -172,7 +172,7 @@ export function parseSOQLFields(queryStr) {
 
 /**
  * Detects if a full SOQL statement has WHERE/ORDER BY/LIMIT on the outer query.
- * These clauses are not supported at the top level because DocGen always runs
+ * These clauses are not supported at the top level because Portwood always runs
  * against a specific record.
  *
  * @param {string} input
@@ -220,7 +220,7 @@ function detectOuterClauses(input) {
             found.join(', ') +
             ' clause' +
             (found.length > 1 ? 's are' : ' is') +
-            ' ignored — DocGen runs against a specific record. Move filters inside a subquery if needed.'
+            ' ignored — Portwood runs against a specific record. Move filters inside a subquery if needed.'
         );
     }
     return null;

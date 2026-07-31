@@ -231,7 +231,7 @@
                                                                                     - button "Configure Action" [ref=f18e1127]:
                                                                                         - generic "Configure Action" [ref=f18e1135]
                                                                 - generic [ref=f18e951]:
-                                                                    - combobox [expanded] [active] [ref=f18e1142]: "You generate HTML document templates for Portwood DocGen, which renders HTML to PDF with Flying Saucer (CSS 2.1 only). Follow the instructions below exactly. Return only a complete, self-contained HTML document. Do not wrap it in markdown code fences and do not add commentary. Instructions: @"
+                                                                    - combobox [expanded] [active] [ref=f18e1142]: "You generate HTML document templates for Portwood, which renders HTML to PDF with Flying Saucer (CSS 2.1 only). Follow the instructions below exactly. Return only a complete, self-contained HTML document. Do not wrap it in markdown code fences and do not add commentary. Instructions: @"
                                                                     - generic [ref=f18e966]:
                                                                         - generic:
                                                                             - generic:

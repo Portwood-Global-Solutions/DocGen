@@ -1,6 +1,6 @@
 # Agentforce template authoring — feasibility and plan
 
-Goal: build and refine a DocGen HTML template by prompting Salesforce AI in-org,
+Goal: build and refine a Portwood HTML template by prompting Salesforce AI in-org,
 instead of copying the Designer's AI prompt out to an external assistant and
 pasting HTML back.
 
@@ -25,7 +25,7 @@ matter — Phase 1 needs Prompt Builder only. (An earlier session left
 the chat path; it is unused here.)
 
 **One org cannot host all of it.** `talentstacker-buildalong` has Einstein but
-also has DocGen v3.45.0 installed as a _managed_ package, so `docGenAdmin` and
+also has Portwood v3.45.0 installed as a _managed_ package, so `docGenAdmin` and
 `DocGenController` cannot be modified there. `Portwood Dev` has the unmanaged
 source but no Einstein. So the work is verified in two halves, which is
 precisely what the provider interface is for:
@@ -83,7 +83,7 @@ the package: `versionIdentifier` is a platform-generated value
 active version is refused outright while the "Deploy Active Prompt Template
 Versions Only" preference is on. Both were measured by trying.
 
-So **the subscriber creates the template**; DocGen ships the code that calls it.
+So **the subscriber creates the template**; Portwood ships the code that calls it.
 That answers open question 3 below: this is documented setup, not shipped
 metadata. Setup node is `EinsteinPromptStudio` (not `EinsteinGPTPromptTemplates`,
 which 404s). The one created for this spike:
@@ -91,7 +91,7 @@ which 404s). The one created for this spike:
 - API name `DocGen_HTML_Body`, type Flex, one required Free Text input
   `Instructions`, model `sfdc_ai__DefaultGPT5Mini`, Published + Activated.
 - Its body is a thin **carrier** — a sentence of framing plus
-  `{{Input.Instructions}}`. DocGen's own `buildAiPrompt()` assembles everything
+  `{{Input.Instructions}}`. Portwood's own `buildAiPrompt()` assembles everything
   that matters and passes it as that one input.
 
 ### The Einstein class only compiles where Einstein exists
@@ -177,7 +177,7 @@ org. It can — proven above with `Einstein1AIPlatform`. So:
 | Package                          | Contents                                                                      | Who installs            |
 | -------------------------------- | ----------------------------------------------------------------------------- | ----------------------- |
 | Base (`Portwood DocGen Managed`) | Everything except Einstein. No feature requirement.                           | Everyone, as today      |
-| Extension ("DocGen AI")          | `DocGenEinsteinProvider` + the `DocGen_HTML_Body` template, active on GPT 5.4 | Only orgs with Einstein |
+| Extension ("Portwood AI")        | `DocGenEinsteinProvider` + the `DocGen_HTML_Body` template, active on GPT 5.4 | Only orgs with Einstein |
 
 That gives the seamless install for Einstein customers — no hand-built template,
 no GPT 5 Mini default trap, no customer-deployed Apex — while the base package
@@ -212,7 +212,7 @@ So:
   non-entitled Dev Hub and fail identically. The earlier extension-package plan
   is therefore dead.
 - **The `.forceignore` fence is load-bearing for the whole product**, not just
-  this feature: leaving those two files in `force-app` breaks the next DocGen
+  this feature: leaving those two files in `force-app` breaks the next Portwood
   release build outright.
 
 Beware a misleading signal: `ConnectApi.EinsteinLLM` **does** compile in
@@ -222,7 +222,7 @@ packageable. It is not. Only a fresh org from the Dev Hub tells the truth.
 
 ### The shipping shape: subscriber-supplied Apex
 
-DocGen already solves exactly this, and the pattern should simply be reused.
+Portwood already solves exactly this, and the pattern should simply be reused.
 `DocGenDataProvider` is a **`global interface`** implemented by a class the
 SUBSCRIBER writes in their own org, with `DocGenDataProviderExample.cls` as the
 documented reference (also `.forceignore`d). Resolution at
@@ -249,7 +249,7 @@ is open: a namespace fallback in `DocGenAiProviderFactory` to match the house
 pattern, and two `DocGen_Settings__c` fields for the provider class name and the
 prompt template API name (both are hardcoded today).
 
-## Why this fits DocGen specifically
+## Why this fits Portwood specifically
 
 - **No external callout.** Einstein is reached through `ConnectApi`, not `Http`.
 - **The prompt already exists.** `buildAiPrompt()` in

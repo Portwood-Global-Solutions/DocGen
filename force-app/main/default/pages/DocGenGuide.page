@@ -11,7 +11,7 @@
         <head>
             <meta charset="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <title>DocGen User Guide — Portwood Global Solutions</title>
+            <title>Portwood User Guide</title>
             <meta http-equiv="refresh" content="0; url=https://portwood.dev/guide" />
             <link rel="canonical" href="https://portwood.dev/guide" />
             <style>
@@ -79,7 +79,7 @@
         </head>
         <body>
             <div class="card">
-                <h1>The DocGen User Guide has moved</h1>
+                <h1>The Portwood User Guide has moved</h1>
                 <p>
                     Setup walkthroughs, merge-tag syntax, e-signature configuration, PDF features, Flow integration, and
                     troubleshooting now live on the web — always up to date with the latest release.

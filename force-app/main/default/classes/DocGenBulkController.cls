@@ -1,6 +1,6 @@
 public with sharing class DocGenBulkController {
     /**
-     * Returns all DocGen templates for the bulk generation UI.
+     * Returns all Portwood templates for the bulk generation UI.
      * @return List of DocGen_Template__c records ordered by name
      */
     @AuraEnabled(cacheable=true)
@@ -525,7 +525,7 @@ public with sharing class DocGenBulkController {
     /**
      * Analyzes a bulk job for governor limit risks before execution.
      * Checks SOQL queries, DML statements, heap (merge mode), and record count.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param recordCount Total number of records to be processed
      * @param batchSize Records per batch execution
      * @param mergePdf Whether merge mode is enabled
@@ -892,7 +892,7 @@ public with sharing class DocGenBulkController {
 
     /**
      * Submits a bulk document generation job for async processing.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param condition Optional SOQL WHERE clause to filter records
      * @param jobLabel Optional human-readable label for the job
      * @param mergePdf Whether to merge all outputs into a single PDF
@@ -1236,7 +1236,7 @@ public with sharing class DocGenBulkController {
     // --- Saved Queries ---
     /**
      * Returns saved filter queries for a template, ordered by creation date descending.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @return List of DocGen_Saved_Query__c records
      */
     @AuraEnabled(cacheable=true)
@@ -1257,7 +1257,7 @@ public with sharing class DocGenBulkController {
 
     /**
      * Saves a named filter query for reuse with a template.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param label The display name for the saved query
      * @param description Optional description of the query
      * @param condition The SOQL WHERE clause condition

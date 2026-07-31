@@ -2103,7 +2103,7 @@
                                         var pages = doc.getPages();
                                         // Renders a DocuSign-style stamp card: an opaque backdrop +
                                         // brand border so it reads as a deliberate stamp, the drawn ink
-                                        // (signature or initials), and a "<labelLine> · Portwood DocGen"
+                                        // (signature or initials), and a "<labelLine> · Portwood"
                                         // footer. Whitespace-aware: it grows into whichever side of the
                                         // field line has more clearance (rect.clearAbove/clearBelow, from
                                         // the text layer) so it never covers the line above (body text)
@@ -2156,7 +2156,7 @@
                                             }
                                             var labelSize = 6.5,
                                                 brandSize = 6;
-                                            var brand = 'Portwood DocGen';
+                                            var brand = 'Portwood';
                                             var labelW = helv.widthOfTextAtSize(labelLine, labelSize);
                                             var brandW = helvBold.widthOfTextAtSize(brand, brandSize);
                                             var accent = 3;

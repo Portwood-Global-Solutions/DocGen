@@ -9,7 +9,7 @@
  *    HTML template body with the author's real merge fields injected, ready
  *    to save as v1 and generate on first click.
  *  - buildAiPrompt(shape, options) — assembles a copy-paste LLM prompt with
- *    the full DocGen tag cheat sheet, the Flying Saucer rendering constraints,
+ *    the full Portwood tag cheat sheet, the Flying Saucer rendering constraints,
  *    and the template's actual schema.
  *
  * Every starter obeys the Flying Saucer envelope: CSS 2.1 only (no flex/grid/
@@ -213,7 +213,7 @@ ${detailRows(detailFields)}
     </table>
 ${sections}
 
-    <div class="footer-note">Generated with Portwood DocGen &#8226; {Today:MM/dd/yyyy}</div>`;
+    <div class="footer-note">Generated with Portwood &#8226; {Today:MM/dd/yyyy}</div>`;
     return docShell('Record Report', inner);
 }
 
@@ -424,7 +424,7 @@ export const STARTERS = [
         key: 'agreement',
         label: 'Agreement (Signature-ready)',
         icon: 'utility:signature',
-        description: 'Numbered terms with a two-party e-signature block wired to DocGen signature tags.'
+        description: 'Numbered terms with a two-party e-signature block wired to Portwood signature tags.'
     },
     {
         key: 'certificate',
@@ -497,7 +497,7 @@ export function buildAiPrompt(shape, options) {
     const opts = options || {};
     const lines = [];
     lines.push(
-        'You are writing an HTML document template for Portwood DocGen, a native Salesforce document-generation package. The template is a single self-contained HTML file. DocGen replaces {merge tags} with Salesforce record data, then renders the HTML to PDF with the Flying Saucer engine.'
+        'You are writing an HTML document template for Portwood, a native Salesforce document-generation package. The template is a single self-contained HTML file. Portwood replaces {merge tags} with Salesforce record data, then renders the HTML to PDF with the Flying Saucer engine.'
     );
     lines.push('');
     lines.push('HARD RENDERING CONSTRAINTS (Flying Saucer = CSS 2.1 plus a small CSS 3 subset):');
@@ -519,7 +519,7 @@ export function buildAiPrompt(shape, options) {
         '- Every {...} pair is treated as a merge tag: unknown names render as empty text, and an unclosed { fails the merge. For literal braces use &#123; and &#125;.'
     );
     lines.push('');
-    lines.push('DOCGEN MERGE TAG SYNTAX:');
+    lines.push('PORTWOOD MERGE TAG SYNTAX:');
     lines.push(
         '- Field: {FieldName} — e.g. {Name}, {Status__c}. Parent lookups dot through: {Account.Name}, {Owner.Profile.Name}. Null renders as empty string.'
     );
@@ -578,7 +578,7 @@ export function buildAiPrompt(shape, options) {
         }
         lines.push('');
         // #248 — the single most common thing an LLM gets wrong when generating a
-        // DocGen template: it puts the loop tags on their own lines wrapping the
+        // Portwood template: it puts the loop tags on their own lines wrapping the
         // <table>, which repeats the whole table instead of the row.
         lines.push('REPEATING TABLES — READ THIS TWICE, IT IS THE MOST COMMON MISTAKE:');
         lines.push(
@@ -683,7 +683,7 @@ export function buildAiPrompt(shape, options) {
         );
         lines.push('');
         lines.push(
-            'QUESTIONS? The full Portwood DocGen UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/DocGen/blob/main/UserGuide.md'
+            'QUESTIONS? The full Portwood UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/DocGen/blob/main/UserGuide.md'
         );
         return lines.join('\n');
     }
@@ -705,7 +705,7 @@ export function buildAiPrompt(shape, options) {
     lines.push('3. Use only the merge tags listed in DATA SHAPE (plus {Today}/{RunningUser.*} built-ins).');
     lines.push('');
     lines.push(
-        'QUESTIONS? The full Portwood DocGen UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/DocGen/blob/main/UserGuide.md'
+        'QUESTIONS? The full Portwood UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/DocGen/blob/main/UserGuide.md'
     );
     return lines.join('\n');
 }
@@ -1063,7 +1063,7 @@ export function buildBlockPalette(shape) {
             '<td style="width: 48%; vertical-align: bottom">{@Signature_Company_Representative:2:Full}' +
             '<div style="border-top: 1pt solid #333333; margin-top: 4pt; padding-top: 3pt; color: #666666; font-size: 9pt">Company &#8226; Date: {@Signature_Company_Representative:2:Date}</div></td>' +
             '</tr></table>\n',
-        title: 'E-signature areas for both parties, wired to DocGen signing'
+        title: 'E-signature areas for both parties, wired to Portwood signing'
     });
     // Special characters — the UserGuide set, all covered by the PDF
     // engine's Arial Unicode fallback. Text glyphs only: color emoji

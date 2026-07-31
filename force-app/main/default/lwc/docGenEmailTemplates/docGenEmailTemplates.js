@@ -161,7 +161,7 @@ export default class DocGenEmailTemplates extends LightningElement {
 
     get layoutModeOptions() {
         return [
-            { label: 'DocGen layout — edit body, branded chrome', value: 'Managed' },
+            { label: 'Portwood layout — edit body, branded chrome', value: 'Managed' },
             { label: 'Full custom HTML — your entire document', value: 'Full_Html' }
         ];
     }

@@ -13,13 +13,13 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>ControlledByParent</externalSharingModel>
-    <label>DocGen Signature Placement</label>
+    <label>Portwood Signature Placement</label>
     <nameField>
         <displayFormat>PLC-{000000}</displayFormat>
         <label>Placement Number</label>
         <type>AutoNumber</type>
     </nameField>
-    <pluralLabel>DocGen Signature Placements</pluralLabel>
+    <pluralLabel>Portwood Signature Placements</pluralLabel>
     <searchLayouts />
     <sharingModel>ControlledByParent</sharingModel>
     <visibility>Public</visibility>

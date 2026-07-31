@@ -5,7 +5,7 @@
  * WHY THIS IS A SEPARATE, SYSTEM-CONTEXT SUBSYSTEM
  * ─────────────────────────────────────────────────────────────────────────
  *
- * DocGen e-signing lets an admin configure extra "form fields" on a template
+ * Portwood e-signing lets an admin configure extra "form fields" on a template
  * (DocGen_Template__c.Form_Fields_Config__c → formFields[]), each optionally mapped
  * to a base-object field. The guest signer fills them in during signing; the
  * values are (a) merged into the re-rendered signed PDF at {?key} positions,
@@ -66,7 +66,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
         @InvocableVariable(
             required=true
             label='Signature Request Id'
-            description='The DocGen Signature Request whose collected signer form-field values should be written back to the base record.'
+            description='The Portwood Signature Request whose collected signer form-field values should be written back to the base record.'
         )
         @AuraEnabled
         global String requestId;
@@ -91,7 +91,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
         try {
             parsed = JSON.deserializeUntyped(queryConfigJson);
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: form-field config parse failed: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: form-field config parse failed: ' + e.getMessage());
             return defs;
         }
         if (!(parsed instanceof Map<String, Object>)) {
@@ -224,7 +224,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
             WHERE Signature_Request__c = :requestId
             WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC
-        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by Portwood permission sets
         for (DocGen_Signer__c s : signers) {
             if (String.isBlank(s.Field_Data_Json__c)) {
                 continue;
@@ -240,7 +240,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
                     }
                 }
             } catch (Exception e) {
-                System.debug(LoggingLevel.WARN, 'DocGen: collectValues parse skip: ' + e.getMessage());
+                System.debug(LoggingLevel.WARN, 'Portwood: collectValues parse skip: ' + e.getMessage());
             }
         }
         return merged;
@@ -274,7 +274,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
                 WHERE Id = :requestId
                 WITH SYSTEM_MODE
                 LIMIT 1
-            ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+            ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by Portwood permission sets
             if (reqs.isEmpty()) {
                 return;
             }
@@ -390,7 +390,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
      * request Id; the allowlist is re-derived server-side.
      */
     @InvocableMethod(
-        label='DocGen: Write Back Signer Form Fields'
+        label='Portwood: Write Back Signer Form Fields'
         description='Writes the collected signer form-field values for a completed signature request back to its related record. The writable fields are re-derived from the template config; failures are logged, never thrown.'
         category='Document Generation'
     )
@@ -405,7 +405,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
                 } catch (Exception e) {
                     // Defensive: performWriteback already swallows, but a bad Id
                     // cast here must not break the Flow / event batch.
-                    System.debug(LoggingLevel.WARN, 'DocGen: writeBackFields skip: ' + e.getMessage());
+                    System.debug(LoggingLevel.WARN, 'Portwood: writeBackFields skip: ' + e.getMessage());
                 }
             }
         }
@@ -509,7 +509,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
      * swallows its own errors so a logging failure can never escalate.
      */
     private static void logWritebackError(Id requestId, String message) {
-        System.debug(LoggingLevel.ERROR, 'DocGen: writeback error (req ' + requestId + '): ' + message);
+        System.debug(LoggingLevel.ERROR, 'Portwood: writeback error (req ' + requestId + '): ' + message);
         // ALSO to DocGen_Error_Log__c, not only to the signature audit trail.
         // Writeback failures used to land exclusively on
         // DocGen_Signature_Audit__c.Error_Message__c, so "check the Error Log"
@@ -537,7 +537,7 @@ global without sharing class DocGenFieldWritebackService { // NOPMD AvoidGlobalM
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             Database.insert(new List<DocGen_Signature_Audit__c>{ errAudit }, false, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: writeback audit log failed: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'Portwood: writeback audit log failed: ' + e.getMessage());
         }
     }
 }

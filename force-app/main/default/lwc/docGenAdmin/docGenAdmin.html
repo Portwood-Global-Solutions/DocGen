@@ -82,7 +82,7 @@
                                             max-length="80"
                                             pattern="[a-zA-Z][a-zA-Z0-9_]*"
                                             message-when-pattern-mismatch="Letters, numbers, and underscores only; must start with a letter."
-                                            field-level-help="Stable key for referencing this template from Flows and DocGen Buttons (Template API Name input). Auto-fills from the name; survives sandbox-to-production deploys, unlike the record Id. Must be unique. Clear it to re-sync with the name."
+                                            field-level-help="Stable key for referencing this template from Flows and Portwood Buttons (Template API Name input). Auto-fills from the name; survives sandbox-to-production deploys, unlike the record Id. Must be unique. Clear it to re-sync with the name."
                                             class="slds-var-m-top_medium"
                                         ></lightning-input>
                                         <lightning-input
@@ -2039,7 +2039,7 @@
                                             <br />
                                             Think this should be a command?
                                             <a
-                                                href="mailto:hello@portwood.dev?subject=DocGen%20designer%20command%20idea"
+                                                href="mailto:hello@portwood.dev?subject=Portwood%20designer%20command%20idea"
                                                 >Email hello@portwood.dev</a
                                             >
                                         </div>
@@ -3515,7 +3515,7 @@
                                             max-length="80"
                                             pattern="[a-zA-Z][a-zA-Z0-9_]*"
                                             message-when-pattern-mismatch="Letters, numbers, and underscores only; must start with a letter."
-                                            field-level-help="Stable key for referencing this template from Flows and DocGen Buttons (Template API Name input). Survives sandbox-to-production deploys, unlike the record Id. Must be unique."
+                                            field-level-help="Stable key for referencing this template from Flows and Portwood Buttons (Template API Name input). Survives sandbox-to-production deploys, unlike the record Id. Must be unique."
                                             class="slds-var-m-top_medium"
                                         ></lightning-input>
                                     </div>
@@ -3722,7 +3722,7 @@
                                         </lightning-textarea>
                                         <lightning-textarea
                                             label="Required Permission Sets"
-                                            field-level-help="Comma-separated permission set API names (e.g. DocGen_Executive_Templates, DocGen_Finance_Templates). Users need at least ONE assigned to see this template. Blank = visible to all DocGen users."
+                                            field-level-help="Comma-separated permission set API names (e.g. DocGen_Executive_Templates, DocGen_Finance_Templates). Users need at least ONE assigned to see this template. Blank = visible to all Portwood users."
                                             value={editTemplateRequiredPermissionSets}
                                             onchange={handleEditRequiredPermSetsChange}
                                             class="slds-var-m-top_medium"
@@ -5148,7 +5148,7 @@
                                                 label="Copy AI Prompt"
                                                 icon-name="utility:copy"
                                                 onclick={handleCopyEditAiPrompt}
-                                                title="Copies a ready-to-paste prompt (your fields + DocGen tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot. Paste the returned HTML into the designer."
+                                                title="Copies a ready-to-paste prompt (your fields + Portwood tag syntax + PDF layout rules) for Claude / ChatGPT / Gemini / Copilot. Paste the returned HTML into the designer."
                                                 class="slds-var-m-left_x-small"
                                             >
                                             </lightning-button>
@@ -5391,7 +5391,7 @@
                 </header>
                 <div class="slds-modal__content slds-var-p-around_large">
                     <p class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_medium">
-                        Your fields, the DocGen tag syntax and the PDF engine's layout rules are sent automatically —
+                        Your fields, the Portwood tag syntax and the PDF engine's layout rules are sent automatically —
                         the same prompt as <strong>Copy AI Prompt</strong>. Just describe what you want.
                     </p>
 

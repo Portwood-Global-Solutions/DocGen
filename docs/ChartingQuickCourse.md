@@ -1,6 +1,6 @@
-# Portwood DocGen Charting Quick Course
+# Portwood Charting Quick Course
 
-This short course teaches the charting features by building one survey report template. It is written for template authors who already know basic DocGen merge tags and want to add charts without learning Apex.
+This short course teaches the charting features by building one survey report template. It is written for template authors who already know basic Portwood merge tags and want to add charts without learning Apex.
 
 Use HTML as the preferred source format for chart-heavy documents. Word templates can render simple charts, but HTML gives you better control over table-like chart layouts, nested `{#cols}` loops, and PDF-safe styling.
 
@@ -87,7 +87,7 @@ Use `{#ChartBucket...}` when you want full control over the markup.
 </table>
 ```
 
-Inside each bucket row, DocGen exposes:
+Inside each bucket row, Portwood exposes:
 
 - `{key}` - raw bucket value.
 - `{key_label}` - display label, with blank values shown as "Not Specified".
@@ -150,4 +150,4 @@ Use `docs/ChartingQuickCourseExample.html` as a copy-paste starting point. It in
 - Use `{#ChartBucket...}` when you need exact HTML control.
 - Add `{:else}` blocks so empty datasets are visible to the reader.
 - Use `colSort=` whenever `groupBy=` is present and the column order matters.
-- For very large child datasets, omit the chart target relationship from eager-loaded query config when possible so DocGen can aggregate through SOQL fallback instead of loading every row into heap.
+- For very large child datasets, omit the chart target relationship from eager-loaded query config when possible so Portwood can aggregate through SOQL fallback instead of loading every row into heap.

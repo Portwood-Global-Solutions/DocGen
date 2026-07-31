@@ -649,7 +649,7 @@ export default class DocGenBulkRunner extends NavigationMixin(LightningElement) 
                 this.isProcessing = false;
                 this.showToast(
                     'Status updates interrupted',
-                    'The job is still running server-side. Check DocGen Jobs (Recent Jobs below) for the final result.',
+                    'The job is still running server-side. Check Portwood Jobs (Recent Jobs below) for the final result.',
                     'warning'
                 );
             }

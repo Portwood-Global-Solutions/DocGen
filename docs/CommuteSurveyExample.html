@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Portwood DocGen — Commute Survey Example (v1.91.0)
+  Portwood — Commute Survey Example (v1.91.0)
 
   Demonstrates the advanced v1.91 chart modifiers:
     groupBy=  cross-tab pivot (Mode Split section, locations as columns)
@@ -8,7 +8,7 @@
     split=    multi-select (Reasons combos split on ';' per respondent)
 
   IMPORTANT: This template uses `<div class="row">` instead of `<tr>` for chart
-  body rows. DocGen's processXml auto-expansion at DocGenService.cls:2708 looks
+  body rows. Portwood's processXml auto-expansion at DocGenService.cls:2708 looks
   for the nearest open `<tr>` when processing nested `{#...}` loops — using
   divs (with `display: table-row`) keeps the inner `{#cols}` loop from
   duplicating the outer row container. CSS 2.1 (`display: table-cell`) works
@@ -247,7 +247,7 @@
         </div>
 
         <div class="footer-meta">
-            Portwood DocGen v1.91 — Page {PageNumber} of {TotalPages}
+            Portwood v1.91 — Page {PageNumber} of {TotalPages}
         </div>
     </body>
 </html>

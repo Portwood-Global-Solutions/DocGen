@@ -37,7 +37,7 @@
                             value={layoutMode}
                             options={layoutModeOptions}
                             onchange={handleLayoutModeChange}
-                            field-level-help="DocGen layout: edit just the body; we wrap the branded header/footer. Full custom HTML: paste your entire email document (your own layout, branding, and hosted image URLs); we send it as-is with only tokens resolved."
+                            field-level-help="Portwood layout: edit just the body; we wrap the branded header/footer. Full custom HTML: paste your entire email document (your own layout, branding, and hosted image URLs); we send it as-is with only tokens resolved."
                             class="slds-p-bottom_x-small"
                         ></lightning-combobox>
 
@@ -84,7 +84,7 @@
                             </p>
                             <template if:true={isFullHtml}>
                                 <p class="slds-text-body_small slds-text-color_weak slds-p-top_xx-small">
-                                    Full HTML mode: your markup is the entire email — DocGen adds no header/footer.
+                                    Full HTML mode: your markup is the entire email — Portwood adds no header/footer.
                                     Reference org values with {CompanyName} and {BrandColor} if you want them.
                                 </p>
                             </template>
@@ -100,7 +100,7 @@
                                     onchange={handleBrandChange}
                                     placeholder="#1589EE"
                                     max-length="7"
-                                    field-level-help="Optional #RRGGBB. Blank uses the org default from DocGen Settings."
+                                    field-level-help="Optional #RRGGBB. Blank uses the org default from Portwood Settings."
                                 ></lightning-input>
                             </div>
                             <div class="slds-col slds-size_1-of-2">
@@ -110,7 +110,7 @@
                                     value={logoUrl}
                                     onchange={handleLogoChange}
                                     placeholder="https://…/logo.png"
-                                    field-level-help="Any public image URL — no length limit. Or pick a DocGen Asset below to host the logo in Salesforce Files. In Full custom HTML this value renders wherever you place {LogoUrl}."
+                                    field-level-help="Any public image URL — no length limit. Or pick a Portwood Asset below to host the logo in Salesforce Files. In Full custom HTML this value renders wherever you place {LogoUrl}."
                                 ></lightning-input>
                                 <lightning-combobox
                                     label="…or override with an Asset file"

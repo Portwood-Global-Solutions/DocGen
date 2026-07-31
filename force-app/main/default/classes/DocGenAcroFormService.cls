@@ -291,7 +291,7 @@ public with sharing class DocGenAcroFormService {
                     objectKind +
                     ' object(s): ' +
                     String.join(missing, ', ') +
-                    '. Save this PDF as a new template version so DocGen can store a matching server-ready PDF body.'
+                    '. Save this PDF as a new template version so Portwood can store a matching server-ready PDF body.'
             );
         }
     }

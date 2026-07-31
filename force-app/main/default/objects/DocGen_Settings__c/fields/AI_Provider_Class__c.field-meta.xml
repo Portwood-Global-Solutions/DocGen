@@ -2,7 +2,7 @@
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>AI_Provider_Class__c</fullName>
     <description
-    >Apex class in YOUR org implementing the DocGenAiProvider interface, used by the Designer's "Generate with Agentforce" button. Leave blank to use the default name DocGenEinsteinProvider. The class is resolved in your namespace first, then in portwoodglobal. If it is absent or does not implement the interface, DocGen hides the button and the Copy AI Prompt workflow is unaffected. See UserGuide section 5.7.11.</description>
+    >Apex class in YOUR org implementing the DocGenAiProvider interface, used by the Designer's "Generate with Agentforce" button. Leave blank to use the default name DocGenEinsteinProvider. The class is resolved in your namespace first, then in portwoodglobal. If it is absent or does not implement the interface, Portwood hides the button and the Copy AI Prompt workflow is unaffected. See UserGuide section 5.7.11.</description>
     <externalId>false</externalId>
     <label>AI Provider Class</label>
     <length>255</length>

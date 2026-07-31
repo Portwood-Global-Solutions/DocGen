@@ -3,7 +3,7 @@
     <fullName>Is_Active__c</fullName>
     <defaultValue>true</defaultValue>
     <description
-    >When unchecked, this template is hidden from the document picker on records but remains visible in DocGen Admin for management. Use to keep time-locked or seasonal templates out of the daily picker without deleting them. New templates default to Active.</description>
+    >When unchecked, this template is hidden from the document picker on records but remains visible in Portwood Admin for management. Use to keep time-locked or seasonal templates out of the daily picker without deleting them. New templates default to Active.</description>
     <label>Active</label>
     <type>Checkbox</type>
 </CustomField>

@@ -13,13 +13,13 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>ControlledByParent</externalSharingModel>
-    <label>DocGen Signer</label>
+    <label>Portwood Signer</label>
     <nameField>
         <displayFormat>SGN-{000000}</displayFormat>
         <label>Signer Number</label>
         <type>AutoNumber</type>
     </nameField>
-    <pluralLabel>DocGen Signers</pluralLabel>
+    <pluralLabel>Portwood Signers</pluralLabel>
     <searchLayouts />
     <sharingModel>ControlledByParent</sharingModel>
     <visibility>Public</visibility>

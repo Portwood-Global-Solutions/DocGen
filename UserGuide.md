@@ -1,8 +1,8 @@
-# Portwood DocGen — User Guide
+# Portwood — User Guide
 
-Build polished Word and PDF documents from any Salesforce record. Author your template in Word, Google Docs, or any tool that exports HTML — drop in merge tags, and DocGen renders the rest. Everything runs natively inside your Salesforce org, with the same record sharing and field-level security your users already have.
+Build polished Word and PDF documents from any Salesforce record. Author your template in Word, Google Docs, or any tool that exports HTML — drop in merge tags, and Portwood renders the rest. Everything runs natively inside your Salesforce org, with the same record sharing and field-level security your users already have.
 
-PowerPoint and Excel templates are also supported as **alpha-stage** formats — see [§2](#2-what-docgen-does) for what to expect.
+PowerPoint and Excel templates are also supported as **alpha-stage** formats — see [§2](#2-what-portwood-does) for what to expect.
 
 [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Support](https://portwood.dev/support) · [Expert Services](https://portwood.dev/services)
 
@@ -11,7 +11,7 @@ PowerPoint and Excel templates are also supported as **alpha-stage** formats —
 ## Table of contents
 
 1. [Five-minute quick start](#1-five-minute-quick-start) — install → first PDF in five steps
-2. [What DocGen does](#2-what-docgen-does)
+2. [What Portwood does](#2-what-portwood-does)
 3. [Install & post-install setup](#3-install--post-install-setup)
 4. [Permission sets](#4-permission-sets)
 5. [Templates](#5-templates)
@@ -39,14 +39,14 @@ Pick the install link above for your environment. Production for live orgs, Sand
 ### Step 2 — Assign yourself the admin permission set
 
 1. **Setup → Users → Permission Sets**
-2. Click **DocGen Admin** → **Manage Assignments** → **Add Assignments**
+2. Click **Portwood Admin** → **Manage Assignments** → **Add Assignments**
 3. Check the box next to your user → **Next** → **Assign**
 
 You can now create templates and generate documents.
 
 ### Step 3 — Enable the PDF rendering release update
 
-DocGen renders PDFs through Salesforce's Visualforce PDF service, which sits behind a release update. Without this, image-heavy PDFs fail silently.
+Portwood renders PDFs through Salesforce's Visualforce PDF service, which sits behind a release update. Without this, image-heavy PDFs fail silently.
 
 1. **Setup → Release Updates**
 2. Find **"Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations"**
@@ -58,12 +58,12 @@ If the release update page looks like it might already be enabled but the button
 
 ### Step 4 — Make your first template
 
-1. **App Launcher → DocGen** (search "DocGen" if it's not pinned). You land on the **Template Library**.
+1. **App Launcher → Portwood** (search "Portwood" if it's not pinned). You land on the **Template Library**.
 2. On the **Create New** tab, choose how you want to build. **Start from a Design** is the recommended path — pick a professional starter layout and your template renders on the very first click, no file authoring needed:
 
     ![The Create New wizard with the starter gallery — Record Report, Invoice, Business Letter, Agreement, and Certificate designs](docs/images/userguide/wizard-starters.png)
     - **Start from a Design** — a starter gallery (Record Report, Invoice / Line Items, Business Letter, signature-ready Agreement, landscape Certificate / Award). Your object's real merge fields are dropped in automatically.
-    - **Generate with AI** — DocGen assembles a ready-to-paste prompt (your fields + the full tag syntax + PDF rendering constraints). Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns back into the wizard.
+    - **Generate with AI** — Portwood assembles a ready-to-paste prompt (your fields + the full tag syntax + PDF rendering constraints). Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns back into the wizard.
     - **Start From Scratch** — a blank page in the visual designer. Click anywhere and type; hit `` ` `` for the insert menu.
     - **I Have an Existing File** — upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain.
 
@@ -77,7 +77,7 @@ If the release update page looks like it might already be enabled but the button
 ### Step 5 — Generate
 
 1. Open any Account record.
-2. Click the **DocGen Runner** component on the page (placed there automatically by the install). If it's not visible, edit the page in Lightning App Builder and add the **DocGen Runner** component.
+2. Click the **Portwood Runner** component on the page (placed there automatically by the install). If it's not visible, edit the page in Lightning App Builder and add the **Portwood Runner** component.
 3. Pick **My First Account Brief** → click **Generate**.
 4. The PDF appears in the record's **Files** related list, and downloads to your browser.
 
@@ -87,11 +87,11 @@ If the release update page looks like it might already be enabled but the button
 
 The rest of this guide covers each capability with worked examples.
 
-> **Stuck?** The most common first-time issue is the runner not showing on the page layout. Edit the page → drag in the **DocGen Runner** component → save. If you see "Insufficient privileges," confirm Step 2 — the perm set assignment.
+> **Stuck?** The most common first-time issue is the runner not showing on the page layout. Edit the page → drag in the **Portwood Runner** component → save. If you see "Insufficient privileges," confirm Step 2 — the perm set assignment.
 
 ---
 
-## 2. What DocGen does
+## 2. What Portwood does
 
 A native Salesforce document generation engine that turns merge-tag templates into rendered files.
 
@@ -147,10 +147,10 @@ Or use the install links at the top of this guide. The install bundles the merge
 
 ### Post-install checklist
 
-1. **Assign the `DocGen_Admin` permission set** to yourself — Setup → Users → Permission Sets → DocGen Admin → Manage Assignments → Add. See [§4](#4-permission-sets) for who needs what.
+1. **Assign the `DocGen_Admin` permission set** to yourself — Setup → Users → Permission Sets → Portwood Admin → Manage Assignments → Add. See [§4](#4-permission-sets) for who needs what.
 2. **Add `HTML` and `Excel` to two `Type` picklists** _(one-time, see callout below)_ — required before you can create HTML or Excel templates.
 3. **Enable the Visualforce PDF Rendering Service release update** — Setup → Release Updates → "Use the Visualforce PDF Rendering Service for `Blob.toPdf()` Invocations" → Get Started → Enable. Mandatory for PDF output. If the page shows a grayed-out **Enable Test Run** button, the update is still off for that org; open a Salesforce Support case and ask Salesforce to enable it.
-4. **Open the DocGen app** from the App Launcher. The Command Hub is your home base for managing templates, running bulk jobs, and configuring signatures.
+4. **Open the Portwood app** from the App Launcher. The Command Hub is your home base for managing templates, running bulk jobs, and configuring signatures.
 5. **For e-signatures only** — run through the [signature admin setup](#1012-admin-setup-one-time) before sending the first signature request: Site URL, Org-Wide Email Address, guest permission set on the site's guest user.
 
 > ⚠️ **One-time picklist setup for HTML and Excel templates**
@@ -163,8 +163,8 @@ Or use the install links at the top of this guide. The install bundles the merge
 >
 > Add the missing values **on both objects**:
 >
-> 1. Setup → Object Manager → **DocGen Template** → Fields & Relationships → **Type** → New under "Picklist Values" → add `HTML`, then `Excel`. Save.
-> 2. Setup → Object Manager → **DocGen Template Version** _(separate object, similar name)_ → Fields & Relationships → **Type** → New → add `HTML`, then `Excel`. Save.
+> 1. Setup → Object Manager → **Portwood Template** → Fields & Relationships → **Type** → New under "Picklist Values" → add `HTML`, then `Excel`. Save.
+> 2. Setup → Object Manager → **Portwood Template Version** _(separate object, similar name)_ → Fields & Relationships → **Type** → New → add `HTML`, then `Excel`. Save.
 >
 > No data migration needed — existing rows aren't touched. Once both picklists list all four values (Word, PowerPoint, Excel, HTML), the Save flow in the Command Hub works normally for every template type. A future package release will move these picklists to a Global Value Set so this step goes away.
 
@@ -183,11 +183,11 @@ Three permission sets ship with the package. Assign what each user needs.
 ### Assigning a permission set
 
 1. **Setup → Users → Permission Sets**
-2. Click the permission-set name (e.g., **DocGen Admin**)
+2. Click the permission-set name (e.g., **Portwood Admin**)
 3. Click **Manage Assignments → Add Assignments**
 4. Check the box next to each user → **Next** → **Assign**
 
-> **Assign deliberately — do not use the select-all checkbox.** `DocGen_User` includes read-only _View All_ on DocGen Template (v3.29+, see §5.4). Some Salesforce user licenses — **Chatter Free**, **Identity**, and **Customer/Partner Community** among them — do not permit View All Records on a custom object. Assigning `DocGen_User` to those users is not just unnecessary (they cannot generate documents anyway); it will **block your next package upgrade**, because Salesforce re-validates every existing assignment against its user license when the permission set changes. The install fails with:
+> **Assign deliberately — do not use the select-all checkbox.** `DocGen_User` includes read-only _View All_ on Portwood Template (v3.29+, see §5.4). Some Salesforce user licenses — **Chatter Free**, **Identity**, and **Customer/Partner Community** among them — do not permit View All Records on a custom object. Assigning `DocGen_User` to those users is not just unnecessary (they cannot generate documents anyway); it will **block your next package upgrade**, because Salesforce re-validates every existing assignment against its user license when the permission set changes. The install fails with:
 >
 > ```
 > PermissionSet(DocGen_User) The user license doesn't allow the
@@ -211,9 +211,9 @@ Salesforce hides guest users behind several clicks. Full path:
 1. **Setup → Sites** → click your e-signature site's name.
 2. Click **Public Access Settings** — opens the site profile.
 3. From the profile, click **View Users**, then select the e-signature site guest user.
-4. On the user record, scroll to **Permission Set Assignments** and add **DocGen Guest Signature**.
+4. On the user record, scroll to **Permission Set Assignments** and add **Portwood Guest Signature**.
 
-### Adding custom fields to DocGen objects?
+### Adding custom fields to Portwood objects?
 
 Update all three permission sets in the same change. Missed FLS grants silently break field access for the affected role (signer can't read it, generator can't populate it).
 
@@ -223,10 +223,10 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 
 ### 5.1 Creating a template
 
-Open the DocGen app → **My Templates** → the **Create New** tab. The wizard offers four authoring paths:
+Open the Portwood app → **My Templates** → the **Create New** tab. The wizard offers four authoring paths:
 
 - **Start from a Design** (recommended) — pick a professional starter (Record Report, Invoice / Line Items, Business Letter, signature-ready Agreement, landscape Certificate / Award). Your object's real merge fields are injected automatically and the template renders on the first click. Starters that need a specific page setup bring it along — the Certificate creates a landscape Letter page with 0.5" margins without you touching anything.
-- **Generate with AI** — a six-step flow, top to bottom on one page: build your query in the full visual builder (fields, parent lookups, related lists with filters), pick your images, describe the document in your own words, copy the assembled prompt (it carries DocGen's full tag syntax and the PDF engine's CSS rules), paste it into Claude / ChatGPT / Copilot, then paste the returned HTML back. The prompt updates live as you build. The result opens in the designer.
+- **Generate with AI** — a six-step flow, top to bottom on one page: build your query in the full visual builder (fields, parent lookups, related lists with filters), pick your images, describe the document in your own words, copy the assembled prompt (it carries Portwood's full tag syntax and the PDF engine's CSS rules), paste it into Claude / ChatGPT / Copilot, then paste the returned HTML back. The prompt updates live as you build. The result opens in the designer.
 - **Start From Scratch** — a blank page in the visual designer.
 - **I Have an Existing File** — upload **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), fillable **PDF** (_testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx`, _alpha_) containing `{FieldName}` merge tags.
 
@@ -260,7 +260,7 @@ Every path also asks for:
 
 #### Fillable PDF templates (PDF-to-PDF, testing)
 
-DocGen can upload a fillable PDF form, read its AcroForm fields in the browser, and map those fields to Salesforce data. The generated output stays a PDF: DocGen fills the mapped fields server-side so the same template can run for a single record, Generate Sample, Flow/API generation, and bulk generation.
+Portwood can upload a fillable PDF form, read its AcroForm fields in the browser, and map those fields to Salesforce data. The generated output stays a PDF: Portwood fills the mapped fields server-side so the same template can run for a single record, Generate Sample, Flow/API generation, and bulk generation.
 
 This feature is currently in testing. It is designed for standard AcroForm PDFs. Many government forms work, including forms whose field dictionaries are stored in PDF object streams after the browser prepares a server-ready copy. XFA-only forms and unusual encrypted forms may still need additional support.
 
@@ -270,23 +270,23 @@ Basic workflow:
 
 1. Create or edit a template with **Type = PDF**.
 2. Upload the fillable `.pdf`.
-3. After upload, open the **Fillable Fields** tab. DocGen scans the PDF and lists the fields in page/position order.
+3. After upload, open the **Fillable Fields** tab. Portwood scans the PDF and lists the fields in page/position order.
 4. Use **Label / Fillable Field** to add your own human label, such as `Checkbox 3c S-Corp`. The original PDF field name remains visible underneath for troubleshooting.
 5. Pick a **Data Path** from the template query, or enter a static/formula-style value where appropriate.
 6. For checkboxes/radio buttons (`Btn` fields), map the data path to a boolean-like value and set **Checked Value** to the PDF's on-state value when needed. Common Salesforce values such as `true`, `yes`, `1`, and `checked` are treated as checked.
-7. Click **Save as New Version**. DocGen saves the field mapping snapshot and prepares a server-ready PDF body for generation.
+7. Click **Save as New Version**. Portwood saves the field mapping snapshot and prepares a server-ready PDF body for generation.
 8. Later edits to labels, mappings, or checked values can be made directly on the **Fillable Fields** tab with **Save Mapping**.
 
 Important notes while the feature is in testing:
 
 - The mapped field list is based on the PDF structure, not visual text recognition. Use the page, position, and friendly label to make large forms navigable.
-- If DocGen says the mapping does not match the active PDF body, save the PDF as a new template version so the mapping and server-ready body are regenerated together.
+- If Portwood says the mapping does not match the active PDF body, save the PDF as a new template version so the mapping and server-ready body are regenerated together.
 - Browser-side scanning is used only to understand and normalize the PDF. Actual generation happens server-side, including Generate Sample and bulk generation.
 - Fillable fields generally remain fillable/editable in the generated PDF. Flattening output is not the default behavior.
 
 ### 5.1.1 API Name — a stable key for automation (v3.28+)
 
-Every template has an optional **API Name** — a unique developer key like `Opp_Close_Summary`. Flows reference it via the **Template API Name** input on the DocGen actions instead of a record Id, so automations survive sandbox→production deploys with nothing to remap. Letters, numbers, and underscores; must start with a letter; must be unique when set; existing templates work fine with it blank.
+Every template has an optional **API Name** — a unique developer key like `Opp_Close_Summary`. Flows reference it via the **Template API Name** input on the Portwood actions instead of a record Id, so automations survive sandbox→production deploys with nothing to remap. Letters, numbers, and underscores; must start with a letter; must be unique when set; existing templates work fine with it blank.
 
 ### 5.1.2 The Visual Designer (Beta)
 
@@ -312,7 +312,7 @@ HTML templates open in a full WYSIWYG designer — the page you see is the page 
 - **Borders** — All / Outline / Rows / None styles, plus a thickness picker (Hairline to Heavy) and a border color; changing either restyles the table under your cursor live.
 - Rows carry `page-break-inside: avoid` automatically, so a PDF page never splits mid-row.
 
-**Images:** assets render as real images on the canvas. Drag the image body to move it anywhere in the text flow (a drop marker tracks your pointer); drag the bottom-right corner to resize (the size is written back into the merge tag); click it and use Left / Center / Right to align it; double-click it to edit the underlying tag (`{%asset:logo:120x}`) by hand. In header/footer HTML you can write `<img src="{%asset:logo}">` and DocGen substitutes the image URL; unsized header/footer images are automatically clamped to fit the margin box.
+**Images:** assets render as real images on the canvas. Drag the image body to move it anywhere in the text flow (a drop marker tracks your pointer); drag the bottom-right corner to resize (the size is written back into the merge tag); click it and use Left / Center / Right to align it; double-click it to edit the underlying tag (`{%asset:logo:120x}`) by hand. In header/footer HTML you can write `<img src="{%asset:logo}">` and Portwood substitutes the image URL; unsized header/footer images are automatically clamped to fit the margin box.
 
 **Query panel:** the designer's Query button opens the full visual query builder (see [§6.4](#64-using-the-visual-builder)) in a wide flyout — walk from the base object into fields, parent lookups, and related lists without leaving the designer. Changes flow straight into the tag palettes.
 
@@ -326,7 +326,7 @@ Where you'll see it (v3.29+):
 
 - **Create wizard** — the API Name auto-fills from the Template Name as you type (`Opp Close Summary` → `Opp_Close_Summary`). Edit it to take manual control, or clear it to re-sync with the name.
 - **Template editor → Settings tab** — shown right under the Template Name, in the Template section.
-- **Template record page** — on the DocGen Template layout, next to Name.
+- **Template record page** — on the Portwood Template layout, next to Name.
 - **Cloning** (§5.2.1) gives the copy its own unique API Name automatically; **Export/Import** (§5.2.2) carries the API Name across orgs and only drops it if a template in the target org already claims it.
 
 ### 5.2 Template versions
@@ -334,14 +334,14 @@ Where you'll see it (v3.29+):
 Each save creates a new `DocGen_Template_Version__c` record. Only the version marked **Active** (`Is_Active__c = true`) is used by the runner.
 
 - Older versions are preserved for rollback.
-- When you save a new version, DocGen pre-extracts images from the DOCX/PPTX ZIP and caches them as ContentVersions for fast PDF rendering at generation time.
+- When you save a new version, Portwood pre-extracts images from the DOCX/PPTX ZIP and caches them as ContentVersions for fast PDF rendering at generation time.
 - The XML parts are also pre-cached so PDF generation can skip ZIP decompression at runtime.
 
 **Version-pinned render config (v1.97+).** Editing a template's Output Format / Header HTML / Footer HTML / Document Title Format / Page Size / Page Orientation / Page Margins / Custom Margins used to silently rewrite the rendering of every previously-saved version, because the runner always read live template values. From v1.97 on, those eight fields are snapshotted onto the version at save time, and the render path overlays a non-null snapshot onto the template values. Practical effect: roll back to an older active version and you get the rendering that was authored at the time of that save, not whatever you've since changed the template to. Versions saved before v1.97 have no snapshot — those still fall back to the live template, so upgrading is non-breaking; the first re-save populates the snapshot.
 
-**Changing a template's format (v3.29+).** Switching **Type** (e.g. Word → HTML) requires uploading a new body file in the new format: change the Type, upload the file on the Document tab, and click **Save as New Version** — format and body update together. A details-only save that changes the Type is **blocked with an error**, because the previous-format body and its cached artifacts would keep rendering (that's the stale-output bug fixed in v3.29). Relatedly, if you've uploaded a file but use a details-only save, DocGen warns that the upload isn't included — documents keep generating from the previous file until you Save as New Version.
+**Changing a template's format (v3.29+).** Switching **Type** (e.g. Word → HTML) requires uploading a new body file in the new format: change the Type, upload the file on the Document tab, and click **Save as New Version** — format and body update together. A details-only save that changes the Type is **blocked with an error**, because the previous-format body and its cached artifacts would keep rendering (that's the stale-output bug fixed in v3.29). Relatedly, if you've uploaded a file but use a details-only save, Portwood warns that the upload isn't included — documents keep generating from the previous file until you Save as New Version.
 
-**Deleting old versions (v1.92+).** Heavy iteration accumulates versions fast — each save creates the version record plus 5–7 ContentVersions (the body file + pre-decomposed XML parts). DocGen Admin → click into the template → **Versions** tab now exposes a **Delete** button next to each non-active version. Confirm the dialog, and the version record _plus_ its body and pre-decomposed files are cascade-deleted in one transaction. The currently active version can't be deleted — activate a different version first if you need to remove the current one.
+**Deleting old versions (v1.92+).** Heavy iteration accumulates versions fast — each save creates the version record plus 5–7 ContentVersions (the body file + pre-decomposed XML parts). Portwood Admin → click into the template → **Versions** tab now exposes a **Delete** button next to each non-active version. Confirm the dialog, and the version record _plus_ its body and pre-decomposed files are cascade-deleted in one transaction. The currently active version can't be deleted — activate a different version first if you need to remove the current one.
 
 ### 5.2.1 Cloning a template (v3.29+)
 
@@ -377,7 +377,7 @@ Use this for compliance-sensitive documents where only one format is allowed (e.
 
 ### 5.5 Template visibility (audience control)
 
-**Active / Inactive (v1.92+).** The simplest visibility control: each template has an **Active** checkbox (defaults to checked on new templates). When unchecked, the template is hidden from the document picker on every record page _while remaining fully editable_ in DocGen Admin. Use this to keep time-locked, seasonal, or work-in-progress templates from cluttering the daily picker without deleting them — the template list view in Admin shows an **Inactive** badge in the Status column so admins can find and re-activate them easily.
+**Active / Inactive (v1.92+).** The simplest visibility control: each template has an **Active** checkbox (defaults to checked on new templates). When unchecked, the template is hidden from the document picker on every record page _while remaining fully editable_ in Portwood Admin. Use this to keep time-locked, seasonal, or work-in-progress templates from cluttering the daily picker without deleting them — the template list view in Admin shows an **Inactive** badge in the Status column so admins can find and re-activate them easily.
 
 Restrict more narrowly which users see a template in their picker:
 
@@ -389,13 +389,13 @@ These can be combined. All three must match for the template to appear.
 
 ### 5.6 Template sharing
 
-**v3.29+: no sharing setup needed.** The **DocGen User** permission set now includes read-only _View All_ on templates, so every DocGen user can see all active templates in the picker without manual shares, public groups, or sharing rules. Who should see which template is controlled by the visibility features built for exactly that (§5.5): the **Active** flag, **Required Permission Sets**, **Specific Record Ids**, and **Record Filter**. Write access is unchanged — only admins (DocGen Admin) can create or edit templates, and field-level security is still enforced on the merged data.
+**v3.29+: no sharing setup needed.** The **Portwood User** permission set now includes read-only _View All_ on templates, so every Portwood user can see all active templates in the picker without manual shares, public groups, or sharing rules. Who should see which template is controlled by the visibility features built for exactly that (§5.5): the **Active** flag, **Required Permission Sets**, **Specific Record Ids**, and **Record Filter**. Write access is unchanged — only admins (Portwood Admin) can create or edit templates, and field-level security is still enforced on the merged data.
 
-On older versions (≤3.28), template records default to Private sharing, so non-owner users saw an empty picker until an admin either shared the templates (manual share, public group, or sharing rule) or set Setup → Sharing Settings → _DocGen Template_ → Default Internal Access = **Public Read Only**. That workaround is no longer necessary after upgrading, but it's harmless to leave in place.
+On older versions (≤3.28), template records default to Private sharing, so non-owner users saw an empty picker until an admin either shared the templates (manual share, public group, or sharing rule) or set Setup → Sharing Settings → _Portwood Template_ → Default Internal Access = **Public Read Only**. That workaround is no longer necessary after upgrading, but it's harmless to leave in place.
 
 > **If you were relying on record-level sharing to hide templates from specific users:** that no longer restricts the picker. Move those rules onto **Required Permission Sets** (§5.5) — it's deploy-safe, visible on the template itself, and enforced consistently across the runner, bulk runner, signature sender, and Flow. Tip: the permission set doesn't need to grant anything — an empty "shell" permission set works as a pure membership token (create one per audience, list it on the template, assign it to the group).
 
-**Keeping templates truly private (record-level sharing).** The sharing-based gate still exists — the packaged _View All_ is what bypasses it. If your org requires share-controlled template visibility, don't assign the packaged **DocGen User** permission set; clone its grants into your own permission set _without_ View All on DocGen Template. Those users get the pre-v3.29 behavior: sharing rules, manual shares, and role hierarchy govern their picker. Also note Required Permission Sets hides templates from _pickers_, not from the DocGen Templates object tab — a user with View All can still see that template records exist (names, descriptions, query configs). Use the custom-permset approach if template definitions themselves are sensitive.
+**Keeping templates truly private (record-level sharing).** The sharing-based gate still exists — the packaged _View All_ is what bypasses it. If your org requires share-controlled template visibility, don't assign the packaged **Portwood User** permission set; clone its grants into your own permission set _without_ View All on Portwood Template. Those users get the pre-v3.29 behavior: sharing rules, manual shares, and role hierarchy govern their picker. Also note Required Permission Sets hides templates from _pickers_, not from the Portwood Templates object tab — a user with View All can still see that template records exist (names, descriptions, query configs). Use the custom-permset approach if template definitions themselves are sensitive.
 
 ### 5.7 HTML templates (Google Docs, Notion, any HTML source)
 
@@ -409,10 +409,10 @@ HTML templates let you author in any tool that produces HTML — Google Docs is 
 2. Add merge tags as plain text: `{Name}`, `{Account.Name}`, `{Amount:currency}`, loops like `{#Contacts}...{/Contacts}`. Full syntax reference in [§7](#7-merge-tag-reference).
 3. **File → Download → Web Page (.html, zipped)**. Google Docs produces a `.zip` with your HTML plus an `images/` folder.
 4. In the Command Hub, create a template with **Type = HTML** (Output Format is forced to PDF). Upload the `.zip`.
-5. DocGen unzips the file in your browser, saves each image as a ContentVersion linked to the template, and rewrites the HTML's `<img src="images/...">` references to `/sfc/servlet.shepherd/version/download/<cvId>` URLs that `Blob.toPdf` resolves natively.
+5. Portwood unzips the file in your browser, saves each image as a ContentVersion linked to the template, and rewrites the HTML's `<img src="images/...">` references to `/sfc/servlet.shepherd/version/download/<cvId>` URLs that `Blob.toPdf` resolves natively.
 6. Click **Save as New Version** — the template is live.
 
-**Why unzip in the browser?** Salesforce's default File Upload Security blocks `.zip` uploads. DocGen's LWC reads zip bytes with a pure-JavaScript reader (native `DecompressionStream` + manual central-directory parse, zero dependencies), extracts just the HTML + images, and uploads those via Apex. The zip itself never becomes a ContentVersion, so the org setting never sees it. Bonus: unzipping client-side keeps Apex heap flat regardless of template size.
+**Why unzip in the browser?** Salesforce's default File Upload Security blocks `.zip` uploads. Portwood's LWC reads zip bytes with a pure-JavaScript reader (native `DecompressionStream` + manual central-directory parse, zero dependencies), extracts just the HTML + images, and uploads those via Apex. The zip itself never becomes a ContentVersion, so the org setting never sees it. Bonus: unzipping client-side keeps Apex heap flat regardless of template size.
 
 #### 5.7.2 Other authoring tools
 
@@ -421,7 +421,7 @@ HTML templates let you author in any tool that produces HTML — Google Docs is 
 - **Apple Pages** — File → Export To → HTML
 - **Hand-written HTML** — any text editor
 
-For single-file uploads (`.html` / `.htm`), DocGen scans for inline `<img src="data:image/...">` URIs — common in Notion / ChatGPT / rich-text paste output — and extracts each to a ContentVersion with the `src` rewritten. `Blob.toPdf` can't decode data URIs directly, so this conversion is what makes those images render.
+For single-file uploads (`.html` / `.htm`), Portwood scans for inline `<img src="data:image/...">` URIs — common in Notion / ChatGPT / rich-text paste output — and extracts each to a ContentVersion with the `src` rewritten. `Blob.toPdf` can't decode data URIs directly, so this conversion is what makes those images render.
 
 #### 5.7.3 CSS rules — what works, what doesn't, and an LLM prompt
 
@@ -547,7 +547,7 @@ font.
 Copy this verbatim into ChatGPT / Claude / Gemini. Replace the bracketed sections with what you want:
 
 ```
-Generate a single self-contained HTML file for Salesforce DocGen.
+Generate a single self-contained HTML file for Portwood.
 
 Audience: rendered to PDF by Flying Saucer (CSS 2.1 + small CSS 3 subset). Modern CSS layout features are silently ignored.
 
@@ -878,7 +878,7 @@ When an LLM (or a designer) hands you a template using modern CSS, here are the 
 
 Two ways to control the page size, margins, and orientation:
 
-1. **Template fields** — `Page_Size__c`, `Page_Orientation__c`, `Page_Margins__c`, `Custom_Margins__c` on the DocGen Template record. DocGen wraps the template's HTML with an engine `<style>` block declaring `@page` from these fields.
+1. **Template fields** — `Page_Size__c`, `Page_Orientation__c`, `Page_Margins__c`, `Custom_Margins__c` on the Portwood Template record. Portwood wraps the template's HTML with an engine `<style>` block declaring `@page` from these fields.
 2. **Source CSS** — your HTML's own `<style>` declares `@page { size: ... }`.
 
 Pick one. If both are set, you get **two `<style>` blocks each declaring `@page`**, the cascade is non-deterministic, and dimensions can come out wrong. Recommended: leave the template fields blank when your source HTML already specifies `@page`. If you author in Google Docs (which sometimes injects an `@page` block on export) and then set `Page_Size__c` to "Legal", the conflict will silently produce a Letter document because the source CSS wins.
@@ -902,7 +902,7 @@ Example footer HTML:
 <div style="text-align:center; font-size:9pt; color:#888;">Page {PageNumber} of {TotalPages}</div>
 ```
 
-**Flying Saucer limitation:** page counters only resolve inside `@page` rules, not on DOM elements. When a header/footer contains counter tokens, DocGen renders that margin as plain text (no inline images or rich formatting). A header _without_ counters stays rich HTML via CSS running elements. Practical workaround: logo in the header (no counters), page count in the footer (counters only). Both fields can be populated simultaneously.
+**Flying Saucer limitation:** page counters only resolve inside `@page` rules, not on DOM elements. When a header/footer contains counter tokens, Portwood renders that margin as plain text (no inline images or rich formatting). A header _without_ counters stays rich HTML via CSS running elements. Practical workaround: logo in the header (no counters), page count in the footer (counters only). Both fields can be populated simultaneously.
 
 #### 5.7.6 Images
 
@@ -933,7 +933,7 @@ Loop auto-expansion works the same as Word. Either pattern produces one repeated
         </tr>
         {/OpportunityLineItems}
 
-        <!-- Pattern B: loop inside the row (DocGen expands to the <tr>) -->
+        <!-- Pattern B: loop inside the row (Portwood expands to the <tr>) -->
         <tr>
             {#OpportunityLineItems}
             <td>{Product2.Name}</td>
@@ -960,33 +960,33 @@ HTML templates work with every generation path: single-record, bulk (individual 
 
 #### 5.7.10 Troubleshooting
 
-- **"Your company doesn't support the following file types: .zip"** — DocGen's LWC extracts the zip client-side and never uploads the zip itself, so this org-level File Upload Security error shouldn't appear in normal use. If you see it, hard-refresh the page (Cmd+Shift+R / Ctrl+Shift+R) to clear any cached LWC bundle.
+- **"Your company doesn't support the following file types: .zip"** — Portwood's LWC extracts the zip client-side and never uploads the zip itself, so this org-level File Upload Security error shouldn't appear in normal use. If you see it, hard-refresh the page (Cmd+Shift+R / Ctrl+Shift+R) to clear any cached LWC bundle.
 - **Images show as broken squares in the PDF** — `Blob.toPdf` can only fetch images via relative `/sfc/` URLs; it can't reach arbitrary HTTPS URLs (no session ID). Make sure the image source is in the zip, a data URI in the HTML, a `{%Image:N}` tag, or a `{%FieldName}` pointing at a real ContentVersion.
 - **Page numbers appearing without a configured header/footer** — your template's source HTML already has `@page { @bottom-center { content: counter(page) ... } }`. Google Docs' Web Page export sometimes includes this automatically. Either remove the `@page` block from the HTML body before upload, or accept it (many users actually want page numbers).
-- **Merge tag shows up literally in the PDF (e.g. the text "{Name}")** — the tag didn't resolve. Check the field name is correct and in your Query Config, and that the WYSIWYG editor didn't HTML-encode the braces (DocGen decodes `&#123;` and `&#125;` automatically, but non-standard editors could still trip this).
+- **Merge tag shows up literally in the PDF (e.g. the text "{Name}")** — the tag didn't resolve. Check the field name is correct and in your Query Config, and that the WYSIWYG editor didn't HTML-encode the braces (Portwood decodes `&#123;` and `&#125;` automatically, but non-standard editors could still trip this).
 
 ### 5.7.11 Generate the template with Agentforce (v3.46+)
 
-DocGen can write and revise HTML templates by prompting Salesforce AI **inside
+Portwood can write and revise HTML templates by prompting Salesforce AI **inside
 your own org**, instead of copying the Designer's prompt out to ChatGPT and
 pasting the HTML back. It sends exactly the same prompt as **Copy AI Prompt** —
 your fields, the merge-tag syntax, the PDF engine's layout rules — through
 `ConnectApi`, not an HTTP callout, so nothing leaves the Salesforce platform.
 
-**This is optional.** It arrives with the separate **Portwood DocGen Agentforce
+**This is optional.** It arrives with the separate **Portwood Agentforce
 Extension** package; without that installed, the Designer simply hides the
 Agentforce button and everything else works exactly as before.
 
 #### Setup — install the extension
 
-The quickest route is one package install. **Portwood DocGen Agentforce
+The quickest route is one package install. **Portwood Agentforce
 Extension** carries everything: the Apex provider that talks to Einstein, and a
 ready-made prompt template already set to a capable model. Nothing to write,
 nothing to configure.
 
 **Prerequisites**
 
-- Portwood DocGen **3.46 or later**
+- Portwood **3.46 or later**
 - **Einstein Generative AI / Prompt Builder** enabled in your org
 
 Salesforce enforces both at install, so you cannot end up half-configured. Not
@@ -1000,12 +1000,12 @@ System.debug('Einstein Apex types are visible');
 
 **Install it,** entering the installation key you were given. Then open any HTML
 template in the Designer — **Generate with Agentforce** appears next to Copy AI
-Prompt. No permission set beyond **DocGen Admin**, and no settings to change.
+Prompt. No permission set beyond **Portwood Admin**, and no settings to change.
 
 > Why a second package? The provider references `ConnectApi.EinsteinLLM`, and the
 > prompt template requires the Generative AI Prompt Templates feature. A base
 > package containing either is **refused at install** for any org without
-> Einstein. Keeping them in a separate, optional package is what lets DocGen
+> Einstein. Keeping them in a separate, optional package is what lets Portwood
 > itself stay installable everywhere.
 
 #### Setup — bring your own provider (alternative)
@@ -1022,14 +1022,14 @@ public with sharing class MyAiProvider implements portwoodglobal.DocGenAiProvide
         return 'My AI';
     }
     public String generateHtml(String prompt) {
-        // Return a complete HTML document. DocGen validates it against the PDF
+        // Return a complete HTML document. Portwood validates it against the PDF
         // engine's constraints before anything is saved, so no need to sanitize.
         return callMyModel(prompt);
     }
 }
 ```
 
-Then point DocGen at it in **Setup → Custom Settings → DocGen Settings**:
+Then point Portwood at it in **Setup → Custom Settings → Portwood Settings**:
 
 | Setting            | Leave blank to use                         |
 | ------------------ | ------------------------------------------ |
@@ -1039,7 +1039,7 @@ Then point DocGen at it in **Setup → Custom Settings → DocGen Settings**:
 The provider class is resolved in your own namespace first, then in
 `portwoodglobal` — so your class wins if both exist.
 
-**Do not make an HTTP callout from a provider.** DocGen's "no external services"
+**Do not make an HTTP callout from a provider.** Portwood's "no external services"
 guarantee depends on it, and Einstein is reached through `ConnectApi` precisely
 so that stays true.
 
@@ -1092,15 +1092,15 @@ anything is saved, and you are told what changed:
 Previous bodies are never destroyed — every save writes a new file version, so
 earlier ones stay in the template's file history.
 
-DocGen also refuses to save a response that is not a document. Models
+Portwood also refuses to save a response that is not a document. Models
 occasionally answer a perfectly good instruction with a refusal such as "I don't
-know."; rather than writing that over your template, DocGen stops and tells you
+know."; rather than writing that over your template, Portwood stops and tells you
 the template was **not** changed.
 
 #### Troubleshooting
 
 - **The button does not appear** — the Agentforce Extension is not installed, or
-  a custom provider named in DocGen Settings is missing or does not implement
+  a custom provider named in Portwood Settings is missing or does not implement
   `portwoodglobal.DocGenAiProvider`. Note that a `public` class is invisible
   across a package boundary: a provider in its own package must be `global`.
 - **"Failed to generate Einstein LLM generations response"** with no detail —
@@ -1113,7 +1113,7 @@ the template was **not** changed.
 
 ### 5.8 Word template authoring tips
 
-Word templates are the most common DocGen authoring path, and 95% of issues come from one of three quirks below. Worth a five-minute read before debugging a "but it looks fine in Word" rendering bug.
+Word templates are the most common Portwood authoring path, and 95% of issues come from one of three quirks below. Worth a five-minute read before debugging a "but it looks fine in Word" rendering bug.
 
 #### 5.8.1 Aligning columns across multiple tables — the "phantom width" trap
 
@@ -1190,7 +1190,7 @@ For tables to align across the document, the `<w:tblGrid>` blocks of those table
 
 ## 6. Query builder
 
-DocGen supports three query config formats. All three work — pick based on complexity.
+Portwood supports three query config formats. All three work — pick based on complexity.
 
 ### 6.1 V1 — Legacy flat string
 
@@ -1334,7 +1334,7 @@ global with sharing class MyAccountBriefProvider implements portwoodglobal.DocGe
         }
 
         // Return the Map<String, Object> the merge engine consumes.
-        // The shape mirrors what every other DocGen path produces.
+        // The shape mirrors what every other Portwood path produces.
         return new Map<String, Object>{
             // Simple fields → {Name}, {Industry}, {AnnualRevenue}
             'Name' => a.Name,
@@ -1374,7 +1374,7 @@ The interface lives in the managed package — reference it with the full namesp
 
 #### Step 2 — bind a template to the class
 
-In the DocGen app → New Template:
+In the Portwood app → New Template:
 
 1. **Step 1 — Data Source**: pick **Apex Class (Data Provider)** instead of Salesforce Record.
 2. **Data Provider Class**: search for your class name (e.g., `MyAccountBriefProvider`). The picker filters to classes implementing `portwoodglobal.DocGenDataProvider`. Select yours.
@@ -1386,7 +1386,7 @@ Behind the scenes the template's `Query_Config__c` becomes `{"v":4,"provider":"M
 
 #### Step 3 — generate
 
-Same as any template. The DocGen app's Generate button, the **Generate Document** Flow action, the Apex `DocGenService.generateDocument()` API — all of them detect the v4 binding automatically and call your class.
+Same as any template. The Portwood app's Generate button, the **Generate Document** Flow action, the Apex `DocGenService.generateDocument()` API — all of them detect the v4 binding automatically and call your class.
 
 ```apex
 // From Apex — exactly the same call shape as a SOQL-backed template
@@ -1412,7 +1412,7 @@ Behind the scenes the template stores `Base_Object_API__c = 'FlowJsonData'` (a s
 
 ## 7. Merge tag reference
 
-Every tag DocGen recognizes. Tags are case-insensitive for functions (`{SUM:...}` == `{sum:...}` in processXml; the giant-query assembler's aggregate regex is case-sensitive — use uppercase to be safe).
+Every tag Portwood recognizes. Tags are case-insensitive for functions (`{SUM:...}` == `{sum:...}` in processXml; the giant-query assembler's aggregate regex is case-sensitive — use uppercase to be safe).
 
 ### 7.1 Field merge
 
@@ -1472,7 +1472,7 @@ Use `:currency:auto` when the symbol should follow the **record's own currency**
 How it works and what to know:
 
 - **The source field must hold an ISO 4217 code** (`GBP`, `USD`, `EUR`, …) — its value is matched against the supported-currency list above.
-- **List the source field in your template's Query Config.** DocGen builds its query from the Query Config (it does not scan the template body), so a field referenced only inside `:currency:auto=...` must be added to the Query Config like any other merge field. The standard `CurrencyIsoCode` is added automatically in multi-currency orgs, so bare `:currency:auto` works without listing it.
+- **List the source field in your template's Query Config.** Portwood builds its query from the Query Config (it does not scan the template body), so a field referenced only inside `:currency:auto=...` must be added to the Query Config like any other merge field. The standard `CurrencyIsoCode` is added automatically in multi-currency orgs, so bare `:currency:auto` works without listing it.
 - **Safe fallback:** if the source field is missing, blank, or not a recognized ISO code, the tag falls back to the default `$` format — it never errors or prints a raw code.
 - **Bare `:currency` is unchanged** — it always emits `$`. Auto-detection is strictly opt-in via `:auto`.
 - **Aggregates** support it too: `{SUM:Lines.Amount:currency:auto=CustomerCurrency__c}` uses the **parent** record's currency for the symbol (values are summed as stored — no exchange-rate conversion).
@@ -1522,9 +1522,9 @@ Repeat a block for each child record.
 {/Contacts}
 ```
 
-**Container auto-expansion.** If the loop tags sit inside a table row or a bulleted/numbered list paragraph, DocGen detects it and repeats the **entire row/paragraph** instead of just the inner content. This is how invoice line-item tables work — drop `{#OpportunityLineItems}` and `{/OpportunityLineItems}` anywhere inside the row and every line item gets its own row automatically.
+**Container auto-expansion.** If the loop tags sit inside a table row or a bulleted/numbered list paragraph, Portwood detects it and repeats the **entire row/paragraph** instead of just the inner content. This is how invoice line-item tables work — drop `{#OpportunityLineItems}` and `{/OpportunityLineItems}` anywhere inside the row and every line item gets its own row automatically.
 
-**Repeating the column header (`{RepeatHeader}`).** Add the text `{RepeatHeader}` anywhere inside the header row (the row with your column labels) to mark it as a repeating header. DocGen strips the marker and groups that row as the table's `<thead>`, which reprints at the top of the table and at each section break in very large (giant-query) documents. Place it once, in the header row only:
+**Repeating the column header (`{RepeatHeader}`).** Add the text `{RepeatHeader}` anywhere inside the header row (the row with your column labels) to mark it as a repeating header. Portwood strips the marker and groups that row as the table's `<thead>`, which reprints at the top of the table and at each section break in very large (giant-query) documents. Place it once, in the header row only:
 
 ```
 | {RepeatHeader}Short Code | Cost to send | Cost to receive |
@@ -1533,7 +1533,7 @@ Repeat a block for each child record.
 
 This works in **Word (`.docx`) templates**; **HTML templates** use a native `<thead>…</thead>`. _(For large datasets that use the giant-query path, re-save the template once after adding `{RepeatHeader}` so the change is captured.)_
 
-> **Note on per-page repetition.** The PDF engine (Flying Saucer) does not reliably reprint a header on _every_ page of a large bordered table — so on multi-page tables the header repeats per section, not strictly per page. (DocGen previously attempted true per-page repeat via the engine's `-fs-table-paginate`, but that caused severe mis-pagination on real templates with running headers/footers and was removed.)
+> **Note on per-page repetition.** The PDF engine (Flying Saucer) does not reliably reprint a header on _every_ page of a large bordered table — so on multi-page tables the header repeats per section, not strictly per page. (Portwood previously attempted true per-page repeat via the engine's `-fs-table-paginate`, but that caused severe mis-pagination on real templates with running headers/footers and was removed.)
 
 Nested loops are supported:
 
@@ -1681,7 +1681,7 @@ Repository ships a complete worked example exercising every IF feature. Three fi
 
 - `dev-only-deploy/main/default/classes/ProjectStatusDemoProvider.cls` — a V4 Apex Data Provider that returns synthetic project data (no SOQL — works without test data setup).
 - `scripts/template-project-status.html` — the full HTML template body. Demonstrates nested IF, AND/OR/NOT, parens, comparison, bare-boolean IF, empty-rel `totalSize=0`, inverse loops with `{:else}`.
-- `scripts/demo-project-status-template.apex` — anonymous Apex script that creates the DocGen template, links the provider, and renders one PDF attached to a record.
+- `scripts/demo-project-status-template.apex` — anonymous Apex script that creates the Portwood template, links the provider, and renders one PDF attached to a record.
 
 To run it:
 
@@ -1733,7 +1733,7 @@ All five functions support any format suffix (`currency`, `number`, `percent`, c
 
 ### 7.6 Charts
 
-Render **nine chart styles** inline in your generated documents — bar, column, pie, donut, pivot, stacked, clustered, line, and area. Charts produce real PNG images via a pure-Apex rasterizer (no `<canvas>`, no external services, no JavaScript libraries), so they render reliably in **every** output format DocGen ships:
+Render **nine chart styles** inline in your generated documents — bar, column, pie, donut, pivot, stacked, clustered, line, and area. Charts produce real PNG images via a pure-Apex rasterizer (no `<canvas>`, no external services, no JavaScript libraries), so they render reliably in **every** output format Portwood ships:
 
 | Output             | How charts get there                                                  |
 | ------------------ | --------------------------------------------------------------------- |
@@ -1744,7 +1744,7 @@ Render **nine chart styles** inline in your generated documents — bar, column,
 | PowerPoint `.pptx` | `<p:pic>` referencing a PNG in `ppt/media/`                           |
 | Excel `.xlsx`      | (Coming in a follow-up release)                                       |
 
-**Zero external callouts.** The chart engine is 100% native Apex — same constraint that makes DocGen suitable for AppExchange security review and managed-package customers. Charts work in Flow actions, batch jobs, Queueables, and Apex tests as well as the runner LWC.
+**Zero external callouts.** The chart engine is 100% native Apex — same constraint that makes Portwood suitable for AppExchange security review and managed-package customers. Charts work in Flow actions, batch jobs, Queueables, and Apex tests as well as the runner LWC.
 
 **Two authoring paths:**
 
@@ -1851,8 +1851,8 @@ The chart engine emits PNG (universal) with one opt-in alternative (inline SVG f
 Paste the block below into Claude / GPT / Gemini with one substitution: `${MY_DATA_DESCRIPTION}` should describe your child relationship name, the dimension field you want bucketed, and (optionally) the cross-tab field plus its expected values. The LLM will produce a complete HTML template you can upload.
 
 ```text
-You are writing a Salesforce DocGen HTML template that renders 8 chart styles using DocGen's
-{Chart:...} tag syntax. DocGen is a native Salesforce 2GP package; the template is a single
+You are writing a Portwood HTML template that renders 8 chart styles using Portwood's
+{Chart:...} tag syntax. Portwood is a native Salesforce 2GP package; the template is a single
 HTML file uploaded as a ContentVersion against a DocGen_Template__c with Type__c='HTML'.
 
 Hard constraints (Flying Saucer PDF engine, CSS 2.1 + small CSS 3 subset):
@@ -1887,7 +1887,7 @@ Required output:
    - A one-line description of when to use this style
    - The {Chart:...} tag itself, wrapped in <div class="chart">
    - <h2 class="page-break"> on sections 2-8 so each chart gets its own page
-4. A footer line acknowledging "DocGen Chart Engine — pure-Apex PNG rasterization".
+4. A footer line acknowledging "Portwood Chart Engine — pure-Apex PNG rasterization".
 
 Data shape — ${MY_DATA_DESCRIPTION}
 (Example: "Survey__c parent. Child relationship Survey_Responses__r. Bucket by Selected_Answer__c.
@@ -1896,7 +1896,7 @@ Cross-tab dimension Location__c with values 8000 Marina, 3260 Bayshore.")
 Use the bucket field for bar/column/pie/donut single-dimension styles. Use the cross-tab field
 in groupBy for stacked/clustered/line/area/pivot. ColSort must match the cross-tab values.
 
-Return the complete HTML file, ready to upload as a DocGen HTML template. No commentary.
+Return the complete HTML file, ready to upload as a Portwood HTML template. No commentary.
 ```
 
 #### 7.6.4 Reference templates
@@ -1952,7 +1952,7 @@ The chart resolver **validates every dynamic identifier** (relationship, child o
 
 #### 7.6.7 Governor budget
 
-DocGen caps chart aggregates at **50 SOQL queries per transaction** (static budget inside `DocGenChartBucketResolver`). When the budget is exhausted, remaining charts render a single sentinel bucket labeled `"Chart limit reached"` — they never silently render as empty. Re-author the template to consolidate charts (or use a pivot instead of N single-dimension charts) if you hit the ceiling.
+Portwood caps chart aggregates at **50 SOQL queries per transaction** (static budget inside `DocGenChartBucketResolver`). When the budget is exhausted, remaining charts render a single sentinel bucket labeled `"Chart limit reached"` — they never silently render as empty. Re-author the template to consolidate charts (or use a pivot instead of N single-dimension charts) if you hit the ceiling.
 
 Per-chart CPU budget is tracked too — the rasterizer auto-tunes `scale=` defaults so an 8-chart document fits comfortably in the 10-second synchronous Apex limit.
 
@@ -2018,7 +2018,7 @@ Inside `{#cols}` you get the standard bucket fields (`{key}` / `{key_label}` / `
 
 Use these when you want each row's segments to sum to 100% (stacked-bar composition) rather than each cell's value as a percent of the overall total.
 
-**Layout gotcha for pivot bodies:** DocGen's HTML container auto-expansion reacts to nested loops by duplicating the nearest open `<tr>`. If you put `{#cols}` directly inside `<tr>`, every column gets a whole row. **Use `<div>` + `display:table-row` + `display:table-cell` for pivot bodies, not `<tr>`/`<td>`.** See `docs/CommuteSurveyExample.html` for the canonical pattern.
+**Layout gotcha for pivot bodies:** Portwood's HTML container auto-expansion reacts to nested loops by duplicating the nearest open `<tr>`. If you put `{#cols}` directly inside `<tr>`, every column gets a whole row. **Use `<div>` + `display:table-row` + `display:table-cell` for pivot bodies, not `<tr>`/`<td>`.** See `docs/CommuteSurveyExample.html` for the canonical pattern.
 
 #### 7.6.9 CSS 2.1 reminders (PDF output)
 
@@ -2108,7 +2108,7 @@ A size token must contain an `x` (the width × height separator); a bare number 
 - **Cross-user by design:** an asset one administrator creates renders correctly in documents other users generate.
 - **Deactivate** an asset (rather than deleting it) to retire it without losing history. A tag that points at a deactivated or unknown key renders a small `[missing asset: <key>]` placeholder so you notice it in review — it never breaks document generation.
 
-**What the tag produces.** The tag resolves to the asset's current image and then flows through DocGen's normal image pipeline, so it behaves like an inline image native to each format. You place the tag **where you want the image to appear** — you do not wrap it in your own `<img>` or pass it to a `src`; the tag _is_ the image.
+**What the tag produces.** The tag resolves to the asset's current image and then flows through Portwood's normal image pipeline, so it behaves like an inline image native to each format. You place the tag **where you want the image to appear** — you do not wrap it in your own `<img>` or pass it to a `src`; the tag _is_ the image.
 
 | Output                          | What `{%asset:key}` becomes                                                                                                                                                                                                                                                                                                                                                                                             |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2119,7 +2119,7 @@ A size token must contain an `x` (the width × height separator); a bare number 
 | **Excel (`.xlsx`)**             | Image assets are **not** rendered in Excel output in v1 — the tag is removed cleanly (no error).                                                                                                                                                                                                                                                                                                                        |
 | **Large datasets (>2000 rows)** | Tags in headers, footers, and grand-summary areas resolve the same way (the high-volume rendering path emits the same `<img>`).                                                                                                                                                                                                                                                                                         |
 
-**Permissions:** administrators (DocGen Admin) create and manage assets; standard DocGen users get read-only access, which is all that is needed to generate documents that reference them.
+**Permissions:** administrators (Portwood Admin) create and manage assets; standard Portwood users get read-only access, which is all that is needed to generate documents that reference them.
 
 > **v1 scope:** shared assets are **images** only. Text/HTML snippet assets and pinning a template to a specific asset version are planned follow-ups.
 
@@ -2154,7 +2154,7 @@ So `:3inx` → `:288x`, `:x25mm` → `:x95`.
 **Hand-authored `<img>` tags (advanced).** If you write your own `<img src="/sfc/servlet.shepherd/version/download/068…">` instead of a `{%}` tag, you control the CSS directly, but two caveats apply:
 
 1. Only `width`/`height` take effect — `max-width` does not (same engine limit as above).
-2. The renderer computes one rendered size **per image URL** and reuses it. If you reference the **same** file at two different sizes, both come out the same. Add a throwaway query parameter to make each distinct (`…/068…?n=1`, `…/068…?n=2`). DocGen's `{%}` tags do this automatically, so prefer the tag unless you specifically need raw markup. (A grid of _different_ logos — different files — isn't affected.)
+2. The renderer computes one rendered size **per image URL** and reuses it. If you reference the **same** file at two different sizes, both come out the same. Add a throwaway query parameter to make each distinct (`…/068…?n=1`, `…/068…?n=2`). Portwood's `{%}` tags do this automatically, so prefer the tag unless you specifically need raw markup. (A grid of _different_ logos — different files — isn't affected.)
 
 ### 7.8 Barcodes & QR codes
 
@@ -2227,9 +2227,9 @@ Notes:
 
 ### 7.10 Rich text fields
 
-When a field value contains HTML (`<p>`, `<div>`, `<br>`, `<b>`, `<i>`, `<u>`, `<strong>`, `<em>`, `<span>`, `<img>`, `<a>`), DocGen preserves the formatting in the output — paragraphs, line breaks, bold/italic/underline, hyperlinks, and embedded images all carry through. Works in **Word templates** (DOCX or PDF output) and **HTML templates** (PDF output). PowerPoint strips HTML to plain text.
+When a field value contains HTML (`<p>`, `<div>`, `<br>`, `<b>`, `<i>`, `<u>`, `<strong>`, `<em>`, `<span>`, `<img>`, `<a>`), Portwood preserves the formatting in the output — paragraphs, line breaks, bold/italic/underline, hyperlinks, and embedded images all carry through. Works in **Word templates** (DOCX or PDF output) and **HTML templates** (PDF output). PowerPoint strips HTML to plain text.
 
-**Inline images in rich text** (the kind you paste directly into a Rich Text Area field) render across all three target formats — Word→PDF, Word→DOCX, and HTML→PDF — when you generate from the runner on a record page. Behind the scenes DocGen handles three flavors of image source automatically:
+**Inline images in rich text** (the kind you paste directly into a Rich Text Area field) render across all three target formats — Word→PDF, Word→DOCX, and HTML→PDF — when you generate from the runner on a record page. Behind the scenes Portwood handles three flavors of image source automatically:
 
 - **Lightning inline images** (`/servlet/rtaImage?...&refid=…`) — refids that resolve to a `ContentVersion` (068/069 prefix) are rewritten to relative `/sfc/servlet.shepherd/…` URLs. `0EM` Lightning ContentReference refids aren't queryable, so they keep their absolute `*.file.force.com` URL — works in authenticated server-side rendering, but not in environments that lack reach to the file subdomain.
 - **Inline data URIs** (`<img src="data:image/...">`) — DOCX and Word→PDF embed them; HTML→PDF drops them (Flying Saucer's `Blob.toPdf` can't decode data URIs).
@@ -2240,7 +2240,7 @@ A few caveats:
 - The **Generate Sample** button in the template builder doesn't render inline rich-text images — they show as broken placeholders. Test the real output via the runner instead.
 - For pixel-perfect images, use the `{%Image:N}` tag with an attached File rather than inline rich text — DOCX image quality is slightly lossy when sourced from rich-text inline images.
 - Inline-image rotation isn't preserved. Rotate the source before pasting.
-- **Pre-size images before pasting.** Lightning's rich text editor doesn't write `width=`/`height=`/`style=` to the HTML it stores — even when you drag-resize the image in the editor, the displayed size never makes it into the saved markup. (In Chrome, drag-resize is disabled outright; Firefox lets you drag but the resize still doesn't persist.) DocGen falls back to a 4-inch default for DOCX output and to natural pixel dimensions for PDF output, so a phone photo pasted at 4000×3000 will render correctly in DOCX but bleed off the page in PDF. The reliable fix is to **resize the image to your intended dimensions in an editor BEFORE pasting** — once it's in the rich text field, the size is locked to whatever the source pixels were. For pixel-precise sizing across both formats, prefer `{%Image:N}` with `:WxH` (§7.7).
+- **Pre-size images before pasting.** Lightning's rich text editor doesn't write `width=`/`height=`/`style=` to the HTML it stores — even when you drag-resize the image in the editor, the displayed size never makes it into the saved markup. (In Chrome, drag-resize is disabled outright; Firefox lets you drag but the resize still doesn't persist.) Portwood falls back to a 4-inch default for DOCX output and to natural pixel dimensions for PDF output, so a phone photo pasted at 4000×3000 will render correctly in DOCX but bleed off the page in PDF. The reliable fix is to **resize the image to your intended dimensions in an editor BEFORE pasting** — once it's in the rich text field, the size is locked to whatever the source pixels were. For pixel-precise sizing across both formats, prefer `{%Image:N}` with `:WxH` (§7.7).
 
 Plain multiline (long text, textarea) fields work too — newlines in the field value render as proper line breaks in the output across all three targets. No manual `<br>` needed.
 
@@ -2317,7 +2317,7 @@ Works in sync generation, bulk runs, giant-query PDFs (headers/footers/title blo
 
 Salesforce's PDF engine (Flying Saucer) only ships with four fonts (Helvetica, Times, Courier, Arial Unicode MS) and **cannot load Wingdings, Symbol, or any custom font**. Most "decorative" Word symbols (Wingdings checkboxes, custom dingbats) silently render as a blank box.
 
-DocGen handles this for you in two ways:
+Portwood handles this for you in two ways:
 
 1. **Word checkbox glyphs** (Insert → Symbol → Wingdings 0xFE / 0xA8, or Word content-control checkboxes) are auto-translated to their Unicode equivalents at PDF render time.
 2. **Unicode symbols** typed directly in Word, Google Docs, Notion, or any HTML template are auto-wrapped in an Arial Unicode MS span so they render instead of dropping to tofu.
@@ -2399,7 +2399,7 @@ Or in tabular form for surveys / inspection forms (the inverse section `{^Field}
 
 #### What does NOT work
 
-- **Wingdings / Webdings glyphs** other than checkboxes — Flying Saucer can't render them at all. DocGen translates the common checkbox/check codepoints (Wingdings F0A8, F0FE, F0FD, F0FB, F0FC, F0A2; Wingdings 2 F050–F053, F0A3, F0A4); anything else falls back to a neutral □ placeholder.
+- **Wingdings / Webdings glyphs** other than checkboxes — Flying Saucer can't render them at all. Portwood translates the common checkbox/check codepoints (Wingdings F0A8, F0FE, F0FD, F0FB, F0FC, F0A2; Wingdings 2 F050–F053, F0A3, F0A4); anything else falls back to a neutral □ placeholder.
 - **Emoji** (😀 🎉 etc.) — out of Arial Unicode MS coverage, render as tofu in PDF. Use the Unicode symbols above instead.
 - **Custom decorative fonts** (script, brand, etc.) — generate as DOCX and open in Word. See [§14.2](#142-pdf-font-limitations).
 
@@ -2407,7 +2407,7 @@ Or in tabular form for surveys / inspection forms (the inverse section `{^Field}
 
 Render the host record's Salesforce **Classic Approvals** process history (submission, every approval/rejection step) directly in a generated document. Common use cases: Purchase Orders showing every approver up the chain in the final PDF, NDAs stamped with each signatory's role + timestamp, change-management forms with the approval audit trail rendered alongside the form data.
 
-**Opt-in via Query_Config\_\_c.** Add the standalone word `Approvals` somewhere in the template's Query_Config**c (case-insensitive, word-boundary — `MyApprovalsList**c`doesn't activate it). When DocGen sees the token, it queries`ProcessInstance`+`ProcessInstanceStep`for the host record and exposes the flattened step list as a child collection at the`Approvals` key.
+**Opt-in via Query_Config\_\_c.** Add the standalone word `Approvals` somewhere in the template's Query_Config**c (case-insensitive, word-boundary — `MyApprovalsList**c`doesn't activate it). When Portwood sees the token, it queries`ProcessInstance`+`ProcessInstanceStep`for the host record and exposes the flattened step list as a child collection at the`Approvals` key.
 
 Example Query_Config\_\_c entry:
 
@@ -2457,7 +2457,7 @@ Comments: {Comments}
 ### 8.1 From a record page (single doc)
 
 1. Open any record (Account, Opportunity, Case, etc.).
-2. The **DocGen Runner** LWC appears (placed via Lightning App Builder or via the Command Hub's "Generate from Record" flow).
+2. The **Portwood Runner** LWC appears (placed via Lightning App Builder or via the Command Hub's "Generate from Record" flow).
 3. Pick a template.
 4. Choose **Save to Record** (attaches as ContentDocumentLink), **Download** (sent to your browser), or **Save & Download** (both, from a single generation).
 5. Optional: override output format if the template isn't locked (§5.4).
@@ -2499,19 +2499,19 @@ A packet is multiple templates generated in one action and merged (or sent as a 
 
 ### 8.6 One-click quick action button (v3.28+)
 
-For the "this object always generates this one template" case, add the **DocGen Button** quick action to a record page — one click generates and downloads the document, with no Runner and no Flow wrapper. Community-contributed.
+For the "this object always generates this one template" case, add the **Portwood Button** quick action to a record page — one click generates and downloads the document, with no Runner and no Flow wrapper. Community-contributed.
 
-**Configure a button — from the UI (v3.42+, recommended).** Open the DocGen app → **Command Hub → Buttons** tab. Click **New Button**, then pick the **object**, the **template**, and (optionally) which **record types** the button appears for, a document title, output-format override, save-to-record, sort order, and active flag. Saving writes the configuration for you (behind the scenes it deploys a **DocGen Button** custom metadata record — this is asynchronous, so a new button appears in the list a few seconds later). No Setup navigation, no hand-typed API names. The list view shows every button with its object, sort order, record types, and status; edit or deactivate from there.
+**Configure a button — from the UI (v3.42+, recommended).** Open the Portwood app → **Command Hub → Buttons** tab. Click **New Button**, then pick the **object**, the **template**, and (optionally) which **record types** the button appears for, a document title, output-format override, save-to-record, sort order, and active flag. Saving writes the configuration for you (behind the scenes it deploys a **Portwood Button** custom metadata record — this is asynchronous, so a new button appears in the list a few seconds later). No Setup navigation, no hand-typed API names. The list view shows every button with its object, sort order, record types, and status; edit or deactivate from there.
 
-> **Who can use the Buttons tab (v3.43+).** Because creating a button deploys custom metadata via the Metadata API, this is a deliberately elevated capability, kept **separate from DocGen Admin**. The tab appears only for a user who has **both** (1) the **`DocGen Button Manager`** permission set — a standalone grant you assign to the specific admins who should manage buttons — **and** (2) the platform **Customize Application** (or **Modify Metadata Through Metadata API Functions**) permission. DocGen intentionally does **not** grant that metadata permission; it stays with your Salesforce administrators. A user missing either simply won't see the tab. (The classic Setup path below is unaffected — it's governed by normal Custom Metadata Types access.)
+> **Who can use the Buttons tab (v3.43+).** Because creating a button deploys custom metadata via the Metadata API, this is a deliberately elevated capability, kept **separate from Portwood Admin**. The tab appears only for a user who has **both** (1) the **`Portwood Button Manager`** permission set — a standalone grant you assign to the specific admins who should manage buttons — **and** (2) the platform **Customize Application** (or **Modify Metadata Through Metadata API Functions**) permission. Portwood intentionally does **not** grant that metadata permission; it stays with your Salesforce administrators. A user missing either simply won't see the tab. (The classic Setup path below is unaffected — it's governed by normal Custom Metadata Types access.)
 
-**Configure a button — via Setup (classic).** Setup → Custom Metadata Types → **DocGen Button** → Manage Records → New. Set **Object API Name** (e.g. `Opportunity`) and **Template API Name** (the template's API Name field — environment-stable, deploys cleanly) or **Template Id** (org-specific; takes precedence when both are set). Optionally **Save To Record**, **Output Format Override**, **Document Title**, **Sort Order**, and **Record Type Developer Names** (see below). Only Active records are offered. (Put the fields on the CMDT layout first — non-required fields don't auto-place.)
+**Configure a button — via Setup (classic).** Setup → Custom Metadata Types → **Portwood Button** → Manage Records → New. Set **Object API Name** (e.g. `Opportunity`) and **Template API Name** (the template's API Name field — environment-stable, deploys cleanly) or **Template Id** (org-specific; takes precedence when both are set). Optionally **Save To Record**, **Output Format Override**, **Document Title**, **Sort Order**, and **Record Type Developer Names** (see below). Only Active records are offered. (Put the fields on the CMDT layout first — non-required fields don't auto-place.)
 
 **Show a button only for certain record types (v3.42+).** The **Record Type Developer Names** field limits a button to specific record types of the object — a comma-separated list of RecordType **Developer Names** (e.g. `Standard_Invoice, Credit_Note`), matched against the record's record type. Leave it blank to show the button for **every** record type. This is enforced both when the button list is built and when it generates, so it can't be bypassed. (In the Command Hub builder this is the record-type checklist; it only appears for objects that actually have record types.)
 
 **Then, two more steps:**
 
-1. **Grant access** — the standard **DocGen User** / **DocGen Admin** permission sets already include the button (v3.28+). The standalone **DocGen Quick Action** permission set exists for granting the button on its own.
+1. **Grant access** — the standard **Portwood User** / **Portwood Admin** permission sets already include the button (v3.28+). The standalone **Portwood Quick Action** permission set exists for granting the button on its own.
 2. **Place the action on the record page** — Object Manager → your object → Buttons, Links, and Actions → New Action → Lightning Web Component → `docGenButton`, then add that action to the object's Lightning record page (or Page Layout actions). Creating the button configuration does **not** place it on the page automatically — this step surfaces it.
 
 When an object has one active configuration (matching the record's type) the click generates immediately; with several, a small picker appears. **Save To Record** additionally attaches the file to the record's Files.
@@ -2563,7 +2563,7 @@ Mass-generate documents for many records in one batch.
 
 Sorting applies to Individual Files too — it decides the order records are processed and the order they appear in Job History.
 
-**In Flows**, the `DocGen: Generate Bulk Documents` action takes the same thing as a **Sort Order** text input, written as a SOQL `ORDER BY` clause without the keywords: `Account.Name ASC`, `CloseDate DESC`, or up to three comma-separated fields (`Account.Name ASC, Amount DESC`). Field API names only; `ASC`/`DESC` and `NULLS FIRST`/`NULLS LAST` are supported. An unknown or unsortable field fails the action with a message on **Error Message** rather than faulting the interview.
+**In Flows**, the `Portwood: Generate Bulk Documents` action takes the same thing as a **Sort Order** text input, written as a SOQL `ORDER BY` clause without the keywords: `Account.Name ASC`, `CloseDate DESC`, or up to three comma-separated fields (`Account.Name ASC, Amount DESC`). Field API names only; `ASC`/`DESC` and `NULLS FIRST`/`NULLS LAST` are supported. An unknown or unsortable field fails the action with a message on **Error Message** rather than faulting the interview.
 
 > **If your Flow passes a Record IDs collection:** SOQL does not preserve the order of that collection, so sorting the collection in the Flow has no effect on the document. Use **Sort Order**.
 
@@ -2655,7 +2655,7 @@ Typed-name electronic signatures with PIN verification, audit trail, packets, an
 ### 10.1 Sending a signature request
 
 1. Open any record.
-2. The **DocGen Signature Sender** LWC appears on the page layout (if placed).
+2. The **Portwood Signature Sender** LWC appears on the page layout (if placed).
 3. Pick one or more templates (packets).
 4. Add signers:
     - **Select from Contacts** (picker shows any Contact on the record).
@@ -2666,11 +2666,11 @@ Typed-name electronic signatures with PIN verification, audit trail, packets, an
 6. Pick signing order: **Parallel** (all get emails simultaneously), **Sequential** (each signer emailed only after the previous completes), or **Single** (an explicit one-signer document — behaves like Parallel for delivery).
 7. Click **Send**. Each signer receives a branded invitation email.
 
-> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood DocGen" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern. If your layout is tight and you'd rather skip the card entirely, append `:inline` to the tag — see [§10.7.2](#1072-stamp-card-vs-inline--how-a-signature-renders).
+> **Placement authoring rule.** Put each `{@Signature_…}` / initials / date tag in its **own table cell or on its own line** — never inline in the middle of a sentence. Each completed field renders as a polished signature stamp card (signature + a "Signed by … · Portwood" caption), which needs a little whitespace around it; a tag dropped mid-paragraph falls back to a plain inline mark so it never covers your text, but a dedicated cell/line looks best. The signature block at the bottom of a contract (a two-column table with "Buyer Signature" / "Seller Signature" labels) is the canonical pattern. If your layout is tight and you'd rather skip the card entirely, append `:inline` to the tag — see [§10.7.2](#1072-stamp-card-vs-inline--how-a-signature-renders).
 
-> **Triggering from Flow.** The **DocGen: Create Signature Request** invocable action gives you the exact same guided signing experience as the Send-for-Signature UI — pass a Template Id, Related Record Id, and a collection of signers. As long as the template has `{@Signature_…}` tags, signers walk the guided field-to-field flow and the signed PDF is stamped and named from your template's **Document Title Format**.
+> **Triggering from Flow.** The **Portwood: Create Signature Request** invocable action gives you the exact same guided signing experience as the Send-for-Signature UI — pass a Template Id, Related Record Id, and a collection of signers. As long as the template has `{@Signature_…}` tags, signers walk the guided field-to-field flow and the signed PDF is stamped and named from your template's **Document Title Format**.
 
-> **Email setup (admin).** Invitation and completion emails send through the Org-Wide Email Address you configure in **DocGen → Signatures settings**. That OWA must have **Allow All Profiles** enabled (guest signers trigger the completion email) and its sending **domain must be DKIM-authenticated** (Setup → Email → DKIM Keys, then publish the CNAME records in your DNS) — Salesforce blocks unauthenticated custom-domain sends. Without these, signing still works but emails won't deliver (the reason is logged on the request's **Email Status** field).
+> **Email setup (admin).** Invitation and completion emails send through the Org-Wide Email Address you configure in **Portwood → Signatures settings**. That OWA must have **Allow All Profiles** enabled (guest signers trigger the completion email) and its sending **domain must be DKIM-authenticated** (Setup → Email → DKIM Keys, then publish the CNAME records in your DNS) — Salesforce blocks unauthenticated custom-domain sends. Without these, signing still works but emails won't deliver (the reason is logged on the request's **Email Status** field).
 
 ### 10.2 Signature tag syntax
 
@@ -2688,15 +2688,15 @@ Useful for contract bundles (MSA + SOW + NDA), onboarding packets, etc.
 - **Sequential**: signers are emailed in order (by `Sort_Order__c`). Next signer is automatically emailed when the previous signs. Good for hierarchical approvals (employee → manager → VP → CFO).
 - **Single**: an explicit one-signer document. Behaves like Parallel for delivery, but says clearly that only one person signs.
 
-> **Sequential + "Send Branded Emails = False"** _(clarified 2026-07-30)_. That Flow input suppresses only the **initial** invitations. On a Sequential request, DocGen still emails signers 2…N automatically as each one completes — that's how the chain advances. If your Flow also sends its own invitations, signers 2…N get two emails. Either let DocGen send everything, or use **Parallel** with `Send Branded Emails = False` and send every invitation yourself.
+> **Sequential + "Send Branded Emails = False"** _(clarified 2026-07-30)_. That Flow input suppresses only the **initial** invitations. On a Sequential request, Portwood still emails signers 2…N automatically as each one completes — that's how the chain advances. If your Flow also sends its own invitations, signers 2…N get two emails. Either let Portwood send everything, or use **Parallel** with `Send Branded Emails = False` and send every invitation yourself.
 
-> **Upgrading from an older version? Add the `Single` value to the picklist.** The **Single** option was added to the **Signing Order** picklist (`Signing_Order__c` on **DocGen Signature Request**) after the package's first release. Salesforce does **not** push new values into a managed package's **restricted** picklists on upgrade — only **fresh installs** receive them automatically. So if your Flow (or process) sets Signing Order to `Single` and you upgraded from an earlier version, the insert fails with:
+> **Upgrading from an older version? Add the `Single` value to the picklist.** The **Single** option was added to the **Signing Order** picklist (`Signing_Order__c` on **Portwood Signature Request**) after the package's first release. Salesforce does **not** push new values into a managed package's **restricted** picklists on upgrade — only **fresh installs** receive them automatically. So if your Flow (or process) sets Signing Order to `Single` and you upgraded from an earlier version, the insert fails with:
 >
 > ```
 > INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST, Signing Order: bad value for restricted picklist field: Single
 > ```
 >
-> **One-time fix (admin):** Setup → Object Manager → **DocGen Signature Request** → Fields & Relationships → **Signing Order** → under Values, **New** → add `Single` → Save. The error clears immediately; no package change is needed. (`Parallel` and `Sequential` shipped with the original release, so they're already present.)
+> **One-time fix (admin):** Setup → Object Manager → **Portwood Signature Request** → Fields & Relationships → **Signing Order** → under Values, **New** → add `Single` → Save. The error clears immediately; no package change is needed. (`Parallel` and `Sequential` shipped with the original release, so they're already present.)
 
 ### 10.5 PIN verification
 
@@ -2712,9 +2712,9 @@ PIN hashes are stored (not the PIN itself). Timestamps on `PIN_Verified_At__c`.
 
 Email verification can be turned **off** (or forced on) at three levels — the most specific wins:
 
-1. **Per-send** — in the Signature runner (single-template), the **Signer Verification** picker (Default / Require / No verification) and **Email Pre-fill** picker. The `DocGen: Create Signature Request` Flow action exposes the same as optional inputs.
-2. **Per-template** — on the DocGen Template record, **Signer Verification** (Inherit / Required / Off) and **Pre-fill Signer Email** (Inherit / Yes / No).
-3. **Org default** — DocGen Command Hub → **Signatures** settings → **Require Email Verification** and **Pre-fill Signer Email** toggles.
+1. **Per-send** — in the Signature runner (single-template), the **Signer Verification** picker (Default / Require / No verification) and **Email Pre-fill** picker. The `Portwood: Create Signature Request` Flow action exposes the same as optional inputs.
+2. **Per-template** — on the Portwood Template record, **Signer Verification** (Inherit / Required / Off) and **Pre-fill Signer Email** (Inherit / Yes / No).
+3. **Org default** — Portwood Command Hub → **Signatures** settings → **Require Email Verification** and **Pre-fill Signer Email** toggles.
 
 The setting is resolved when the request is sent and stored on the request, so later config changes don't affect in-flight requests. With verification **off**, the signer goes straight to the document — no PIN. The signed audit record's **Verification Method** field records `Email PIN`, `None`, or `In-Person` either way, so you always know how (or whether) identity was checked.
 
@@ -2742,7 +2742,7 @@ Guided, mobile-friendly. States: PIN verify → signing → review → submit.
 - Before final submit, a consent checkbox.
 - Alternative: **Decline** with optional reason.
 
-**Two signing-page experiences.** DocGen ships two signer-facing pages, and which one a signer lands on is determined by the action that created the request — they coexist, with no org-wide switch:
+**Two signing-page experiences.** Portwood ships two signer-facing pages, and which one a signer lands on is determined by the action that created the request — they coexist, with no org-wide switch:
 
 - **Typed-name page** (`DocGenSignature`, the default) — the placement-driven experience described above, used by the **Create Signature Request** action and the bundled "Send for Signature" component. Signatures are stamped at `{@Signature_Role}` tag positions.
 - **PDF-viewer page** (`DocGenSignaturePdf`) — renders the **real generated PDF** in the browser and guides the signer through a modal. Used by the **Send Existing Document for Signature** action (see [§11.7](#117-recipe--send-a-document-for-signature-on-the-pdf-viewer-page)). On a template-snapshot send it also supports the [`{#Signatures}` loop block](#signature-loop-block--signatures-variable-signer-count) and, on completion, re-renders the document from the send-time data snapshot, appends the certificate page, and attaches the signed PDF to the related record.
@@ -2765,7 +2765,7 @@ Created via `createGuidedPdfSignatureRequest` (HTML templates).
 
 When a signer finishes, each field is composited onto the real PDF in one of two styles:
 
-- **Stamp card (default).** A polished signature block: the drawn or typed ink, an opaque white backdrop, a brand-blue border + accent bar, and a small caption (`Signed by <name> · <date> · Portwood DocGen`). It's deliberately a little bigger than the field line, so it needs a bit of whitespace. The renderer is **whitespace-aware** — it reads the text around the tag and grows the card into whichever side (above/below) has more room, so it doesn't cover the line above or a label below. If **neither** side has room (a tag dropped mid-sentence), it **automatically** degrades to the inline mark below so it never covers your text. This is why the authoring tip above says to give the tag its own line or cell — the card looks best with room to breathe.
+- **Stamp card (default).** A polished signature block: the drawn or typed ink, an opaque white backdrop, a brand-blue border + accent bar, and a small caption (`Signed by <name> · <date> · Portwood`). It's deliberately a little bigger than the field line, so it needs a bit of whitespace. The renderer is **whitespace-aware** — it reads the text around the tag and grows the card into whichever side (above/below) has more room, so it doesn't cover the line above or a label below. If **neither** side has room (a tag dropped mid-sentence), it **automatically** degrades to the inline mark below so it never covers your text. This is why the authoring tip above says to give the tag its own line or cell — the card looks best with room to breathe.
 - **Inline mark (opt-in, or the auto-fallback).** Just the ink — the drawn signature/initials image, or the typed name in a signature font — sized to the line height, with **no card, border, or caption**. It occupies only the field's own footprint, so it can sit right after a label (`Member Signature: {@Signature_Member:1:Full:inline}`) without overlapping it. Date fields already render as plain inline text and are unaffected.
 
 **Force inline rendering** by adding `:inline` as the final suffix on the tag:
@@ -2778,11 +2778,11 @@ Initials: {@Signature_Member:1:Initials:inline}
 
 Use `:inline` when your template is space-constrained or you simply prefer the signature to land exactly where the field is, with no surrounding card. Leave it off to get the full attributed stamp card (recommended for formal contracts, where the caption doubles as a visible audit cue). Either way, the full audit trail (signer, timestamp, IP, consent, document hash) is always recorded on the **Certificate of Completion** page — the on-page caption is presentation only.
 
-> **Why a card at all?** The caption (`Signed by … · Portwood DocGen`) makes a signed document self-evidently signed at a glance, the way commercial e-sign tools stamp their marks. `:inline` trades that visible cue for a tighter footprint; the legal audit record is identical.
+> **Why a card at all?** The caption (`Signed by … · Portwood`) makes a signed document self-evidently signed at a glance, the way commercial e-sign tools stamp their marks. `:inline` trades that visible cue for a tighter footprint; the legal audit record is identical.
 
 ### 10.8 Link expiration, reminders & request management
 
-**Link expiration (v3.31)** — signing links expire after the org-wide **Link expiration (days)** default in Signature Settings (default 2 days, matching the historical 48-hour window). Individual sends can override it per request — the **Link Expiration in Days** field on the send screen, or the **Link Expiration (Days)** input on the `DocGen: Create Signature Request` Flow action (1–365 days). The window is stamped on the request at send time, so changing the org default never affects requests already in flight. Resending a request opens a fresh window.
+**Link expiration (v3.31)** — signing links expire after the org-wide **Link expiration (days)** default in Signature Settings (default 2 days, matching the historical 48-hour window). Individual sends can override it per request — the **Link Expiration in Days** field on the send screen, or the **Link Expiration (Days)** input on the `Portwood: Create Signature Request` Flow action (1–365 days). The window is stamped on the request at send time, so changing the org default never affects requests already in flight. Resending a request opens a fresh window.
 
 **Reminders (v3.31: multiple)** — enable in Signature Settings and enter a comma-separated schedule of hour offsets after send, e.g. `24, 72, 168` to nudge pending signers after 1, 3, and 7 days. A scheduled job runs hourly and sends each due reminder once; a single-entry schedule behaves exactly like the classic one-shot reminder. Reminders stop once the request's signing window expires, and missed offsets (e.g. the job was paused) collapse into one catch-up reminder rather than a burst.
 
@@ -2803,7 +2803,7 @@ Every signature action creates an immutable `DocGen_Signature_Audit__c` record w
 
 Audit records are read-only and appear on the signature request related list.
 
-**What does _not_ create an audit record** _(clarified 2026-07-30)_ — audit data exists only for a mark drawn or typed through DocGen's own signing surface. These do not produce one, and do not appear on the Certificate of Completion:
+**What does _not_ create an audit record** _(clarified 2026-07-30)_ — audit data exists only for a mark drawn or typed through Portwood's own signing surface. These do not produce one, and do not appear on the Certificate of Completion:
 
 - A signature image you captured elsewhere and merged in with `{%Field__c}` ([§11.9.2](#1192-not-supported--injecting-a-captured-signature-image-into-a-v3-signer)).
 - A signature drawn in your own custom UI and passed to **Submit Signed Signature** / **Finalize Signature Image** against a v3 request — those actions don't accept v3 signer tokens at all ([§11.9.1](#1191-compatibility--which-tokens-these-actions-accept)).
@@ -2815,7 +2815,7 @@ If the signature has to be legally defensible, the signer must go through their 
 
 Once all signers complete:
 
-1. **Guided PDF signing (the standard path):** each signer's marks — drawn ink or typed name — are composited onto the document as **stamp cards** ("Signed by X · date · Portwood DocGen") right where the `{@Signature_…}` tags sit; drawn and typed get identical treatment. A **Certificate of Completion** page is appended listing each signer, email, signed timestamp, IP address, consent, verification method, an ESIGN/UETA attestation, and a link to the verify page (where the signed PDF's **SHA-256 hash** is confirmed against the tamper-evident audit record).
+1. **Guided PDF signing (the standard path):** each signer's marks — drawn ink or typed name — are composited onto the document as **stamp cards** ("Signed by X · date · Portwood") right where the `{@Signature_…}` tags sit; drawn and typed get identical treatment. A **Certificate of Completion** page is appended listing each signer, email, signed timestamp, IP address, consent, verification method, an ESIGN/UETA attestation, and a link to the verify page (where the signed PDF's **SHA-256 hash** is confirmed against the tamper-evident audit record).
 2. In rare fallback cases (the signer's browser couldn't load the source PDF, or a returning signer whose in-session marks are gone), the server stamps "Electronically signed by X on DATE" text instead — functionally signed, just without the stamp-card visual.
 3. The signed PDF is saved to the source record (named per the template's Document Title Format, falling back to "<name> - Signed").
 4. The request creator is emailed a link to the signed doc.
@@ -2848,7 +2848,7 @@ Salesforce hides the guest user behind a few clicks. The full path:
 1. **Setup → Sites** — click the name of your e-signature site.
 2. Click **Public Access Settings**. This opens the site profile.
 3. From the profile, click **View Users**, then select the e-signature site guest user.
-4. On the user record, scroll to **Permission Set Assignments** and add **DocGen Guest Signature**.
+4. On the user record, scroll to **Permission Set Assignments** and add **Portwood Guest Signature**.
 
 ### 10.13 Email branding
 
@@ -2858,7 +2858,7 @@ The **Signature Settings** page now covers setup only: public site URL, the **Se
 
 ### 10.14 Email Templates (Command Hub tab)
 
-Every email DocGen sends is a fully editable, brandable template — open **DocGen Command Hub → Email Templates**. Pick the email to edit from the dropdown:
+Every email Portwood sends is a fully editable, brandable template — open **Portwood Command Hub → Email Templates**. Pick the email to edit from the dropdown:
 
 | Template                | Sent to | When                                  |
 | ----------------------- | ------- | ------------------------------------- |
@@ -2874,11 +2874,11 @@ For each template you can edit the **subject** and **body**, preview it live wit
 
 **Two layout modes** (per template):
 
-- **DocGen layout** (default) — edit just the body in a rich-text editor; DocGen wraps the branded header (logo + brand color) and footer around it. You can override **brand color / logo / footer** per template here. Best when you want consistent branding with minimal effort.
+- **Portwood layout** (default) — edit just the body in a rich-text editor; Portwood wraps the branded header (logo + brand color) and footer around it. You can override **brand color / logo / footer** per template here. Best when you want consistent branding with minimal effort.
 
-    **Logo options (v3.32+):** the **Logo URL Override** accepts URLs of any length (long CDN or Salesforce Files delivery links included). Or skip URLs entirely with **"…or override with an Asset file"** — link the template to a Shared Asset image (Command Hub → Assets) and DocGen publishes a permanent public file link for it. The link is resolved to the asset's **latest** image at send time — replacing the asset's file (even with a brand-new upload) updates your email logo everywhere, with no template edits. Typing a URL manually unlinks the asset. **Logo height (px)** controls the rendered size in the branded header (default 48 px, up to 200; width scales proportionally) — upload a transparent PNG at 2× the rendered size for crisp retina display. (Asset links require Content Deliveries enabled — Setup → Content Deliveries and Public Links.)
+    **Logo options (v3.32+):** the **Logo URL Override** accepts URLs of any length (long CDN or Salesforce Files delivery links included). Or skip URLs entirely with **"…or override with an Asset file"** — link the template to a Shared Asset image (Command Hub → Assets) and Portwood publishes a permanent public file link for it. The link is resolved to the asset's **latest** image at send time — replacing the asset's file (even with a brand-new upload) updates your email logo everywhere, with no template edits. Typing a URL manually unlinks the asset. **Logo height (px)** controls the rendered size in the branded header (default 48 px, up to 200; width scales proportionally) — upload a transparent PNG at 2× the rendered size for crisp retina display. (Asset links require Content Deliveries enabled — Setup → Content Deliveries and Public Links.)
 
-- **Full custom HTML** — paste your **entire** HTML email document (your own table layout, inline styles, and `<img src="https://…">` images). DocGen sends it exactly as authored, resolving only merge tokens and widgets — no added header/footer. Use this for pixel-perfect, fully on-brand emails. **Images must use absolute, publicly reachable URLs** (your website/CDN, or Shared Assets — see below); internal Salesforce file links won't load in a recipient's inbox. Reference any Shared Asset image with `{%asset:<key>}`, which resolves to the asset's public link: `<img src="{%asset:footer-banner}" style="height:40px"/>` — place and size it freely, and use as many assets as you like. `{LogoUrl}` additionally resolves the _logo_ cascade (linked asset → template override → org default). You can still reference org values with `{CompanyName}` and `{BrandColor}`, and drop in `{ActionButton}`/`{VerificationCode}` so the signing button/code keep working.
+- **Full custom HTML** — paste your **entire** HTML email document (your own table layout, inline styles, and `<img src="https://…">` images). Portwood sends it exactly as authored, resolving only merge tokens and widgets — no added header/footer. Use this for pixel-perfect, fully on-brand emails. **Images must use absolute, publicly reachable URLs** (your website/CDN, or Shared Assets — see below); internal Salesforce file links won't load in a recipient's inbox. Reference any Shared Asset image with `{%asset:<key>}`, which resolves to the asset's public link: `<img src="{%asset:footer-banner}" style="height:40px"/>` — place and size it freely, and use as many assets as you like. `{LogoUrl}` additionally resolves the _logo_ cascade (linked asset → template override → org default). You can still reference org values with `{CompanyName}` and `{BrandColor}`, and drop in `{ActionButton}`/`{VerificationCode}` so the signing button/code keep working.
 
 **Merge tokens** resolve at send time and are HTML-escaped: `{SignerName}`, `{SenderName}`, `{CompanyName}`, `{DocumentTitle}`, `{RoleName}`, `{ExpirationHours}`, `{RequestId}`, `{LogoUrl}` (the effective logo — asset link, template override, or org default), `{%asset:<key>}` (any Shared Asset image's public link — v3.32+), and `{Message}`. Four **widget tokens** render branded blocks — place them anywhere in the body:
 
@@ -2889,25 +2889,25 @@ For each template you can edit the **subject** and **body**, preview it live wit
 
 > **Out of the box:** a default record for each template is created on install, so emails work immediately with zero setup. Delete a record to fall back to the built-in default.
 
-**Send-time customization.** When sending a single-template request (from the Signature Sender or the `DocGen: Create Signature Request` Flow action), you can type a **Custom Email Subject** and/or **Custom Email Message** that override the saved template for that one send. The subject supports merge tokens; the branded layout and signing button are always kept. Bulk/packet sends always use the saved templates.
+**Send-time customization.** When sending a single-template request (from the Signature Sender or the `Portwood: Create Signature Request` Flow action), you can type a **Custom Email Subject** and/or **Custom Email Message** that override the saved template for that one send. The subject supports merge tokens; the branded layout and signing button are always kept. Bulk/packet sends always use the saved templates.
 
-**Per-template default message (v3.28+).** Each DocGen Template has a **Default Email Message** field (Command Hub → template editor). When set, it becomes the `{Message}` text for signature requests sent from that template — pre-filled in the sender so you see exactly what will go out, and used automatically by Flow sends that leave the message blank. Resolution order: send-time custom message → template default → the email template's generic text. A quote template can say "Please see the attached proposal…" while an NDA template carries different copy, with no per-send typing.
+**Per-template default message (v3.28+).** Each Portwood Template has a **Default Email Message** field (Command Hub → template editor). When set, it becomes the `{Message}` text for signature requests sent from that template — pre-filled in the sender so you see exactly what will go out, and used automatically by Flow sends that leave the message blank. Resolution order: send-time custom message → template default → the email template's generic text. A quote template can say "Please see the attached proposal…" while an NDA template carries different copy, with no per-send typing.
 
 ---
 
 ## 11. Flow automation cookbook
 
-DocGen ships six Flow invocable actions plus three helpers for custom signing UIs. Each one fits a different job-to-be-done. Below: which to pick, plus a worked recipe for each. (One of the six — "DocGen: Send Existing Document for Signature" — is **deprecated**; it still works but new Flows should use "DocGen: Create Signature Request," which covers the same in-browser PDF signing. The sixth, "DocGen: Write Back Signer Form Fields," re-runs signer-input writeback for a completed request — normally automatic, exposed for retry/custom flows.)
+Portwood ships six Flow invocable actions plus three helpers for custom signing UIs. Each one fits a different job-to-be-done. Below: which to pick, plus a worked recipe for each. (One of the six — "Portwood: Send Existing Document for Signature" — is **deprecated**; it still works but new Flows should use "Portwood: Create Signature Request," which covers the same in-browser PDF signing. The sixth, "Portwood: Write Back Signer Form Fields," re-runs signer-input writeback for a completed request — normally automatic, exposed for retry/custom flows.)
 
 ### 11.1 Picking the right action
 
-| You want to…                                                                  | Use this action                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------- |
-| Generate a single document for one record (most common)                       | **DocGen — Generate Document**                    |
-| Auto-detect "is this dataset big enough to need async?" and route accordingly | **DocGen — Generate Document (Auto Giant Query)** |
-| Run a template against many records in one batch                              | **DocGen — Generate Bulk Documents**              |
-| Email a document for typed-name signature                                     | **DocGen: Create Signature Request**              |
-| Send a generated document for signature on the in-browser PDF viewer          | **DocGen: Send Existing Document for Signature**  |
+| You want to…                                                                  | Use this action                                     |
+| ----------------------------------------------------------------------------- | --------------------------------------------------- |
+| Generate a single document for one record (most common)                       | **Portwood — Generate Document**                    |
+| Auto-detect "is this dataset big enough to need async?" and route accordingly | **Portwood — Generate Document (Auto Giant Query)** |
+| Run a template against many records in one batch                              | **Portwood — Generate Bulk Documents**              |
+| Email a document for typed-name signature                                     | **Portwood: Create Signature Request**              |
+| Send a generated document for signature on the in-browser PDF viewer          | **Portwood: Send Existing Document for Signature**  |
 
 The first is the workhorse. The other three exist because Flow can't always tell at design time whether a dataset will be small (sync) or huge (async), and bulk + signatures need different inputs.
 
@@ -2917,7 +2917,7 @@ The bread-and-butter "trigger automation generates a doc" recipe.
 
 **Trigger:** Record-Triggered Flow on Opportunity, **Updated only**, Entry condition: `IsClosed = TRUE AND IsWon = TRUE`.
 
-**Step:** Add an **Action** element → search "DocGen" → pick **Generate Document**.
+**Step:** Add an **Action** element → search "Portwood" → pick **Generate Document**.
 
 | Input             | Value                                                                                                                                                                                                         |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2935,7 +2935,7 @@ The bread-and-butter "trigger automation generates a doc" recipe.
 
 **Use case:** generate a quote PDF and email it to the customer, but don't store a copy on the record.
 
-1. **DocGen — Generate Document** with **Save to Record = True**. Capture `contentVersionId`.
+1. **Portwood — Generate Document** with **Save to Record = True**. Capture `contentVersionId`.
 2. **Send Email** action with `contentVersionId` wired into the attachment input.
 3. _(Optional)_ **Delete Records** on the ContentDocument afterward to remove the file.
 
@@ -2945,7 +2945,7 @@ For a truly storage-less path, drop into Apex: `DocGenService.generatePdfBlob(te
 
 **Trigger:** Scheduled Flow, runs first day of quarter at 6:00 AM.
 
-**Step:** **DocGen — Generate Bulk Documents**.
+**Step:** **Portwood — Generate Bulk Documents**.
 
 | Input                      | Value                                                      |
 | -------------------------- | ---------------------------------------------------------- |
@@ -2956,7 +2956,7 @@ For a truly storage-less path, drop into Apex: `DocGenService.generatePdfBlob(te
 | Also Keep Individual Files | `{!$GlobalConstant.True}`                                  |
 | Batch Size                 | `25`                                                       |
 
-**Output:** `jobId` — track in the **Job History** tab in the DocGen Command Hub.
+**Output:** `jobId` — track in the **Job History** tab in the Portwood Command Hub.
 
 **Result:** every eligible record gets its own statement PDF attached. The job runs async — Flow continues immediately. Failed records are logged on the job record with the specific error.
 
@@ -2964,7 +2964,7 @@ For a truly storage-less path, drop into Apex: `DocGenService.generatePdfBlob(te
 
 **Use case:** a customer-portal screen Flow generates an invoice. Most invoices have 5–20 line items, but a few customers have 5,000+. You can't know at design time which path is right.
 
-**Step:** **DocGen — Generate Document (Auto Giant Query)**.
+**Step:** **Portwood — Generate Document (Auto Giant Query)**.
 
 | Input          | Value                         |
 | -------------- | ----------------------------- |
@@ -2999,27 +2999,27 @@ Only **`name`** and **`email`** are required. Add the populated record into your
 
 > **Don't see `DocGenSigner` in the Apex Class list?** You need package **v2.7.0 or later** — that's the version that introduced the standalone `DocGenSigner` type. (Flow only exposes top-level Apex classes as Apex-Defined variables; the earlier inner `DocGenSignatureFlowAction.Signer` could never appear, regardless of version.) On older versions, use the legacy primitive inputs instead: **Signer Names**, **Signer Emails**, **Signer Roles**, and **Signer Contact Ids** (each a Text collection, matched by position).
 
-**Step 3 — DocGen: Create Signature Request.**
+**Step 3 — Portwood: Create Signature Request.**
 
-| Input                  | Value                                                                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Template API Name      | `MSA_Agreement` _(v3.28+ — see note below)_                                                                                                           |
-| Related Record ID      | `{!$Record.Id}`                                                                                                                                       |
-| Signers                | `{!signers}`                                                                                                                                          |
-| Signing Order          | `Sequential`                                                                                                                                          |
-| Send Branded Emails    | leave blank / `{!$GlobalConstant.True}` to let DocGen email signers; `{!$GlobalConstant.False}` to send your own emails using the `signerUrls` output |
-| Link Expiration (Days) | _(optional, v3.31+)_ how many days the signing links stay valid (1–365); leave blank for the org default from Signature Settings                      |
+| Input                  | Value                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Template API Name      | `MSA_Agreement` _(v3.28+ — see note below)_                                                                                                             |
+| Related Record ID      | `{!$Record.Id}`                                                                                                                                         |
+| Signers                | `{!signers}`                                                                                                                                            |
+| Signing Order          | `Sequential`                                                                                                                                            |
+| Send Branded Emails    | leave blank / `{!$GlobalConstant.True}` to let Portwood email signers; `{!$GlobalConstant.False}` to send your own emails using the `signerUrls` output |
+| Link Expiration (Days) | _(optional, v3.31+)_ how many days the signing links stay valid (1–365); leave blank for the org default from Signature Settings                        |
 
 > **Template API Name (v3.28+).** Set the **API Name** field on the template (Command Hub → template editor), then pass it here instead of a record Id — it survives sandbox→production deploys, so no Custom Label or Get Records is needed. `Template ID` still works and takes precedence when both are set.
 
-> **Send Branded Emails (fixed in v3.28).** Explicitly setting `False` now truly suppresses DocGen's invitation emails — the request and signer URLs are still created for your Flow to deliver its own message (pair it with the Email Templates system or your own send). Left blank, DocGen sends as before. Note that **PIN verification emails still require an Org-Wide Email Address** in DocGen settings even when you send your own invites.
+> **Send Branded Emails (fixed in v3.28).** Explicitly setting `False` now truly suppresses Portwood's invitation emails — the request and signer URLs are still created for your Flow to deliver its own message (pair it with the Email Templates system or your own send). Left blank, Portwood sends as before. Note that **PIN verification emails still require an Org-Wide Email Address** in Portwood settings even when you send your own invites.
 
 **Outputs:**
 
 - `success` — `true` if the request was created. Branch on this; on `false` read `errorMessage`.
 - `signatureRequestId` — the `DocGen_Signature_Request__c` Id; useful for status tracking on the parent Opportunity.
-- `signerUrls` — the per-signer signing links (Text collection, in signer order). Use these if you send your own emails instead of DocGen's.
-- `emailStatus` — delivery result when DocGen sends the branded emails (e.g. OWA missing, daily limit exceeded).
+- `signerUrls` — the per-signer signing links (Text collection, in signer order). Use these if you send your own emails instead of Portwood's.
+- `emailStatus` — delivery result when Portwood sends the branded emails (e.g. OWA missing, daily limit exceeded).
 - `errorMessage` — populated when `success` is `false`.
 
 **Result:** the signer receives a branded invitation email. They click → enter the PIN → sign → submit. The signed PDF lands on the Opportunity's Files related list with a verification page appended.
@@ -3039,14 +3039,14 @@ Common shape: an Experience Cloud screen Flow collects information, one person (
 {@Signature_Member:2:Full}
 ```
 
-**2 — At the end of your flow, call DocGen: Create Signature Request** exactly as in §11.6, with:
+**2 — At the end of your flow, call Portwood: Create Signature Request** exactly as in §11.6, with:
 
 | Input                      | Value                                                                                                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Signers                    | the in-session signer **first** in the collection, then everyone else — `signerUrls` comes back in this same order                                            |
 | Signing Order              | `Sequential` — the in-session signer goes first, and each later signer is emailed only once the previous one finishes                                         |
 | Require Email Verification | `{!$GlobalConstant.False}` — the in-session signer is about to sign immediately; leaving PIN verification on forces them to go fetch an emailed code mid-flow |
-| Send Branded Emails        | leave blank / `True` — let DocGen send every invitation (see the caveat below before setting `False`)                                                         |
+| Send Branded Emails        | leave blank / `True` — let Portwood send every invitation (see the caveat below before setting `False`)                                                       |
 
 **3 — Send the signer straight to their link.** Use the native **Navigate** action at the end of the screen Flow, with the in-session signer's URL as the target — the signer is taken to the signing page automatically, with no extra click and no custom component.
 
@@ -3057,25 +3057,25 @@ Loop: signerUrls → currentUrl
   Decision: firstUrl Is Null OR firstUrl = ""  →  Assignment: firstUrl = {!currentUrl}
 ```
 
-Then pass `{!firstUrl}` to **Navigate**. (If you'd rather the signer choose when to start, a final screen with a **Display Text** hyperlink to `{!firstUrl}` works just as well.) Either way they sign in the same browser session, on DocGen's signing page, so it's a real audited signature: timestamp, IP, consent hash, and an entry on the Certificate of Completion.
+Then pass `{!firstUrl}` to **Navigate**. (If you'd rather the signer choose when to start, a final screen with a **Display Text** hyperlink to `{!firstUrl}` works just as well.) Either way they sign in the same browser session, on Portwood's signing page, so it's a real audited signature: timestamp, IP, consent hash, and an entry on the Certificate of Completion.
 
 **4 — Stop there.** Do **not** add a **Generate Document** action after the signature request. The request produces the document itself once the last signer completes: signatures stamped at the tag positions, Certificate of Completion appended, PDF attached to the related record. Calling Generate Document as well leaves a second, unsigned, certificate-less file next to the real one.
 
-> **Email caveat with `Send Branded Emails = False`.** That input suppresses only the **initial** invitations. On a **Sequential** request, DocGen still emails signers 2…N automatically as each one completes ([§10.4](#104-sequential-vs-parallel)). So either let DocGen send everything (recommended), or use **Parallel** with `Send Branded Emails = False` and send every invitation yourself. Mixing the two produces duplicate emails.
+> **Email caveat with `Send Branded Emails = False`.** That input suppresses only the **initial** invitations. On a **Sequential** request, Portwood still emails signers 2…N automatically as each one completes ([§10.4](#104-sequential-vs-parallel)). So either let Portwood send everything (recommended), or use **Parallel** with `Send Branded Emails = False` and send every invitation yourself. Mixing the two produces duplicate emails.
 
 To reuse one person's signature as a **picture** on other documents instead of having them sign each one, see [§11.9.2](#1192-not-supported--injecting-a-captured-signature-image-into-a-v3-signer) — it renders, but it carries no audit trail.
 
 ### 11.7 Recipe — Send a document for signature on the PDF viewer page
 
-> **Deprecated (v3.21+).** "DocGen: Send Existing Document for Signature" still works — it now routes to the same guided PDF signing as everything else — but new Flows should use **DocGen: Create Signature Request** (§11.6), which covers this scenario with more options (email message/subject, verification settings, Template API Name). This recipe stays for existing Flows.
+> **Deprecated (v3.21+).** "Portwood: Send Existing Document for Signature" still works — it now routes to the same guided PDF signing as everything else — but new Flows should use **Portwood: Create Signature Request** (§11.6), which covers this scenario with more options (email message/subject, verification settings, Template API Name). This recipe stays for existing Flows.
 
-Use **DocGen: Send Existing Document for Signature** (`DocGenSignaturePdfFlowAction`) when you want the signer to review the **real, fully rendered PDF in the browser** (rather than the typed-name placement page) and have the completed document land back on the record. Pass a **Template Id**: DocGen snapshots the record's merge data at send-time and, on completion, re-renders the document from that snapshot (immune to later record edits), appends a signing-certificate page, and attaches the signed PDF to the related record's Files. This supports the [`{#Signatures}` loop block](#signature-loop-block--signatures-variable-signer-count) — one signature layout that repeats per signer. The template must have a **Base Object** and **Query Config** set.
+Use **Portwood: Send Existing Document for Signature** (`DocGenSignaturePdfFlowAction`) when you want the signer to review the **real, fully rendered PDF in the browser** (rather than the typed-name placement page) and have the completed document land back on the record. Pass a **Template Id**: Portwood snapshots the record's merge data at send-time and, on completion, re-renders the document from that snapshot (immune to later record edits), appends a signing-certificate page, and attaches the signed PDF to the related record's Files. This supports the [`{#Signatures}` loop block](#signature-loop-block--signatures-variable-signer-count) — one signature layout that repeats per signer. The template must have a **Base Object** and **Query Config** set.
 
 > **Removed in v3.18 — sending a pre-generated PDF (Content Version Id).** E-signature always renders from a **template** now. A finished PDF has no signature tags to detect, so it could never drive field-by-field signing or stamp signatures back into the document. Provide a Template Id; the `Content Version Id` input is ignored. (Generating a PDF normally — outside signing — is unchanged.)
 
 **Trigger:** any Flow (record-triggered, screen, or scheduled). Build the `signers` collection exactly as in [§11.6](#116-recipe--send-a-contract-for-signature-on-opportunity-approval) (an Apex-Defined `DocGenSigner` collection — `name` + `email` required; `role`, `contactId` optional).
 
-**Step — DocGen: Send Existing Document for Signature.**
+**Step — Portwood: Send Existing Document for Signature.**
 
 | Input                 | Value                                                        |
 | --------------------- | ------------------------------------------------------------ |
@@ -3119,7 +3119,7 @@ On the guided PDF signing path you can ask each signer for extra information **b
 
 ### 11.8 Recipe — Pass pre-built JSON data instead of querying
 
-The **Generate Document** action accepts an optional **JSON Data** input. When present, DocGen skips its own SOQL retrieval and uses the supplied JSON directly. Use cases:
+The **Generate Document** action accepts an optional **JSON Data** input. When present, Portwood skips its own SOQL retrieval and uses the supplied JSON directly. Use cases:
 
 - External API response that you've already fetched and parsed
 - Cross-object data your query config can't express
@@ -3142,9 +3142,9 @@ Wire this to a Flow Text Variable populated upstream — typically by an Apex ac
 
 ### 11.9 Recipe — Custom signing UI (advanced, legacy requests only)
 
-> **Corrected 2026-07-30 (guide revision, no package change).** Earlier revisions of this section did not state which kind of signature request these three actions work with. They work **only** against a **legacy single-signer** request — one whose signing token lives on the request record itself. They **cannot** submit a signature into a request created by **DocGen: Create Signature Request** ([§11.6](#116-recipe--send-a-contract-for-signature-on-opportunity-approval)) or **Send Existing Document for Signature** ([§11.7](#117-recipe--send-a-document-for-signature-on-the-pdf-viewer-page)) — the current v3 multi-signer path, and what almost every Flow built since v3.0 uses. If you want to capture a signature inside your own portal or screen Flow, use [§11.6.1](#1161-sign-in-session--capture-the-signature-in-your-own-portal-or-screen-flow) instead: it is the supported route, and it is the only one that produces an audit trail and a Certificate of Completion.
+> **Corrected 2026-07-30 (guide revision, no package change).** Earlier revisions of this section did not state which kind of signature request these three actions work with. They work **only** against a **legacy single-signer** request — one whose signing token lives on the request record itself. They **cannot** submit a signature into a request created by **Portwood: Create Signature Request** ([§11.6](#116-recipe--send-a-contract-for-signature-on-opportunity-approval)) or **Send Existing Document for Signature** ([§11.7](#117-recipe--send-a-document-for-signature-on-the-pdf-viewer-page)) — the current v3 multi-signer path, and what almost every Flow built since v3.0 uses. If you want to capture a signature inside your own portal or screen Flow, use [§11.6.1](#1161-sign-in-session--capture-the-signature-in-your-own-portal-or-screen-flow) instead: it is the supported route, and it is the only one that produces an audit trail and a Certificate of Completion.
 
-Three helper actions exist for orgs that want to build their own signing experience instead of using the bundled Visualforce pages — for example, an embedded signature pad inside an existing customer portal. **These require package v2.6.0 or later** (earlier versions shipped them but they weren't exposed to subscriber Flows). In Flow Builder, search "DocGen" and pick the action by its label:
+Three helper actions exist for orgs that want to build their own signing experience instead of using the bundled Visualforce pages — for example, an embedded signature pad inside an existing customer portal. **These require package v2.6.0 or later** (earlier versions shipped them but they weren't exposed to subscriber Flows). In Flow Builder, search "Portwood" and pick the action by its label:
 
 - **Validate Signature Token** (`DocGenSignatureValidator`) — validates a secure token from the signing URL and returns signer name, document title, and a preview URL. Call this when your custom page first loads.
 - **Submit Signed Signature** (`DocGenSignatureSubmitter`) — accepts the secure token plus the base64-encoded signature and submits it. A lighter-weight alternative to Finalize.
@@ -3158,11 +3158,11 @@ Three helper actions exist for orgs that want to build their own signing experie
 | The **request's own** `Secure_Token__c` on a v3 request         | ✅ returns `isValid = true` | ❌ falls into the legacy typed-name path with no per-signer placements → an error on the audit record and no document is produced. |
 | A **legacy single-signer** request token                        | ✅                          | ✅ works as documented                                                                                                             |
 
-**Why.** On a v3 request each signer's signing token lives on the **DocGen Signer** child record, and the request's own `Secure_Token__c` is the **certificate verification** token printed on the Certificate of Completion — not a signing token. Validate Signature Token resolves both shapes; Submit and Finalize resolve only the request-level token. That asymmetry is exactly why a Flow can validate cleanly and then produce nothing.
+**Why.** On a v3 request each signer's signing token lives on the **Portwood Signer** child record, and the request's own `Secure_Token__c` is the **certificate verification** token printed on the Certificate of Completion — not a signing token. Validate Signature Token resolves both shapes; Submit and Finalize resolve only the request-level token. That asymmetry is exactly why a Flow can validate cleanly and then produce nothing.
 
 #### 11.9.2 Not supported — injecting a captured signature image into a v3 signer
 
-There is **no** action that takes a base64 signature you captured yourself and records it as a v3 signer's signature. Audit data (timestamp, IP address, consent hash, document hash, certificate entry) is only created for a mark drawn or typed through DocGen's own signing surface — see [§10.9](#109-audit-trail).
+There is **no** action that takes a base64 signature you captured yourself and records it as a v3 signer's signature. Audit data (timestamp, IP address, consent hash, document hash, certificate entry) is only created for a mark drawn or typed through Portwood's own signing surface — see [§10.9](#109-audit-trail).
 
 If you have already captured a signature image and only need it to **appear** in the document, that works — but it is a picture, not a signed signature:
 
@@ -3211,7 +3211,7 @@ Always add a Decision element after the action that branches on `success`. The m
 
 ## 12. Apex API reference
 
-Call DocGen from your own Apex code, triggers, scheduled jobs, or Lightning components. **`DocGenService` is the `global`, subscriber-callable API** — prefix as `portwoodglobal.DocGenService` from your own code. The controller classes referenced later in this chapter (`DocGenController`, `DocGenBulkController`) are the package's own UI endpoints and are **not callable from subscriber code** — they're documented for reference; automate through `DocGenService` or the Flow actions instead.
+Call Portwood from your own Apex code, triggers, scheduled jobs, or Lightning components. **`DocGenService` is the `global`, subscriber-callable API** — prefix as `portwoodglobal.DocGenService` from your own code. The controller classes referenced later in this chapter (`DocGenController`, `DocGenBulkController`) are the package's own UI endpoints and are **not callable from subscriber code** — they're documented for reference; automate through `DocGenService` or the Flow actions instead.
 
 > Backwards compatibility: methods below are published as stable global entry points. New optional overloads may be added in future releases; existing signatures will not be removed without a major version bump and a deprecation notice.
 
@@ -3251,7 +3251,7 @@ String title = (String) result.get('title');
 
 > **Catching exceptions.** All API methods throw `portwoodglobal.DocGenException` on validation failures (locked output format, missing template, PowerPoint→PDF, null `dataMap`, etc.). Subscriber code can catch by name: `catch (portwoodglobal.DocGenException e) { ... }`.
 
-> **Sharing & FLS.** `DocGenService` runs `with sharing` — record-level access is enforced for the calling user. Field-level security is **not** explicitly checked inside the merge engine; if a user has row access but restricted FLS on a referenced field, that field's value will still appear in the rendered document. The `…FromData` overloads (`generatePdfBlobFromData`, `generateAndSaveFromData`) accept a caller-supplied data map and bypass DocGen's SOQL boundary entirely — the calling code is responsible for any FLS/CRUD enforcement on the values it places in the map. Treat these like any privileged service: gate them in your own code if you expose them to lower-privilege actors.
+> **Sharing & FLS.** `DocGenService` runs `with sharing` — record-level access is enforced for the calling user. Field-level security is **not** explicitly checked inside the merge engine; if a user has row access but restricted FLS on a referenced field, that field's value will still appear in the rendered document. The `…FromData` overloads (`generatePdfBlobFromData`, `generateAndSaveFromData`) accept a caller-supplied data map and bypass Portwood's SOQL boundary entirely — the calling code is responsible for any FLS/CRUD enforcement on the values it places in the map. Treat these like any privileged service: gate them in your own code if you expose them to lower-privilege actors.
 
 ### 12.2 `DocGenController` — LWC / Aura endpoints
 
@@ -3352,7 +3352,7 @@ The package installs in the `portwoodglobal` namespace. From subscriber code:
 
 ### 13.1 The Command Hub
 
-App Launcher → **DocGen**. The Command Hub is the single entry point for admins:
+App Launcher → **Portwood**. The Command Hub is the single entry point for admins:
 
 - **My Templates** — create, edit, version, clone, export/import.
 - **Bulk Generation** — mass-generate against a SOQL filter or saved query.
@@ -3370,7 +3370,7 @@ Worth knowing inside My Templates:
 
 ### 13.2 Signature Settings
 
-Location: DocGen app → Command Hub → Signature Settings.
+Location: Portwood app → Command Hub → Signature Settings.
 
 Covers:
 
@@ -3385,7 +3385,7 @@ Email branding (colors, logo, subject lines, body copy) lives in **Command Hub �
 
 ### 13.2.1 Error Logs
 
-The **DocGen Error Logs** tab (in the DocGen app's navigation) lists `DocGen_Error_Log__c` records — non-sensitive exception details captured automatically when generation, bulk jobs, or signature processing hit an error. Each log records the failing context so you can troubleshoot without asking users to reproduce. Start here (alongside the bulk job history in §9.6) whenever someone reports "it didn't work"; §15 covers the common fixes.
+The **Portwood Error Logs** tab (in the Portwood app's navigation) lists `DocGen_Error_Log__c` records — non-sensitive exception details captured automatically when generation, bulk jobs, or signature processing hit an error. Each log records the failing context so you can troubleshoot without asking users to reproduce. Start here (alongside the bulk job history in §9.6) whenever someone reports "it didn't work"; §15 covers the common fixes.
 
 ### 13.3 Blob.toPdf Release Update
 
@@ -3399,7 +3399,7 @@ Suggested case language:
 
 > Please enable the "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations" release update in this org. We generate PDFs using a managed package that calls `Blob.toPdf()`. The Release Updates page still shows "Enable Test Run", and generated PDFs are rendering raw CSS at the top of the document.
 
-### 13.4 Custom fields on DocGen objects
+### 13.4 Custom fields on Portwood objects
 
 You can extend `DocGen_Template__c`, `DocGen_Signature_Request__c`, `DocGen_Signer__c`, or any package object with your own custom fields. Just remember to grant FLS to whichever permission sets your users are on (Admin, User, or Guest).
 
@@ -3411,7 +3411,7 @@ You can extend `DocGen_Template__c`, `DocGen_Signature_Request__c`, `DocGen_Sign
 
 - **Sync (interactive runner)**: 6 MB heap.
 - **Async (giant-query batch, queueable, bulk)**: 12 MB heap.
-- DocGen auto-routes based on dataset size — you never need to manually pick "sync vs async."
+- Portwood auto-routes based on dataset size — you never need to manually pick "sync vs async."
 
 ### 14.2 PDF font limitations
 
@@ -3436,15 +3436,15 @@ Built-in tags for the current date and datetime. See [§7.12](#712-built-in-date
 
 ### 14.5 Browser payload limit
 
-The Salesforce framework caps individual server-to-browser responses at 4 MB. DocGen works around this for you — large DOCX files are assembled in the browser, large PDFs are streamed in chunks and stitched client-side. You don't have to think about it.
+The Salesforce framework caps individual server-to-browser responses at 4 MB. Portwood works around this for you — large DOCX files are assembled in the browser, large PDFs are streamed in chunks and stitched client-side. You don't have to think about it.
 
 ### 14.6 Lightning Web Security (LWS)
 
-If your org has LWS turned on, DocGen still works. We route binary data through Apex rather than direct browser fetches so file URLs never get blocked.
+If your org has LWS turned on, Portwood still works. We route binary data through Apex rather than direct browser fetches so file URLs never get blocked.
 
 ### 14.7 Guest user constraints (signing page)
 
-The signing page runs as a guest user, which the platform restricts pretty heavily. The most visible consequence: **a verified Org-Wide Email Address is required** to send signing emails (Setup → Organization-Wide Email Addresses). Everything else (image rendering, audit logging, platform events) DocGen handles for you.
+The signing page runs as a guest user, which the platform restricts pretty heavily. The most visible consequence: **a verified Org-Wide Email Address is required** to send signing emails (Setup → Organization-Wide Email Addresses). Everything else (image rendering, audit logging, platform events) Portwood handles for you.
 
 **Experience Cloud sites — one required preference.** If you host the signing page on an **Experience Cloud** site (rather than a classic Salesforce Site), you must enable **"Let guest users view asset files, library files, and CMS content available to the site"** under the site's **Administration → Preferences**, or the signer sees a blank "Document unavailable" preview. Classic Salesforce Sites (`*.my.salesforce-sites.com`) don't need this. See [§15.9](#159-signing-preview-is-blank--document-unavailable-on-an-experience-cloud-site).
 
@@ -3463,7 +3463,7 @@ The signing page runs as a guest user, which the platform restricts pretty heavi
 
 **Why the 10 MB template cap?** The platform unzips and pre-caches every template at save time, and async heap is bounded at 12 MB. Templates over ~10 MB don't survive that step. Almost every 20 MB+ template is uncompressed images — in Word, right-click any image → **Compress Pictures → Email (96 ppi)** drops most templates to 1–2 MB with no visible quality loss.
 
-**Why the 2-step flow for > ~4 MB DOCX / XLSX?** The framework caps inbound browser-to-server payloads at roughly 4 MB. For larger files, DocGen downloads the file to your computer, then shows a drag-to-attach uploader that uses the platform's native (2 GB) uploader. One extra click, no Apex heap involved.
+**Why the 2-step flow for > ~4 MB DOCX / XLSX?** The framework caps inbound browser-to-server payloads at roughly 4 MB. For larger files, Portwood downloads the file to your computer, then shows a drag-to-attach uploader that uses the platform's native (2 GB) uploader. One extra click, no Apex heap involved.
 
 ### 14.9 Excel templates — alpha limitations
 
@@ -3505,9 +3505,9 @@ If the page shows a grayed-out **Enable Test Run** button, the update is still o
 
 ### 15.3 Heap size too large
 
-You should almost never see this — DocGen estimates dataset size up front and routes large jobs to the giant-query async path automatically. If you do hit it:
+You should almost never see this — Portwood estimates dataset size up front and routes large jobs to the giant-query async path automatically. If you do hit it:
 
-1. Confirm the package is current (Setup → Installed Packages → DocGen version).
+1. Confirm the package is current (Setup → Installed Packages → Portwood version).
 2. If you're current, file an issue at portwood.dev/support with the template Id and record Id — this is a routing bug we want to know about.
 
 ### 15.4 Merge tags render as literal text (e.g., `{Name}` appears in the output)
@@ -3577,9 +3577,9 @@ The signing email sends and the request is created, but clicking the signing lin
 
 Check these in order:
 
-1. **Trailing `/s` on the Site URL** — the most common cause. Open **Signature Settings** and look at the Site URL. Copying an Experience Cloud site URL from the browser or from Digital Experiences setup usually appends `/s` (e.g. `https://yourdomain.my.site.com/signing/s`). DocGen appends the page path itself, so the `/s` breaks every generated link. Remove it, save, and send a **fresh** request. This applies to custom (branded) domains too — they work fine once the `/s` is gone.
+1. **Trailing `/s` on the Site URL** — the most common cause. Open **Signature Settings** and look at the Site URL. Copying an Experience Cloud site URL from the browser or from Digital Experiences setup usually appends `/s` (e.g. `https://yourdomain.my.site.com/signing/s`). Portwood appends the page path itself, so the `/s` breaks every generated link. Remove it, save, and send a **fresh** request. This applies to custom (branded) domains too — they work fine once the `/s` is gone.
 2. **VF pages not on the new site** — the signature Visualforce pages (`DocGenSignature`, `DocGenSignaturePdf`, `DocGenVerify`, `DocGenSign`) must be added to the site currently serving signing. If you previously removed them (or added them to a different site), re-add them.
-3. **Guest permission set** — confirm the new site's guest user has **DocGen Guest Signature** assigned (§10.12). Each site has its own guest user; assignments don't carry over between sites.
+3. **Guest permission set** — confirm the new site's guest user has **Portwood Guest Signature** assigned (§10.12). Each site has its own guest user; assignments don't carry over between sites.
 
 Notes:
 
@@ -3602,7 +3602,7 @@ column.
 
 | Technique                   | Result                                                         |
 | --------------------------- | -------------------------------------------------------------- |
-| `word-wrap: break-word`     | ignored (DocGen already applies this to every cell)            |
+| `word-wrap: break-word`     | ignored (Portwood already applies this to every cell)          |
 | `overflow-wrap: break-word` | ignored                                                        |
 | `word-break: break-all`     | ignored                                                        |
 | `table-layout: fixed`       | column stops growing, so the text overflows the border instead |
@@ -3670,26 +3670,26 @@ opens to an empty canvas in the Designer and converts badly on generation.
 | `DocGen_Template__c`         | `Type__c` | What you pick when creating the template                                                 |
 | `DocGen_Template_Version__c` | `Type__c` | **How the template actually behaves** — the editor that opens and how the body is parsed |
 
-DocGen derives the template's behaviour from the **version's** type, so a
+Portwood derives the template's behaviour from the **version's** type, so a
 template that says HTML while its active version says Word behaves as Word. If
 only one of the two is fixed, the symptom persists. Check both.
 
 **To make the values available:**
 
-1. **Setup → Object Manager**, open **DocGen Template**.
+1. **Setup → Object Manager**, open **Portwood Template**.
 2. **Fields & Relationships → Type → Values**.
 3. Confirm `Word`, `PowerPoint`, `Excel`, `HTML` and `PDF` are all present and
    **Active**. Use **Activate** on any that are deactivated.
 4. If your org uses **record types** on the object, open each record type and add
    the values to its available list — a value that exists but is not assigned to
    the record type will not appear in the picker.
-5. Repeat all of the above for **DocGen Template Version**.
+5. Repeat all of the above for **Portwood Template Version**.
 
 **If a value is genuinely absent rather than inactive**, do not try to add it by
 hand. Both fields are **restricted** picklists owned by the managed package, so a
 subscriber org cannot add a new value to them — and a value typed in manually
 would not match what the engine compares against. An absent value means the org
-is on a package version that predates it: **upgrade DocGen** and the value
+is on a package version that predates it: **upgrade Portwood** and the value
 arrives with the upgrade.
 
 **Repairing templates already saved with the wrong type.** Fixing the picklist
@@ -3700,6 +3700,6 @@ record says.
 
 ### 15.13 Still stuck?
 
-Check the **DocGen Error Logs** tab first (§13.2.1) — most generation, bulk, and signature failures leave a log record with the failing context, which beats guessing.
+Check the **Portwood Error Logs** tab first (§13.2.1) — most generation, bulk, and signature failures leave a log record with the failing context, which beats guessing.
 
 The web guide at [portwood.dev/guide](https://portwood.dev/guide) is always current with the latest release. For implementation help or training, visit [portwood.dev/support](https://portwood.dev/support) — we'll walk you through it.

@@ -20,7 +20,7 @@ global without sharing class DocGenSignatureValidator { // NOPMD AvoidGlobalModi
         global String documentUrl;
     }
 
-    @InvocableMethod(label='Validate Signature Token' category='DocGen')
+    @InvocableMethod(label='Validate Signature Token' category='Portwood')
     global static List<FlowOutput> validateToken(List<FlowInput> inputs) {
         List<FlowOutput> results = new List<FlowOutput>();
         for (FlowInput input : inputs) {

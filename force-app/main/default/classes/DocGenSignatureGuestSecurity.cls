@@ -1,5 +1,5 @@
 /**
- * Centralized CRUD/FLS enforcement helper for guest-context DocGen signature
+ * Centralized CRUD/FLS enforcement helper for guest-context Portwood signature
  * operations (token-gated PIN verification, signature capture, decline,
  * audit lookup, etc.). Documents the security model the AppExchange security
  * reviewer needs to evaluate.
@@ -9,7 +9,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  *
  * Guest users (anonymous recipients clicking a signature link in their
- * inbox) DO NOT have profile CRUD on the DocGen custom objects, and granting
+ * inbox) DO NOT have profile CRUD on the Portwood custom objects, and granting
  * them CRUD would itself create the very vulnerability the reviewer fears —
  * any guest could enumerate / modify other signers' records.
  *
