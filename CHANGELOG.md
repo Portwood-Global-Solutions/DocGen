@@ -2,7 +2,8 @@
 
 ## v3.50.0 — Renamed to Portwood
 
-`04t…` (build 3.50.0-N, promoted YYYY-MM-DD, ancestor 3.49.0). Build coverage 78%.
+`04tVx000000zxCrIAI` (build 3.50.0-1, promoted 2026-07-31, ancestor 3.49.0). Build
+coverage 78%.
 
 **No functional change. No action required.** This release renames what you see in
 Setup and in the app. Nothing about how the package works changed, and nothing you
