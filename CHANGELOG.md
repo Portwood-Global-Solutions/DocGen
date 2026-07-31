@@ -1,8 +1,9 @@
 # Changelog
 
-## v3.49.0 — Bulk sort order, `{RowNumber}`, Save & Download (unreleased)
+## v3.49.0 — Bulk sort order, `{RowNumber}`, Save & Download
 
-Not yet built or promoted — no package version id.
+`04tVx000000zvz3IAA` (build 3.49.0-1, promoted 2026-07-31, ancestor 3.48.0). Build
+coverage 78%.
 
 ### Fixed — Designer could load an OLD template body (silent)
 
