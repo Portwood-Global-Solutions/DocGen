@@ -4,21 +4,21 @@ Portwood is free, native, and community-driven. There are no paid tiers and no f
 
 Portwood is [listed on the AppExchange](https://appexchange.salesforce.com/appxListingDetail?listingId=5a580bd8-2745-41e5-b62c-c495957857d3) and ships on a fast release cadence — currently v3.30. Recent releases brought guest e-signing with drawn signatures, a shared image-asset manager, brandable email templates, quick-action generation, and template management upgrades. For the full record, see the [changelog](/changelog).
 
-**Want to shape it?** Open a request on [GitHub Issues](https://github.com/Portwood-Global-Solutions/DocGen/issues) or post in [Slack](/community). Every request gets read, labeled, and tracked. Bugs that silently corrupt output jump the queue.
+**Want to shape it?** Open a request on [GitHub Issues](https://github.com/Portwood-Global-Solutions/Portwood/issues) or post in [Slack](/community). Every request gets read, labeled, and tracked. Bugs that silently corrupt output jump the queue.
 
 ## Up next
 
 Enhancements with a clear path, planned for the next release or two.
 
-### Preview before you save ([#212](https://github.com/Portwood-Global-Solutions/DocGen/issues/212))
+### Preview before you save ([#212](https://github.com/Portwood-Global-Solutions/Portwood/issues/212))
 
 The runner generates and saves in one step. This adds a preview (and print) of the generated PDF before you commit to saving it on the record or downloading it — catch a wrong template or a bad merge before it becomes a File.
 
-### Template comments ([#211](https://github.com/Portwood-Global-Solutions/DocGen/issues/211))
+### Template comments ([#211](https://github.com/Portwood-Global-Solutions/Portwood/issues/211))
 
 A comment syntax for template authors: leave notes to yourself ("this table feeds from the Opportunity line items") inside the template, and the merge engine strips them from every generated document.
 
-### Custom Label merge tags ([#204](https://github.com/Portwood-Global-Solutions/DocGen/issues/204))
+### Custom Label merge tags ([#204](https://github.com/Portwood-Global-Solutions/Portwood/issues/204))
 
 Resolve Salesforce Custom Labels inside templates, so one template can serve a multi-language org — the label renders in each recipient's language instead of hardcoded text.
 
@@ -26,7 +26,7 @@ Resolve Salesforce Custom Labels inside templates, so one template can serve a m
 
 Larger items on the list, paced by community demand.
 
-### Images in signature and notification emails ([#198](https://github.com/Portwood-Global-Solutions/DocGen/issues/198))
+### Images in signature and notification emails ([#198](https://github.com/Portwood-Global-Solutions/Portwood/issues/198))
 
 Logos and branding images in the emails Portwood sends around signing and delivery. Weighing two designs — routing through the shared asset system versus a public-URL hook — before committing.
 
@@ -42,11 +42,11 @@ Long right-to-left paragraphs that wrap can start their continuation lines from 
 
 Ideas with merit that are iceboxed until demand moves them up. Feedback here is especially useful — a few voices asking is what promotes these.
 
-### Reusable template partials ([#31](https://github.com/Portwood-Global-Solutions/DocGen/issues/31))
+### Reusable template partials ([#31](https://github.com/Portwood-Global-Solutions/Portwood/issues/31))
 
 Define a header, footer, or signature block once and include it across many templates. A design spec is drafted; it's iceboxed until enough teams ask for it.
 
-### Drag-and-drop template builder ([#55](https://github.com/Portwood-Global-Solutions/DocGen/issues/55))
+### Drag-and-drop template builder ([#55](https://github.com/Portwood-Global-Solutions/Portwood/issues/55))
 
 A visual, no-Word path to authoring templates. Iceboxed — Word and HTML templates with merge tags remain the supported authoring path, and they cover the same ground with tools authors already know. Would revisit if demand builds.
 

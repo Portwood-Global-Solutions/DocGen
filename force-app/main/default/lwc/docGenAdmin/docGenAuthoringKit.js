@@ -683,7 +683,7 @@ export function buildAiPrompt(shape, options) {
         );
         lines.push('');
         lines.push(
-            'QUESTIONS? The full Portwood UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/DocGen/blob/main/UserGuide.md'
+            'QUESTIONS? The full Portwood UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/Portwood/blob/main/UserGuide.md'
         );
         return lines.join('\n');
     }
@@ -705,7 +705,7 @@ export function buildAiPrompt(shape, options) {
     lines.push('3. Use only the merge tags listed in DATA SHAPE (plus {Today}/{RunningUser.*} built-ins).');
     lines.push('');
     lines.push(
-        'QUESTIONS? The full Portwood UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/DocGen/blob/main/UserGuide.md'
+        'QUESTIONS? The full Portwood UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/Portwood/blob/main/UserGuide.md'
     );
     return lines.join('\n');
 }
