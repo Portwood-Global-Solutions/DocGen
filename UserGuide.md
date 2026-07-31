@@ -3393,7 +3393,7 @@ Mandatory. Enable: Setup → Release Updates → "Use the Visualforce PDF Render
 
 The release-update UI is easy to misread. If the button is grayed out and says **Enable Test Run**, the update is not enabled in that org. When it is enabled, the button says **Disable Test Run**. If you cannot turn it on from Setup, create a Salesforce Support case for the affected production org or sandbox.
 
-![Salesforce release update screen showing a grayed-out Enable Test Run button](https://raw.githubusercontent.com/Portwood-Global-Solutions/DocGen/refs/heads/main/docs/images/blob-to-pdf-enable-test-run.jpg)
+![Salesforce release update screen showing a grayed-out Enable Test Run button](https://raw.githubusercontent.com/Portwood-Global-Solutions/Portwood/refs/heads/main/docs/images/blob-to-pdf-enable-test-run.jpg)
 
 Suggested case language:
 
@@ -3497,11 +3497,11 @@ Not yet supported in Excel output: **images** (`{%…}` tags are removed cleanly
 
 This usually means the Visualforce PDF Rendering Service release update for `Blob.toPdf()` is not active in the org. Go to Setup → Release Updates → "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations".
 
-![Generated PDF showing raw CSS printed at the top of the document](https://raw.githubusercontent.com/Portwood-Global-Solutions/DocGen/refs/heads/main/docs/images/blob-to-pdf-css-leak.jpg)
+![Generated PDF showing raw CSS printed at the top of the document](https://raw.githubusercontent.com/Portwood-Global-Solutions/Portwood/refs/heads/main/docs/images/blob-to-pdf-css-leak.jpg)
 
 If the page shows a grayed-out **Enable Test Run** button, the update is still off. When enabled, the button says **Disable Test Run**. Open a Salesforce Support case and ask Salesforce to enable the release update for the affected org; once Salesforce enables it, regenerate the PDF.
 
-![Salesforce release update screen showing a grayed-out Enable Test Run button](https://raw.githubusercontent.com/Portwood-Global-Solutions/DocGen/refs/heads/main/docs/images/blob-to-pdf-enable-test-run.jpg)
+![Salesforce release update screen showing a grayed-out Enable Test Run button](https://raw.githubusercontent.com/Portwood-Global-Solutions/Portwood/refs/heads/main/docs/images/blob-to-pdf-enable-test-run.jpg)
 
 ### 15.3 Heap size too large
 

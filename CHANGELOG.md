@@ -1035,7 +1035,7 @@ e2e-01..08 PASS/FAIL0, RunLocalTests 1536 methods / 100% / 76% org-wide, `sf cod
 
 ## v3.13.0 — Guided PDF Signing: Draw or Type on the Real Document (`04tVx000000nYdFIAU`, build `3.13.0-3`, promoted 2026-06-13)
 
-The full guided-signing overhaul. Signers walk field-to-field through the actual PDF, **drawing (mouse/finger) or typing** their signature, initials, and date, with the marks composited into the finished document client-side (PDF.js + pdf-lib, vendored — no callouts, no data egress) and a **Certificate of Completion** appended (per-signer signed time, email-verified, IP, consent, device, plus a SHA-256 document hash). Point-in-time snapshot signing keeps the signed PDF faithful to what the signer reviewed. Issue [#167](https://github.com/Portwood-Global-Solutions/DocGen/issues/167); also closed [#163](https://github.com/Portwood-Global-Solutions/DocGen/issues/163) (drawn signatures). PDF.js upgraded to 4.7.76 to clear CVE-2024-4367; SBOM in `THIRD-PARTY-NOTICES.md`.
+The full guided-signing overhaul. Signers walk field-to-field through the actual PDF, **drawing (mouse/finger) or typing** their signature, initials, and date, with the marks composited into the finished document client-side (PDF.js + pdf-lib, vendored — no callouts, no data egress) and a **Certificate of Completion** appended (per-signer signed time, email-verified, IP, consent, device, plus a SHA-256 document hash). Point-in-time snapshot signing keeps the signed PDF faithful to what the signer reviewed. Issue [#167](https://github.com/Portwood-Global-Solutions/Portwood/issues/167); also closed [#163](https://github.com/Portwood-Global-Solutions/Portwood/issues/163) (drawn signatures). PDF.js upgraded to 4.7.76 to clear CVE-2024-4367; SBOM in `THIRD-PARTY-NOTICES.md`.
 
 ## v3.12.0 — Date Field Fix + Verification Security (build pending)
 
@@ -1057,7 +1057,7 @@ Validation: RunLocalTests 1504/100%, e2e-01..08 PASS/FAIL0, `sf code-analyzer` 0
 
 This release fixes the follow-up shared-template image issue reported from Slack. Non-admin users could generate both HTML and Word/giant-query PDFs, but template-owned images referenced by `/sfc/servlet.shepherd/version/download/<ContentVersionId>` could render as broken when the running user did not own or otherwise have file access to the image file.
 
-Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+Related: [#154](https://github.com/Portwood-Global-Solutions/Portwood/issues/154)
 
 ### 1. Non-admin PDF renders can fetch referenced template image assets
 
@@ -1091,7 +1091,7 @@ Regression coverage verifies that a referenced template image file is linked to 
 
 This release fixes the follow-up large-template rendering issue reported from Slack. Non-admin users could generate the document after v3.09.0, but large/giant-query output could still lose template chrome and render as a bare data table when the internal pre-baked HTML snapshot was not visible from the queueable's sharing context.
 
-Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+Related: [#154](https://github.com/Portwood-Global-Solutions/Portwood/issues/154)
 
 ### 1. Giant-query output preserves headers, footers, and embedded template images
 
@@ -1124,7 +1124,7 @@ Giant-query chrome preservation tests now assert that snapshot title/header/foot
 
 This release completes the non-admin large-template support fix reported from Slack. Users with the Portwood User permission set could see shared templates and start generation, but large/giant-query jobs still failed because the job record needed to store internal generation context in fields that were not editable by non-admin users.
 
-Related: [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+Related: [#154](https://github.com/Portwood-Global-Solutions/Portwood/issues/154)
 
 ### 1. Portwood users can generate giant-query documents
 
@@ -1173,7 +1173,7 @@ Authors can wrap one signature layout in `{#Signatures}...{/Signatures}` anywher
 
 This release closes two field-reported support issues: HTML e-signature templates with embedded Salesforce Files images now render those images in signer-facing previews, and non-admin users who can access a template can generate large/giant-query documents without needing Portwood Admin just to read Portwood's internal generated parts.
 
-Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152), [#154](https://github.com/Portwood-Global-Solutions/DocGen/issues/154)
+Related: [#152](https://github.com/Portwood-Global-Solutions/Portwood/issues/152), [#154](https://github.com/Portwood-Global-Solutions/Portwood/issues/154)
 
 ### 1. HTML signature previews can render template images
 
@@ -1197,7 +1197,7 @@ Giant-query generation now reads Portwood-managed internal `docgen_%` / `docgen_
 
 This release completes HTML-template e-signature support. v3.06 fixed sender-side signature placement detection, but HTML signature previews and completed signed PDFs could still render blank because the signing flow sent already-rendered HTML through the Word-to-HTML renderer.
 
-Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152)
+Related: [#152](https://github.com/Portwood-Global-Solutions/Portwood/issues/152)
 
 ### 1. HTML signature previews render the merged HTML directly
 
@@ -1222,7 +1222,7 @@ Final signed PDF rendering now uses an HTML-safe stamping path for HTML template
 
 This release fixes HTML-template signature sending. HTML templates that contained valid signature tags such as `{@Signature_Customer}` or `{@Signature_Customer:1:Date}` could render the tag text in generated output but still show **No Signature Placements Found** in the signature sender component.
 
-Related: [#152](https://github.com/Portwood-Global-Solutions/DocGen/issues/152)
+Related: [#152](https://github.com/Portwood-Global-Solutions/Portwood/issues/152)
 
 ### 1. HTML signature tags are detected by the sender
 
@@ -1290,31 +1290,31 @@ Related: fresh `tmpVar1` template-loading failure from Greg's June 10 Slack thre
 
 `DocGen_User` can now create bulk generation jobs without also needing the admin permission set. The bundled permission set now grants the field access required by the bulk-job create path, and the regression suite verifies the standard user role can create the controller-owned job fields.
 
-Related: [#149](https://github.com/Portwood-Global-Solutions/DocGen/issues/149)
+Related: [#149](https://github.com/Portwood-Global-Solutions/Portwood/issues/149)
 
 ### 3. Picklist labels are available in templates
 
 Admins can render a picklist's user-facing label with `{Field:label}` while `{Field}` continues to render the stored API value. The label suffix works in normal merge tags, document titles, and the giant-query parent merge path.
 
-Related: [#146](https://github.com/Portwood-Global-Solutions/DocGen/issues/146)
+Related: [#146](https://github.com/Portwood-Global-Solutions/Portwood/issues/146)
 
 ### 4. Hebrew and other RTL signing previews read correctly
 
 The signing preview now detects right-to-left text and applies RTL direction to the preview container. The final PDF path was already rendering correctly; this fixes the signer-facing preview.
 
-Related: [#138](https://github.com/Portwood-Global-Solutions/DocGen/issues/138)
+Related: [#138](https://github.com/Portwood-Global-Solutions/Portwood/issues/138)
 
 ### 5. Fillable PDF versioning preserves the PDF and mapping
 
 Saving a fillable PDF template as a new version without uploading another file now carries forward the prior active PDF body and copies its AcroForm mapping JSON to the new version. Admins can then remap fields and save the mapping on the new active version.
 
-Related: [#150](https://github.com/Portwood-Global-Solutions/DocGen/issues/150)
+Related: [#150](https://github.com/Portwood-Global-Solutions/Portwood/issues/150)
 
 ### 6. Fillable PDFs bulk-generate as individual files
 
 Bulk generation now has an explicit AcroForm regression: fillable PDF templates generate filled PDFs in **Individual Files** mode. Merged PDF / Merge Only bulk output is blocked up front with friendly guidance because the merged bulk renderer combines HTML snippets, and fillable PDFs are PDF-to-PDF AcroForm output rather than HTML.
 
-Related: [#150](https://github.com/Portwood-Global-Solutions/DocGen/issues/150)
+Related: [#150](https://github.com/Portwood-Global-Solutions/Portwood/issues/150)
 
 ### Release validation
 
@@ -2819,7 +2819,7 @@ None were code regressions — all three are test-side bugs that were latent bec
 
 Two community PRs landed in this release, with full commit attribution preserved:
 
-- [@anushpoudel](https://github.com/anushpoudel) — [PR #36](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/pull/36) (Prettier configuration baseline) + [PR #35](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/pull/35) (configurable `docGenRunner` visibility options for FlexiPage / Flow embeds).
+- [@anushpoudel](https://github.com/anushpoudel) — [PR #36](https://github.com/Portwood-Global-Solutions/Portwood/pull/36) (Prettier configuration baseline) + [PR #35](https://github.com/Portwood-Global-Solutions/Portwood/pull/35) (configurable `docGenRunner` visibility options for FlexiPage / Flow embeds).
 
 ## v1.72.0 — Nested IF blocks + AND/OR/NOT + empty-rel totalSize + bare-boolean IF
 
@@ -3390,7 +3390,7 @@ Both PDF and DOCX output paths supported. PDF uses zero-heap URL references (`/s
 
 ### Fixed: `#32` — textarea newline loses formatting _(contributed by [@raykeating](https://github.com/raykeating))_
 
-Multi-line textarea fields were losing their run formatting (font, size, bold, italic) on everything after the first line. The bug was in `convertMultilineToXml` emitting bare `<w:r>` runs for each `<w:br/>` without carrying the original run's `<w:rPr>` (run properties) block. Ray's fix ([PR #33](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/pull/33)) extracts the currently-open `<w:rPr>` from the output buffer and re-emits it on every line after a break. Formatting is now preserved across every line break in textarea fields, including RTL (`<w:rtl/>`) markers.
+Multi-line textarea fields were losing their run formatting (font, size, bold, italic) on everything after the first line. The bug was in `convertMultilineToXml` emitting bare `<w:r>` runs for each `<w:br/>` without carrying the original run's `<w:rPr>` (run properties) block. Ray's fix ([PR #33](https://github.com/Portwood-Global-Solutions/Portwood/pull/33)) extracts the currently-open `<w:rPr>` from the output buffer and re-emits it on every line after a break. Formatting is now preserved across every line break in textarea fields, including RTL (`<w:rtl/>`) markers.
 
 ### Fixed: `#34` — `DocGenDataProvider` interface must be `global`
 
@@ -3601,7 +3601,7 @@ Now resolved via a single SOQL aggregate query inside `DocGenGiantQueryAssembler
 Promoted package: `04tal000006hlZhAAI` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006hlZhAAI)
 Upgrade-safety validator: passed. v1.48.x subscribers can install directly.
 
-Closes GitHub issue [#28](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues/28).
+Closes GitHub issue [#28](https://github.com/Portwood-Global-Solutions/Portwood/issues/28).
 
 ### Signature PDF: table borders now render correctly
 
@@ -3701,7 +3701,7 @@ Upgrade-safety validator: passed. v1.47.x subscribers can install directly.
 Promoted package: `04tal000006hQwfAAE` · [Install URL](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tal000006hQwfAAE)
 Upgrade-safety validator: passed. v1.43.x+ subscribers can install directly.
 
-Closes GitHub issue [#25](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues/25).
+Closes GitHub issue [#25](https://github.com/Portwood-Global-Solutions/Portwood/issues/25).
 
 ### Per-record templates
 
@@ -3783,7 +3783,7 @@ Upgrade-safety validator: passed. v1.43.x subscribers can install directly.
 
 ### Coming in v1.47.0
 
-GitHub issue [#25](https://github.com/Portwood-Global-Solutions/Portwood-DocGen/issues/25) — design doc in `RUNNER_UX_PLAN.md`:
+GitHub issue [#25](https://github.com/Portwood-Global-Solutions/Portwood/issues/25) — design doc in `RUNNER_UX_PLAN.md`:
 
 - Per-record templates (`Specific_Record_Ids__c` comma-separated Id list)
 - Category browsing + explicit sort order
@@ -4147,7 +4147,7 @@ First managed package release. Giant Query, security review prep, and 615 tests.
 ## v1.1.6 — "Template Import/Export & Community Repo Migration" (Portwood)
 
 - **Template Import/Export** — Export any template as a portable `.docgen.json` file containing all metadata, query config, saved queries, and the template file (DOCX/XLSX/PPTX). Import the JSON into any org to recreate the template with a single click. Pre-decomposed parts and images are auto-regenerated on import. Export via row action menu; Import via toolbar button.
-- **Community Repo Migration** — Portwood's official home is now [Portwood-Global-Solutions/Portwood-DocGen](https://github.com/Portwood-Global-Solutions/Portwood-DocGen). GitHub Discussions enabled, issue templates upgraded (bug report, feature request, question), PR template, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, and custom labels added.
+- **Community Repo Migration** — Portwood's official home is now [Portwood-Global-Solutions/Portwood](https://github.com/Portwood-Global-Solutions/Portwood). GitHub Discussions enabled, issue templates upgraded (bug report, feature request, question), PR template, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, and custom labels added.
 - **Landing Page Links Updated** — All GitHub and install links on portwoodglobalsolutions.com now point to the new org repo and use CMDT-backed install URLs.
 - **507/507 Apex tests**, 77% coverage, 0 Critical/High. E2E 24/24.
 
