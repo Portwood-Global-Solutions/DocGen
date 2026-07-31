@@ -3,7 +3,7 @@
     <allowInChatterGroups>false</allowInChatterGroups>
     <compactLayoutAssignment>SYSTEM</compactLayoutAssignment>
     <deploymentStatus>Deployed</deploymentStatus>
-    <description>Stores historical versions of DocGen Templates.</description>
+    <description>Stores historical versions of Portwood Templates.</description>
     <enableActivities>false</enableActivities>
     <enableBulkApi>true</enableBulkApi>
     <enableFeeds>false</enableFeeds>
@@ -14,13 +14,13 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>ControlledByParent</externalSharingModel>
-    <label>DocGen Template Version</label>
+    <label>Portwood Template Version</label>
     <nameField>
         <displayFormat>V-{0000}</displayFormat>
         <label>Version Name</label>
         <type>AutoNumber</type>
     </nameField>
-    <pluralLabel>DocGen Template Versions</pluralLabel>
+    <pluralLabel>Portwood Template Versions</pluralLabel>
     <searchLayouts />
     <sharingModel>ControlledByParent</sharingModel>
     <visibility>Public</visibility>

@@ -2,7 +2,7 @@
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Brand_Color__c</fullName>
     <description
-    >Optional per-template brand color override (#RRGGBB). Blank inherits the org default from DocGen Settings (Signature_Email_Brand_Color__c). Validated against strict 6-digit hex before use to prevent style injection.</description>
+    >Optional per-template brand color override (#RRGGBB). Blank inherits the org default from Portwood Settings (Signature_Email_Brand_Color__c). Validated against strict 6-digit hex before use to prevent style injection.</description>
     <externalId>false</externalId>
     <label>Brand Color Override</label>
     <length>7</length>

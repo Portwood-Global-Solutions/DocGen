@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Portwood DocGen runs 100% on the Salesforce platform — no external services, no
+Portwood runs 100% on the Salesforce platform — no external services, no
 callouts, and document data never leaves the org. It does, however, **vendor** a
 small number of open-source **client-side** JavaScript libraries as pinned static
 resources. They execute entirely in the user's browser, make no network calls, and

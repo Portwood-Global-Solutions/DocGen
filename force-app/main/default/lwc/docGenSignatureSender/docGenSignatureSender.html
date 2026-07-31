@@ -14,7 +14,7 @@
                     name="selectTemplate"
                     label="Select Template"
                     value=""
-                    placeholder="Choose a DocGen template..."
+                    placeholder="Choose a Portwood template..."
                     options={availableTemplateOptions}
                     onchange={handleTemplateSelected}
                 >
@@ -143,7 +143,7 @@
                         type="number"
                         name="expirationDays"
                         label="Link Expiration in Days (optional)"
-                        field-level-help="How many days the signing links stay valid for this request. Leave blank to use the org default from DocGen Signature Settings."
+                        field-level-help="How many days the signing links stay valid for this request. Leave blank to use the org default from Portwood Signature Settings."
                         placeholder="Org default"
                         value={expirationDays}
                         min="1"
@@ -167,7 +167,7 @@
                     <lightning-textarea
                         name="emailMessage"
                         label="Custom Email Message (optional)"
-                        field-level-help="Replaces the default message in the signature request email for this send only. The branded layout and the signing button are always kept. Leave blank to use the configured Email Template. Edit the templates themselves under DocGen Command Hub → Email Templates."
+                        field-level-help="Replaces the default message in the signature request email for this send only. The branded layout and the signing button are always kept. Leave blank to use the configured Email Template. Edit the templates themselves under Portwood Command Hub → Email Templates."
                         placeholder="Add a personal note for the signer…"
                         value={emailMessage}
                         onchange={handleEmailMessageChange}

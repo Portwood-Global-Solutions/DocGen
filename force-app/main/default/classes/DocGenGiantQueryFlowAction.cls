@@ -13,7 +13,7 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
     private static final Integer GIANT_THRESHOLD = 2000;
 
     global class Request {
-        @InvocableVariable(label='Template ID' required=true description='The DocGen Template record ID')
+        @InvocableVariable(label='Template ID' required=true description='The Portwood Template record ID')
         global Id templateId;
 
         @InvocableVariable(label='Record ID' required=true description='The source record ID to merge data from')
@@ -38,7 +38,7 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
 
         @InvocableVariable(
             label='Job ID'
-            description='The DocGen Job record ID (async Giant Query only — poll for completion)'
+            description='The Portwood Job record ID (async Giant Query only — poll for completion)'
         )
         global Id jobId;
 
@@ -217,10 +217,10 @@ global with sharing class DocGenGiantQueryFlowAction { // NOPMD AvoidGlobalModif
         // Create Job record
         DocGen_Job__c job = new DocGen_Job__c(
             Status__c = 'Draft',
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+            // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
             Template__c = templateId,
             Label__c = 'Giant Query PDF (Flow)',
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+            // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
             Parent_Record_Id__c = String.valueOf(recordId)
         );
         insert job; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets

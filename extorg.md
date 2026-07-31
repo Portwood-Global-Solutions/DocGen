@@ -52,34 +52,34 @@
                 - generic [ref=f65e145]:
                     - navigation "App" [ref=f65e146]:
                         - button "App Launcher" [ref=f65e148] [cursor=pointer]
-                    - heading "DocGen" [level=1] [ref=f65e160]
+                    - heading "Portwood" [level=1] [ref=f65e160]
                 - navigation "Global" [ref=f65e164]:
                     - list [ref=f65e165]:
                         - listitem [ref=f65e166]:
-                            - link "DocGen" [ref=f65e167] [cursor=pointer]:
+                            - link "Portwood" [ref=f65e167] [cursor=pointer]:
                                 - /url: /lightning/n/portwoodglobal\_\_DocGen_Command_Hub
                         - listitem [ref=f65e169]:
-                            - link "DocGen Templates" [ref=f65e170] [cursor=pointer]:
+                            - link "Portwood Templates" [ref=f65e170] [cursor=pointer]:
                                 - /url: /lightning/o/portwoodglobal**DocGen_Template**c/home
-                            - button "DocGen Templates List" [ref=f65e175] [cursor=pointer]
+                            - button "Portwood Templates List" [ref=f65e175] [cursor=pointer]
                         - listitem [ref=f65e183]:
-                            - link "DocGen Jobs" [ref=f65e184] [cursor=pointer]:
+                            - link "Portwood Jobs" [ref=f65e184] [cursor=pointer]:
                                 - /url: /lightning/o/portwoodglobal**DocGen_Job**c/home
-                            - button "DocGen Jobs List" [ref=f65e189] [cursor=pointer]
+                            - button "Portwood Jobs List" [ref=f65e189] [cursor=pointer]
                         - listitem [ref=f65e197]:
-                            - link "DocGen Signature Requests" [ref=f65e198] [cursor=pointer]:
+                            - link "Portwood Signature Requests" [ref=f65e198] [cursor=pointer]:
                                 - /url: /lightning/o/portwoodglobal**DocGen_Signature_Request**c/home
-                            - button "DocGen Signature Requests List" [ref=f65e203] [cursor=pointer]
+                            - button "Portwood Signature Requests List" [ref=f65e203] [cursor=pointer]
                         - listitem [ref=f65e211]:
-                            - link "DocGen Signers" [ref=f65e212] [cursor=pointer]:
+                            - link "Portwood Signers" [ref=f65e212] [cursor=pointer]:
                                 - /url: /lightning/o/portwoodglobal**DocGen_Signer**c/home
-                            - button "DocGen Signers List" [ref=f65e217] [cursor=pointer]
+                            - button "Portwood Signers List" [ref=f65e217] [cursor=pointer]
                         - listitem [ref=f65e293] [cursor=pointer]:
-                            - link "\* DocGen Template Manager" [ref=f65e294]:
+                            - link "\* Portwood Template Manager" [ref=f65e294]:
                                 - /url: /lightning/n/portwoodglobal\_\_DocGen_Template_Manager
                                 - generic "Not added to nav bar" [ref=f65e295]: "\*"
-                                - generic [ref=f65e296]: DocGen Template Manager
-                            - button "DocGen Template Manager List" [ref=f65e300]
+                                - generic [ref=f65e296]: Portwood Template Manager
+                            - button "Portwood Template Manager List" [ref=f65e300]
                             - button "Close tab" [ref=f65e308]
                         - listitem [ref=f65e316]:
                             - button "Show more navigation items" [ref=f65e318] [cursor=pointer]:
@@ -112,11 +112,11 @@
                                             - generic [ref=f65e367]: Start from a Design
                                             - generic [ref=f65e368]: Recommended
                                         - paragraph [ref=f65e369]: Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Creates an HTML template, the most reliable path to pixel-perfect PDFs.
-                                    - radio "Generate with AI Agentforce We assemble a prompt with your fields and DocGen's tag syntax. Generate it right here with Agentforce, or copy the prompt into Claude, ChatGPT, or Copilot and paste the HTML back. Either way you land in the designer." [ref=f65e370] [cursor=pointer]:
+                                    - radio "Generate with AI Agentforce We assemble a prompt with your fields and Portwood's tag syntax. Generate it right here with Agentforce, or copy the prompt into Claude, ChatGPT, or Copilot and paste the HTML back. Either way you land in the designer." [ref=f65e370] [cursor=pointer]:
                                         - generic [ref=f65e371]:
                                             - generic [ref=f65e380]: Generate with AI
                                             - generic [ref=f65e381]: Agentforce
-                                        - paragraph [ref=f65e382]: We assemble a prompt with your fields and DocGen's tag syntax. Generate it right here with Agentforce, or copy the prompt into Claude, ChatGPT, or Copilot and paste the HTML back. Either way you land in the designer.
+                                        - paragraph [ref=f65e382]: We assemble a prompt with your fields and Portwood's tag syntax. Generate it right here with Agentforce, or copy the prompt into Claude, ChatGPT, or Copilot and paste the HTML back. Either way you land in the designer.
                                     - 'radio "Start From Scratch A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way." [ref=f65e383] [cursor=pointer]':
                                         - generic [ref=f65e384]: Start From Scratch
                                         - paragraph [ref=f65e392]: "A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way."

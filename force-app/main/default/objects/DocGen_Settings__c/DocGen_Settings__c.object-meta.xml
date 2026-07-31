@@ -3,6 +3,6 @@
     <customSettingsType>Hierarchy</customSettingsType>
     <description>Global settings for the Document Generation platform.</description>
     <enableFeeds>false</enableFeeds>
-    <label>DocGen Settings</label>
+    <label>Portwood Settings</label>
     <visibility>Public</visibility>
 </CustomObject>

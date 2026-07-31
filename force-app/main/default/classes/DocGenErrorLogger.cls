@@ -36,7 +36,7 @@ public without sharing class DocGenErrorLogger { // NOPMD AvoidPublicWithoutShar
     /**
      * Record a SUCCESSFUL-BUT-DEGRADED outcome: the operation continued with a
      * fallback, so the caller sees no error, but the document is not what the
-     * author asked for. This is DocGen's characteristic failure — output that is
+     * author asked for. This is Portwood's characteristic failure — output that is
      * wrong rather than absent — and until now it left no trace at all.
      *
      * Never throws, never inserts on its own. Call flush() at the end of the

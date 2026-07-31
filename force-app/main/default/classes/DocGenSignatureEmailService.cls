@@ -1,5 +1,5 @@
 /**
- * Sends DocGen signature-flow emails. As of #193 all message rendering is
+ * Sends Portwood signature-flow emails. As of #193 all message rendering is
  * delegated to DocGenEmailTemplateService (record-driven, admin-brandable,
  * built-in-default fallback). This class keeps the send-side concerns:
  * recipient/OWA/reply-to wiring, sequential-signing logic, delivery-status
@@ -158,8 +158,8 @@ public without sharing class DocGenSignatureEmailService {
         // OWA is required for signature emails — guest users cannot send without one,
         // and consistent branding requires all emails come from the same address.
         if (String.isBlank(owaId)) {
-            String errMsg = 'Emails not sent — no Org-Wide Email Address configured. Set one in DocGen > Signatures settings.';
-            System.debug(LoggingLevel.ERROR, 'DocGen: ' + errMsg);
+            String errMsg = 'Emails not sent — no Org-Wide Email Address configured. Set one in Portwood > Signatures settings.';
+            System.debug(LoggingLevel.ERROR, 'Portwood: ' + errMsg);
             updateEmailStatus(requestId, errMsg);
             return;
         }
@@ -240,7 +240,7 @@ public without sharing class DocGenSignatureEmailService {
                         statusParts.add(signers[i].signerEmail + ': FAILED — ' + errDetail);
                         System.debug(
                             LoggingLevel.ERROR,
-                            'DocGen: Signature email failed for ' + signers[i].signerEmail + ': ' + errDetail
+                            'Portwood: Signature email failed for ' + signers[i].signerEmail + ': ' + errDetail
                         );
                     }
                 }
@@ -362,7 +362,7 @@ public without sharing class DocGenSignatureEmailService {
 
             Messaging.sendEmail(new List<Messaging.SingleEmailMessage>{ email }, false);
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Sender notification failed: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: Sender notification failed: ' + e.getMessage());
             logSignatureEmailFailure('sendSenderNotification', requestId, e);
         }
     }
@@ -418,7 +418,7 @@ public without sharing class DocGenSignatureEmailService {
                 // Guest/async sends require an OWA; surface the reason instead of failing silently.
                 updateEmailStatus(
                     requestId,
-                    'Signer completion emails not sent — no Org-Wide Email Address configured. Set one in DocGen > Signatures settings.'
+                    'Signer completion emails not sent — no Org-Wide Email Address configured. Set one in Portwood > Signatures settings.'
                 );
                 return;
             }
@@ -467,7 +467,7 @@ public without sharing class DocGenSignatureEmailService {
                 Messaging.sendEmail(emails, false);
             }
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Signer completion emails failed: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: Signer completion emails failed: ' + e.getMessage());
             logSignatureEmailFailure('sendSignerCompletionEmails', requestId, e);
         }
     }
@@ -486,7 +486,7 @@ public without sharing class DocGenSignatureEmailService {
         if (pdf.size() > MAX_ATTACHMENT_BYTES) {
             System.debug(
                 LoggingLevel.WARN,
-                'DocGen: signed PDF (' + pdf.size() + ' bytes) exceeds the email attachment cap — sending without it.'
+                'Portwood: signed PDF (' + pdf.size() + ' bytes) exceeds the email attachment cap — sending without it.'
             );
             return null;
         }
@@ -532,7 +532,7 @@ public without sharing class DocGenSignatureEmailService {
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(req, false, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Could not update email status: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: Could not update email status: ' + e.getMessage());
         }
     }
 }

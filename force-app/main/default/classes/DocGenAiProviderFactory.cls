@@ -6,7 +6,7 @@
  * time. That is load bearing, and it is what makes the whole feature shippable:
  * an implementation mentions `ConnectApi.EinsteinLLM`, which is not a visible
  * type in an org without the entitlement — including the org Salesforce spins up
- * to BUILD the package. A compile-time reference here would make DocGen itself
+ * to BUILD the package. A compile-time reference here would make Portwood itself
  * unbuildable. Measured 2026-07-26 against a fresh namespaced scratch org from
  * the Dev Hub: "Type is not visible: ConnectApi.EinsteinLLM".
  *
@@ -27,7 +27,7 @@ public with sharing class DocGenAiProviderFactory {
      * someone stuck mid-task with nowhere to go.
      */
     @TestVisible
-    private static final String NOT_CONFIGURED = 'In-org AI generation is not set up in this org. Use Copy AI Prompt and paste the result back, or ask an administrator to deploy an AI provider class (see the DocGen Agentforce setup guide).';
+    private static final String NOT_CONFIGURED = 'In-org AI generation is not set up in this org. Use Copy AI Prompt and paste the result back, or ask an administrator to deploy an AI provider class (see the Portwood Agentforce setup guide).';
 
     /** Set by tests, or to force a specific implementation. */
     @TestVisible
@@ -69,7 +69,7 @@ public with sharing class DocGenAiProviderFactory {
             return new DocGenUnavailableProvider(
                 'The class "' +
                     className +
-                    '" does not implement the DocGenAiProvider interface, so DocGen cannot use it.'
+                    '" does not implement the DocGenAiProvider interface, so Portwood cannot use it.'
             );
         }
         return (DocGenAiProvider) instance;
@@ -84,7 +84,7 @@ public with sharing class DocGenAiProviderFactory {
     /**
      * Prompt template API name from settings, falling back to the default.
      *
-     * DocGen never calls Prompt Builder itself — the provider class does — so
+     * Portwood never calls Prompt Builder itself — the provider class does — so
      * this exists purely so an admin can point a provider at a differently named
      * template without editing Apex.
      */

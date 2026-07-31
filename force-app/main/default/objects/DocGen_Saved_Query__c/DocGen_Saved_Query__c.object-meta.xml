@@ -14,12 +14,12 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>ControlledByParent</externalSharingModel>
-    <label>Saved DocGen Query</label>
+    <label>Saved Portwood Query</label>
     <nameField>
         <label>Query Label</label>
         <type>Text</type>
     </nameField>
-    <pluralLabel>Saved DocGen Queries</pluralLabel>
+    <pluralLabel>Saved Portwood Queries</pluralLabel>
     <searchLayouts />
     <sharingModel>ControlledByParent</sharingModel>
     <visibility>Public</visibility>

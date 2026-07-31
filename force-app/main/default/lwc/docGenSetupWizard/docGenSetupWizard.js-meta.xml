@@ -2,7 +2,7 @@
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>66.0</apiVersion>
     <isExposed>true</isExposed>
-    <masterLabel>DocGen Setup Wizard</masterLabel>
+    <masterLabel>Portwood Setup Wizard</masterLabel>
     <description>Guided setup wizard for configuring Public E-Signatures.</description>
     <targets>
         <target>lightning__AppPage</target>

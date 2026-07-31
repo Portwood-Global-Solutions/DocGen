@@ -178,7 +178,7 @@ async function decodeFlatePixels(streamBytes, params) {
     try {
         pixels = await inflate(streamBytes);
     } catch (e) {
-        console.warn('[DocGen PDF→PNG] inflate failed:', e);
+        console.warn('[Portwood PDF→PNG] inflate failed:', e);
         return null;
     }
     let bytesPerPixel;
@@ -186,7 +186,7 @@ async function decodeFlatePixels(streamBytes, params) {
     else if (params.colorSpace === 'DeviceRGB' || params.colorSpace === 'CalRGB' || params.colorSpace === 'sRGB')
         bytesPerPixel = 3;
     else {
-        console.warn('[DocGen PDF→PNG] unsupported color space:', params.colorSpace);
+        console.warn('[Portwood PDF→PNG] unsupported color space:', params.colorSpace);
         return null;
     }
     if (params.hasPredictor) pixels = stripPdfPngPredictor(pixels, params.width, bytesPerPixel);
@@ -229,7 +229,7 @@ async function buildRgbaPngFromColorPlusSMask(colorEntry, smaskEntry) {
     const sp = parseImageDictParams(smaskEntry.dictText);
     if (!cp || !sp) return null;
     if (cp.width !== sp.width || cp.height !== sp.height) {
-        console.warn('[DocGen PDF→PNG] color/SMask dim mismatch; falling back to opaque RGB');
+        console.warn('[Portwood PDF→PNG] color/SMask dim mismatch; falling back to opaque RGB');
         return null;
     }
     const color = await decodeFlatePixels(colorEntry.streamBytes, cp);
@@ -285,7 +285,7 @@ export async function extractFirstImageFromPdfBase64(pdfBase64) {
     try {
         bytes = base64ToBytes(pdfBase64);
     } catch (e) {
-        console.warn('[DocGen] PDF base64 decode failed', e);
+        console.warn('[Portwood] PDF base64 decode failed', e);
         return null;
     }
 
@@ -313,6 +313,6 @@ export async function extractFirstImageFromPdfBase64(pdfBase64) {
         if (png) return { base64: bytesToBase64(png), mediaType: 'image/png', ext: 'png', width, height };
     }
 
-    console.warn('[DocGen] PDF image uses unsupported filter, dict:', primary.dictText.slice(0, 200));
+    console.warn('[Portwood] PDF image uses unsupported filter, dict:', primary.dictText.slice(0, 200));
     return null;
 }

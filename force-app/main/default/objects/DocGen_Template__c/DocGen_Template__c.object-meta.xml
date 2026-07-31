@@ -14,12 +14,12 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>Private</externalSharingModel>
-    <label>DocGen Template</label>
+    <label>Portwood Template</label>
     <nameField>
         <label>Template Name</label>
         <type>Text</type>
     </nameField>
-    <pluralLabel>DocGen Templates</pluralLabel>
+    <pluralLabel>Portwood Templates</pluralLabel>
     <searchLayouts />
     <sharingModel>Private</sharingModel>
     <visibility>Public</visibility>

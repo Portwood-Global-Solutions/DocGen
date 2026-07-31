@@ -4,7 +4,7 @@
     <deleteConstraint>Restrict</deleteConstraint>
     <label>Template</label>
     <referenceTo>DocGen_Template__c</referenceTo>
-    <relationshipLabel>DocGen Jobs</relationshipLabel>
+    <relationshipLabel>Portwood Jobs</relationshipLabel>
     <relationshipName>DocGen_Jobs</relationshipName>
     <required>true</required>
     <type>Lookup</type>

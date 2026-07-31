@@ -4,7 +4,7 @@
     <description
     >Platform event to trigger signature PDF generation in system context. Published by guest user VF page, consumed by trigger running as Automated Process user.</description>
     <eventType>HighVolume</eventType>
-    <label>DocGen Signature PDF</label>
-    <pluralLabel>DocGen Signature PDFs</pluralLabel>
+    <label>Portwood Signature PDF</label>
+    <pluralLabel>Portwood Signature PDFs</pluralLabel>
     <publishBehavior>PublishAfterCommit</publishBehavior>
 </CustomObject>

@@ -1851,7 +1851,7 @@ private class DocGenSignatureTests {
 
         // Should use defaults
         System.assert(html.contains('#0176D3'), 'Should use default brand color');
-        System.assert(html.contains('DocGen'), 'Should use default company name');
+        System.assert(html.contains('Portwood'), 'Should use default company name');
     }
 
     @isTest

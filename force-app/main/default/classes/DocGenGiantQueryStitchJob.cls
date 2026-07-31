@@ -288,7 +288,7 @@ public with sharing class DocGenGiantQueryStitchJob implements Database.Batchabl
         } catch (Exception e) {
             try {
                 DocGen_Job__c failJob = new DocGen_Job__c(Id = jobId, Status__c = 'Failed');
-                // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+                // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
                 failJob.Label__c = ('Stitch finish error: ' + e.getMessage()).left(255);
                 update failJob; // NOPMD ApexCRUDViolation — package-internal; CRUD controlled by permission sets
             } catch (Exception updateErr) {

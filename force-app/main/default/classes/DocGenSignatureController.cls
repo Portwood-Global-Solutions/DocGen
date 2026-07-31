@@ -164,7 +164,7 @@ public without sharing class DocGenSignatureController {
             return;
         }
         // Load the template config for this request (SYSTEM_MODE — guest has no
-        // DocGen CRUD; token-bound capability already established by the caller).
+        // Portwood CRUD; token-bound capability already established by the caller).
         DocGenFlsGuard.guestAssertAccessible(DocGen_Signature_Request__c.sObjectType, new Set<String>{ 'Template__c' });
         DocGenFlsGuard.guestAssertAccessible(
             DocGen_Template__c.sObjectType,
@@ -443,11 +443,11 @@ public without sharing class DocGenSignatureController {
         // Hash the PIN for storage (never store plaintext)
         String pinHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', Blob.valueOf(pinStr)));
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         // Store hash and expiry on signer record
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         signer.PIN_Hash__c = pinHash;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         signer.PIN_Expires_At__c = System.now().addMinutes(PIN_EXPIRATION_MINUTES);
         signer.PIN_Attempts__c = 0; // Reset attempts on new PIN
         // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
@@ -544,7 +544,7 @@ public without sharing class DocGenSignatureController {
         String submittedHash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', Blob.valueOf(pin)));
 
         if (submittedHash != signer.PIN_Hash__c) {
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+            // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
             // Increment failed attempts
             signer.PIN_Attempts__c = (signer.PIN_Attempts__c == null ? 0 : signer.PIN_Attempts__c) + 1;
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
@@ -569,16 +569,16 @@ public without sharing class DocGenSignatureController {
             return result;
         }
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         // PIN verified — record timestamp and clear PIN data
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         signer.PIN_Verified_At__c = System.now();
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         signer.PIN_Hash__c = null;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         signer.PIN_Expires_At__c = null;
         signer.PIN_Attempts__c = 0;
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         if (signer.Status__c == 'Pending') {
             signer.Status__c = 'Viewed';
         }
@@ -606,9 +606,9 @@ public without sharing class DocGenSignatureController {
         if (String.isBlank(owaId) && UserInfo.getUserType() == 'Guest') {
             System.debug(
                 LoggingLevel.ERROR,
-                'DocGen: PIN email failed — no Org-Wide Email Address configured in Signature Settings (required for guest users)'
+                'Portwood: PIN email failed — no Org-Wide Email Address configured in Signature Settings (required for guest users)'
             );
-            return 'No Org-Wide Email Address configured. An admin must set one in DocGen Signature Settings.';
+            return 'No Org-Wide Email Address configured. An admin must set one in Portwood Signature Settings.';
         }
 
         // #193 — render the verification email from the brandable template
@@ -636,7 +636,7 @@ public without sharing class DocGenSignatureController {
         );
         if (!results.isEmpty() && !results[0].isSuccess()) {
             String errMsg = results[0].getErrors()[0].getMessage();
-            System.debug(LoggingLevel.ERROR, 'DocGen: PIN email send failed — ' + errMsg);
+            System.debug(LoggingLevel.ERROR, 'Portwood: PIN email send failed — ' + errMsg);
             return errMsg;
         }
         return null;
@@ -658,7 +658,7 @@ public without sharing class DocGenSignatureController {
         }
 
         // Update signer status to Viewed (SYSTEM_MODE for guest user CRUD bypass)
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         if (signer.Status__c == 'Pending') {
             signer.Status__c = 'Viewed';
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
@@ -679,7 +679,7 @@ public without sharing class DocGenSignatureController {
         res.prefillEmail = requireVerification && parentReq.Prefill_Signer_Email__c == true;
 
         // Count total and signed signers
-        // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+        // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
         DocGenFlsGuard.guestAssertAccessible(
             DocGen_Signer__c.sObjectType,
             new Set<String>{ 'Status__c', 'Signature_Request__c' }
@@ -705,7 +705,7 @@ public without sharing class DocGenSignatureController {
             // No public link needed — preview is rendered from template merge
         } else {
             Id sourceDocId = parentReq.Source_Document_Id__c;
-            // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+            // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
             DocGenFlsGuard.guestAssertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             List<ContentVersion> cvs = [
@@ -723,7 +723,7 @@ public without sharing class DocGenSignatureController {
                 try {
                     res.documentUrl = getOrCreatePublicLink(cvs[0], parentReq.Expires_At__c);
                 } catch (Exception e) {
-                    System.debug(LoggingLevel.WARN, 'DocGen: public preview link unavailable — ' + e.getMessage());
+                    System.debug(LoggingLevel.WARN, 'Portwood: public preview link unavailable — ' + e.getMessage());
                 }
             } else {
                 res.documentTitle = 'Confidential Document';
@@ -753,7 +753,7 @@ public without sharing class DocGenSignatureController {
             return res;
         }
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         if (req.Status__c == 'Sent') {
             req.Status__c = 'Viewed';
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").
@@ -768,7 +768,7 @@ public without sharing class DocGenSignatureController {
         res.totalSigners = 1;
         res.signedCount = 0;
 
-        // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+        // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
         DocGenFlsGuard.guestAssertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         List<ContentVersion> cvs = [
@@ -835,7 +835,7 @@ public without sharing class DocGenSignatureController {
         );
         /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
         Database.insert(new List<ContentDistribution>{ cd }, false, AccessLevel.SYSTEM_MODE);
-        // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+        // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
         cd = new ContentDistribution(Id = cd.Id);
         DocGenFlsGuard.guestAssertAccessible(
             ContentDistribution.sObjectType,
@@ -900,7 +900,7 @@ public without sharing class DocGenSignatureController {
             declinedAt = signers[0].LastModifiedDate;
             res.recordId = recordId;
         } else {
-            // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+            // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
             // Legacy fallback
             DocGenFlsGuard.guestAssertAccessible(
                 DocGen_Signature_Request__c.sObjectType,
@@ -944,7 +944,7 @@ public without sharing class DocGenSignatureController {
         // Template-based: load preview HTML from Signature_Data__c cache on the request,
         // or generate on-the-fly if cache is empty.
         if (templateId != null && requestId != null) {
-            // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+            // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
             // Try cached preview first
             DocGenFlsGuard.guestAssertAccessible(
                 DocGen_Signature_Request__c.sObjectType,
@@ -975,7 +975,7 @@ public without sharing class DocGenSignatureController {
                         return res;
                     }
                 } catch (Exception e) {
-                    System.debug(LoggingLevel.WARN, 'DocGen: Failed to parse cached preview: ' + e.getMessage());
+                    System.debug(LoggingLevel.WARN, 'Portwood: Failed to parse cached preview: ' + e.getMessage());
                 }
             }
 
@@ -1000,7 +1000,7 @@ public without sharing class DocGenSignatureController {
                     return res;
                 }
             } catch (Exception e) {
-                System.debug(LoggingLevel.WARN, 'DocGen: Failed to generate live preview: ' + e.getMessage());
+                System.debug(LoggingLevel.WARN, 'Portwood: Failed to generate live preview: ' + e.getMessage());
             }
 
             res.templateBase64 = '<html><body><p>Document preview unavailable.</p></body></html>';
@@ -1008,7 +1008,7 @@ public without sharing class DocGenSignatureController {
         }
 
         // Legacy: convert source DOCX to HTML
-        // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+        // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
         if (sourceDocId != null) {
             DocGenFlsGuard.guestAssertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -1060,7 +1060,7 @@ public without sharing class DocGenSignatureController {
         } catch (Exception e) {
             System.debug(
                 LoggingLevel.ERROR,
-                'DocGen: Error converting DOCX to HTML for signature display: ' + e.getMessage()
+                'Portwood: Error converting DOCX to HTML for signature display: ' + e.getMessage()
             );
         }
         return '<html><body><p>Document preview unavailable.</p></body></html>';
@@ -1187,7 +1187,7 @@ public without sharing class DocGenSignatureController {
         // (no status change, nothing persisted) and the guest sees a clean error.
         captureFormFieldData(signer.Id, signer.Signature_Request__c, token, formFieldJson);
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         // Store typed name and mark as signed
         signer.Signature_Data__c = typedName;
         signer.Status__c = 'Signed';
@@ -1257,7 +1257,7 @@ public without sharing class DocGenSignatureController {
         result.remaining = remaining;
         result.isComplete = (remaining == 0);
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         // Update parent request status
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
         parentReq.Status__c = 'In Progress';
@@ -1276,7 +1276,7 @@ public without sharing class DocGenSignatureController {
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             EventBus.publish(pdfEvent);
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Post-signature event publish failed: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: Post-signature event publish failed: ' + e.getMessage());
         }
 
         return result;
@@ -1347,7 +1347,7 @@ public without sharing class DocGenSignatureController {
             String docTitle;
             if (templateId != null) {
                 docTitle = triggerSigner.Signature_Request__r.Template__r.Name;
-                // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+                // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
             } else if (sourceDocId != null) {
                 DocGenFlsGuard.guestAssertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
                 /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -1364,7 +1364,7 @@ public without sharing class DocGenSignatureController {
             }
             return new Map<String, String>{ 'status' => 'complete', 'title' => docTitle + ' - Signed' };
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: Multi-signer stamping failed: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'Portwood: Multi-signer stamping failed: ' + e.getMessage());
             throw new AuraHandledException('An error occurred while processing signatures.');
         }
     }
@@ -1394,9 +1394,9 @@ public without sharing class DocGenSignatureController {
             LIMIT 1
         ];
         if (requests.isEmpty() || requests[0].Status__c == 'Signed' || requests[0].Status__c == 'Cancelled') {
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+            // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
             throw new AuraHandledException('Invalid request or document already signed.');
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+            // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         }
         requests[0].Signature_Data__c = typedName;
         requests[0].Status__c = 'Viewed';
@@ -1437,7 +1437,7 @@ public without sharing class DocGenSignatureController {
             // PDF generation via VF page (stamps signatures internally, no DML before callout)
             Blob pdfBlob = convertSignatureRequestToPdf(req.Id);
 
-            // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+            // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
 
             DocGenFlsGuard.guestAssertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -1454,7 +1454,7 @@ public without sharing class DocGenSignatureController {
             // Save PDF to record
             saveSignedDocument(req.Related_Record_Id__c, fileName, base64Pdf, 'pdf');
 
-            // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+            // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
 
             // Update request status and clear signature data
             req.Status__c = 'Signed';
@@ -1492,7 +1492,7 @@ public without sharing class DocGenSignatureController {
 
             return new Map<String, String>{ 'status' => 'complete', 'title' => fileName };
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: Legacy stamping failed: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'Portwood: Legacy stamping failed: ' + e.getMessage());
             throw new AuraHandledException('An error occurred while processing the signature.');
         }
     }
@@ -1557,7 +1557,7 @@ public without sharing class DocGenSignatureController {
             return Blob.toPdf('<html><body><p>Test PDF - Signed Document</p></body></html>');
         }
 
-        // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+        // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
 
         DocGenFlsGuard.guestAssertAccessible(
             DocGen_Signature_Request__c.sObjectType,
@@ -1580,7 +1580,7 @@ public without sharing class DocGenSignatureController {
         Id activeVersionId = lookupActiveTemplateVersionId(templateId);
         DocGenService.applyWatermarkOverride(templateId);
 
-        // SYSTEM_MODE required: guest profile has no DocGen CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
+        // SYSTEM_MODE required: guest profile has no Portwood CRUD by design; access is gated by token-bound lookup. See DocGenSignatureGuestSecurity for the security model.
         // Get typed-name signatures from signers
         DocGenFlsGuard.guestAssertAccessible(
             DocGen_Signer__c.sObjectType,
@@ -1752,7 +1752,7 @@ public without sharing class DocGenSignatureController {
                 }
             }
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'DocGen: Failed to clean up temp signature images: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'Portwood: Failed to clean up temp signature images: ' + e.getMessage());
         }
     }
 
@@ -1841,7 +1841,7 @@ public without sharing class DocGenSignatureController {
         }
 
         // Mark signer as declined
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         signer.Status__c = 'Declined';
         signer.Decline_Reason__c = String.isNotBlank(reason) ? reason.left(1000) : null;
         // Issue #91: clear the typed-name cache so a refresh of the signing link doesn't
@@ -1924,7 +1924,7 @@ public without sharing class DocGenSignatureController {
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
             EventBus.publish(notifyEvent);
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: Decline notification event failed: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: Decline notification event failed: ' + e.getMessage());
         }
 
         result.put('success', true);
@@ -1963,7 +1963,7 @@ public without sharing class DocGenSignatureController {
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
             LIMIT 1
-        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by Portwood permission sets
 
         if (signers.isEmpty()) {
             throw new AuraHandledException('Signer not found.');
@@ -2006,7 +2006,7 @@ public without sharing class DocGenSignatureController {
             WHERE Signer__c = :signer.Id
             WITH SYSTEM_MODE
             ORDER BY Document_Index__c ASC, Sequence_Order__c ASC
-        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by Portwood permission sets
 
         List<Map<String, Object>> result = new List<Map<String, Object>>();
         for (DocGen_Signature_Placement__c plc : placements) {
@@ -2058,7 +2058,7 @@ public without sharing class DocGenSignatureController {
             WHERE Secure_Token__c = :token
             WITH SYSTEM_MODE
             LIMIT 1
-        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by Portwood permission sets
 
         if (signers.isEmpty()) {
             throw new AuraHandledException('Signer not found.');
@@ -2084,7 +2084,7 @@ public without sharing class DocGenSignatureController {
             WHERE Id = :placementId AND Signer__c = :signer.Id
             WITH SYSTEM_MODE
             LIMIT 1
-        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by DocGen permission sets
+        ]; // NOPMD ApexCRUDViolation - package-internal custom object; CRUD controlled by Portwood permission sets
 
         if (plcs.isEmpty()) {
             throw new AuraHandledException('Placement not found.');
@@ -2359,7 +2359,7 @@ public without sharing class DocGenSignatureController {
         }
 
         try {
-            // SYSTEM_MODE required: guest profile has no DocGen/ContentVersion CRUD by
+            // SYSTEM_MODE required: guest profile has no Portwood/ContentVersion CRUD by
             // design; access is gated by the token-bound Source_Document_Id__c above.
             DocGenFlsGuard.guestAssertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData', 'Title' });
             /* code-analyzer-suppress ApexFlsViolation, DatabaseOperationsMustUseWithSharing */
@@ -2480,7 +2480,7 @@ public without sharing class DocGenSignatureController {
         // (no status change, nothing persisted) and the guest sees a clean error.
         captureFormFieldData(signer.Id, signer.Signature_Request__c, token, formFieldJson);
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         // Store typed name and mark as signed
         signer.Signature_Data__c = typedName;
         signer.Status__c = 'Signed';
@@ -2563,7 +2563,7 @@ public without sharing class DocGenSignatureController {
         ];
         Boolean snapshotBacked = !parentReqs.isEmpty() && parentReqs[0].Template__c != null;
 
-        // CxSAST: FLS enforced by DocGen permission sets; package-internal custom objects
+        // CxSAST: FLS enforced by Portwood permission sets; package-internal custom objects
         DocGen_Signature_Request__c parentReq = new DocGen_Signature_Request__c(Id = signer.Signature_Request__c);
         if (snapshotBacked) {
             // Leave 'In Progress' so the platform-event trigger enqueues the finalizer,
@@ -2830,7 +2830,7 @@ public without sharing class DocGenSignatureController {
                         signedTitle = resolved.trim();
                     }
                 } catch (Exception titleErr) {
-                    System.debug(LoggingLevel.WARN, 'DocGen: signed title format failed: ' + titleErr.getMessage());
+                    System.debug(LoggingLevel.WARN, 'Portwood: signed title format failed: ' + titleErr.getMessage());
                     // Visible in DocGen_Error_Log__c: when this fails the signed file falls
                     // back to "<base> - Signed" and the author's Document Title Format is
                     // silently lost — admins should be able to see why.
@@ -2895,7 +2895,7 @@ public without sharing class DocGenSignatureController {
             } catch (Exception shareErr) {
                 System.debug(
                     LoggingLevel.ERROR,
-                    'DocGen: failed to share intermediate signing PDF with next signer: ' + shareErr.getMessage()
+                    'Portwood: failed to share intermediate signing PDF with next signer: ' + shareErr.getMessage()
                 );
             }
         }
@@ -2920,7 +2920,7 @@ public without sharing class DocGenSignatureController {
             } catch (Exception wbEx) {
                 System.debug(
                     LoggingLevel.WARN,
-                    'DocGen: composited writeback event publish failed: ' + wbEx.getMessage()
+                    'Portwood: composited writeback event publish failed: ' + wbEx.getMessage()
                 );
             }
 
@@ -2939,7 +2939,7 @@ public without sharing class DocGenSignatureController {
             } catch (Exception notifEx) {
                 System.debug(
                     LoggingLevel.WARN,
-                    'DocGen: composited all-signed notification failed: ' + notifEx.getMessage()
+                    'Portwood: composited all-signed notification failed: ' + notifEx.getMessage()
                 );
             }
             try {
@@ -2951,7 +2951,7 @@ public without sharing class DocGenSignatureController {
             } catch (Exception signerNotifEx) {
                 System.debug(
                     LoggingLevel.WARN,
-                    'DocGen: composited signer completion email failed: ' + signerNotifEx.getMessage()
+                    'Portwood: composited signer completion email failed: ' + signerNotifEx.getMessage()
                 );
             }
         }

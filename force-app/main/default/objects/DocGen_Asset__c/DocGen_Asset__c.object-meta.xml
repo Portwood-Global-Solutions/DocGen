@@ -15,12 +15,12 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>Private</externalSharingModel>
-    <label>DocGen Asset</label>
+    <label>Portwood Asset</label>
     <nameField>
         <label>Asset Name</label>
         <type>Text</type>
     </nameField>
-    <pluralLabel>DocGen Assets</pluralLabel>
+    <pluralLabel>Portwood Assets</pluralLabel>
     <searchLayouts />
     <sharingModel>ReadWrite</sharingModel>
     <visibility>Public</visibility>

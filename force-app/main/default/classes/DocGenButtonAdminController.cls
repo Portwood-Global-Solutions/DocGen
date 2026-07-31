@@ -1,7 +1,7 @@
 /**
- * Front-end admin for the one-click DocGen Button configs (DocGen_Button__mdt).
+ * Front-end admin for the one-click Portwood Button configs (DocGen_Button__mdt).
  *
- * Lets DocGen admins create / update / deactivate the record-page document
+ * Lets Portwood admins create / update / deactivate the record-page document
  * buttons from the Command Hub UI instead of Setup > Custom Metadata Types.
  * Custom metadata can't be written with DML, so saves go through the Apex
  * Metadata API (Metadata.Operations.enqueueDeployment) and are ASYNC — the LWC

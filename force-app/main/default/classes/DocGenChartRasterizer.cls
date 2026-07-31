@@ -17,7 +17,7 @@
  *     of the surrounding Word document text (rendered at full font quality
  *     by the target app). The raster carries shapes + colors only — this
  *     avoids shipping a pixel font and keeps the output visually clean.
- *   - 8-bit indexed color with the standard 8-bucket DocGen palette plus
+ *   - 8-bit indexed color with the standard 8-bucket Portwood palette plus
  *     white background + grid grey. Keeps file size minimal.
  *   - No anti-aliasing in v1. Edges are crisp at chart-rendering scale.
  *

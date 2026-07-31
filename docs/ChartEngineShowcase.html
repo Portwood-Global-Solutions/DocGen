@@ -19,7 +19,7 @@ img { max-width: 100%; height: auto; }
 
 <h1>{Name}</h1>
 <p class="lede">Chart Engine Showcase — all 8 styles rendered against {COUNT:Survey_Responses__r} commute responses across 2 office locations.</p>
-<p class="meta">Generated {today:MMMM d, yyyy} by DocGen</p>
+<p class="meta">Generated {today:MMMM d, yyyy} by Portwood</p>
 
 <h2>1. Bar (horizontal)</h2>
 <p class="desc">Baseline bucket aggregation — one bar per commute mode, length proportional to count.</p>
@@ -53,7 +53,7 @@ img { max-width: 100%; height: auto; }
 <p class="desc">Line chart with a filled polygon under each series — emphasizes accumulated volume.</p>
 <div class="chart">{Chart:Survey_Responses__r:Selected_Answer__c:area:groupBy=Location__c&colSort=8000 Marina,3260 Bayshore&title=Commute Volume by Location}</div>
 
-<p class="footer">DocGen Chart Engine — pure-Apex PNG rasterization, no external callouts.</p>
+<p class="footer">Portwood Chart Engine — pure-Apex PNG rasterization, no external callouts.</p>
 
 </body>
 </html>

@@ -50,34 +50,34 @@
                 - generic [ref=f22e28]:
                     - navigation "App" [ref=f22e29]:
                         - button "App Launcher" [ref=f22e31] [cursor=pointer]
-                    - heading "DocGen" [level=1] [ref=f22e43]
+                    - heading "Portwood" [level=1] [ref=f22e43]
                 - navigation "Global" [ref=f22e47]:
                     - list [ref=f22e48]:
                         - listitem [ref=f22e49]:
-                            - link "DocGen" [ref=f22e50] [cursor=pointer]:
+                            - link "Portwood" [ref=f22e50] [cursor=pointer]:
                                 - /url: /lightning/n/portwoodglobal\_\_DocGen_Command_Hub
                         - listitem [ref=f22e52]:
-                            - link "DocGen Templates" [ref=f22e53] [cursor=pointer]:
+                            - link "Portwood Templates" [ref=f22e53] [cursor=pointer]:
                                 - /url: /lightning/o/portwoodglobal**DocGen_Template**c/home
-                            - button "DocGen Templates List" [ref=f22e58] [cursor=pointer]
+                            - button "Portwood Templates List" [ref=f22e58] [cursor=pointer]
                         - listitem [ref=f22e66]:
-                            - link "DocGen Jobs" [ref=f22e67] [cursor=pointer]:
+                            - link "Portwood Jobs" [ref=f22e67] [cursor=pointer]:
                                 - /url: /lightning/o/portwoodglobal**DocGen_Job**c/home
-                            - button "DocGen Jobs List" [ref=f22e72] [cursor=pointer]
+                            - button "Portwood Jobs List" [ref=f22e72] [cursor=pointer]
                         - listitem [ref=f22e80]:
-                            - link "DocGen Signature Requests" [ref=f22e81] [cursor=pointer]:
+                            - link "Portwood Signature Requests" [ref=f22e81] [cursor=pointer]:
                                 - /url: /lightning/o/portwoodglobal**DocGen_Signature_Request**c/home
-                            - button "DocGen Signature Requests List" [ref=f22e86] [cursor=pointer]
+                            - button "Portwood Signature Requests List" [ref=f22e86] [cursor=pointer]
                         - listitem [ref=f22e94]:
-                            - link "DocGen Signers" [ref=f22e95] [cursor=pointer]:
+                            - link "Portwood Signers" [ref=f22e95] [cursor=pointer]:
                                 - /url: /lightning/o/portwoodglobal**DocGen_Signer**c/home
-                            - button "DocGen Signers List" [ref=f22e100] [cursor=pointer]
+                            - button "Portwood Signers List" [ref=f22e100] [cursor=pointer]
                         - listitem [ref=f22e241] [cursor=pointer]:
-                            - link "\* DocGen Template Manager" [ref=f22e242]:
+                            - link "\* Portwood Template Manager" [ref=f22e242]:
                                 - /url: /lightning/n/portwoodglobal\_\_DocGen_Template_Manager
                                 - generic "Not added to nav bar" [ref=f22e243]: "\*"
-                                - generic [ref=f22e244]: DocGen Template Manager
-                            - button "DocGen Template Manager List" [ref=f22e248]
+                                - generic [ref=f22e244]: Portwood Template Manager
+                            - button "Portwood Template Manager List" [ref=f22e248]
                             - button "Close tab" [ref=f22e256]
                         - listitem [ref=f22e264]:
                             - button "Show more navigation items" [ref=f22e266] [cursor=pointer]:
@@ -110,9 +110,9 @@
                                             - generic [ref=f22e338]: Start from a Design
                                             - generic [ref=f22e339]: Recommended
                                         - paragraph [ref=f22e340]: Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Creates an HTML template, the most reliable path to pixel-perfect PDFs.
-                                    - radio "Generate with AI We assemble a ready-to-paste prompt with your fields and DocGen's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor." [ref=f22e341] [cursor=pointer]:
+                                    - radio "Generate with AI We assemble a ready-to-paste prompt with your fields and Portwood's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor." [ref=f22e341] [cursor=pointer]:
                                         - generic [ref=f22e342]: Generate with AI
-                                        - paragraph [ref=f22e352]: We assemble a ready-to-paste prompt with your fields and DocGen's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor.
+                                        - paragraph [ref=f22e352]: We assemble a ready-to-paste prompt with your fields and Portwood's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor.
                                     - 'radio "Start From Scratch A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way." [ref=f22e353] [cursor=pointer]':
                                         - generic [ref=f22e354]: Start From Scratch
                                         - paragraph [ref=f22e362]: "A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way."

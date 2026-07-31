@@ -2,7 +2,7 @@
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Signer_Verification__c</fullName>
     <description
-    >Template default for signer email-PIN verification (#verification). Inherit = use the org default (DocGen Settings); Required = always verify; Off = skip verification. Individual sends can still override. Resolved at send time and stored on the signature request.</description>
+    >Template default for signer email-PIN verification (#verification). Inherit = use the org default (Portwood Settings); Required = always verify; Off = skip verification. Individual sends can still override. Resolved at send time and stored on the signature request.</description>
     <externalId>false</externalId>
     <label>Signer Verification</label>
     <required>false</required>

@@ -4,7 +4,7 @@
     <description
     >Platform event to trigger signer form-field writeback to the base record in system context. Published by the signature finalizer (TemplateSignaturePdfQueueable) only after the signed PDF is saved; consumed by DocGenFieldWritebackTrigger running as the Automated Process user. Carries only the request Id — the subscriber re-derives the writable field allowlist from the template config and re-checks FLS per field.</description>
     <eventType>HighVolume</eventType>
-    <label>DocGen Field Writeback</label>
-    <pluralLabel>DocGen Field Writebacks</pluralLabel>
+    <label>Portwood Field Writeback</label>
+    <pluralLabel>Portwood Field Writebacks</pluralLabel>
     <publishBehavior>PublishAfterCommit</publishBehavior>
 </CustomObject>

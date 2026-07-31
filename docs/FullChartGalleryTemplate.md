@@ -1,15 +1,15 @@
 ---
-title: 'DocGen Chart Gallery'
+title: 'Portwood Chart Gallery'
 subtitle: 'Button-ready Word template for chart rendering'
 ---
 
 # {Name}
 
-DocGen Chart Gallery
+Portwood Chart Gallery
 
 Generated {TODAY:date:MMMM d, yyyy}
 
-This Word template is designed to be uploaded as a DocGen **Word** template and generated from a demo survey record. Each chart tag below is top-level text so DocGen can discover it, rasterize the chart, and replace the tag with a generated PNG when you press the runner button.
+This Word template is designed to be uploaded as a Portwood **Word** template and generated from a demo survey record. Each chart tag below is top-level text so Portwood can discover it, rasterize the chart, and replace the tag with a generated PNG when you press the runner button.
 
 Use this template with survey-style demo data:
 
@@ -112,4 +112,4 @@ Use pivot when you want a table like this:
 | Transit  |         25% |   18% |       36% |     30% |   27% |
 | Telework |         33% |   51% |       44% |     52% |   44% |
 
-Keep chart tags on one plain-text line in Word. If Word splits a tag across styled runs, DocGen may not detect it during chart preflight.
+Keep chart tags on one plain-text line in Word. If Word splits a tag across styled runs, Portwood may not detect it during chart preflight.

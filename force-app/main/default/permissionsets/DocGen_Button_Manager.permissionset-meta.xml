@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
-    <label>Portwood DocGen Button Manager</label>
+    <label>Portwood Button Manager</label>
     <description
-    >Grants the DocGen button-builder (Command Hub Buttons tab). Requires Customize Application / Modify Metadata, which the package does not grant; the tab stays hidden without it.</description>
+    >Grants the Portwood button-builder (Command Hub Buttons tab). Requires Customize Application / Modify Metadata, which the package does not grant; the tab stays hidden without it.</description>
     <hasActivationRequired>false</hasActivationRequired>
     <classAccesses>
         <apexClass>DocGenButtonAdminController</apexClass>

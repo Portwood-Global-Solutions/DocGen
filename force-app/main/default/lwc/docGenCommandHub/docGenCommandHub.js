@@ -56,7 +56,7 @@ export default class DocGenCommandHub extends LightningElement {
     }
 
     get bannerHeading() {
-        return this.templateCount === 0 ? 'Welcome to DocGen' : 'DocGen';
+        return this.templateCount === 0 ? 'Welcome to Portwood' : 'Portwood';
     }
 
     get bannerSubtext() {

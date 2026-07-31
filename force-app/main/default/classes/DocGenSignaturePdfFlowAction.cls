@@ -1,7 +1,7 @@
 /**
- * Flow-invocable action to send a DocGen TEMPLATE for signature.
+ * Flow-invocable action to send a Portwood TEMPLATE for signature.
  *
- * As of v3.18 this action is template-only. DocGen snapshots the record data at
+ * As of v3.18 this action is template-only. Portwood snapshots the record data at
  * send-time and, on completion, re-renders the document from that snapshot and
  * appends a signing-certificate page to the related record's Files. The legacy
  * "send a pre-generated ContentVersion" path was removed: a flat PDF has no
@@ -9,14 +9,14 @@
  * signatures back into the document (the contentVersionId input is now ignored).
  *
  * PREREQUISITES:
- * 1. A DocGen Template with an active version (HTML or Word) — ideally carrying
+ * 1. A Portwood Template with an active version (HTML or Word) — ideally carrying
  *    {@Signature_Role:Order:Type} placement tags for guided signing.
- * 2. An Org-Wide Email Address configured in DocGen > Signatures settings.
+ * 2. An Org-Wide Email Address configured in Portwood > Signatures settings.
  * 3. A Salesforce Site configured for the signing page.
  *
  * QUICK START:
  * 1. Find the template (Get Records) and capture its Id.
- * 2. Build a collection of DocGen Signers (Name + Email + optional Role/Contact Id).
+ * 2. Build a collection of Portwood Signers (Name + Email + optional Role/Contact Id).
  * 3. Drag this action into your Flow, set Template Id + Related Record Id + Signers.
  * 4. The action returns signing URLs and a request Id for downstream automation.
  */
@@ -24,13 +24,13 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
     global class Request {
         @InvocableVariable(
             label='Template Id'
-            description='Snapshot signing (recommended): the DocGen Template Id to send. DocGen snapshots the record data at send-time and, on completion, re-renders the document from that snapshot and appends a signing-certificate page to the related record\'s Files. Provide EITHER Template Id (with Related Record Id) OR Content Version Id.'
+            description='Snapshot signing (recommended): the Portwood Template Id to send. Portwood snapshots the record data at send-time and, on completion, re-renders the document from that snapshot and appends a signing-certificate page to the related record\'s Files. Provide EITHER Template Id (with Related Record Id) OR Content Version Id.'
         )
         global Id templateId;
 
         @InvocableVariable(
             label='Content Version Id (DEPRECATED — ignored)'
-            description='DEPRECATED and ignored as of v3.18. Sending a pre-generated PDF for signature is no longer supported — a flat PDF has no signature tags to place or stamp. Provide a Template Id instead; DocGen renders and tags the document at send time.'
+            description='DEPRECATED and ignored as of v3.18. Sending a pre-generated PDF for signature is no longer supported — a flat PDF has no signature tags to place or stamp. Provide a Template Id instead; Portwood renders and tags the document at send time.'
         )
         global Id contentVersionId;
 
@@ -43,7 +43,7 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
 
         @InvocableVariable(
             label='Signers'
-            description='A collection of DocGen Signers. Create an Apex-Defined variable of type DocGenSigner (Name + Email required; Role and Contact Id optional), add each to a collection with an Assignment element, and pass it here.'
+            description='A collection of Portwood Signers. Create an Apex-Defined variable of type DocGenSigner (Name + Email required; Role and Contact Id optional), add each to a collection with an Assignment element, and pass it here.'
         )
         global List<DocGenSigner> signerRecords;
 
@@ -63,7 +63,7 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
     global class Result {
         @InvocableVariable(
             label='Signature Request Id'
-            description='The Id of the created DocGen Signature Request record. Use this to track status or link in downstream Flow elements.'
+            description='The Id of the created Portwood Signature Request record. Use this to track status or link in downstream Flow elements.'
         )
         global Id signatureRequestId;
 
@@ -99,8 +99,8 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
     }
 
     @InvocableMethod(
-        label='DocGen: Send Existing Document for Signature (Deprecated — use "DocGen: Create Signature Request")'
-        description='DEPRECATED: use "DocGen: Create Signature Request" instead. Kept for existing Flows; now routes through the same unified signing path, so signature placement tags ({@Signature_Role:Order:Type[:inline]}) are honored and the {#Signatures} loop still populates. Pass a Template Id, Related Record Id, and a Signers collection. Returns signing URLs.'
+        label='Portwood: Send Existing Document for Signature (Deprecated — use "Portwood: Create Signature Request")'
+        description='DEPRECATED: use "Portwood: Create Signature Request" instead. Kept for existing Flows; now routes through the same unified signing path, so signature placement tags ({@Signature_Role:Order:Type[:inline]}) are honored and the {#Signatures} loop still populates. Pass a Template Id, Related Record Id, and a Signers collection. Returns signing URLs.'
         category='Document Generation'
     )
     global static List<Result> send(List<Request> requests) {
@@ -131,7 +131,7 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
             // stamp-back. E-signature always starts from a template now.
             throw new DocGenException(
                 'Template Id is required. Sending a pre-generated document (Content Version) for signature is no ' +
-                'longer supported — provide a Template Id and DocGen will render and tag the document for signing.'
+                'longer supported — provide a Template Id and Portwood will render and tag the document for signing.'
             );
         }
         if (req.relatedRecordId == null) {
@@ -154,7 +154,7 @@ global with sharing class DocGenSignaturePdfFlowAction { // NOPMD AvoidGlobalMod
 
             String signersJson = JSON.serialize(signerInputs);
             // DEPRECATED action — routed through the single canonical entry point so its
-            // behavior is identical to "DocGen: Create Signature Request": placement tags
+            // behavior is identical to "Portwood: Create Signature Request": placement tags
             // ({@Signature_Role:Order:Type[:inline]}) are positioned/inline-composited, and
             // a {#Signatures}-loop template is dispatched to the snapshot render strategy
             // internally. Previously this called createTemplateSnapshotRequest directly,

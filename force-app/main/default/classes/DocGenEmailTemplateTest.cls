@@ -354,7 +354,7 @@ private class DocGenEmailTemplateTest {
         List<ContentDistribution> dists = [
             SELECT ContentDownloadUrl
             FROM ContentDistribution
-            WHERE Name LIKE 'DocGen Asset - Footer Banner%'
+            WHERE Name LIKE 'Portwood Asset - Footer Banner%'
         ];
         if (dists.isEmpty()) {
             return; // org without Content Deliveries — publish path covered elsewhere
@@ -637,8 +637,8 @@ private class DocGenEmailTemplateTest {
         System.assert(r.htmlBody.startsWith('<div id="mine">'), 'admin markup is the document root: ' + r.htmlBody);
         System.assert(r.htmlBody.contains('Jordan Rivera'), 'merge token resolved in full HTML');
         System.assert(r.htmlBody.contains('https://sign.example.com/?token=RAW'), 'action button widget resolved');
-        System.assert(!r.htmlBody.contains('Powered by DocGen'), 'no DocGen chrome footer in full HTML');
-        System.assert(!r.htmlBody.contains('max-width:600px'), 'no DocGen chrome wrapper in full HTML');
+        System.assert(!r.htmlBody.contains('Powered by Portwood'), 'no Portwood chrome footer in full HTML');
+        System.assert(!r.htmlBody.contains('max-width:600px'), 'no Portwood chrome wrapper in full HTML');
     }
 
     // ---- Service: per-send subject override resolves tokens ----
@@ -666,7 +666,7 @@ private class DocGenEmailTemplateTest {
         // Preview from unsaved full-HTML values skips chrome too.
         DocGenEmailTemplateService.RenderedEmail pv = DocGenEmailTemplateController.renderPreview(data);
         Test.stopTest();
-        System.assert(!pv.htmlBody.contains('Powered by DocGen'), 'full-HTML preview has no chrome');
+        System.assert(!pv.htmlBody.contains('Powered by Portwood'), 'full-HTML preview has no chrome');
 
         List<Map<String, Object>> rows = DocGenEmailTemplateController.getTemplates();
         for (Map<String, Object> row : rows) {

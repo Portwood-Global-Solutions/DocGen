@@ -2,9 +2,9 @@
 <Flow xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>66.0</apiVersion>
     <description
-    >Screen Flow: generates a PDF summary for the current Account using the default DocGen template marked for Account. Launch as a Quick Action or App Page button on the Account record page. Requires at least one Account template with Default Template checked.</description>
-    <interviewLabel>DocGen Generate Account Summary {!$Flow.CurrentDateTime}</interviewLabel>
-    <label>DocGen: Generate Account Summary</label>
+    >Screen Flow: generates a PDF summary for the current Account using the default Portwood template marked for Account. Launch as a Quick Action or App Page button on the Account record page. Requires at least one Account template with Default Template checked.</description>
+    <interviewLabel>Portwood Generate Account Summary {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Portwood: Generate Account Summary</label>
     <processMetadataValues>
         <name>BuilderType</name>
         <value>
@@ -179,7 +179,7 @@
         <fields>
             <name>No_Template_Message</name>
             <fieldText
-            >&lt;p&gt;&lt;strong style=&quot;color: rgb(183, 28, 28);&quot;&gt;No default Account template found.&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;Open DocGen, go to Templates, and check &lt;strong&gt;Default Template&lt;/strong&gt; on an Account template to enable this flow.&lt;/p&gt;</fieldText>
+            >&lt;p&gt;&lt;strong style=&quot;color: rgb(183, 28, 28);&quot;&gt;No default Account template found.&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;Open Portwood, go to Templates, and check &lt;strong&gt;Default Template&lt;/strong&gt; on an Account template to enable this flow.&lt;/p&gt;</fieldText>
             <fieldType>DisplayText</fieldType>
         </fields>
         <showFooter>true</showFooter>

@@ -16,7 +16,7 @@ global without sharing class DocGenSignatureSubmitter { // NOPMD AvoidGlobalModi
         global String errorMessage;
     }
 
-    @InvocableMethod(label='Submit Signed Signature' category='DocGen')
+    @InvocableMethod(label='Submit Signed Signature' category='Portwood')
     // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
     global static List<FlowOutput> submitSignature(List<FlowInput> inputs) {
         List<FlowOutput> results = new List<FlowOutput>();

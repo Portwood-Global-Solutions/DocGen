@@ -13,13 +13,13 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>ControlledByParent</externalSharingModel>
-    <label>DocGen Signature Audit</label>
+    <label>Portwood Signature Audit</label>
     <nameField>
         <displayFormat>AUD-{000000}</displayFormat>
         <label>Audit Number</label>
         <type>AutoNumber</type>
     </nameField>
-    <pluralLabel>DocGen Signature Audits</pluralLabel>
+    <pluralLabel>Portwood Signature Audits</pluralLabel>
     <searchLayouts />
     <sharingModel>ControlledByParent</sharingModel>
     <visibility>Public</visibility>

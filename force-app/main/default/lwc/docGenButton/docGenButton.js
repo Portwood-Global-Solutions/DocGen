@@ -7,10 +7,10 @@ import generate from '@salesforce/apex/DocGenButtonController.generate';
 /**
  * docGenButton
  * ------------
- * Screen quick action that generates a DocGen document from a pre-configured
+ * Screen quick action that generates a Portwood document from a pre-configured
  * template (DocGen_Button__mdt) and downloads it. When exactly one configuration
  * exists for the object it runs immediately; when several exist it shows a small
- * picker. No DocGen Runner, no field choices.
+ * picker. No Portwood Runner, no field choices.
  */
 export default class DocGenButton extends LightningElement {
     _recordId;
@@ -67,7 +67,7 @@ export default class DocGenButton extends LightningElement {
         try {
             const opts = await getButtons({ recordId: this.recordId });
             if (!opts || opts.length === 0) {
-                this.fail('No DocGen document is configured for this record type.');
+                this.fail('No Portwood document is configured for this record type.');
                 return;
             }
             if (opts.length === 1) {

@@ -13,14 +13,14 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>Private</externalSharingModel>
-    <label>DocGen Signature Request</label>
+    <label>Portwood Signature Request</label>
     <nameField>
         <displayFormat>SIG-{000000}</displayFormat>
         <label>Request Number</label>
         <trackHistory>false</trackHistory>
         <type>AutoNumber</type>
     </nameField>
-    <pluralLabel>DocGen Signature Requests</pluralLabel>
+    <pluralLabel>Portwood Signature Requests</pluralLabel>
     <searchLayouts />
     <sharingModel>ReadWrite</sharingModel>
     <visibility>Public</visibility>

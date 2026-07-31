@@ -11,7 +11,7 @@
     <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
     <isNavTabPersistenceDisabled>false</isNavTabPersistenceDisabled>
     <isOmniPinnedViewEnabled>false</isOmniPinnedViewEnabled>
-    <label>DocGen</label>
+    <label>Portwood</label>
     <navType>Standard</navType>
     <tabs>DocGen_Command_Hub</tabs>
     <tabs>DocGen_Template__c</tabs>

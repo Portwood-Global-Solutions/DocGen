@@ -7,7 +7,7 @@ global with sharing class DocGenFlowAction { // NOPMD AvoidGlobalModifier — gl
     global class Request {
         @InvocableVariable(
             label='Template ID'
-            description='The DocGen Template record ID. Provide this OR Template API Name.'
+            description='The Portwood Template record ID. Provide this OR Template API Name.'
         )
         global Id templateId;
 
@@ -66,7 +66,7 @@ global with sharing class DocGenFlowAction { // NOPMD AvoidGlobalModifier — gl
 
     @InvocableMethod(
         label='Generate Document'
-        description='Generates a document (PDF, DOCX, PPTX, XLSX) from a DocGen template and record. Supports all merge tags including loops, images, barcodes, QR codes, and aggregates.'
+        description='Generates a document (PDF, DOCX, PPTX, XLSX) from a Portwood template and record. Supports all merge tags including loops, images, barcodes, QR codes, and aggregates.'
     )
     global static List<Response> generateDocument(List<Request> requests) {
         List<Response> responses = new List<Response>();

@@ -274,7 +274,7 @@ public with sharing class DocGenAiTemplateController {
             Database.update(t, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
             // Staging is a convenience. Losing it must not lose the generation.
-            System.debug(LoggingLevel.WARN, 'DocGen: could not stage Draft_Body__c: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: could not stage Draft_Body__c: ' + e.getMessage());
         }
     }
 }

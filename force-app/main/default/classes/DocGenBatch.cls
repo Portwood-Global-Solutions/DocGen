@@ -680,7 +680,7 @@ public with sharing class DocGenBatch implements Database.Batchable<SObject>, Da
             Messaging.CustomNotification notification = new Messaging.CustomNotification();
             notification.setNotificationTypeId(types[0].Id);
             notification.setTargetId(jobId);
-            notification.setTitle('DocGen: ' + jobName + ' — ' + status);
+            notification.setTitle('Portwood: ' + jobName + ' — ' + status);
             notification.setBody(
                 successCount +
                     ' documents generated' +

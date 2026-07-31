@@ -2,7 +2,7 @@
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>66.0</apiVersion>
     <isExposed>true</isExposed>
-    <masterLabel>DocGen Runner</masterLabel>
+    <masterLabel>Portwood Runner</masterLabel>
     <description
     >Generate documents from any record — PDF, Word, Excel, PowerPoint. Works on desktop and mobile.</description>
     <targets>

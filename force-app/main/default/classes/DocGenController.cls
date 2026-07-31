@@ -68,7 +68,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
     /**
      * Retrieves template metadata, file content, and merged record data for client-side processing.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param recordId The source record ID to merge data from
      * @return Map containing record data, template file, type, output format, and title format
      */
@@ -79,11 +79,11 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         }
 
         // Explicit object-level CRUD check — the documented enforcement signal
-        // gating this admin-only read on the user's DocGen permission set
+        // gating this admin-only read on the user's Portwood permission set
         // assignment.
         if (!Schema.sObjectType.DocGen_Template__c.isAccessible()) {
             throw new DocGenException(
-                'Insufficient access to DocGen templates. Verify DocGen permission set assignment.'
+                'Insufficient access to Portwood templates. Verify Portwood permission set assignment.'
             );
         }
         // SYSTEM_MODE retained for the field read: Query_Config__c, Header/Footer_Html__c,
@@ -204,7 +204,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      */
     /**
      * Returns template metadata combined with pre-cached record data, skipping per-record SOQL.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param cachedRecordData Pre-loaded record data from bulk cache
      * @return Map containing record data, template file, type, output format, and title format
      */
@@ -474,7 +474,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     /**
      * Processes a template server-side and returns the document as base64, along with
      * the title, output format, and template type. Used by LWC for download/preview.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param recordId The source record ID
      * @return Map containing base64 document data, title, outputFormat, and templateType
      */
@@ -502,7 +502,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * The LWC can fetch RTF images via the browser session and pass them as
      * a map of originalUrl to base64DataUri. This enables DOCX image embedding
      * without server-side HTTP callouts (AppExchange safe).
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param recordId The source record ID
      * @param resolvedImages Map of original image URLs to base64 data URIs from the LWC
      * @return Map containing base64 document data, title, outputFormat, and templateType
@@ -559,7 +559,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * Returns merged document parts for client-side DOCX assembly.
      * Server merges the XML (lightweight). Client fetches the shell ZIP and images
      * by URL, then assembles the final DOCX — no server-side ZIP, zero heap for large docs.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param recordId The source record ID
      * @return Map containing allXmlParts, imageBase64Map, imageCvIdMap, title, and templateType
      */
@@ -1967,9 +1967,9 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     private static final String TEMPLATE_PICKER_SHARING_MESSAGE =
-        'Unable to load DocGen templates. Ask an admin to verify that at least one active DocGen Template is shared ' +
-        'with you for this object. If DocGen Template sharing is Private, share the template record directly or set ' +
-        'Setup > Sharing Settings > Portwood DocGen Template > Default Internal Access to Public Read.';
+        'Unable to load Portwood templates. Ask an admin to verify that at least one active Portwood Template is shared ' +
+        'with you for this object. If Portwood Template sharing is Private, share the template record directly or set ' +
+        'Setup > Sharing Settings > Portwood Template > Default Internal Access to Public Read.';
 
     @TestVisible
     private static String resolveTemplatePickerLoadError(Exception e) {
@@ -1977,7 +1977,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (isInternalUserModeBindError(message)) {
             return TEMPLATE_PICKER_SHARING_MESSAGE;
         }
-        return String.isBlank(message) ? 'Unable to load DocGen templates.' : message;
+        return String.isBlank(message) ? 'Unable to load Portwood templates.' : message;
     }
 
     @TestVisible
@@ -2132,7 +2132,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 readableIds.add(template.Id);
             }
         } catch (Exception e) {
-            // If the user cannot read DocGen templates at all, the runner should show none.
+            // If the user cannot read Portwood templates at all, the runner should show none.
             readableIds.clear();
         }
         return readableIds;
@@ -2410,7 +2410,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
-     * Returns all DocGen templates with their latest file attachment info.
+     * Returns all Portwood templates with their latest file attachment info.
      * @return List of all DocGen_Template__c records ordered by category and name
      */
     @AuraEnabled(cacheable=true)
@@ -3705,7 +3705,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
-     * Deletes a DocGen template record.
+     * Deletes a Portwood template record.
      * @param templateId The ID of the template to delete
      */
     @AuraEnabled
@@ -3782,7 +3782,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
     /**
      * Returns all version history records for a template, ordered by creation date descending.
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @return List of DocGen_Template_Version__c records
      */
     @AuraEnabled
@@ -4094,7 +4094,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * Unified PDF generation. Uses the same code path as bulk batch generation.
      * For "save" mode: saves PDF to record via DocGenService.generateDocument().
      * For "download" mode: returns base64 PDF via DocGenService.generatePdfBlob().
-     * @param templateId The DocGen template record ID
+     * @param templateId The Portwood template record ID
      * @param recordId The source record ID
      * @param saveToRecord Whether to save the PDF as a file on the record
      * @return Map containing base64 PDF data and title, or saved content document ID
@@ -5125,7 +5125,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
-     * Imports a report's columns and filters as a DocGen query config.
+     * Imports a report's columns and filters as a Portwood query config.
      * Uses the Reports API to describe the report, then normalizes
      * column names to SOQL field API names.
      * @param reportId The Salesforce Report ID to import configuration from
@@ -7875,7 +7875,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             throw DocGenService.ahe('Expected a ContentVersion Id.');
         }
         if (assetId.getSObjectType() != DocGen_Asset__c.sObjectType) {
-            throw DocGenService.ahe('Expected a DocGen Asset Id.');
+            throw DocGenService.ahe('Expected a Portwood Asset Id.');
         }
         try {
             // Confirm the RUNNING USER can see this ContentVersion under their own
@@ -8018,7 +8018,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 LIMIT 1
             ]; // NOPMD ApexCRUDViolation - internal plumbing behind the addAssetVersion guards
             ContentDistribution cd = new ContentDistribution(
-                Name = 'DocGen Asset - ' + (named.isEmpty() ? 'Logo' : named[0].Name),
+                Name = 'Portwood Asset - ' + (named.isEmpty() ? 'Logo' : named[0].Name),
                 ContentVersionId = newLatestCvId,
                 PreferencesAllowViewInBrowser = true,
                 PreferencesLinkLatestVersion = true,
@@ -8030,7 +8030,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             /* code-analyzer-suppress ApexFlsViolation */
             Database.insert(cd, AccessLevel.SYSTEM_MODE);
         } catch (Exception e) {
-            System.debug(LoggingLevel.WARN, 'DocGen: asset delivery carry-forward skipped: ' + e.getMessage());
+            System.debug(LoggingLevel.WARN, 'Portwood: asset delivery carry-forward skipped: ' + e.getMessage());
         }
     }
 

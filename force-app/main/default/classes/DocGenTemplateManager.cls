@@ -1,6 +1,6 @@
 public with sharing class DocGenTemplateManager {
     /**
-     * Retrieves the ContentVersion Blob for the latest file attached to the DocGen Template.
+     * Retrieves the ContentVersion Blob for the latest file attached to the Portwood Template.
      * @param templateId The ID of the DocGen_Template__c record.
      * @return String Base64 encoded file data.
      */

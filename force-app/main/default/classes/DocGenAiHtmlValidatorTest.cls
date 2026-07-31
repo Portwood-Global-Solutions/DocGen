@@ -195,7 +195,7 @@ private class DocGenAiHtmlValidatorTest {
     @isTest
     static void visualforceStyleTagsAreRewritten() {
         // A model writing Salesforce markup reaches for {!Field} — that is what
-        // most Salesforce templating looks like. DocGen has no bang.
+        // most Salesforce templating looks like. Portwood has no bang.
         DocGenAiHtmlValidator.Result r = DocGenAiHtmlValidator.sanitize(
             '<p>{!Account.Name} — {!Industry}</p><p>{Name}</p>'
         );

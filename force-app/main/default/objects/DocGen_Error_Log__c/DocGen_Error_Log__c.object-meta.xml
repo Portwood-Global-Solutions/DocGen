@@ -3,7 +3,7 @@
     <allowInChatterGroups>false</allowInChatterGroups>
     <compactLayoutAssignment>SYSTEM</compactLayoutAssignment>
     <deploymentStatus>Deployed</deploymentStatus>
-    <description>Stores non-sensitive DocGen exception details for administrator troubleshooting.</description>
+    <description>Stores non-sensitive Portwood exception details for administrator troubleshooting.</description>
     <enableActivities>false</enableActivities>
     <enableBulkApi>true</enableBulkApi>
     <enableFeeds>false</enableFeeds>
@@ -14,13 +14,13 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <externalSharingModel>Private</externalSharingModel>
-    <label>DocGen Error Log</label>
+    <label>Portwood Error Log</label>
     <nameField>
         <displayFormat>ERR-{000000}</displayFormat>
         <label>Error Number</label>
         <type>AutoNumber</type>
     </nameField>
-    <pluralLabel>DocGen Error Logs</pluralLabel>
+    <pluralLabel>Portwood Error Logs</pluralLabel>
     <searchLayouts />
     <sharingModel>Private</sharingModel>
     <visibility>Public</visibility>

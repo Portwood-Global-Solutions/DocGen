@@ -1,6 +1,6 @@
 # Contributors
 
-Thank you to everyone who has contributed to DocGen through code, bug reports, feature requests, and testing.
+Thank you to everyone who has contributed to Portwood through code, bug reports, feature requests, and testing.
 
 ## Code Contributors
 

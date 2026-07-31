@@ -2,7 +2,7 @@
  * DocGenButtonController
  * -----------------------
  * Backs the docGenButton quick action. Resolves a pre-configured template from the
- * DocGen_Button__mdt custom metadata type, generates the document through the DocGen
+ * DocGen_Button__mdt custom metadata type, generates the document through the Portwood
  * service layer, and returns the file to the browser for download (and, optionally,
  * attaches it to the record).
  *
@@ -47,7 +47,7 @@ public with sharing class DocGenButtonController {
         public String errorMessage;
     }
 
-    /** Default generator: delegates to the DocGen service layer. */
+    /** Default generator: delegates to the Portwood service layer. */
     public class ServiceGenerator implements Generator {
         public GenResult generate(GenRequest r) {
             GenResult out = new GenResult();
@@ -66,7 +66,7 @@ public with sharing class DocGenButtonController {
                 out.contentDocumentId = contentDocumentId;
                 out.success = (contentDocumentId != null);
                 if (!out.success) {
-                    out.errorMessage = 'DocGen did not return a document.';
+                    out.errorMessage = 'Portwood did not return a document.';
                 }
             } catch (Exception e) {
                 out.success = false;
@@ -152,7 +152,7 @@ public with sharing class DocGenButtonController {
             DocGen_Button__mdt cfg = getConfig(configDeveloperName);
             if (cfg == null) {
                 throw new DocGenButtonException(
-                    'No active DocGen Button configuration named "' + configDeveloperName + '".'
+                    'No active Portwood Button configuration named "' + configDeveloperName + '".'
                 );
             }
             // Enforce the object + record-type match here too — getButtons hides a
@@ -161,7 +161,7 @@ public with sharing class DocGenButtonController {
             String recObject = recordId.getSObjectType().getDescribe().getName();
             if (String.isNotBlank(cfg.Object_API_Name__c) && cfg.Object_API_Name__c != recObject) {
                 throw new DocGenButtonException(
-                    'DocGen Button "' +
+                    'Portwood Button "' +
                         configDeveloperName +
                         '" is configured for ' +
                         cfg.Object_API_Name__c +
@@ -172,12 +172,12 @@ public with sharing class DocGenButtonController {
             }
             if (!matchesRecordType(cfg, recordTypeDevName(recordId))) {
                 throw new DocGenButtonException(
-                    'DocGen Button "' + configDeveloperName + '" is not available for this record\'s record type.'
+                    'Portwood Button "' + configDeveloperName + '" is not available for this record\'s record type.'
                 );
             }
             if (String.isBlank(cfg.Template_Id__c) && String.isBlank(cfg.Template_API_Name__c)) {
                 throw new DocGenButtonException(
-                    'DocGen Button "' +
+                    'Portwood Button "' +
                         configDeveloperName +
                         '" has no template configured. Set Template Id or Template API Name.'
                 );
@@ -189,11 +189,11 @@ public with sharing class DocGenButtonController {
                     templateId = (Id) cfg.Template_Id__c;
                 } catch (Exception idEx) {
                     throw new DocGenButtonException(
-                        'DocGen Button "' +
+                        'Portwood Button "' +
                             configDeveloperName +
                             '" has an invalid Template Id (' +
                             cfg.Template_Id__c +
-                            '). Set it to a DocGen Template record Id, or use Template API Name.'
+                            '). Set it to a Portwood Template record Id, or use Template API Name.'
                     );
                 }
             } else {

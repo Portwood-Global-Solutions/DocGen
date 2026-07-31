@@ -30,7 +30,7 @@ private class DocGenAssetTest {
 
     private static User buildAdminUser() {
         // System Administrator profile so object/CRUD is satisfied without relying
-        // on the DocGen permset being assignable in every test org.
+        // on the Portwood permset being assignable in every test org.
         Profile p = [SELECT Id FROM Profile WHERE Name = 'System Administrator' LIMIT 1];
         return new User(
             Alias = 'dgast',
