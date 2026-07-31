@@ -202,7 +202,9 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 FROM ContentVersion
                 WHERE ContentDocumentId IN :docIds AND Title LIKE :likePattern AND IsLatest = TRUE
                 WITH SYSTEM_MODE // NOPMD — package-internal template assets
-                ORDER BY CreatedDate DESC
+                // Id DESC breaks same-second CreatedDate ties — see the sibling
+                // loadForLinkedEntityByTitlePrefix query.
+                ORDER BY CreatedDate DESC, Id DESC
                 LIMIT 50
             ];
         }
@@ -254,7 +256,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 FROM ContentVersion
                 WHERE ContentDocumentId IN :docIds AND Title LIKE :likePattern AND IsLatest = TRUE
                 WITH SYSTEM_MODE // NOPMD — package-internal pre-decomposed parts linked to template version
-                ORDER BY CreatedDate DESC // newest snapshot wins if duplicates exist (#203)
+                // Newest snapshot wins if duplicates exist (#203). Id DESC breaks the
+                // tie: CreatedDate has one-second granularity, so two versions saved
+                // in the same second — an edit saved twice, or both writes inside one
+                // transaction — order arbitrarily, and "newest wins" silently returned
+                // whichever row the optimizer felt like. That reads back an OLD body
+                // into the Designer with no error. Ids are assigned in insert order,
+                // so the higher Id is the later write.
+                ORDER BY CreatedDate DESC, Id DESC
             ];
         }
 
@@ -4190,9 +4199,15 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                     prefetchImagesForIds(loopIds);
                                 }
                                 Integer iterCount = 0;
+                                Boolean wantsRowNumber = loopBodyHasRowNumberTag(trueBranch);
+                                Integer rowNumber = 0;
                                 for (Object item : records) {
                                     if (item instanceof Map<String, Object>) {
-                                        sectionResult += processXml(trueBranch, (Map<String, Object>) item);
+                                        rowNumber++;
+                                        sectionResult += processXml(
+                                            trueBranch,
+                                            rowContext((Map<String, Object>) item, wantsRowNumber, rowNumber)
+                                        );
                                     }
                                     iterCount++;
                                     if (Math.mod(iterCount, HEAP_CHECK_EVERY_N_ITERS) == 0) {
@@ -4224,9 +4239,15 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                                 prefetchImagesForIds(loopIds);
                             }
                             Integer iterCount = 0;
+                            Boolean wantsRowNumber = loopBodyHasRowNumberTag(trueBranch);
+                            Integer rowNumber = 0;
                             for (Object item : listVal) {
                                 if (item instanceof Map<String, Object>) {
-                                    sectionResult += processXml(trueBranch, (Map<String, Object>) item);
+                                    rowNumber++;
+                                    sectionResult += processXml(
+                                        trueBranch,
+                                        rowContext((Map<String, Object>) item, wantsRowNumber, rowNumber)
+                                    );
                                 }
                                 iterCount++;
                                 if (Math.mod(iterCount, HEAP_CHECK_EVERY_N_ITERS) == 0) {
@@ -8234,6 +8255,39 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * True when a loop body references {RowNumber} (bare or with a format suffix).
+     *
+     * Probed once per loop rather than assumed, because supplying the number means
+     * COPYING each row's data map to add the key — cheap for one table, real heap on
+     * a 30,000-row giant-query loop. Templates that don't ask for it pay nothing.
+     */
+    @TestVisible
+    private static Boolean loopBodyHasRowNumberTag(String innerXml) {
+        if (String.isBlank(innerXml)) {
+            return false;
+        }
+        String lower = innerXml.toLowerCase();
+        return lower.contains('{rownumber}') || lower.contains('{rownumber:');
+    }
+
+    /**
+     * The per-row context for one loop iteration: the record's own map, plus
+     * {RowNumber} when the body asks for it.
+     *
+     * The copy is deliberate — writing the key into the caller's map would leak the
+     * counter into the record data itself, and a nested loop would then see its
+     * parent's row number as a stale field.
+     */
+    private static Map<String, Object> rowContext(Map<String, Object> row, Boolean wantsRowNumber, Integer rowNumber) {
+        if (!wantsRowNumber) {
+            return row;
+        }
+        Map<String, Object> ctx = new Map<String, Object>(row);
+        ctx.put('RowNumber', rowNumber);
+        return ctx;
+    }
+
+    /**
      * Applies {%Image:N:SIZE} size token to an ImageRenderSpec.
      *   single number   → max dimension (preserves aspect)
      *   WxH             → explicit width × height
@@ -9205,7 +9259,29 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         List<SObject> records,
         List<String> fieldNames
     ) {
+        return renderLoopBodyForRecords(innerXml, relationshipName, records, fieldNames, 0);
+    }
+
+    /**
+     * As above, continuing {RowNumber} from a running offset.
+     *
+     * The giant-query path renders its loop in fragments of `batchSize` records per
+     * execute(), so each call sees only its own slice. Without the offset every
+     * fragment would restart at 1 and a 30,000-row table would count 1..200 over and
+     * over — which looks plausible enough on page 1 to ship unnoticed.
+     *
+     * @param rowNumberOffset Rows already rendered by previous fragments (0 for the first)
+     */
+    public static String renderLoopBodyForRecords(
+        String innerXml,
+        String relationshipName,
+        List<SObject> records,
+        List<String> fieldNames,
+        Integer rowNumberOffset
+    ) {
         String rendered = '';
+        Boolean wantsRowNumber = loopBodyHasRowNumberTag(innerXml);
+        Integer rowNumber = (rowNumberOffset == null ? 0 : rowNumberOffset);
         for (SObject rec : records) {
             Map<String, Object> dataMap = new Map<String, Object>();
             for (String field : fieldNames) {
@@ -9237,6 +9313,12 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
                 } catch (Exception e) {
                     dataMap.put(field, null);
                 }
+            }
+            rowNumber++;
+            if (wantsRowNumber) {
+                // dataMap is built fresh per record here, so it can be written
+                // directly — no copy needed as in the in-memory loop path.
+                dataMap.put('RowNumber', rowNumber);
             }
             rendered += processXml(innerXml, dataMap);
         }

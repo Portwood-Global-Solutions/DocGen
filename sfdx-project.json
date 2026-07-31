@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.48.0 — Bulk generation: conditionals, charts, sorting, permissions",
-      "versionNumber": "3.48.0.NEXT",
+      "versionName": "v3.49.0 — Bulk sort order, {RowNumber}, Save & Download",
+      "versionNumber": "3.49.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood DocGen Managed",
-      "ancestorVersion": "3.47.0",
-      "versionDescription": "Portwood DocGen generates PDFs and Word documents from any Salesforce record. v3.48 is a bulk generation release: conditional sections and filtered loops now behave the same in bulk as they do for a single record, charts render in bulk jobs, and you can sort related lists by more than one column. Template cloning now brings every file with it, and the Template Designer opens correctly for users with the DocGen Admin permission set. 100% native Salesforce — no external services or callouts. Free for all users."
+      "ancestorVersion": "3.48.0",
+      "versionDescription": "Portwood DocGen generates PDFs and Word documents from any Salesforce record. v3.49 puts you in control of document order. Bulk jobs can now be sorted by any field — including a field on a related record, like the Account name — so a combined PDF comes out in the order you expect instead of the order records happened to be created. Table rows can number themselves with a new {RowNumber} tag. And when you generate a document you no longer have to choose between keeping a copy and filing it: a new Save & Download option does both from one generation, with no size limit. 100% native Salesforce — no external services or callouts. Free for all users."
     },
     {
       "versionName": "v1.0.0 — Agentforce template authoring",

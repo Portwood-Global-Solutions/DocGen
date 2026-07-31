@@ -96,4 +96,12 @@
         <shortDescription>Runner save-to-record output option</shortDescription>
         <value>Save to Record</value>
     </labels>
+    <labels>
+        <fullName>DocGenRunner_SaveAndDownload</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner save-to-record-and-download output option</shortDescription>
+        <value>Save &amp; Download</value>
+    </labels>
 </CustomLabels>

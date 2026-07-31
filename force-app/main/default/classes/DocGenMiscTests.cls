@@ -7464,6 +7464,81 @@ private class DocGenMiscTests {
         }
     }
 
+    // ─── {RowNumber} across giant-query fragments ────────────────────────
+    // The giant path renders its loop in slices of batchSize per execute(), so
+    // each renderLoopBodyForRecords call sees only its own records. Without the
+    // running offset every fragment restarts at 1 — a 30,000-row table counting
+    // 1..50 over and over, which looks right on page one and ships unnoticed.
+
+    @IsTest
+    static void testRenderLoopBodyRowNumberContinuesAcrossFragments() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = TestDataFactory.getTestAccount();
+            List<Contact> contacts = new List<Contact>();
+            for (Integer i = 0; i < 4; i++) {
+                contacts.add(new Contact(FirstName = 'Row' + i, LastName = 'Frag', AccountId = acc.Id));
+            }
+            insert contacts;
+            // Scoped by LastName, not AccountId: the shared test Account carries
+            // fixture Contacts of its own, which would pad the list.
+            List<Contact> queried = [
+                SELECT FirstName
+                FROM Contact
+                WHERE AccountId = :acc.Id AND LastName = 'Frag'
+                ORDER BY FirstName
+            ];
+
+            String innerXml = '[{RowNumber}:{FirstName}]';
+            List<Contact> firstHalf = new List<Contact>{ queried[0], queried[1] };
+            List<Contact> secondHalf = new List<Contact>{ queried[2], queried[3] };
+
+            Test.startTest();
+            String frag1 = DocGenService.renderLoopBodyForRecords(
+                innerXml,
+                'Contacts',
+                firstHalf,
+                new List<String>{ 'FirstName' },
+                0
+            );
+            // Offset = rows already rendered, exactly as DocGenGiantQueryBatch accumulates it.
+            String frag2 = DocGenService.renderLoopBodyForRecords(
+                innerXml,
+                'Contacts',
+                secondHalf,
+                new List<String>{ 'FirstName' },
+                firstHalf.size()
+            );
+            Test.stopTest();
+
+            System.assertEquals('[1:Row0][2:Row1]', frag1, 'First fragment should number from 1.');
+            System.assertEquals('[3:Row2][4:Row3]', frag2, 'Second fragment must continue, not restart at 1.');
+        }
+    }
+
+    @IsTest
+    static void testRenderLoopBodyWithoutRowNumberTagIsUnaffected() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            Account acc = TestDataFactory.getTestAccount();
+            insert new Contact(FirstName = 'Plain', LastName = 'NoRowNum', AccountId = acc.Id);
+            List<Contact> queried = [SELECT FirstName FROM Contact WHERE LastName = 'NoRowNum'];
+
+            Test.startTest();
+            // The 4-arg overload is what every pre-existing caller uses; it must
+            // keep behaving exactly as before.
+            String result = DocGenService.renderLoopBodyForRecords(
+                '[{FirstName}]',
+                'Contacts',
+                queried,
+                new List<String>{ 'FirstName' }
+            );
+            Test.stopTest();
+
+            System.assertEquals('[Plain]', result, 'A body without {RowNumber} renders unchanged.');
+        }
+    }
+
     @IsTest
     static void testGenerateDocumentPartsGiantQueryWithInvalidTemplate() {
         User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];

@@ -48,4 +48,8 @@
         <label>儲存至記錄</label>
         <name>DocGenRunner_SaveToRecord</name>
     </customLabels>
+    <customLabels>
+        <label>儲存並下載</label>
+        <name>DocGenRunner_SaveAndDownload</name>
+    </customLabels>
 </Translations>

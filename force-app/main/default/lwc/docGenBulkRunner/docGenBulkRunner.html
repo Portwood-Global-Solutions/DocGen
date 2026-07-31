@@ -301,6 +301,54 @@
                     </template>
                 </div>
 
+                <!-- Sort order — decides page order in a combined PDF -->
+                <template if:true={hasSortFields}>
+                    <div class="slds-var-m-top_medium">
+                        <div class="slds-grid slds-gutters_small slds-grid_vertical-align-end slds-wrap">
+                            <div class="slds-col slds-size_1-of-2">
+                                <lightning-combobox
+                                    label="Sort By (optional)"
+                                    value={sortField}
+                                    options={sortFieldOptions}
+                                    onchange={handleSortFieldChange}
+                                    placeholder="Record order (default)"
+                                    disabled={isProcessing}
+                                    field-level-help="Controls the order records are processed — and the page order of a combined PDF. Related fields are listed as 'Account > Account Name'. Leave empty to keep the default record order."
+                                >
+                                </lightning-combobox>
+                            </div>
+                            <div class="slds-col slds-size_1-of-3">
+                                <lightning-combobox
+                                    label="Direction"
+                                    value={sortDirection}
+                                    options={sortDirectionOptions}
+                                    onchange={handleSortDirectionChange}
+                                    disabled={isProcessing}
+                                >
+                                </lightning-combobox>
+                            </div>
+                            <template if:true={isSortSelected}>
+                                <div class="slds-col">
+                                    <lightning-button
+                                        label="Clear"
+                                        onclick={handleClearSort}
+                                        disabled={isProcessing}
+                                        variant="neutral"
+                                    >
+                                    </lightning-button>
+                                </div>
+                            </template>
+                        </div>
+                        <template if:true={isSortSelected}>
+                            <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                                Documents will be generated in order of
+                                <code class="inline-code">{sortOrderClause}</code>. Records tied on this field fall back
+                                to name order, so the packet is reproducible.
+                            </p>
+                        </template>
+                    </div>
+                </template>
+
                 <!-- Pre-flight Analysis -->
                 <template if:true={filterValidated}>
                     <div class="analysis-card slds-var-m-top_medium">

@@ -48,4 +48,8 @@
         <label>Im Datensatz speichern</label>
         <name>DocGenRunner_SaveToRecord</name>
     </customLabels>
+    <customLabels>
+        <label>Speichern &amp; Herunterladen</label>
+        <name>DocGenRunner_SaveAndDownload</name>
+    </customLabels>
 </Translations>

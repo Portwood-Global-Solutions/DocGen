@@ -48,4 +48,8 @@
         <label>Salvar no registro</label>
         <name>DocGenRunner_SaveToRecord</name>
     </customLabels>
+    <customLabels>
+        <label>Salvar e baixar</label>
+        <name>DocGenRunner_SaveAndDownload</name>
+    </customLabels>
 </Translations>
