@@ -2,6 +2,9 @@
 
 ## v3.51.0 — Smarter AI template authoring
 
+`04tVx000000zxWDIAY` (build 3.51.0-1, promoted 2026-08-01, ancestor 3.50.0). Build
+coverage 78%.
+
 **No action required.** Nothing about existing templates or generated documents
 changes. This release improves what the AI knows when it writes a template for
 you.
