@@ -998,7 +998,9 @@ ConnectApi.EinsteinPromptTemplateGenerationsInput probe = new ConnectApi.Einstei
 System.debug('Einstein Apex types are visible');
 ```
 
-**Install it,** entering the installation key you were given. Then open any HTML
+**Install it** — v1.1.0 and later need no installation key; it is free, like
+Portwood itself. (v1.0.0 was key-protected. If you were given a key, you are on
+the old build — install v1.1.0 or later instead.) Then open any HTML
 template in the Designer — **Generate with Agentforce** appears next to Copy AI
 Prompt. No permission set beyond **Portwood Admin**, and no settings to change.
 

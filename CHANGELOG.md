@@ -1,5 +1,61 @@
 # Changelog
 
+## v3.51.0 — Smarter AI template authoring
+
+**No action required.** Nothing about existing templates or generated documents
+changes. This release improves what the AI knows when it writes a template for
+you.
+
+### Changed — a fuller merge-tag reference in the authoring prompt
+
+The prompt the Designer sends (the same one **Copy AI Prompt** puts on your
+clipboard) now spells out the tags it was previously silent about, so the model
+stops reaching for the UserGuide link and stops inventing syntax:
+
+- `{RowNumber}` — 1-based row counter inside any loop, including how it restarts
+  per nested loop and per `{#GroupBy}` group
+- `{#GroupBy Rel by Field}` — expanded with a complete worked example (own
+  `<table>` + `<thead>` per group, `{GroupName}` header, per-group subtotal)
+- `{^Field}` inverse conditionals, and `{#IF …}` comparisons with
+  `AND`/`OR`/`NOT`, parentheses, nesting, and the
+  `{#IF Rel.totalSize != 0}` "render this section if there are rows" idiom
+- `{Chart:Rel:Field:style:opts}` — the one-line chart tag, with all nine styles
+  and every modifier. Previously the prompt only described the hand-authored
+  `{#ChartBucket}` loop, which is now correctly presented as the fallback for
+  layouts the one-liner can't produce.
+- `{%FieldName}` / `{%Image:N}` record images, including that the `:WxH` size
+  token — not CSS — is what sizes them
+- Rich-text passthrough, `{PageNumber}`/`{TotalPages}` (header/footer only, so
+  the model stops putting them in the body), `:Initials`/`:DatePick`/`:inline`
+  signature types, and the `{#Signatures}` variable-signer loop
+
+Also corrected: the prompt advertised `code39` barcodes, which the engine does
+not support and renders as nothing. Only `code128` and `qr` are listed now.
+
+This lands in the **base package**, not in the Agentforce Extension: the prompt is
+assembled by the Designer and passed to whichever AI provider is configured, so
+both the in-org Agentforce button and the copy-paste route pick it up from one
+place.
+
+## Agentforce Extension v1.1.0 — Free install, no installation key
+
+`04tVx000000zxUbIAI` (build 1.1.0-1, promoted 2026-08-01, ancestor 1.0.0.2).
+
+Separate optional package (`Portwood Agentforce Extension`), versioned
+independently of Portwood itself.
+
+### Changed — no installation key
+
+v1.0.0 required an installation key at install. v1.1.0 does not: the extension is
+free for everyone, on the same terms as Portwood. This is also what lets it go
+through AppExchange security review as a free listing.
+
+Prerequisites are unchanged — Portwood 3.46 or later, and Einstein / Prompt
+Builder enabled in the org. Salesforce still enforces both at install.
+
+Install (no password):
+<https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000zxUbIAI>
+
 ## v3.50.0 — Renamed to Portwood
 
 `04tVx000000zxCrIAI` (build 3.50.0-1, promoted 2026-07-31, ancestor 3.49.0). Build
