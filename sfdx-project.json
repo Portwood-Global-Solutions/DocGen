@@ -1,23 +1,24 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.50.0 — Renamed to Portwood",
-      "versionNumber": "3.50.0.NEXT",
+      "versionName": "v3.51.0 — Smarter AI template authoring",
+      "versionNumber": "3.51.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood",
-      "ancestorVersion": "3.49.0",
-      "versionDescription": "Portwood DocGen generates PDFs and Word documents from any Salesforce record. v3.49 puts you in control of document order. Bulk jobs can now be sorted by any field — including a field on a related record, like the Account name — so a combined PDF comes out in the order you expect instead of the order records happened to be created. Table rows can number themselves with a new {RowNumber} tag. And when you generate a document you no longer have to choose between keeping a copy and filing it: a new Save & Download option does both from one generation, with no size limit. 100% native Salesforce — no external services or callouts. Free for all users."
+      "ancestorVersion": "3.50.0",
+      "versionDescription": "Portwood generates PDFs and Word documents from any Salesforce record. v3.51 makes the built-in AI template writer far better at Portwood's own features. Ask it for numbered rows, a separate table for each product family, a chart, or a section that only appears when there is something to put in it, and you get a template that works the first time instead of a near miss — because the AI is now told about all of those capabilities up front rather than left to guess at them. This applies whether you write templates inside Salesforce with Agentforce or copy the prompt out to your own assistant. 100% native Salesforce — no external services or callouts. Free for all users."
     },
     {
-      "versionName": "v1.0.0 — Agentforce template authoring",
-      "versionNumber": "1.0.0.NEXT",
+      "versionName": "v1.1.0 — Free install, no installation key",
+      "versionNumber": "1.1.0.NEXT",
       "path": "agentforce-ext",
       "default": false,
       "package": "Portwood Agentforce Extension",
-      "versionDescription": "Adds AI template authoring to Portwood DocGen. Describe the document you want and it writes the template; ask for a change in plain English and it revises the one you already have. Everything it produces is checked against the PDF engine first, so a template never looks right on screen and wrong in the finished document. Includes a ready-made prompt template — no Prompt Builder setup required. Requires Portwood DocGen 3.46 or later and Einstein/Prompt Builder in your org. 100% native Salesforce — no external services or callouts.",
+      "ancestorVersion": "1.0.0",
+      "versionDescription": "Adds AI template authoring to Portwood. Describe the document you want and it writes the template; ask for a change in plain English and it revises the one you already have. Everything it produces is checked against the PDF engine first, so a template never looks right on screen and wrong in the finished document. Includes a ready-made prompt template — no Prompt Builder setup required, and no installation key: like Portwood itself, it is free for everyone. Requires Portwood 3.46 or later and Einstein/Prompt Builder in your org. 100% native Salesforce — no external services or callouts.",
       "definitionFile": "config/agentforce-ext-def.json",
       "dependencies": [
         {
@@ -235,6 +236,7 @@
     "Portwood Agentforce Extension@1.0.0-2": "04tVx000000s82DIAQ",
     "Portwood@3.48.0-1": "04tVx000000zgS9IAI",
     "Portwood@3.49.0-1": "04tVx000000zvz3IAA",
-    "Portwood@3.50.0-1": "04tVx000000zxCrIAI"
+    "Portwood@3.50.0-1": "04tVx000000zxCrIAI",
+    "Portwood Agentforce Extension@1.1.0-1": "04tVx000000zxUbIAI"
   }
 }

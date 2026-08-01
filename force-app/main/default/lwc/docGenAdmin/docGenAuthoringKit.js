@@ -527,12 +527,22 @@ export function buildAiPrompt(shape, options) {
         '- Format suffixes: {CloseDate:MMMM d, yyyy} (Java SimpleDateFormat), {CloseDate:date} (user locale), {Amount:currency}, {Amount:currency:EUR}, {Qty:number}, {Qty:#,##0.00}, {Rate:percent}, {IsActive:checkbox} ([X]/[ ]), {Status__c:label} (picklist label).'
     );
     lines.push(
-        '- Child loop: {#RelationshipName} ... {/RelationshipName} repeats the block per child record; child fields are bare inside the loop. If the tags sit inside a table row, the whole <tr> repeats — put {#Rel} in the first cell and {/Rel} in the last cell of the data row. Use a real <thead> for column headers. Nested loops are supported.'
+        '- Child loop: {#RelationshipName} ... {/RelationshipName} repeats the block per child record; child fields are bare inside the loop. If the tags sit inside a table row, the whole <tr> repeats — put {#Rel} in the first cell and {/Rel} in the last cell of the data row. Use a real <thead> for column headers. Nested loops are supported. An empty child list renders nothing — no error.'
     );
     lines.push(
-        '- Group into separate tables/sections by a field value: {#GroupBy RelationshipName by GroupField} ... {/GroupBy} repeats its whole block once per DISTINCT value of GroupField among the child records (first-seen order; dot-paths like Product2.Family allowed). Inside the block, {GroupName} is that group’s value (use it as the header), the inner {#RelationshipName}...{/RelationshipName} loops only that group’s members, and {SUM|COUNT|AVG:RelationshipName.Field} totals just that group. Ideal when the user wants "a table per <type/category>" without knowing the values in advance.'
+        '- Row numbering: {RowNumber} inside any loop is that row’s 1-based position — use it for a "#" column. It counts the rows actually rendered, keeps counting through very large tables, restarts at 1 for each nested loop and for each {#GroupBy} group, and resolves to nothing outside a loop. Accepts format suffixes ({RowNumber:number}).'
+    );
+    lines.push(
+        '- Group into separate tables/sections by a field value: {#GroupBy RelationshipName by GroupField} ... {/GroupBy} repeats its whole block once per DISTINCT value of GroupField among the child records (first-seen order; dot-paths like Product2.Family allowed). Inside the block, {GroupName} is that group’s value (use it as the header), the inner {#RelationshipName}...{/RelationshipName} loops only that group’s members, {RowNumber} restarts at 1, and {SUM|COUNT|AVG|MIN|MAX:RelationshipName.Field} aggregate just that group. Ideal when the user wants "a table per <type/category>" without knowing the values in advance — 50 distinct values produce 50 tables, with no need to know them up front. Give each group its own <table> WITH its own <thead>, and put the whole table inside the {#GroupBy} block.'
+    );
+    lines.push(
+        '- Group-block example: {#GroupBy Lines by Product2.Family}<h3>{GroupName}</h3><table><thead><tr><th>#</th><th>Product</th><th>Amount</th></tr></thead><tbody><tr><td>{#Lines}{RowNumber}</td><td>{Product2.Name}</td><td>{TotalPrice:currency}{/Lines}</td></tr><tr><td colspan="2">Subtotal</td><td>{SUM:Lines.TotalPrice:currency}</td></tr></tbody></table>{/GroupBy}'
     );
     lines.push('- Conditional: {#SomeField} shown when truthy {:else} otherwise {/SomeField}.');
+    lines.push('- Inverse conditional: {^SomeField} shown when the field is FALSY {:else} otherwise {/SomeField}.');
+    lines.push(
+        "- Comparison conditional: {#IF Amount > 100000} ... {:else} ... {/IF}. Operators > < >= <= = (or ==) != against a field, a number, or a quoted string (case-sensitive). Combine with AND / OR / NOT (or && || !) and parentheses: {#IF (Amount > 1000 AND StageName = 'Closed Won') OR Type = 'Renewal'}. Nest {#IF} blocks freely. To render a section only when a child list has rows, use {#IF RelationshipName.totalSize != 0} — totalSize is 0, never null, on an empty relationship."
+    );
     lines.push(
         '- Aggregates (grand totals across a child list, place OUTSIDE the loop): {SUM:Rel.Field}, {AVG:Rel.Field}, {MIN:Rel.Field}, {MAX:Rel.Field}, {COUNT:Rel} or {COUNT:Rel.Field}. All accept format suffixes: {SUM:Lines.Amount:currency}, {SUM:Lines.Amount:currency:EUR:de_DE} (ISO + locale), {SUM:Lines.Amount:currency:auto} (record currency), {COUNT:Lines:number}. The aggregated field must be in the Query Config, but does NOT need to be a rendered column.'
     );
@@ -540,13 +550,25 @@ export function buildAiPrompt(shape, options) {
         '- Built-ins: {Today:MMMM d, yyyy}, {Now:yyyy-MM-dd HH:mm}, and running-user tags {RunningUser.Name}, {RunningUser.Email}, {RunningUser.Title}.'
     );
     lines.push(
-        '- Barcodes & QR codes (rendered server-side as crisp vectors — no fonts, no external services, no <img>): {*FieldName} = QR code of the field value; {*FieldName:qr:200} = QR at 200px; {*FieldName:code128} and {*FieldName:code39} = linear barcodes (add :WxH like {*Serial__c:code128:300x80} to size). QR handles URLs and long text and survives low print quality best; Code 128/39 suit short IDs and serials. Place the tag alone in its own cell/block with white space around it — do not shrink below the default or scanners will struggle. Any queried field works, e.g. {*Id}, {*Name}, {*Tracking_Number__c}.'
+        '- Barcodes & QR codes (rendered server-side — no fonts, no external services, no <img> of your own): {*FieldName} = Code 128 barcode of the field value; {*FieldName:code128:300x80} = Code 128 sized 300x80px; {*FieldName:qr} = QR code; {*FieldName:qr:200} = QR at 200px. ONLY code128 and qr are supported — any other type renders nothing, silently. QR handles URLs and long text and survives low print quality best; Code 128 suits short IDs and serials. Place the tag alone in its own cell/block with white space around it — do not shrink below the default or scanners will struggle. Any queried field works, e.g. {*Id}, {*Name}, {*Tracking_Number__c}.'
     );
     lines.push(
-        '- Charts (aggregate a child list into bars, place OUTSIDE loops): {#ChartBucket:Rel:Field} {key} {count} {percent} {/ChartBucket} groups child records by Field and repeats the body per bucket — style it as CSS bars (a <div> whose width uses {percent}). Keep charts CSS-only; no SVG or canvas.'
+        '- Charts — ONE-LINE TAG, this is the path to use: {Chart:RelationshipName:FieldToGroupBy:style:opt=value&opt=value}, on its own line as a block-level element. Portwood aggregates the child records server-side and renders it as a real image, so you do NOT style it — no wrapper markup, no CSS bars. Styles: bar (horizontal, best for long labels), column (vertical), pie, donut, line, area, and the cross-tab styles stacked, clustered, pivot (these three REQUIRE groupBy=). Default style is bar. Modifiers, joined with &: title=Text (header drawn above the chart), width=420, height=240, colors=#1e40af,#b91c1c (6-char hex, cycles), groupBy=SecondField__c (second dimension), colSort=A,B,C (column order), where=SOQL fragment, split=; (multi-select field). Examples: {Chart:Survey_Responses__r:Answer__c:bar:title=Responses by Answer} and {Chart:Survey_Responses__r:Answer__c:stacked:groupBy=Location__c&title=Answer by Location}. Inside a {#Rel} loop the chart’s relationship resolves against the record being iterated, giving one chart per row.'
     );
     lines.push(
-        '- E-signature placeholders (only if asked for a signable document): {@Signature_RoleName:1:Full}, {@Signature_RoleName:1:Date}.'
+        '- Charts — hand-authored fallback, use ONLY when the one-line tag cannot produce the layout asked for: {#ChartBucket:Rel:Field} {key} {count} {percent} {/ChartBucket} groups child records by Field and repeats the body per bucket, so you style it yourself as CSS bars (a <div> whose width uses {percent}). Keep it CSS-only; no SVG or canvas.'
+    );
+    lines.push(
+        '- Record images: {%FieldName} renders the image stored in a file/ContentVersion field, {%Image:1} renders the Nth file attached to the record. Size them INSIDE the tag — {%FieldName:160x} (160px wide), {%Image:1:x80} (80px tall), {%FieldName:200x80} (exact) — CSS width/height on the tag does NOT size the image in the PDF.'
+    );
+    lines.push(
+        '- Rich text / long text fields pass their formatting through automatically (paragraphs, bold, italic, links, line breaks). Do not wrap them in <pre> or escape them.'
+    );
+    lines.push(
+        '- Page numbers: {PageNumber} and {TotalPages} work ONLY in the template’s Header HTML / Footer HTML fields, never in the body — do not put them in the document you write; mention them to the user instead if they ask for page numbering.'
+    );
+    lines.push(
+        '- E-signature placeholders (only if asked for a signable document): {@Signature_RoleName:1:Full}, {@Signature_RoleName:1:Initials}, {@Signature_RoleName:1:Date}, {@Signature_RoleName:1:DatePick}. Role is any string (underscores become spaces), then the signing order, then the type. Add :inline as a final suffix for a compact in-place mark instead of a stamp card. When the number of signers varies, use the {#Signatures} ... {/Signatures} loop instead of fixed role tags.'
     );
     lines.push('');
     lines.push('DATA SHAPE — use ONLY these fields (any other tag renders empty):');
@@ -702,7 +724,9 @@ export function buildAiPrompt(shape, options) {
         '1. Return ONE complete self-contained HTML file (<!DOCTYPE html> ... </html>) with all CSS inline in a single <style> block. No commentary, no markdown fences.'
     );
     lines.push('2. Professional print-ready design within the CSS 2.1 constraints above.');
-    lines.push('3. Use only the merge tags listed in DATA SHAPE (plus {Today}/{RunningUser.*} built-ins).');
+    lines.push(
+        '3. Only bind to field names listed in DATA SHAPE. On top of those you may use any tag from PORTWOOD MERGE TAG SYNTAX above — {RowNumber}, {#GroupBy}/{GroupName}, {#IF}, aggregates, {Chart:...}, {Today}/{Now}, {RunningUser.*} — since those are built into the engine and need no field of their own.'
+    );
     lines.push('');
     lines.push(
         'QUESTIONS? The full Portwood UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/Portwood/blob/main/UserGuide.md'
